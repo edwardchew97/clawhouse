@@ -16,6 +16,12 @@ replace Scope V0 key trading.
 - Amendment basis: JY clarified that current V0 removes OutLayer and does not
   need a Trade Engine that validates, quotes, executes, or gates agent trades.
   Current V0 should use Agent Board Ledger as the observation/accounting layer.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-19
+- Amendment basis: JY confirmed that V0 creator onboarding should use manual
+  IronClaw strategy upload. ClawHouse/Codex/Claude generate a non-secret
+  strategy package, while IronClaw owns API keys, wallet/private keys,
+  activation, execution, and runtime.
 
 ## One Sentence
 
@@ -100,6 +106,161 @@ Do not treat NEAR Intents as:
 
 Hyperliquid perps remain a future, separate Agent Trading expansion. They should
 not be mixed into current V0 unless JY explicitly reopens that direction.
+
+## Manual Strategy Package Boundary
+
+V0 strategy onboarding is manual upload, not API-key delegation.
+
+ClawHouse, Codex, and Claude may generate a non-secret strategy package for the
+creator to review and manually upload/import into IronClaw. This package is a
+strategy/config artifact. It is not a trade order, not a ClawHouse execution
+request, and not proof that the strategy is already active in IronClaw.
+
+The package must not contain:
+
+- IronClaw API keys;
+- wallet private keys, seed phrases, or raw signing material;
+- ClawHouse backend execution credentials;
+- deposit, withdrawal, or custody instructions;
+- permission to withdraw funds;
+- unsupported venues, leverage, perps, borrowing, liquidation, shorts, or
+  funding-rate mechanics.
+
+IronClaw owns:
+
+- importing and validating the strategy package;
+- user approval and activation inside IronClaw;
+- API key, secret, wallet, and private-key storage;
+- the execution loop;
+- quote/trade submission through IronClaw-controlled tooling;
+- deciding whether a proposed action is executable;
+- reporting events back to ClawHouse or Agent Board Ledger when configured.
+
+ClawHouse owns only:
+
+- producing the strategy package draft;
+- recording package hash/version and public metadata when provided;
+- displaying public identity and observed performance through Agent Board
+  Ledger.
+
+### What IronClaw Needs To Execute
+
+IronClaw cannot safely execute a vague instruction like "trade well" or "buy low,
+sell high." The package needs enough structure for IronClaw to turn strategy into
+an order intent inside its own runtime.
+
+The minimum execution-ready strategy document should define:
+
+- agent identity: name, description, avatar reference, and trading style;
+- venue/asset boundary: current V0 target is NEAR Intents spot activity;
+- allowed actions: hold, spot swap, rebalance, and report reason;
+- forbidden actions: withdrawals, leverage, shorts, borrowing, perps,
+  liquidations, and unmanaged venues;
+- decision loop: what context IronClaw should inspect before proposing a trade;
+- cadence/triggers: manual, daily, event-based, or another explicit schedule;
+- risk rails: max position size, max trade notional, daily loss limit, max
+  drawdown, slippage cap, and stop conditions;
+- order-intent output shape: the fields IronClaw should produce before it calls
+  its own execution tooling;
+- reporting contract: reason required, event report required, and optional Agent
+  Board Ledger hints;
+- secret policy: package contains no secrets.
+
+### ClawHouse Strategy Package v0
+
+Canonical artifact: `clawhouse_strategy_package.v0.json`.
+
+Authoring previews can be Markdown or YAML for readability, but the machine
+artifact should be JSON so it can be hashed, validated, versioned, and imported
+without ambiguous parsing.
+
+Minimum fields:
+
+- `schema`: must be `clawhouse.strategy_package.v0`;
+- `package_id`;
+- `created_at`;
+- `created_by`;
+- `agent`: `name`, `description`, `avatar_reference`, `trading_style`;
+- `ironclaw`: `import_mode`, `activation`, `wallet_source`,
+  `api_key_required_by_clawhouse`;
+- `strategy`: `objective`, `thesis`, `allowed_actions`, `allowed_assets`,
+  `base_asset`, `decision_loop`, `cadence`, `exit_conditions`;
+- `risk`: `max_position_pct`, `max_trade_notional_usd`, `daily_loss_limit_pct`,
+  `max_drawdown_pct`, `max_slippage_bps`, `allow_leverage`, `allow_shorts`,
+  `allow_withdrawals`;
+- `order_intent_template`: the expected proposed-action shape IronClaw should
+  produce internally before execution;
+- `reporting`: `reason_required`, `report_after_trade`, `ledger_hint`;
+- `secrets`: must be `none_included`;
+- `metadata`: package notes and optional hash/version fields.
+
+Example:
+
+```json
+{
+  "schema": "clawhouse.strategy_package.v0",
+  "package_id": "chsp_example_001",
+  "created_at": "2026-06-19T00:00:00Z",
+  "created_by": "clawhouse_creator_skill",
+  "agent": {
+    "name": "Near Spot Scout",
+    "description": "A cautious NEAR ecosystem spot trader that explains every move.",
+    "avatar_reference": "manual-upload-or-public-url",
+    "trading_style": "long-only NEAR ecosystem momentum"
+  },
+  "ironclaw": {
+    "import_mode": "manual_upload",
+    "activation": "inside_ironclaw",
+    "wallet_source": "ironclaw_managed",
+    "api_key_required_by_clawhouse": false
+  },
+  "strategy": {
+    "objective": "Grow a small spot portfolio while avoiding leverage and withdrawals.",
+    "thesis": "Prefer NEAR and approved ecosystem assets when momentum and liquidity are healthy; otherwise hold USDC.",
+    "allowed_actions": ["hold", "spot_swap", "rebalance", "report_reason"],
+    "allowed_assets": [
+      { "symbol": "USDC", "chain": "near" },
+      { "symbol": "NEAR", "chain": "near" }
+    ],
+    "base_asset": { "symbol": "USDC", "chain": "near" },
+    "decision_loop": "Before each proposed trade, inspect current holdings, recent price movement, liquidity, risk limits, and the last trade reason.",
+    "cadence": "daily_or_manual",
+    "exit_conditions": ["daily_loss_limit_hit", "max_drawdown_hit", "asset_removed_from_allowed_list"]
+  },
+  "risk": {
+    "max_position_pct": 35,
+    "max_trade_notional_usd": 25,
+    "daily_loss_limit_pct": 5,
+    "max_drawdown_pct": 15,
+    "max_slippage_bps": 100,
+    "allow_leverage": false,
+    "allow_shorts": false,
+    "allow_withdrawals": false
+  },
+  "order_intent_template": {
+    "action": "hold | spot_swap | rebalance",
+    "from_asset": "asset symbol when swapping",
+    "to_asset": "asset symbol when swapping",
+    "amount_policy": "fixed_usd | percent_of_portfolio | no_trade",
+    "max_slippage_bps": "number",
+    "reason": "plain-language reason required before execution",
+    "risk_check": "must pass package risk rails before execution"
+  },
+  "reporting": {
+    "reason_required": true,
+    "report_after_trade": true,
+    "ledger_hint": "agent_board_ledger"
+  },
+  "secrets": "none_included",
+  "metadata": {
+    "notes": "Manual upload package. User must activate inside IronClaw."
+  }
+}
+```
+
+The exact IronClaw importer, parser, validation errors, and activation UX remain
+implementation/partner-confirmation work. Until that is verified, this schema is
+ClawHouse's target contract, not a claim that IronClaw already supports the file.
 
 ## Non-Negotiable Product Rules
 
@@ -319,6 +480,8 @@ These are not current V0 requirements:
 - ClawHouse-controlled trade execution engine;
 - pre-trade validation or risk gating;
 - OutLayer policy integration;
+- ClawHouse-hosted IronClaw API-key collection;
+- local wallet/private-key generation by Codex, Claude, or the creator skill;
 - copy-with-constraints;
 - user-funded autonomous copy trading;
 - Hyperliquid perps;
@@ -345,6 +508,8 @@ The first Agent Trading slice is done only when:
 - holder/key-gated read API is scoped as a read surface, not key trading;
 - no OutLayer, pre-trade validation, ClawHouse quote, ClawHouse execution,
   Hyperliquid, leverage, shorts, liquidation, or copy trading is required.
+- a non-secret `clawhouse_strategy_package.v0.json` can be generated for manual
+  IronClaw upload without requiring ClawHouse to execute or activate it.
 
 ## Open Decisions
 
@@ -357,6 +522,12 @@ The first Agent Trading slice is done only when:
 - What price freshness threshold blocks leaderboard updates?
 - What should be public versus key-holder-only in the event timeline?
 - What proof is enough to compute PnL for confidential activity?
+- Whether IronClaw will accept `clawhouse_strategy_package.v0.json` directly or
+  require a wrapper, script, or different import API.
+- What exact validation errors IronClaw should return for invalid strategy
+  packages.
+- What minimum package hash/version should ClawHouse display publicly after
+  manual upload.
 
 ## Change Log
 
@@ -367,3 +538,8 @@ The first Agent Trading slice is done only when:
 - 2026-06-19 - `019ede10-c43f-76f1-ab2d-68b0fabf9802` - Replaced the V0
   execution-engine/policy-gate direction with Agent Board Ledger as the
   observation, event, reconciliation, portfolio, PnL, and read-access layer.
+- 2026-06-19 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added the V0 manual
+  IronClaw strategy package boundary and target
+  `clawhouse_strategy_package.v0.json` format, making ClawHouse/Codex/Claude
+  responsible only for a non-secret package draft while IronClaw owns keys,
+  wallet custody, activation, and execution.
