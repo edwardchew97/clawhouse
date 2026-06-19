@@ -126,6 +126,11 @@
       gap: 4px;
     }
 
+    #flowList {
+      display: grid;
+      gap: 6px;
+    }
+
     .flow-button,
     .step-button,
     .tab,
@@ -148,6 +153,7 @@
       text-align: left;
       color: var(--strong);
       font-weight: 560;
+      line-height: 1.25;
     }
 
     .flow-button.active,
@@ -157,17 +163,54 @@
       background: var(--selected);
     }
 
+    .flow-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .flow-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .flow-chevron {
+      flex: 0 0 auto;
+      width: 6px;
+      height: 6px;
+      border-right: 1.5px solid var(--subtle);
+      border-bottom: 1.5px solid var(--subtle);
+      transform: rotate(-45deg);
+      transition: transform 120ms ease-out, border-color 120ms ease-out;
+    }
+
+    .flow-button[aria-expanded="true"] .flow-chevron {
+      transform: rotate(45deg);
+    }
+
+    .flow-button.active .flow-chevron,
+    .flow-button:hover .flow-chevron {
+      border-color: var(--default);
+    }
+
     .step-list {
       display: grid;
       gap: 2px;
-      margin-left: 10px;
-      padding-left: 8px;
+      margin-left: 12px;
+      padding-left: 9px;
       border-left: 1px solid var(--border);
+    }
+
+    .step-list[hidden] {
+      display: none;
     }
 
     .step-button {
       display: grid;
-      grid-template-columns: 48px minmax(0, 1fr);
+      grid-template-columns: 52px minmax(0, 1fr);
       align-items: center;
       gap: 8px;
       width: 100%;
@@ -175,6 +218,9 @@
       border-radius: 7px;
       padding: 5px 7px;
       text-align: left;
+      color: var(--default);
+      font-size: 12px;
+      line-height: 1.25;
     }
 
     .step-button strong {
@@ -185,9 +231,14 @@
       font-weight: 520;
     }
 
+    .step-button.active strong {
+      color: var(--strong);
+      font-weight: 600;
+    }
+
     .verb {
       justify-self: start;
-      min-width: 44px;
+      width: 50px;
       border-radius: 5px;
       background: var(--selected);
       color: var(--default);
@@ -195,6 +246,12 @@
       font-family: var(--mono);
       font-size: 11px;
       text-align: center;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .flow-chevron {
+        transition: none;
+      }
     }
 
     .verb.post,
@@ -363,6 +420,14 @@
       min-width: 0;
     }
 
+    .request-description {
+      max-width: 860px;
+      margin: 2px 0 0;
+      color: var(--default);
+      font-size: 13px;
+      line-height: 1.42;
+    }
+
     h1,
     h2 {
       margin: 0;
@@ -472,7 +537,7 @@
     }
 
     .params-fields {
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      grid-template-columns: 1fr;
     }
 
     .params-fields .kv-row {
@@ -978,6 +1043,7 @@
           <div class="request-head">
             <div class="title-block">
               <h1 id="stepName">Request</h1>
+              <p id="stepDescription" class="request-description"></p>
               <span id="stepType" class="tab-meta"></span>
             </div>
             <div id="requestPills" class="pill-row"></div>
@@ -1068,6 +1134,7 @@
       filter: "",
       env: { ...defaultEnv, ...pruneObsoleteEnv(persisted.env || {}), testUserPrivateKey: "" },
       encryptedEnv: persisted.encryptedEnv || {},
+      collapsedFlows: persisted.collapsedFlows || {},
       vars: persisted.vars || {},
       inputs: persisted.inputs || {},
       requestTemplates: persisted.requestTemplates || {},
@@ -1114,6 +1181,7 @@
         envOpen: state.envOpen,
         env: persistableEnv(),
         encryptedEnv: state.encryptedEnv,
+        collapsedFlows: state.collapsedFlows,
         vars: state.vars,
         inputs: state.inputs,
         requestTemplates: state.requestTemplates
@@ -1468,6 +1536,9 @@
     function renderSidebar() {
       const needle = state.filter.trim().toLowerCase();
       $("flowList").innerHTML = state.spec.flows.map((flow, flowIndex) => {
+        const flowKey = flowCollapseKey(flow, flowIndex);
+        const stepsId = `flow-steps-${flowIndex}`;
+        const isCollapsed = !needle && state.collapsedFlows[flowKey] === true;
         const steps = flow.steps
           .map((step, stepIndex) => ({ step, stepIndex }))
           .filter(({ step }) => {
@@ -1477,15 +1548,24 @@
         if (!steps.length) return "";
         return `
           <div class="flow-block">
-            <button class="flow-button ${flowIndex === state.activeFlow ? "active" : ""}" data-flow="${flowIndex}">
-              <span>${flow.name}</span>
+            <button
+              type="button"
+              class="flow-button ${flowIndex === state.activeFlow ? "active" : ""}"
+              data-flow-toggle="${flowIndex}"
+              aria-expanded="${isCollapsed ? "false" : "true"}"
+              aria-controls="${stepsId}"
+            >
+              <span class="flow-title">
+                <span class="flow-chevron" aria-hidden="true"></span>
+                <span class="flow-name">${escapeHtml(flow.name)}</span>
+              </span>
               <span class="sidebar-label">${flow.steps.length}</span>
             </button>
-            <div class="step-list">
+            <div id="${stepsId}" class="step-list" ${isCollapsed ? "hidden" : ""}>
               ${steps.map(({ step, stepIndex }) => `
-                <button class="step-button ${flowIndex === state.activeFlow && stepIndex === state.activeStep ? "active" : ""}" data-flow="${flowIndex}" data-step="${stepIndex}">
-                  <span class="verb ${methodLabel(step).toLowerCase()}">${methodLabel(step)}</span>
-                  <strong>${step.name}</strong>
+                <button type="button" class="step-button ${flowIndex === state.activeFlow && stepIndex === state.activeStep ? "active" : ""}" data-flow="${flowIndex}" data-step="${stepIndex}">
+                  <span class="verb ${escapeAttr(methodLabel(step).toLowerCase())}">${escapeHtml(methodLabel(step))}</span>
+                  <strong>${escapeHtml(step.name)}</strong>
                 </button>
               `).join("")}
             </div>
@@ -1493,17 +1573,28 @@
         `;
       }).join("");
 
-      document.querySelectorAll("[data-flow]").forEach((button) => {
+      document.querySelectorAll("[data-flow-toggle]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const flowIndex = Number(button.dataset.flowToggle);
+          const flow = state.spec.flows[flowIndex];
+          const flowKey = flowCollapseKey(flow, flowIndex);
+          state.collapsedFlows[flowKey] = state.collapsedFlows[flowKey] !== true;
+          renderSidebar();
+          persist();
+        });
+      });
+
+      document.querySelectorAll("[data-step]").forEach((button) => {
         button.addEventListener("click", () => {
           state.activeFlow = Number(button.dataset.flow);
-          if (button.dataset.step !== undefined) {
-            state.activeStep = Number(button.dataset.step);
-          } else {
-            state.activeStep = 0;
-          }
+          state.activeStep = Number(button.dataset.step);
           render();
         });
       });
+    }
+
+    function flowCollapseKey(flow, flowIndex) {
+      return flow.id || flow.name || String(flowIndex);
     }
 
     function renderTopbar() {
@@ -1521,6 +1612,7 @@
       const step = activeStep();
       const method = methodLabel(step);
       $("stepName").textContent = step.name;
+      $("stepDescription").textContent = step.description || "No description has been added for this request yet.";
       $("stepType").textContent = `${flow.name} / ${step.id}`;
       $("methodSelect").innerHTML = `<option>${method}</option>`;
       $("requestTarget").value = requestTemplate(step);

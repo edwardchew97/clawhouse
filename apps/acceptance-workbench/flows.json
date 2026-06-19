@@ -10,6 +10,7 @@
         {
           "id": "key.create",
           "name": "Create Agent Key Market",
+          "description": "Creates a NEAR testnet agent key market by running the local create script with the selected agent id, display name, metadata URI, and storage deposit. Use a new agentId when validating market creation.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -40,6 +41,7 @@
         {
           "id": "key.quoteBuy",
           "name": "Quote Buy",
+          "description": "Calls the contract quote path for buying keys without signing a transaction. It returns the bonding-curve cost, fees, and max-price value that the Buy Key step uses as protection.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -71,6 +73,7 @@
         {
           "id": "key.buy",
           "name": "Buy Key",
+          "description": "Sends a real NEAR testnet buy_key transaction for the selected agent market using the test user account and the previous buy quote as max-price protection.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -117,6 +120,7 @@
         {
           "id": "key.stateAfterBuy",
           "name": "Read Contract State After Buy",
+          "description": "Reads contract state through a NEAR view call after a buy. It verifies market supply, reserve, and the selected holder balance without sending a transaction.",
           "type": "near-view",
           "contractId": "{{contractId}}",
           "methodName": "get_state",
@@ -142,6 +146,7 @@
         {
           "id": "key.quoteSell",
           "name": "Quote Sell",
+          "description": "Calls the contract quote path for selling keys without signing a transaction. It returns the expected payout and min-payout guard that the Sell Key step uses.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -172,6 +177,7 @@
         {
           "id": "key.sell",
           "name": "Sell Key",
+          "description": "Sends a real NEAR testnet sell_key transaction for the selected agent market using the test user account and the previous sell quote as min-payout protection.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -224,6 +230,7 @@
         {
           "id": "wallet.generate",
           "name": "Generate Test Wallet",
+          "description": "Runs the local wallet generator and writes a test wallet artifact under the configured work path. The response is expected to expose only public wallet metadata, not private key material.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -261,6 +268,7 @@
         {
           "id": "wallet.inspectPublic",
           "name": "Inspect Public Metadata",
+          "description": "Reads the generated wallet artifact through the local wallet inspect command and returns the public wallet address, public key, and key id for later acceptance steps.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -299,6 +307,7 @@
         {
           "id": "wallet.duplicateRefusesOverwrite",
           "name": "Duplicate Generation Refuses Overwrite",
+          "description": "Runs wallet generation against an existing artifact without --overwrite and expects the command to fail. This verifies the tool refuses accidental key replacement.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -335,6 +344,7 @@
         {
           "id": "wallet.inspectPublicAfterDuplicate",
           "name": "Inspect Public Metadata After Refusal",
+          "description": "Inspects the wallet artifact after the duplicate-generation refusal to confirm the existing public metadata is still readable and private key material stays out of the Workbench response.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -375,11 +385,600 @@
     {
       "id": "agent-board-ledger",
       "name": "Agent Board Ledger",
-      "purpose": "Verify the V0 ledger records wallet-signed agent events, append-only attachments, wallet observations, cron reconciliation, portfolio, and PnL through the real local HTTP service.",
+      "purpose": "Expose and verify the V0 ledger HTTP API for board registration, observations, accounting evidence, cron reconciliation, portfolio, PnL, read access, wallet-signed events, and full script-backed flows through the real local service.",
       "steps": [
+        {
+          "id": "ledger.apiHealth",
+          "name": "GET /health",
+          "description": "Calls the local Agent Board Ledger health endpoint. Use this first to confirm the backend is reachable and can report its database connection state.",
+          "type": "http",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/health",
+          "runningNotes": [
+            "Calling the real Agent Board Ledger /health endpoint.",
+            "Use this first to confirm the local backend is running and connected to Neon/Postgres."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerHealthDb": "response.json.json.db"
+          }
+        },
+        {
+          "id": "ledger.apiCreateBoard",
+          "name": "POST /boards",
+          "description": "Creates or registers an agent board through the Ledger HTTP API using the admin authorization header. The returned board id is stored for later observation, readback, and PnL steps.",
+          "type": "http",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "board_id": "{{ledgerBoardId}}",
+            "agent_id": "{{ledgerAgentId}}",
+            "wallet_address": "{{ledgerWalletAddress}}",
+            "public_key": "{{ledgerPublicKey}}",
+            "starting_value_usd": "{{ledgerStartingValueUsd}}",
+            "base_currency": "USD",
+            "public_status": "active",
+            "visibility_mode": "{{ledgerVisibilityMode}}"
+          },
+          "runningNotes": [
+            "Calling the real POST /boards backend API.",
+            "ledgerAuthorizationHeader must be formatted as Bearer <AGENT_BOARD_LEDGER_ADMIN_TOKEN>.",
+            "Leave ledgerBoardId empty if you want the backend to generate an id.",
+            "The returned board id is stored as ledgerBoardId for the later API calls."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "ledgerBoardId": "",
+            "ledgerAgentId": "ironclaw-api-workbench",
+            "ledgerWalletAddress": "ledger-api-wallet.testnet",
+            "ledgerPublicKey": "ed25519:ledger-api-public-key",
+            "ledgerStartingValueUsd": "100",
+            "ledgerVisibilityMode": "public"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerAgentId",
+            "ledgerWalletAddress",
+            "ledgerPublicKey",
+            "ledgerStartingValueUsd",
+            "ledgerVisibilityMode"
+          ],
+          "setVars": {
+            "ledgerBoardId": "response.json.json.board.id",
+            "ledgerAgentId": "response.json.json.board.agent_id",
+            "ledgerWalletAddress": "response.json.json.board.wallet_address",
+            "ledgerPublicKey": "response.json.json.board.public_key"
+          }
+        },
+        {
+          "id": "ledger.apiGetBoard",
+          "name": "GET /boards/:id",
+          "description": "Reads a single board by id through the Ledger API. Public boards can be read directly; holder-gated boards require a valid read token in the headers.",
+          "type": "http",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
+          "runningNotes": [
+            "Reading a board through the real GET /boards/:id API.",
+            "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerBoardId": "response.json.json.id",
+            "ledgerWalletAddress": "response.json.json.wallet_address"
+          }
+        },
+        {
+          "id": "ledger.apiCreateObservation",
+          "name": "POST /boards/:id/observations",
+          "description": "Writes a service-authorized wallet observation for a board. This is the input evidence cron uses to build events, portfolio snapshots, and PnL calculations.",
+          "type": "http",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/observations",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "wallet_address": "{{ledgerWalletAddress}}",
+            "current_value_usd": "{{ledgerCurrentValueUsd}}",
+            "topup_usd": "{{ledgerTopupUsd}}",
+            "withdrawal_usd": "{{ledgerWithdrawalUsd}}",
+            "client_event_id": "{{ledgerClientEventId}}",
+            "tx_hash": "{{ledgerTxHash}}",
+            "intent_id": "{{ledgerIntentId}}",
+            "status_claim": "observed_on_wallet",
+            "asset_in": "{{ledgerAssetIn}}",
+            "amount_in": "{{ledgerAmountIn}}",
+            "asset_out": "{{ledgerAssetOut}}",
+            "amount_out": "{{ledgerAmountOut}}",
+            "metadata": {
+              "source": "acceptance-workbench-api"
+            }
+          },
+          "runningNotes": [
+            "Calling the real service-authorized observation API.",
+            "This is how the backend records an observed wallet/portfolio state before cron calculates PnL.",
+            "ledgerAuthorizationHeader must be formatted as Bearer <AGENT_BOARD_LEDGER_ADMIN_TOKEN>."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "ledgerBoardId": "",
+            "ledgerWalletAddress": "",
+            "ledgerCurrentValueUsd": "112",
+            "ledgerTopupUsd": "0",
+            "ledgerWithdrawalUsd": "0",
+            "ledgerClientEventId": "",
+            "ledgerTxHash": "",
+            "ledgerIntentId": "",
+            "ledgerAssetIn": "USDC",
+            "ledgerAmountIn": "25",
+            "ledgerAssetOut": "NEAR",
+            "ledgerAmountOut": "10"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerCurrentValueUsd",
+            "ledgerTopupUsd",
+            "ledgerWithdrawalUsd",
+            "ledgerAssetIn",
+            "ledgerAmountIn",
+            "ledgerAssetOut",
+            "ledgerAmountOut"
+          ],
+          "setVars": {
+            "ledgerObservationId": "response.json.json.observation.id",
+            "ledgerObservedAt": "response.json.json.observation.observed_at",
+            "ledgerClientEventId": "response.json.json.observation.client_event_id",
+            "ledgerTxHash": "response.json.json.observation.tx_hash",
+            "ledgerIntentId": "response.json.json.observation.intent_id"
+          }
+        },
+        {
+          "id": "ledger.apiCreatePrice",
+          "name": "POST /boards/:id/prices",
+          "description": "Writes an explicit asset price snapshot for the board. Use it before cron when a PnL readback should be tied to visible pricing evidence.",
+          "type": "http",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/prices",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "asset_id": "{{ledgerPriceAssetId}}",
+            "asset_symbol": "{{ledgerPriceAssetSymbol}}",
+            "price_usd": "{{ledgerPriceUsd}}",
+            "price_source": "{{ledgerPriceSource}}",
+            "observed_at": "{{ledgerObservedAt}}"
+          },
+          "runningNotes": [
+            "Calling the real price snapshot API.",
+            "Use this before cron when you want a PnL snapshot to link to explicit pricing evidence."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "ledgerBoardId": "",
+            "ledgerPriceAssetId": "native:near",
+            "ledgerPriceAssetSymbol": "NEAR",
+            "ledgerPriceUsd": "2",
+            "ledgerPriceSource": "acceptance-workbench-api",
+            "ledgerObservedAt": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerPriceAssetId",
+            "ledgerPriceAssetSymbol",
+            "ledgerPriceUsd",
+            "ledgerPriceSource"
+          ],
+          "setVars": {
+            "ledgerPriceSnapshotId": "response.json.json.prices.0.id"
+          }
+        },
+        {
+          "id": "ledger.apiCreateBalanceChange",
+          "name": "POST /boards/:id/balance-changes",
+          "description": "Writes service-authorized balance-change evidence for an asset. It can link the accounting entry back to an observation, tx hash, or NEAR Intent id.",
+          "type": "http",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/balance-changes",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "asset_id": "{{ledgerBalanceAssetId}}",
+            "asset_symbol": "{{ledgerBalanceAssetSymbol}}",
+            "normalized_amount": "{{ledgerNormalizedAmount}}",
+            "delta_amount": "{{ledgerDeltaAmount}}",
+            "delta_value_usd": "{{ledgerDeltaValueUsd}}",
+            "change_type": "{{ledgerChangeType}}",
+            "source_observation_id": "{{ledgerObservationId}}",
+            "tx_hash": "{{ledgerTxHash}}",
+            "intent_id": "{{ledgerIntentId}}",
+            "metadata": {
+              "source": "acceptance-workbench-api"
+            }
+          },
+          "runningNotes": [
+            "Calling the real balance-change API.",
+            "This records accounting evidence for the wallet and can link back to an observation, tx hash, or intent id."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "ledgerBoardId": "",
+            "ledgerBalanceAssetId": "native:near",
+            "ledgerBalanceAssetSymbol": "NEAR",
+            "ledgerNormalizedAmount": "56",
+            "ledgerDeltaAmount": "6",
+            "ledgerDeltaValueUsd": "12",
+            "ledgerChangeType": "trade",
+            "ledgerObservationId": "",
+            "ledgerTxHash": "",
+            "ledgerIntentId": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerBalanceAssetId",
+            "ledgerBalanceAssetSymbol",
+            "ledgerNormalizedAmount",
+            "ledgerDeltaAmount",
+            "ledgerDeltaValueUsd",
+            "ledgerChangeType"
+          ],
+          "setVars": {
+            "ledgerBalanceChangeId": "response.json.json.balance_changes.0.id"
+          }
+        },
+        {
+          "id": "ledger.apiCronTick",
+          "name": "POST /cron/tick",
+          "description": "Runs the Ledger reconciliation endpoint. It converts observations and accounting evidence into events, holding snapshots, and PnL snapshots.",
+          "type": "http",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/cron/tick",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {},
+          "runningNotes": [
+            "Calling the real cron reconciliation API.",
+            "This links observed activity to events, creates holding snapshots, and calculates PnL."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerCronStatus": "response.json.json.status",
+            "ledgerSnapshotsCreated": "response.json.json.summary.snapshotsCreated"
+          }
+        },
+        {
+          "id": "ledger.apiListEvents",
+          "name": "GET /boards/:id/events",
+          "description": "Reads the board event timeline through the Ledger API. Use this after observations, signed events, or cron to confirm the timeline that users would inspect.",
+          "type": "http",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
+          "runningNotes": [
+            "Reading the event timeline through the real GET /boards/:id/events API.",
+            "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerEventId": "response.json.json.events.0.id",
+            "ledgerEventCount": "response.json.json.events.length"
+          }
+        },
+        {
+          "id": "ledger.apiGetPortfolio",
+          "name": "GET /boards/:id/portfolio",
+          "description": "Reads the latest portfolio snapshot for a board. This verifies the public or token-gated portfolio readback produced by cron reconciliation.",
+          "type": "http",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/portfolio",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
+          "runningNotes": [
+            "Reading the latest portfolio snapshot through the real GET /boards/:id/portfolio API."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerHoldingSnapshotId": "response.json.json.latest.id",
+            "ledgerCurrentValueUsd": "response.json.json.latest.current_value_usd"
+          }
+        },
+        {
+          "id": "ledger.apiGetPnl",
+          "name": "GET /boards/:id/pnl",
+          "description": "Reads the latest PnL snapshot for a board. Use it to verify current PnL, total PnL percentage, and the snapshot created from prior evidence.",
+          "type": "http",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/pnl",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
+          "runningNotes": [
+            "Reading the latest PnL snapshot through the real GET /boards/:id/pnl API."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerPnlSnapshotId": "response.json.json.latest.id",
+            "ledgerPnlUsd": "response.json.json.latest.pnl_usd",
+            "ledgerTotalPnlPct": "response.json.json.latest.total_pnl_pct"
+          }
+        },
+        {
+          "id": "ledger.apiListBalanceChanges",
+          "name": "GET /boards/:id/balance-changes",
+          "description": "Reads stored balance-change evidence for the board. This lets developers verify that wallet accounting entries were persisted and can be audited.",
+          "type": "http",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/balance-changes",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
+          "runningNotes": [
+            "Reading balance-change evidence through the real GET /boards/:id/balance-changes API."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerBalanceChangeId": "response.json.json.balance_changes.0.id"
+          }
+        },
+        {
+          "id": "ledger.apiListPrices",
+          "name": "GET /boards/:id/prices",
+          "description": "Reads stored price snapshots for the board. This lets developers confirm the exact pricing evidence available for PnL calculations.",
+          "type": "http",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/prices",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
+          "runningNotes": [
+            "Reading price snapshots through the real GET /boards/:id/prices API."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerPriceSnapshotId": "response.json.json.prices.0.id"
+          }
+        },
+        {
+          "id": "ledger.apiReadAccessCheck",
+          "name": "POST /boards/:id/read-access/checks",
+          "description": "Creates a service-authorized read-access check and optional read token for a requester wallet. Use this before testing holder-gated board readback.",
+          "type": "http",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/read-access/checks",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "requester_wallet_address": "{{ledgerRequesterWalletAddress}}",
+            "access_level": "{{ledgerAccessLevel}}",
+            "access_result": "{{ledgerAccessResult}}",
+            "read_token": "{{ledgerReadToken}}",
+            "expires_at": "{{ledgerReadTokenExpiresAt}}",
+            "reason": "acceptance-workbench-api"
+          },
+          "runningNotes": [
+            "Calling the service-authorized read-access check API.",
+            "Use this to issue a read token for holder-gated board readback."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "ledgerBoardId": "",
+            "ledgerRequesterWalletAddress": "holder.testnet",
+            "ledgerAccessLevel": "key_holder_detail",
+            "ledgerAccessResult": "granted",
+            "ledgerReadToken": "workbench-read-token",
+            "ledgerReadTokenExpiresAt": "2030-01-01T00:00:00.000Z"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerRequesterWalletAddress",
+            "ledgerAccessLevel",
+            "ledgerAccessResult",
+            "ledgerReadToken",
+            "ledgerReadTokenExpiresAt"
+          ],
+          "setVars": {
+            "ledgerReadAccessCheckId": "response.json.json.check.id",
+            "ledgerReadToken": "inputs.ledgerReadToken"
+          }
+        },
+        {
+          "id": "ledger.apiSignedEventTemplate",
+          "name": "POST /boards/:id/events",
+          "description": "Exposes the raw wallet-signed event endpoint. Developers must provide matching signature headers for the exact request body, or use the signed script flow to generate them.",
+          "type": "http",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events",
+          "headers": {
+            "content-type": "application/json",
+            "x-clawhouse-wallet-address": "{{ledgerWalletAddress}}",
+            "x-clawhouse-public-key": "{{ledgerPublicKey}}",
+            "x-clawhouse-timestamp": "{{ledgerSignatureTimestamp}}",
+            "x-clawhouse-nonce": "{{ledgerSignatureNonce}}",
+            "x-clawhouse-body-sha256": "{{ledgerBodySha256}}",
+            "x-clawhouse-signature": "{{ledgerSignature}}"
+          },
+          "body": {
+            "client_event_id": "{{ledgerClientEventId}}",
+            "tx_hash": "{{ledgerTxHash}}",
+            "intent_id": "{{ledgerIntentId}}",
+            "event_type": "agent_reported",
+            "status_claim": "{{ledgerStatusClaim}}",
+            "asset_in": "{{ledgerAssetIn}}",
+            "amount_in": "{{ledgerAmountIn}}",
+            "asset_out": "{{ledgerAssetOut}}",
+            "amount_out": "{{ledgerAmountOut}}",
+            "reason": "{{ledgerReason}}",
+            "metadata": {
+              "source": "acceptance-workbench-api"
+            }
+          },
+          "runningNotes": [
+            "This exposes the raw wallet-signed event API.",
+            "The backend will reject this request unless the signature headers match the exact request body.",
+            "Use the signed script flow when you want Workbench to generate the wallet signature automatically."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerWalletAddress": "",
+            "ledgerPublicKey": "",
+            "ledgerSignatureTimestamp": "",
+            "ledgerSignatureNonce": "",
+            "ledgerBodySha256": "",
+            "ledgerSignature": "",
+            "ledgerClientEventId": "",
+            "ledgerTxHash": "",
+            "ledgerIntentId": "",
+            "ledgerStatusClaim": "filled",
+            "ledgerAssetIn": "USDC",
+            "ledgerAmountIn": "25",
+            "ledgerAssetOut": "NEAR",
+            "ledgerAmountOut": "10",
+            "ledgerReason": "Raw API event submitted from Workbench."
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerStatusClaim",
+            "ledgerAssetIn",
+            "ledgerAmountIn",
+            "ledgerAssetOut",
+            "ledgerAmountOut",
+            "ledgerReason"
+          ],
+          "setVars": {
+            "ledgerEventId": "response.json.json.event.id"
+          }
+        },
+        {
+          "id": "ledger.apiSignedAttachmentTemplate",
+          "name": "POST /boards/:id/events/:eventId/attachments",
+          "description": "Exposes the raw wallet-signed event attachment endpoint. Developers must provide matching signature headers for the exact request body, or use the signed script flow to generate them.",
+          "type": "http",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events/{{ledgerEventId}}/attachments",
+          "headers": {
+            "content-type": "application/json",
+            "x-clawhouse-wallet-address": "{{ledgerWalletAddress}}",
+            "x-clawhouse-public-key": "{{ledgerPublicKey}}",
+            "x-clawhouse-timestamp": "{{ledgerSignatureTimestamp}}",
+            "x-clawhouse-nonce": "{{ledgerSignatureNonce}}",
+            "x-clawhouse-body-sha256": "{{ledgerBodySha256}}",
+            "x-clawhouse-signature": "{{ledgerSignature}}"
+          },
+          "body": {
+            "attachment_type": "{{ledgerAttachmentType}}",
+            "reason": "{{ledgerAttachmentReason}}",
+            "metadata": {
+              "source": "acceptance-workbench-api"
+            }
+          },
+          "runningNotes": [
+            "This exposes the raw wallet-signed attachment API.",
+            "The backend will reject this request unless the signature headers match the exact request body.",
+            "Use the signed script flow when you want Workbench to generate the wallet signature automatically."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerEventId": "",
+            "ledgerWalletAddress": "",
+            "ledgerPublicKey": "",
+            "ledgerSignatureTimestamp": "",
+            "ledgerSignatureNonce": "",
+            "ledgerBodySha256": "",
+            "ledgerSignature": "",
+            "ledgerAttachmentType": "analysis",
+            "ledgerAttachmentReason": "Raw API attachment submitted from Workbench."
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerAttachmentType",
+            "ledgerAttachmentReason"
+          ],
+          "setVars": {
+            "ledgerAttachmentId": "response.json.json.attachment.id"
+          }
+        },
         {
           "id": "ledger.neonMigrate",
           "name": "Migrate Neon Schema",
+          "description": "Runs the Ledger Neon migration script with the database URL passed through the script environment. It creates or updates the tables required by board, event, accounting, read-access, and audit flows.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -410,6 +1009,7 @@
         {
           "id": "ledger.fullFlow",
           "name": "Run Signed Ledger Flow",
+          "description": "Runs a complete script-backed Ledger acceptance flow against the local service: wallet setup, board registration, signed event and attachment writes, observation, cron, event readback, portfolio, and PnL.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -487,6 +1087,7 @@
         {
           "id": "ledger.edgeCases",
           "name": "Run Ledger Edge Cases",
+          "description": "Runs the script-backed Ledger edge-case suite against the local service. It verifies rejection cases, holder-gated readback, mocked NEAR RPC paths, FT evidence, signed writes, cron idempotency, and PnL linkage.",
           "type": "script",
           "command": "bun",
           "args": [
