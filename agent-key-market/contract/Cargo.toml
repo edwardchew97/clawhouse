@@ -1,0 +1,15 @@
+[package]
+name = "clawhouse-agent-key-market"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+borsh = "1.7.0"
+near-sdk = { version = "5.28.2", features = ["legacy"] }
+
+[dev-dependencies]
+near-sdk = { version = "5.28.2", features = ["legacy", "unit-testing"] }

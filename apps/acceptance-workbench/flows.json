@@ -1,0 +1,285 @@
+{
+  "name": "ClawHouse Season 0 Acceptance",
+  "version": "0.1.0",
+  "flows": [
+    {
+      "id": "creator-onboarding",
+      "name": "Creator Onboarding",
+      "purpose": "Verify draft submission, approval-link creation, and deployment boundary.",
+      "steps": [
+        {
+          "id": "creator.submitDraft",
+          "name": "Submit Agent Draft",
+          "type": "http",
+          "method": "POST",
+          "url": "{{baseUrl}}/api/creator/drafts",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "Bearer {{apiToken}}"
+          },
+          "body": {
+            "creatorHandle": "{{creatorHandle}}",
+            "agentName": "{{agentName}}",
+            "strategyPrompt": "{{strategyPrompt}}",
+            "risk": {
+              "maxDrawdownPct": "{{maxDrawdownPct}}",
+              "allowedMarkets": "{{allowedMarkets}}"
+            }
+          },
+          "inputs": {
+            "creatorHandle": "@grandmaquant",
+            "agentName": "Grandma Quant",
+            "strategyPrompt": "Rotate between BTC, ETH, and NEAR with conservative risk commentary.",
+            "maxDrawdownPct": "5",
+            "allowedMarkets": "BTC,ETH,NEAR"
+          },
+          "setVars": {
+            "draftId": "response.json.draftId",
+            "capsuleHash": "response.json.capsuleHash",
+            "approvalUrl": "response.json.approvalUrl"
+          }
+        },
+        {
+          "id": "creator.fetchDraft",
+          "name": "Fetch Pending Draft",
+          "type": "http",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/creator/drafts/{{draftId}}",
+          "headers": {
+            "authorization": "Bearer {{apiToken}}"
+          },
+          "inputs": {},
+          "setVars": {}
+        },
+        {
+          "id": "creator.approveDraft",
+          "name": "Approve Draft For Deployment",
+          "type": "http",
+          "method": "POST",
+          "url": "{{baseUrl}}/api/creator/drafts/{{draftId}}/approve",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "Bearer {{apiToken}}"
+          },
+          "body": {
+            "approvedCapsuleHash": "{{capsuleHash}}",
+            "reviewer": "{{reviewer}}"
+          },
+          "inputs": {},
+          "setVars": {
+            "deployRequestId": "response.json.deployRequestId"
+          }
+        }
+      ]
+    },
+    {
+      "id": "key-market",
+      "name": "NEAR Key Market",
+      "purpose": "Verify Scope V0 contract behavior through local scripts and NEAR RPC state reads.",
+      "steps": [
+        {
+          "id": "key.create",
+          "name": "Create Agent Key Market",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "run",
+            "create",
+            "{{agentId}}",
+            "{{agentName}}",
+            "{{metadataUri}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
+          "inputs": {
+            "agentId": "terminal_chad",
+            "agentName": "Terminal Chad",
+            "metadataUri": "ipfs://terminal-chad",
+            "STORAGE_DEPOSIT": "1"
+          },
+          "setVars": {
+            "agentId": "response.json.agentId",
+            "createTxHash": "response.json.txHash"
+          }
+        },
+        {
+          "id": "key.quoteBuy",
+          "name": "Quote Buy",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "run",
+            "quote",
+            "buy",
+            "{{agentId}}",
+            "{{keyAmount}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
+          "inputs": {
+            "keyAmount": "1"
+          },
+          "setVars": {
+            "keyAmount": "response.json.amount",
+            "buyMaxPriceNear": "response.json.total_cost_near",
+            "buyQuoteYocto": "response.json.total_cost"
+          }
+        },
+        {
+          "id": "key.buy",
+          "name": "Buy Key",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "run",
+            "buy",
+            "{{agentId}}",
+            "{{keyAmount}}",
+            "{{buyMaxPriceNear}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
+          "inputs": {
+            "STORAGE_DEPOSIT": "0.2"
+          },
+          "setVars": {
+            "buyTxHash": "response.json.txHash",
+            "supplyAfterBuy": "response.json.result.supply_after",
+            "holderBalanceAfterBuy": "response.json.result.trader_balance_after",
+            "reserveAfterBuyYocto": "response.json.result.reserve_after"
+          }
+        },
+        {
+          "id": "key.stateAfterBuy",
+          "name": "Read Contract State After Buy",
+          "type": "near-view",
+          "contractId": "{{contractId}}",
+          "methodName": "get_state",
+          "args": {
+            "agent_id": "{{agentId}}",
+            "holder_id": "{{testUserAccountId}}"
+          },
+          "inputs": {},
+          "setVars": {
+            "keySupply": "response.json.agent.supply",
+            "reserveYocto": "response.json.agent.reserve",
+            "holderBalance": "response.json.holder_balance"
+          }
+        },
+        {
+          "id": "key.quoteSell",
+          "name": "Quote Sell",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "run",
+            "quote",
+            "sell",
+            "{{agentId}}",
+            "{{keyAmount}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
+          "inputs": {},
+          "setVars": {
+            "minPayoutNear": "response.json.payout_near",
+            "sellQuoteYocto": "response.json.payout"
+          }
+        },
+        {
+          "id": "key.sell",
+          "name": "Sell Key",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "run",
+            "sell",
+            "{{agentId}}",
+            "{{keyAmount}}",
+            "{{minPayoutNear}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
+          "inputs": {},
+          "setVars": {
+            "sellTxHash": "response.json.txHash",
+            "supplyAfterSell": "response.json.result.supply_after",
+            "holderBalanceAfterSell": "response.json.result.trader_balance_after",
+            "reserveAfterSellYocto": "response.json.result.reserve_after"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ironclaw",
+      "name": "IronClaw Runtime",
+      "purpose": "Verify a deployed/self-hosted IronClaw instance accepts a real webhook message.",
+      "steps": [
+        {
+          "id": "ironclaw.webhook",
+          "name": "Send Webhook Message",
+          "type": "http",
+          "method": "POST",
+          "url": "{{ironclawWebhookUrl}}",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "Bearer {{ironclawWebhookSecret}}"
+          },
+          "body": {
+            "user_id": "{{holderId}}",
+            "message": "{{agentMessage}}"
+          },
+          "inputs": {
+            "holderId": "holder-36",
+            "agentMessage": "Give a one-paragraph room update for the latest key-market move."
+          },
+          "setVars": {
+            "ironclawJobId": "response.json.job_id"
+          }
+        },
+        {
+          "id": "ironclaw.job",
+          "name": "Fetch Job Result",
+          "type": "http",
+          "method": "GET",
+          "url": "{{ironclawBaseUrl}}/jobs/{{ironclawJobId}}",
+          "headers": {
+            "authorization": "Bearer {{ironclawWebhookSecret}}"
+          },
+          "inputs": {},
+          "setVars": {}
+        }
+      ]
+    },
+    {
+      "id": "outlayer-policy",
+      "name": "OutLayer Policy",
+      "purpose": "Verify the policy checker denies invalid trade proposals and allows valid ones.",
+      "steps": [
+        {
+          "id": "outlayer.check",
+          "name": "Run Policy Checker Script",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "run",
+            "policy:check",
+            "--asset",
+            "{{asset}}",
+            "--notional-usd",
+            "{{notionalUsd}}",
+            "--max-position-usd",
+            "{{maxPositionUsd}}",
+            "--leverage",
+            "{{leverage}}"
+          ],
+          "cwd": "{{repoRoot}}/outlayer-policy-checker",
+          "inputs": {
+            "asset": "BTC",
+            "notionalUsd": "80",
+            "maxPositionUsd": "100",
+            "leverage": "none"
+          },
+          "setVars": {
+            "policyDecision": "response.json.allowed"
+          }
+        }
+      ]
+    }
+  ]
+}

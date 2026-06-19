@@ -1,0 +1,1292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClawHouse Acceptance Workbench</title>
+  <style>
+    :root {
+      --bg: #fbfbfa;
+      --surface: #ffffff;
+      --selected: #f5f5f5;
+      --border: #f2f2f2;
+      --border-strong: #e5e5e2;
+      --strong: #292929;
+      --default: #5d5d5d;
+      --subtle: #7f7f7f;
+      --green: #2f6f4e;
+      --red: #a23a35;
+      --amber: #8b6424;
+      --blue: #2f5f8f;
+      --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--strong);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", sans-serif;
+      font-size: 13px;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+      color: inherit;
+    }
+
+    button {
+      border: 0;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 292px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow: auto;
+    }
+
+    .sidebar-top {
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .brand {
+      display: grid;
+      gap: 2px;
+    }
+
+    .brand strong {
+      font-size: 16px;
+      font-weight: 650;
+    }
+
+    .workspace-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 26px;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      background: #ffffff;
+      padding: 5px 8px;
+      font-size: 12px;
+      color: var(--default);
+    }
+
+    .search {
+      width: 100%;
+      height: 32px;
+      border: 1px solid var(--border-strong);
+      border-radius: 7px;
+      background: var(--selected);
+      padding: 7px 9px;
+      outline: none;
+    }
+
+    .sidebar-section {
+      padding: 12px 10px 18px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .sidebar-label,
+    .field label,
+    .tab-meta {
+      color: var(--subtle);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .flow-block {
+      display: grid;
+      gap: 4px;
+    }
+
+    .flow-button,
+    .step-button,
+    .tab,
+    .button,
+    .mini-button {
+      border: 1px solid transparent;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .flow-button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      min-height: 32px;
+      border-radius: 7px;
+      padding: 7px 8px;
+      text-align: left;
+      color: var(--strong);
+      font-weight: 560;
+    }
+
+    .flow-button.active,
+    .flow-button:hover,
+    .step-button.active,
+    .step-button:hover {
+      background: var(--selected);
+    }
+
+    .step-list {
+      display: grid;
+      gap: 2px;
+      margin-left: 10px;
+      padding-left: 8px;
+      border-left: 1px solid var(--border);
+    }
+
+    .step-button {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      min-height: 30px;
+      border-radius: 7px;
+      padding: 5px 7px;
+      text-align: left;
+    }
+
+    .step-button strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 520;
+    }
+
+    .verb {
+      justify-self: start;
+      min-width: 44px;
+      border-radius: 5px;
+      background: var(--selected);
+      color: var(--default);
+      padding: 3px 5px;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .verb.post,
+    .verb.script {
+      color: var(--blue);
+    }
+
+    .verb.view {
+      color: var(--amber);
+    }
+
+    .workspace {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 52px;
+      padding: 10px 14px;
+      background: rgba(251, 251, 250, 0.96);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+    }
+
+    .crumbs {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      color: var(--default);
+      font-size: 12px;
+    }
+
+    .crumb-current {
+      color: var(--strong);
+      font-weight: 560;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .env-control {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .env-select,
+    .select,
+    .input,
+    .textarea {
+      border: 1px solid var(--border-strong);
+      border-radius: 7px;
+      background: #ffffff;
+      outline: none;
+    }
+
+    .env-select {
+      height: 32px;
+      min-width: 172px;
+      padding: 6px 9px;
+    }
+
+    .env-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 0 0 0 3px rgba(47, 111, 78, 0.08);
+    }
+
+    .button,
+    .mini-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 32px;
+      border: 1px solid var(--border-strong);
+      border-radius: 7px;
+      background: #ffffff;
+      padding: 7px 10px;
+      font-weight: 560;
+      white-space: nowrap;
+    }
+
+    .button:hover,
+    .mini-button:hover {
+      background: var(--selected);
+    }
+
+    .button.primary {
+      border-color: var(--strong);
+      background: var(--strong);
+      color: #ffffff;
+    }
+
+    .button.primary:hover {
+      background: #111111;
+    }
+
+    .button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .mini-button {
+      min-height: 28px;
+      padding: 5px 8px;
+      font-size: 12px;
+    }
+
+    .env-drawer {
+      display: none;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+      gap: 12px;
+      padding: 12px 14px;
+      background: #ffffff;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .env-drawer.open {
+      display: grid;
+    }
+
+    .workbench {
+      min-width: 0;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .request-shell,
+    .response-shell {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .request-head,
+    .response-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .title-block {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    h1,
+    h2 {
+      margin: 0;
+      font-weight: 650;
+      line-height: 1.2;
+    }
+
+    h1 {
+      font-size: 18px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    h2 {
+      font-size: 16px;
+    }
+
+    .request-line {
+      display: grid;
+      grid-template-columns: 108px minmax(0, 1fr) auto;
+      gap: 8px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .select,
+    .input {
+      width: 100%;
+      height: 36px;
+      padding: 8px 10px;
+    }
+
+    .request-target {
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .input[readonly] {
+      color: var(--default);
+      background: #fafafa;
+    }
+
+    .input:focus,
+    .textarea:focus,
+    .select:focus,
+    .env-select:focus {
+      border-color: var(--strong);
+      box-shadow: 0 0 0 2px rgba(41, 41, 41, 0.08);
+    }
+
+    .target-strip {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      background: #fcfcfb;
+    }
+
+    .target-item {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .target-value {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--strong);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tabs {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 0 10px;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+    }
+
+    .tab {
+      min-height: 38px;
+      border-radius: 0;
+      padding: 10px 10px;
+      color: var(--default);
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+    }
+
+    .tab.active {
+      color: var(--strong);
+      border-bottom-color: var(--strong);
+      font-weight: 560;
+    }
+
+    .tab-body {
+      padding: 14px;
+      min-height: 230px;
+    }
+
+    .fields {
+      display: grid;
+      gap: 9px;
+    }
+
+    .kv-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 210px) minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .textarea {
+      width: 100%;
+      min-height: 168px;
+      resize: vertical;
+      padding: 10px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .code {
+      margin: 0;
+      padding: 12px;
+      background: #191919;
+      color: #eeeeee;
+      border-radius: 7px;
+      overflow: auto;
+      min-height: 180px;
+      max-height: 520px;
+      white-space: pre-wrap;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .light-code {
+      margin: 0;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #fafafa;
+      color: var(--strong);
+      overflow: auto;
+      white-space: pre-wrap;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .pill-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: var(--selected);
+      color: var(--default);
+      font-size: 12px;
+      font-weight: 560;
+    }
+
+    .pill.ok {
+      color: var(--green);
+      background: #edf6f1;
+    }
+
+    .pill.fail {
+      color: var(--red);
+      background: #fbefed;
+    }
+
+    .pill.warn {
+      color: var(--amber);
+      background: #faf3e5;
+    }
+
+    .response-shell {
+      display: grid;
+    }
+
+    .response-body {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .vars-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px;
+    }
+
+    .var-card {
+      display: grid;
+      gap: 4px;
+      padding: 9px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #ffffff;
+      min-width: 0;
+    }
+
+    .var-key {
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .var-value {
+      font-family: var(--mono);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .empty {
+      color: var(--subtle);
+      font-size: 12px;
+    }
+
+    @media (max-width: 980px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: relative;
+        height: auto;
+      }
+
+      .env-drawer,
+      .target-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .request-line {
+        grid-template-columns: 96px minmax(0, 1fr);
+      }
+
+      .request-line .button {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .topbar,
+      .request-head,
+      .response-head {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .env-control {
+        justify-content: flex-start;
+        width: 100%;
+      }
+
+      .env-select {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .kv-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="brand-row">
+          <div class="brand">
+            <strong>ClawHouse</strong>
+            <span class="sidebar-label">Acceptance</span>
+          </div>
+          <span class="workspace-pill">Local</span>
+        </div>
+        <input id="filter" class="search" placeholder="Filter requests" />
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Collections</div>
+        <div id="flowList"></div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="crumbs">
+          <span>Collections</span>
+          <span>/</span>
+          <span id="crumbFlow"></span>
+          <span>/</span>
+          <span id="crumbStep" class="crumb-current"></span>
+        </div>
+        <div class="env-control">
+          <span class="env-dot"></span>
+          <select id="envSelect" class="env-select">
+            <option value="local">Local Environment</option>
+          </select>
+          <button id="toggleEnv" class="mini-button">Environment</button>
+        </div>
+      </header>
+
+      <section id="envDrawer" class="env-drawer">
+        <div class="field">
+          <label>Environment JSON</label>
+          <textarea id="envEditor" class="textarea"></textarea>
+        </div>
+        <div class="field">
+          <label>Runtime Variables JSON</label>
+          <textarea id="varsEditor" class="textarea"></textarea>
+          <div class="pill-row">
+            <button id="saveEnv" class="mini-button">Save</button>
+            <button id="clearVars" class="mini-button">Clear Runtime Vars</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="workbench">
+        <div class="request-shell">
+          <div class="request-head">
+            <div class="title-block">
+              <h1 id="stepName">Request</h1>
+              <span id="stepType" class="tab-meta"></span>
+            </div>
+            <div id="requestPills" class="pill-row"></div>
+          </div>
+
+          <div class="request-line">
+            <select id="methodSelect" class="select"></select>
+            <input id="requestTarget" class="input request-target" />
+            <button id="fireStep" class="button primary">Send</button>
+          </div>
+
+          <div class="target-strip">
+            <div class="target-item">
+              <span class="tab-meta">Runner URL</span>
+              <span id="runnerUrl" class="target-value"></span>
+            </div>
+            <div class="target-item">
+              <span class="tab-meta">Resolved Target</span>
+              <span id="resolvedTarget" class="target-value"></span>
+            </div>
+          </div>
+
+          <nav id="tabs" class="tabs"></nav>
+          <div id="tabBody" class="tab-body"></div>
+        </div>
+
+        <div class="response-shell">
+          <div class="response-head">
+            <div class="title-block">
+              <h2>Response</h2>
+              <span id="responseTarget" class="tab-meta">No request sent.</span>
+            </div>
+            <div id="resultMeta" class="pill-row"></div>
+          </div>
+          <div class="response-body">
+            <pre id="resultBox" class="code">No response yet.</pre>
+            <div class="pill-row">
+              <span class="pill" id="varCount">0 runtime vars</span>
+            </div>
+            <div id="vars" class="vars-grid"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const storageKey = "clawhouse.acceptance.workbench.v2";
+    const defaultEnv = {
+      repoRoot: "",
+      baseUrl: "http://127.0.0.1:3000",
+      apiToken: "",
+      nearRpcUrl: "https://rpc.testnet.near.org",
+      contractId: "clawhouse-key-20260619125948.testnet",
+      nearNetworkId: "testnet",
+      testUserAccountId: "",
+      testUserPrivateKey: "",
+      accountId: "",
+      reviewer: "JY",
+      ironclawBaseUrl: "",
+      ironclawWebhookUrl: "",
+      ironclawWebhookSecret: ""
+    };
+
+    const persisted = loadState();
+    const state = {
+      spec: null,
+      activeFlow: 0,
+      activeStep: 0,
+      activeTab: persisted.activeTab || "params",
+      envOpen: persisted.envOpen || false,
+      filter: "",
+      env: { ...defaultEnv, ...(persisted.env || {}) },
+      vars: persisted.vars || {},
+      inputs: persisted.inputs || {},
+      requestTemplates: persisted.requestTemplates || {},
+      lastResult: null
+    };
+
+    const tabs = [
+      { id: "params", label: "Params" },
+      { id: "headers", label: "Headers" },
+      { id: "body", label: "Body / Args" },
+      { id: "vars", label: "Vars" },
+      { id: "preview", label: "Preview" }
+    ];
+
+    const $ = (id) => document.getElementById(id);
+
+    function loadState() {
+      try {
+        return JSON.parse(localStorage.getItem(storageKey) || "{}");
+      } catch {
+        return {};
+      }
+    }
+
+    function persist() {
+      localStorage.setItem(storageKey, JSON.stringify({
+        activeTab: state.activeTab,
+        envOpen: state.envOpen,
+        env: persistableEnv(),
+        vars: state.vars,
+        inputs: state.inputs,
+        requestTemplates: state.requestTemplates
+      }));
+    }
+
+    function persistableEnv() {
+      const next = { ...state.env };
+      next.testUserPrivateKey = "";
+      return next;
+    }
+
+    function displayEnv() {
+      const next = { ...state.env };
+      if (next.testUserPrivateKey) next.testUserPrivateKey = "[not shown]";
+      return next;
+    }
+
+    function activeFlow() {
+      return state.spec.flows[state.activeFlow];
+    }
+
+    function activeStep() {
+      return activeFlow().steps[state.activeStep];
+    }
+
+    function currentInputs() {
+      const step = activeStep();
+      state.inputs[step.id] ||= { ...(step.inputs || {}) };
+      return state.inputs[step.id];
+    }
+
+    function methodLabel(step = activeStep()) {
+      if (step.type === "http") return step.method || "GET";
+      if (step.type === "near-view") return "VIEW";
+      return "SCRIPT";
+    }
+
+    function runnerPath(step = activeStep()) {
+      if (step.type === "http") return "/run/http";
+      if (step.type === "near-view") return "/run/near-view";
+      return "/run/script";
+    }
+
+    function runnerUrl(step = activeStep()) {
+      return `${location.origin}${runnerPath(step)}`;
+    }
+
+    function requestTemplate(step = activeStep()) {
+      if (state.requestTemplates[step.id] !== undefined) return state.requestTemplates[step.id];
+      if (step.type === "http") return step.url || "";
+      if (step.type === "near-view") return `${step.contractId || ""} :: ${step.methodName || ""}`;
+      return `${step.command || ""} ${(step.args || []).join(" ")}`;
+    }
+
+    function allVars() {
+      return { ...state.env, ...state.vars, ...currentInputs() };
+    }
+
+    function interpolate(value, vars) {
+      if (typeof value === "string") {
+        return value.replace(/\{\{([^}]+)\}\}/g, (_, key) => {
+          const value = vars[key.trim()];
+          return value === undefined || value === null ? "" : String(value);
+        });
+      }
+      if (Array.isArray(value)) return value.map((item) => interpolate(item, vars));
+      if (value && typeof value === "object") {
+        return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, interpolate(item, vars)]));
+      }
+      return value;
+    }
+
+    function getPath(source, path) {
+      return path.split(".").reduce((acc, key) => {
+        if (acc === undefined || acc === null) return undefined;
+        return acc[key];
+      }, source);
+    }
+
+    function resolvedTarget(step = activeStep()) {
+      const vars = allVars();
+      if (step.type === "http") return interpolate(requestTemplate(step), vars);
+      if (step.type === "near-view") {
+        const rpc = vars.nearRpcUrl || "";
+        const contract = interpolate(step.contractId || "", vars);
+        const method = interpolate(step.methodName || "", vars);
+        return `${rpc} -> ${contract}.${method}`;
+      }
+      const command = step.command || "";
+      const args = interpolate(step.args || [], vars);
+      const cwd = interpolate(step.cwd || "", vars);
+      return `${cwd} $ ${[command, ...args].join(" ")}`;
+    }
+
+    function previewPayload(step = activeStep()) {
+      const vars = allVars();
+      if (step.type === "http") {
+        return {
+          target: runnerPath(step),
+          method: methodLabel(step),
+          url: interpolate(requestTemplate(step), vars),
+          headers: interpolate(step.headers || {}, vars),
+          body: interpolate(step.body, vars)
+        };
+      }
+      if (step.type === "near-view") {
+        return {
+          target: runnerPath(step),
+          rpcUrl: vars.nearRpcUrl,
+          contractId: interpolate(step.contractId, vars),
+          methodName: interpolate(step.methodName, vars),
+          args: interpolate(step.args || {}, vars)
+        };
+      }
+      return {
+        target: runnerPath(step),
+        stepId: step.id,
+        command: step.command,
+        args: interpolate(step.args || [], vars),
+        cwd: interpolate(step.cwd, vars)
+      };
+    }
+
+    function render() {
+      renderSidebar();
+      renderTopbar();
+      renderRequest();
+      renderTabs();
+      renderVars();
+      persist();
+    }
+
+    function renderSidebar() {
+      const needle = state.filter.trim().toLowerCase();
+      $("flowList").innerHTML = state.spec.flows.map((flow, flowIndex) => {
+        const steps = flow.steps
+          .map((step, stepIndex) => ({ step, stepIndex }))
+          .filter(({ step }) => {
+            if (!needle) return true;
+            return `${flow.name} ${step.name} ${step.id} ${step.type}`.toLowerCase().includes(needle);
+          });
+        if (!steps.length) return "";
+        return `
+          <div class="flow-block">
+            <button class="flow-button ${flowIndex === state.activeFlow ? "active" : ""}" data-flow="${flowIndex}">
+              <span>${flow.name}</span>
+              <span class="sidebar-label">${flow.steps.length}</span>
+            </button>
+            <div class="step-list">
+              ${steps.map(({ step, stepIndex }) => `
+                <button class="step-button ${flowIndex === state.activeFlow && stepIndex === state.activeStep ? "active" : ""}" data-flow="${flowIndex}" data-step="${stepIndex}">
+                  <span class="verb ${methodLabel(step).toLowerCase()}">${methodLabel(step)}</span>
+                  <strong>${step.name}</strong>
+                </button>
+              `).join("")}
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      document.querySelectorAll("[data-flow]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.activeFlow = Number(button.dataset.flow);
+          if (button.dataset.step !== undefined) {
+            state.activeStep = Number(button.dataset.step);
+          } else {
+            state.activeStep = 0;
+          }
+          render();
+        });
+      });
+    }
+
+    function renderTopbar() {
+      const flow = activeFlow();
+      const step = activeStep();
+      $("crumbFlow").textContent = flow.name;
+      $("crumbStep").textContent = step.name;
+      $("envDrawer").classList.toggle("open", state.envOpen);
+      $("envEditor").value = JSON.stringify(state.env, null, 2);
+      $("varsEditor").value = JSON.stringify(state.vars, null, 2);
+    }
+
+    function renderRequest() {
+      const flow = activeFlow();
+      const step = activeStep();
+      const method = methodLabel(step);
+      $("stepName").textContent = step.name;
+      $("stepType").textContent = `${flow.name} / ${step.id}`;
+      $("methodSelect").innerHTML = `<option>${method}</option>`;
+      $("requestTarget").value = requestTemplate(step);
+      $("requestTarget").readOnly = step.type !== "http";
+      $("requestPills").innerHTML = `
+        <span class="pill">${step.type}</span>
+        <span class="pill">${Object.keys(step.setVars || {}).length} extracts</span>
+      `;
+      $("runnerUrl").textContent = `POST ${runnerUrl(step)}`;
+      $("resolvedTarget").textContent = resolvedTarget(step);
+      $("responseTarget").textContent = `Ready to send to ${resolvedTarget(step)}`;
+    }
+
+    function renderTabs() {
+      $("tabs").innerHTML = tabs.map((tab) => `
+        <button class="tab ${tab.id === state.activeTab ? "active" : ""}" data-tab="${tab.id}">${tab.label}</button>
+      `).join("");
+
+      document.querySelectorAll("[data-tab]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.activeTab = button.dataset.tab;
+          renderTabs();
+          persist();
+        });
+      });
+
+      const step = activeStep();
+      if (state.activeTab === "params") renderParams(step);
+      if (state.activeTab === "headers") renderHeaders(step);
+      if (state.activeTab === "body") renderBody(step);
+      if (state.activeTab === "vars") renderVarsTab(step);
+      if (state.activeTab === "preview") renderPreview(step);
+    }
+
+    function renderParams(step) {
+      const inputs = currentInputs();
+      const keys = Object.keys(inputs);
+      $("tabBody").innerHTML = keys.length ? `
+        <div class="fields">
+          ${keys.map((key) => `
+            <div class="kv-row">
+              <input class="input" value="${escapeAttr(key)}" readonly />
+              <input class="input" data-input="${escapeAttr(key)}" value="${escapeAttr(String(inputs[key]))}" />
+            </div>
+          `).join("")}
+        </div>
+      ` : `<div class="empty">This step has no request inputs.</div>`;
+      document.querySelectorAll("[data-input]").forEach((input) => {
+        input.addEventListener("input", () => {
+          currentInputs()[input.dataset.input] = input.value;
+          renderRequest();
+          if (state.activeTab === "preview") renderPreview(step);
+          persist();
+        });
+      });
+    }
+
+    function renderHeaders(step) {
+      const headers = step.type === "http" ? interpolate(step.headers || {}, allVars()) : {};
+      $("tabBody").innerHTML = Object.keys(headers).length
+        ? `<pre class="light-code">${escapeHtml(JSON.stringify(headers, null, 2))}</pre>`
+        : `<div class="empty">No headers for this step.</div>`;
+    }
+
+    function renderBody(step) {
+      let payload;
+      if (step.type === "http") payload = interpolate(step.body, allVars());
+      if (step.type === "near-view") payload = interpolate(step.args || {}, allVars());
+      if (step.type === "script") {
+        payload = {
+          command: step.command,
+          args: interpolate(step.args || [], allVars()),
+          cwd: interpolate(step.cwd, allVars())
+        };
+      }
+      $("tabBody").innerHTML = payload === undefined
+        ? `<div class="empty">No body for this step.</div>`
+        : `<pre class="light-code">${escapeHtml(JSON.stringify(payload, null, 2))}</pre>`;
+    }
+
+    function renderVarsTab(step) {
+      $("tabBody").innerHTML = `
+        <div class="fields">
+          <div class="field">
+            <label>Runtime Variables</label>
+            <textarea id="varsTabEditor" class="textarea">${escapeHtml(JSON.stringify(state.vars, null, 2))}</textarea>
+          </div>
+          <div class="field">
+            <label>Variables Extracted By This Step</label>
+            <pre class="light-code">${escapeHtml(JSON.stringify(step.setVars || {}, null, 2))}</pre>
+          </div>
+        </div>
+      `;
+      $("varsTabEditor").addEventListener("input", () => {
+        try {
+          state.vars = parseJsonObject($("varsTabEditor").value || "{}", "Runtime variables");
+          renderRequest();
+          renderVars();
+          persist();
+        } catch {
+          // Keep editing local until valid JSON is restored.
+        }
+      });
+    }
+
+    function renderPreview(step) {
+      const preview = {
+        runner: {
+          method: "POST",
+          url: runnerUrl(step),
+          payload: step.type === "script"
+            ? { stepId: step.id, env: displayEnv(), inputs: currentInputs(), vars: state.vars }
+            : previewPayload(step)
+        },
+        resolvedAction: previewPayload(step)
+      };
+      $("tabBody").innerHTML = `<pre class="light-code">${escapeHtml(JSON.stringify(preview, null, 2))}</pre>`;
+    }
+
+    function renderVars() {
+      const entries = Object.entries(state.vars);
+      $("varCount").textContent = `${entries.length} runtime vars`;
+      $("vars").innerHTML = entries.length ? entries.map(([key, value]) => `
+        <div class="var-card">
+          <div class="var-key">${escapeHtml(key)}</div>
+          <div class="var-value">${escapeHtml(String(value))}</div>
+        </div>
+      `).join("") : `<div class="empty">No runtime variables extracted yet.</div>`;
+      if ($("varsEditor")) $("varsEditor").value = JSON.stringify(state.vars, null, 2);
+      const varsTabEditor = $("varsTabEditor");
+      if (varsTabEditor && document.activeElement !== varsTabEditor) {
+        varsTabEditor.value = JSON.stringify(state.vars, null, 2);
+      }
+    }
+
+    function syncEditors() {
+      try {
+        state.env = parseJsonObject($("envEditor").value || "{}", "Environment");
+        state.vars = parseJsonObject($("varsEditor").value || "{}", "Runtime variables");
+        renderRequest();
+        renderVars();
+        if (state.activeTab === "preview") renderPreview(activeStep());
+        persist();
+        return true;
+      } catch (error) {
+        renderResult({ ok: false, error: error.message }, new Date().toLocaleTimeString(), "Invalid JSON");
+        return false;
+      }
+    }
+
+    function parseJsonObject(value, label) {
+      const parsed = JSON.parse(value);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error(`${label} must be a JSON object`);
+      }
+      return parsed;
+    }
+
+    function applySetVars(step, result) {
+      const mappings = step.setVars || {};
+      const source = {
+        response: result,
+        inputs: currentInputs(),
+        env: state.env,
+        vars: state.vars
+      };
+      for (const [name, path] of Object.entries(mappings)) {
+        const value = getPath(source, path);
+        if (value !== undefined && value !== null && value !== "") {
+          state.vars[name] = typeof value === "object" ? JSON.stringify(value) : String(value);
+        }
+      }
+    }
+
+    function renderResult(result, startedAt, targetLabel) {
+      const ok = Boolean(result.ok);
+      $("resultMeta").innerHTML = `
+        <span class="pill ${ok ? "ok" : "fail"}">${ok ? "success" : "failed"}</span>
+        <span class="pill">started ${escapeHtml(startedAt)}</span>
+        ${result.status ? `<span class="pill">status ${result.status}</span>` : ""}
+        ${result.exitCode !== undefined ? `<span class="pill">exit ${result.exitCode}</span>` : ""}
+      `;
+      $("resultBox").textContent = JSON.stringify(result, null, 2);
+      $("responseTarget").textContent = targetLabel;
+    }
+
+    async function fireStep() {
+      if (state.envOpen && !syncEditors()) return;
+      const step = activeStep();
+      const preview = previewPayload(step);
+      const target = runnerPath(step);
+      const startedAt = new Date().toLocaleTimeString();
+      const targetLabel = `${methodLabel(step)} ${resolvedTarget(step)}`;
+      const confirmed = window.confirm(`Send real request?\n\n${targetLabel}\nRunner: POST ${runnerUrl(step)}`);
+      if (!confirmed) return;
+
+      $("fireStep").disabled = true;
+      $("resultMeta").innerHTML = `<span class="pill warn">running</span><span class="pill">started ${startedAt}</span>`;
+      $("resultBox").textContent = "Running real action...";
+      $("responseTarget").textContent = targetLabel;
+
+      try {
+        const payload = target === "/run/script"
+          ? { stepId: step.id, env: state.env, inputs: currentInputs(), vars: state.vars }
+          : preview;
+        const response = await fetch(target, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        state.lastResult = result;
+        applySetVars(step, result);
+        renderResult(result, startedAt, targetLabel);
+        renderVars();
+        if (state.activeTab === "preview") renderPreview(step);
+      } catch (error) {
+        renderResult({ ok: false, error: error.message }, startedAt, targetLabel);
+      } finally {
+        $("fireStep").disabled = false;
+        persist();
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value);
+    }
+
+    async function boot() {
+      const [spec, health] = await Promise.all([
+        fetch("/flows.json").then((res) => res.json()),
+        fetch("/health").then((res) => res.json())
+      ]);
+      state.spec = spec;
+      if (!state.env.repoRoot && health.repoRoot) {
+        state.env.repoRoot = health.repoRoot;
+      }
+      render();
+    }
+
+    $("filter").addEventListener("input", () => {
+      state.filter = $("filter").value;
+      renderSidebar();
+    });
+
+    $("toggleEnv").addEventListener("click", () => {
+      state.envOpen = !state.envOpen;
+      renderTopbar();
+      persist();
+    });
+
+    $("saveEnv").addEventListener("click", () => {
+      syncEditors();
+    });
+
+    $("clearVars").addEventListener("click", () => {
+      state.vars = {};
+      $("varsEditor").value = JSON.stringify(state.vars, null, 2);
+      renderVars();
+      renderRequest();
+      if (state.activeTab === "vars") renderVarsTab(activeStep());
+      if (state.activeTab === "preview") renderPreview(activeStep());
+      persist();
+    });
+
+    $("requestTarget").addEventListener("input", () => {
+      const step = activeStep();
+      if (step.type !== "http") return;
+      state.requestTemplates[step.id] = $("requestTarget").value;
+      renderRequest();
+      if (state.activeTab === "preview") renderPreview(step);
+      persist();
+    });
+
+    $("fireStep").addEventListener("click", fireStep);
+
+    boot().catch((error) => {
+      $("resultBox").textContent = error.message;
+    });
+  </script>
+</body>
+</html>
