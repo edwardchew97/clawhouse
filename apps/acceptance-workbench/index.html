@@ -547,74 +547,150 @@
       font-size: 13px;
     }
 
-    .result-running {
-      min-height: 180px;
-      padding: 12px;
+    .response-console {
       border: 1px solid var(--border);
       border-radius: 7px;
-      background: #fafafa;
-      display: grid;
-      align-content: center;
+      background: #ffffff;
+      overflow: hidden;
     }
 
-    .running-card {
-      display: grid;
-      gap: 10px;
-      max-width: 760px;
-    }
-
-    .running-heading {
+    .response-console-bar,
+    .result-section > summary,
+    .result-section-static {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
+      min-height: 38px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      background: #fcfcfb;
+    }
+
+    .response-tabs,
+    .response-metrics {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .response-tab {
+      color: var(--default);
+      font-size: 12px;
+      font-weight: 560;
+      white-space: nowrap;
+    }
+
+    .response-tab.active {
+      color: var(--strong);
+      font-weight: 650;
+    }
+
+    .response-tab.muted {
+      color: var(--subtle);
+    }
+
+    .metric {
+      color: var(--default);
+      font-family: var(--mono);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .metric.ok {
+      color: var(--green);
+      font-weight: 650;
+    }
+
+    .metric.fail {
+      color: var(--red);
+      font-weight: 650;
+    }
+
+    .metric.warn {
+      color: var(--amber);
+      font-weight: 650;
+    }
+
+    .spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid #eadfc8;
+      border-top-color: var(--amber);
+      border-radius: 999px;
+      animation: spin 780ms linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .running-strip {
+      display: grid;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: #fffdf8;
+    }
+
+    .running-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
     }
 
     .running-title {
       color: var(--strong);
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 650;
+      white-space: nowrap;
     }
 
     .running-target {
+      min-width: 0;
       color: var(--default);
       font-family: var(--mono);
       font-size: 12px;
-      line-height: 1.5;
-      overflow-wrap: anywhere;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .running-steps {
-      margin: 0;
-      padding-left: 20px;
       display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
       gap: 7px;
-      color: var(--strong);
-      font-size: 13px;
-      line-height: 1.45;
     }
 
-    .running-steps li::marker {
-      color: var(--subtle);
-      font-weight: 650;
+    .running-step {
+      min-width: 0;
+      padding: 7px 8px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #ffffff;
+      color: var(--default);
+      font-size: 12px;
+      line-height: 1.35;
     }
 
     .result-summary {
       display: grid;
       gap: 8px;
-      padding: 11px;
-      border: 1px solid var(--border);
-      border-left-width: 3px;
-      border-radius: 7px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
       background: #ffffff;
     }
 
     .result-summary.ok {
-      border-left-color: var(--green);
+      box-shadow: inset 3px 0 0 var(--green);
     }
 
     .result-summary.fail {
-      border-left-color: var(--red);
+      box-shadow: inset 3px 0 0 var(--red);
     }
 
     .result-heading {
@@ -639,16 +715,19 @@
     }
 
     .result-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
     }
 
     .result-kv {
       display: grid;
       gap: 3px;
       min-width: 0;
-      padding: 8px;
+      width: min(210px, 100%);
+      padding: 7px 8px;
       border: 1px solid var(--border);
       border-radius: 7px;
       background: #fcfcfb;
@@ -669,30 +748,65 @@
     }
 
     .result-section {
-      border: 1px solid var(--border);
-      border-radius: 7px;
+      border-bottom: 1px solid var(--border);
       background: #ffffff;
       overflow: hidden;
     }
 
+    .result-section:last-child {
+      border-bottom: 0;
+    }
+
     .result-section > summary {
       cursor: pointer;
-      padding: 9px 10px;
       color: var(--strong);
       font-size: 13px;
       font-weight: 620;
-      background: #fcfcfb;
-      border-bottom: 1px solid var(--border);
     }
 
     .result-section:not([open]) > summary {
       border-bottom: 0;
     }
 
-    .result-section .light-code {
-      border: 0;
-      border-radius: 0;
-      max-height: 360px;
+    .result-section-meta {
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 520;
+      white-space: nowrap;
+    }
+
+    .result-code {
+      max-height: 460px;
+      overflow: auto;
+      background: #ffffff;
+      color: var(--strong);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .code-line {
+      display: grid;
+      grid-template-columns: 44px minmax(max-content, 1fr);
+      min-width: max-content;
+    }
+
+    .code-line-number {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      padding: 0 10px 0 6px;
+      border-right: 1px solid var(--border);
+      background: #fbfbfa;
+      color: #a0a09b;
+      text-align: right;
+      user-select: none;
+    }
+
+    .code-line-text {
+      padding: 0 12px;
+      white-space: pre;
     }
 
     .pill-row {
@@ -1615,6 +1729,7 @@
       $("resultMeta").innerHTML = `
         <span class="pill ${ok ? "ok" : "fail"}">${ok ? "success" : "failed"}</span>
         <span class="pill">started ${escapeHtml(startedAt)}</span>
+        ${result.durationMs !== undefined ? `<span class="pill">${escapeHtml(String(result.durationMs))} ms</span>` : ""}
         ${result.status ? `<span class="pill">status ${result.status}</span>` : ""}
         ${result.exitCode !== undefined ? `<span class="pill">exit ${result.exitCode}</span>` : ""}
       `;
@@ -1626,40 +1741,85 @@
     function renderReadableResult(result, startedAt) {
       const ok = Boolean(result.ok);
       const parsedJson = result.json ?? parseJsonText(result.stdout);
+      const stdout = typeof result.stdout === "string" ? result.stdout : "";
+      const stderr = typeof result.stderr === "string" ? result.stderr : "";
+      const text = typeof result.text === "string" ? result.text : "";
+      let bodyContent = JSON.stringify(result, null, 2);
+      let bodyMeta = "Runner JSON";
+      let bodySource = "runner";
+
+      if (parsedJson !== null && parsedJson !== undefined) {
+        bodyContent = JSON.stringify(parsedJson, null, 2);
+        bodyMeta = "Pretty JSON";
+        bodySource = "parsed";
+      } else if (text.trim()) {
+        bodyContent = text;
+        bodyMeta = "Raw text";
+        bodySource = "text";
+      } else if (stdout.trim()) {
+        bodyContent = stdout;
+        bodyMeta = "Raw stdout";
+        bodySource = "stdout";
+      }
+
       const rows = [
         ["Started", startedAt],
         ["Duration", result.durationMs !== undefined ? `${result.durationMs} ms` : ""],
         ["HTTP status", result.status],
-        ["Exit code", result.exitCode],
-        ["Command", formatCommand(result.command)],
-        ["Working dir", result.cwd]
+        ["Exit code", result.exitCode]
       ].filter(([, value]) => value !== undefined && value !== null && value !== "");
+      const runnerMeta = Object.fromEntries([
+        ["command", formatCommand(result.command)],
+        ["workingDir", result.cwd]
+      ].filter(([, value]) => value !== undefined && value !== null && value !== ""));
       const sections = [];
 
-      if (parsedJson !== null && parsedJson !== undefined) {
-        sections.push(resultSection("Parsed response JSON", JSON.stringify(parsedJson, null, 2), true));
+      sections.push(resultSection("Body", bodyContent, true, bodyMeta));
+      if (Object.keys(runnerMeta).length) {
+        sections.push(resultSection("Runner metadata", JSON.stringify(runnerMeta, null, 2), false, "JSON"));
       }
-      if (typeof result.stdout === "string" && result.stdout.trim()) {
-        sections.push(resultSection("Raw stdout", result.stdout, false));
+      if (stdout.trim() && bodySource !== "stdout") {
+        sections.push(resultSection("Raw stdout", stdout, false, "Stream"));
       }
-      if (typeof result.stderr === "string" && result.stderr.trim()) {
-        sections.push(resultSection("Raw stderr", result.stderr, !ok));
+      if (stderr.trim()) {
+        sections.push(resultSection("Raw stderr", stderr, !ok, "Stream"));
       }
-      if (typeof result.text === "string" && result.text.trim() && result.text !== result.stdout) {
-        sections.push(resultSection("Raw response text", result.text, false));
+      if (text.trim() && bodySource !== "text" && text !== stdout) {
+        sections.push(resultSection("Raw response text", text, false, "Text"));
       }
-      sections.push(resultSection("Full runner response", JSON.stringify(result, null, 2), false));
+      sections.push(resultSection("Full runner response", JSON.stringify(result, null, 2), false, "Runner JSON"));
+
+      const statusMetric = result.status
+        ? `Status ${result.status}`
+        : result.exitCode !== undefined
+          ? `Exit ${result.exitCode}`
+          : ok ? "OK" : "Failed";
+      const durationMetric = result.durationMs !== undefined ? `${result.durationMs} ms` : "";
 
       return `
-        <div class="result-summary ${ok ? "ok" : "fail"}">
-          <div class="result-heading">
-            <div class="result-title">${ok ? "Step completed" : "Step failed"}</div>
-            <span class="pill ${ok ? "ok" : "fail"}">${ok ? "success" : "failed"}</span>
+        <div class="response-console ${ok ? "ok" : "fail"}">
+          <div class="response-console-bar">
+            <div class="response-tabs">
+              <span class="response-tab active">Body</span>
+              <span class="response-tab muted">Runner</span>
+              <span class="response-tab muted">Streams</span>
+            </div>
+            <div class="response-metrics">
+              <span class="metric ${ok ? "ok" : "fail"}">${escapeHtml(statusMetric)}</span>
+              ${durationMetric ? `<span class="metric">${escapeHtml(durationMetric)}</span>` : ""}
+              <span class="metric">${escapeHtml(byteSize(bodyContent))}</span>
+            </div>
           </div>
-          <div class="result-message">${escapeHtml(resultMessage(result, parsedJson, ok))}</div>
+          <div class="result-summary ${ok ? "ok" : "fail"}">
+            <div class="result-heading">
+              <div class="result-title">${ok ? "Step completed" : "Step failed"}</div>
+              <span class="pill ${ok ? "ok" : "fail"}">${ok ? "success" : "failed"}</span>
+            </div>
+            <div class="result-message">${escapeHtml(resultMessage(result, parsedJson, ok))}</div>
+          </div>
           ${rows.length ? `<div class="result-grid">${rows.map(resultRow).join("")}</div>` : ""}
+          ${sections.join("")}
         </div>
-        ${sections.join("")}
       `;
     }
 
@@ -1672,12 +1832,40 @@
       `;
     }
 
-    function resultSection(title, content, open) {
+    function resultSection(title, content, open, meta) {
       return `
         <details class="result-section" ${open ? "open" : ""}>
-          <summary>${escapeHtml(title)}</summary>
-          <pre class="light-code">${escapeHtml(content)}</pre>
+          <summary>
+            <span>${escapeHtml(title)}</span>
+            <span class="result-section-meta">${escapeHtml(meta || "Raw")} · ${escapeHtml(byteSize(content))}</span>
+          </summary>
+          ${resultCodeBlock(content)}
         </details>
+      `;
+    }
+
+    function resultStaticSection(title, content, meta) {
+      return `
+        <div class="result-section">
+          <div class="result-section-static">
+            <span>${escapeHtml(title)}</span>
+            <span class="result-section-meta">${escapeHtml(meta || "Live")}</span>
+          </div>
+          ${resultCodeBlock(content)}
+        </div>
+      `;
+    }
+
+    function resultCodeBlock(content) {
+      return `
+        <div class="result-code">
+          ${String(content ?? "").split("\n").map((line, index) => `
+            <div class="code-line">
+              <span class="code-line-number">${index + 1}</span>
+              <span class="code-line-text">${escapeHtml(line || " ")}</span>
+            </div>
+          `).join("")}
+        </div>
       `;
     }
 
@@ -1685,20 +1873,42 @@
       const notes = Array.isArray(step.runningNotes) && step.runningNotes.length
         ? step.runningNotes
         : defaultRunningNotes(step);
+      const logLines = [
+        targetLabel,
+        ...notes.map((note) => `- ${note}`)
+      ].join("\n");
       return `
-        <div class="result-running">
-          <div class="running-card">
-            <div class="running-heading">
-              <div class="running-title">Running real action</div>
-              <span class="pill warn">started ${escapeHtml(startedAt)}</span>
+        <div class="response-console running">
+          <div class="response-console-bar">
+            <div class="response-tabs">
+              <span class="response-tab active">Body</span>
+              <span class="response-tab muted">Runner</span>
+              <span class="response-tab muted">Streams</span>
             </div>
-            <div class="running-target">${escapeHtml(targetLabel)}</div>
-            <ol class="running-steps">
-              ${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}
-            </ol>
+            <div class="response-metrics">
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="metric warn">Sending</span>
+              <span class="metric">started ${escapeHtml(startedAt)}</span>
+            </div>
           </div>
+          <div class="running-strip">
+            <div class="running-line">
+              <span class="running-title">Running real action</span>
+              <span class="running-target">${escapeHtml(targetLabel)}</span>
+            </div>
+            <div class="running-steps">
+              ${notes.map((note) => `<div class="running-step">${escapeHtml(note)}</div>`).join("")}
+            </div>
+          </div>
+          ${resultStaticSection("Runner log", logLines, "waiting")}
         </div>
       `;
+    }
+
+    function byteSize(content) {
+      const bytes = new TextEncoder().encode(String(content ?? "")).length;
+      if (bytes < 1024) return `${bytes} B`;
+      return `${(bytes / 1024).toFixed(1)} KB`;
     }
 
     function defaultRunningNotes(step) {
@@ -1757,6 +1967,7 @@
       const step = activeStep();
       const target = runnerPath(step);
       const startedAt = new Date().toLocaleTimeString();
+      const startedMs = performance.now();
       let targetLabel = `${methodLabel(step)} ${resolvedTarget(step)}`;
       let payload = null;
 
@@ -1780,6 +1991,9 @@
           body: JSON.stringify(payload)
         });
         const result = await response.json();
+        if (result.durationMs === undefined) {
+          result.durationMs = Math.round(performance.now() - startedMs);
+        }
         state.lastResult = result;
         state.lastDebugPacket = buildDebugPacket(flow, step, startedAt, targetLabel, payload, result);
         applySetVars(step, result);
@@ -1787,7 +2001,7 @@
         renderVars();
         if (state.activeTab === "preview") renderPreview(step);
       } catch (error) {
-        const result = { ok: false, error: error.message };
+        const result = { ok: false, error: error.message, durationMs: Math.round(performance.now() - startedMs) };
         state.lastResult = result;
         state.lastDebugPacket = buildDebugPacket(
           flow,
