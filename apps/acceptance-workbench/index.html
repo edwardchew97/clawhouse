@@ -764,7 +764,10 @@
               <h2>Response</h2>
               <span id="responseTarget" class="tab-meta">No request sent.</span>
             </div>
-            <div id="resultMeta" class="pill-row"></div>
+            <div class="pill-row">
+              <button id="copyDebug" class="mini-button" disabled>Copy Debug Prompt</button>
+              <div id="resultMeta" class="pill-row"></div>
+            </div>
           </div>
           <div class="response-body">
             <pre id="resultBox" class="code">No response yet.</pre>
@@ -810,7 +813,8 @@
       vars: persisted.vars || {},
       inputs: persisted.inputs || {},
       requestTemplates: persisted.requestTemplates || {},
-      lastResult: null
+      lastResult: null,
+      lastDebugPacket: null
     };
 
     const tabs = [
@@ -1279,17 +1283,20 @@
       `;
       $("resultBox").textContent = JSON.stringify(result, null, 2);
       $("responseTarget").textContent = targetLabel;
+      $("copyDebug").disabled = !state.lastDebugPacket;
     }
 
     async function fireStep() {
       if (state.envOpen && !syncEditors()) return;
+      const flow = activeFlow();
       const step = activeStep();
       const preview = previewPayload(step);
       const target = runnerPath(step);
       const startedAt = new Date().toLocaleTimeString();
       const targetLabel = `${methodLabel(step)} ${resolvedTarget(step)}`;
-      const confirmed = window.confirm(`Send real request?\n\n${targetLabel}\nRunner: POST ${runnerUrl(step)}`);
-      if (!confirmed) return;
+      const payload = target === "/run/script"
+        ? { stepId: step.id, env: state.env, inputs: currentInputs(), vars: state.vars }
+        : preview;
 
       $("fireStep").disabled = true;
       $("resultMeta").innerHTML = `<span class="pill warn">running</span><span class="pill">started ${startedAt}</span>`;
@@ -1297,9 +1304,6 @@
       $("responseTarget").textContent = targetLabel;
 
       try {
-        const payload = target === "/run/script"
-          ? { stepId: step.id, env: state.env, inputs: currentInputs(), vars: state.vars }
-          : preview;
         const response = await fetch(target, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1307,16 +1311,94 @@
         });
         const result = await response.json();
         state.lastResult = result;
+        state.lastDebugPacket = buildDebugPacket(flow, step, startedAt, targetLabel, payload, result);
         applySetVars(step, result);
         renderResult(result, startedAt, targetLabel);
         renderVars();
         if (state.activeTab === "preview") renderPreview(step);
       } catch (error) {
-        renderResult({ ok: false, error: error.message }, startedAt, targetLabel);
+        const result = { ok: false, error: error.message };
+        state.lastResult = result;
+        state.lastDebugPacket = buildDebugPacket(flow, step, startedAt, targetLabel, payload, result);
+        renderResult(result, startedAt, targetLabel);
       } finally {
         $("fireStep").disabled = false;
         persist();
       }
+    }
+
+    function buildDebugPacket(flow, step, startedAt, targetLabel, payload, result) {
+      return {
+        project: "ClawHouse",
+        worktree: state.env.repoRoot || "",
+        flow: flow.name,
+        stepId: step.id,
+        stepName: step.name,
+        type: step.type,
+        startedAt,
+        runner: {
+          method: "POST",
+          url: runnerUrl(step)
+        },
+        target: targetLabel,
+        requestPayload: sanitizeSecrets(payload),
+        response: sanitizeSecrets(result),
+        runtimeVars: sanitizeSecrets(state.vars),
+        note: "Secrets are redacted. This packet came from the local Acceptance Workbench after manually pressing Send."
+      };
+    }
+
+    function buildDebugPrompt() {
+      if (!state.lastDebugPacket) return "";
+      return [
+        "ClawHouse Acceptance Workbench debug request.",
+        "",
+        "Please debug this real local acceptance-workbench run. Follow AGENTS.md worktree discipline before editing. Do not use simulated output.",
+        "",
+        "Debug packet:",
+        "```json",
+        JSON.stringify(state.lastDebugPacket, null, 2),
+        "```"
+      ].join("\n");
+    }
+
+    function sanitizeSecrets(value) {
+      if (Array.isArray(value)) return value.map((item) => sanitizeSecrets(item));
+      if (value && typeof value === "object") {
+        return Object.fromEntries(Object.entries(value).map(([key, item]) => {
+          const normalized = key.toLowerCase().replace(/[_-]/g, "");
+          const sensitive = normalized.includes("privatekey")
+            || normalized.includes("secret")
+            || normalized.includes("token")
+            || normalized.includes("apikey");
+          return [key, sensitive ? "[redacted]" : sanitizeSecrets(item)];
+        }));
+      }
+      return value;
+    }
+
+    async function copyDebugPrompt() {
+      const text = buildDebugPrompt();
+      if (!text) return;
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      const button = $("copyDebug");
+      const original = button.textContent;
+      button.textContent = "Copied";
+      setTimeout(() => {
+        button.textContent = original;
+      }, 1200);
     }
 
     function escapeHtml(value) {
@@ -1382,6 +1464,7 @@
     });
 
     $("fireStep").addEventListener("click", fireStep);
+    $("copyDebug").addEventListener("click", copyDebugPrompt);
 
     boot().catch((error) => {
       $("resultBox").textContent = error.message;
