@@ -18,6 +18,12 @@ reproducible yet.
 bun apps/acceptance-workbench/server.ts
 ```
 
+The local server reads the encryption key from the repo root `.env`:
+
+```sh
+ACCEPTANCE_WORKBENCH_ENCRYPTION_KEY=base64-encoded-32-byte-key
+```
+
 Then open:
 
 ```txt
@@ -27,8 +33,9 @@ http://127.0.0.1:4317
 ## Model
 
 - `flows.json` defines the acceptance flows and each allowed step.
-- The browser stores non-secret environment values and extracted variables in
-  localStorage.
+- The browser stores environment values and extracted variables in localStorage.
+  `testUserPrivateKey` is stored only as an AES-GCM encrypted value. The
+  encryption key stays in the local `.env` file and is not committed.
 - A step can use variables from a previous step via `{{variableName}}`.
 - Script execution is allowlisted by step id. The browser cannot run arbitrary
   shell commands.
@@ -51,8 +58,9 @@ in `Environment JSON`:
 `testUserAccountId` is used by the NEAR Key Market create/buy/sell steps.
 `testUserPrivateKey` is passed only to allowlisted local scripts as
 `NEAR_PRIVATE_KEY`; it is visible while editing the local environment JSON but
-is not saved to localStorage. Scripts also receive `ACCOUNT_ID`, `CONTRACT_ID`,
-`NEAR_ACCOUNT_ID`, `NEAR_NETWORK_ID`, and `NEAR_NODE_URL`.
+is saved to localStorage only after server-side encryption. Scripts also receive
+`ACCOUNT_ID`, `CONTRACT_ID`, `NEAR_ACCOUNT_ID`, `NEAR_NETWORK_ID`, and
+`NEAR_NODE_URL`.
 
 The default contract account is the deployed Scope V0 testnet contract:
 

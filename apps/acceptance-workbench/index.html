@@ -780,7 +780,8 @@
       activeTab: persisted.activeTab || "params",
       envOpen: persisted.envOpen || false,
       filter: "",
-      env: { ...defaultEnv, ...(persisted.env || {}) },
+      env: { ...defaultEnv, ...(persisted.env || {}), testUserPrivateKey: "" },
+      encryptedEnv: persisted.encryptedEnv || {},
       vars: persisted.vars || {},
       inputs: persisted.inputs || {},
       requestTemplates: persisted.requestTemplates || {},
@@ -806,10 +807,16 @@
     }
 
     function persist() {
+      writePersistedState();
+      queuePrivateKeyEncryption();
+    }
+
+    function writePersistedState() {
       localStorage.setItem(storageKey, JSON.stringify({
         activeTab: state.activeTab,
         envOpen: state.envOpen,
         env: persistableEnv(),
+        encryptedEnv: state.encryptedEnv,
         vars: state.vars,
         inputs: state.inputs,
         requestTemplates: state.requestTemplates
@@ -826,6 +833,54 @@
       const next = { ...state.env };
       if (next.testUserPrivateKey) next.testUserPrivateKey = "[not shown]";
       return next;
+    }
+
+    let privateKeyEncryptionTimer = null;
+    let lastPrivateKeyForEncryption = "";
+
+    function queuePrivateKeyEncryption() {
+      const privateKey = state.env.testUserPrivateKey || "";
+      if (!privateKey || privateKey === lastPrivateKeyForEncryption) return;
+      if (privateKeyEncryptionTimer) clearTimeout(privateKeyEncryptionTimer);
+      privateKeyEncryptionTimer = setTimeout(() => {
+        encryptPrivateKey(privateKey);
+      }, 200);
+    }
+
+    async function encryptPrivateKey(privateKey) {
+      try {
+        const response = await fetch("/crypto/encrypt", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ value: privateKey })
+        });
+        const result = await response.json();
+        if (!result.ok) throw new Error(result.error || "Private key encryption failed");
+        if (state.env.testUserPrivateKey !== privateKey) return;
+        state.encryptedEnv.testUserPrivateKey = result.ciphertext;
+        lastPrivateKeyForEncryption = privateKey;
+        writePersistedState();
+      } catch (error) {
+        console.warn(error);
+      }
+    }
+
+    async function restoreEncryptedEnv() {
+      const ciphertext = state.encryptedEnv.testUserPrivateKey;
+      if (!ciphertext) return;
+      try {
+        const response = await fetch("/crypto/decrypt", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ciphertext })
+        });
+        const result = await response.json();
+        if (!result.ok) throw new Error(result.error || "Private key decrypt failed");
+        state.env.testUserPrivateKey = result.value || "";
+        lastPrivateKeyForEncryption = state.env.testUserPrivateKey;
+      } catch (error) {
+        console.warn(error);
+      }
     }
 
     function activeFlow() {
@@ -1137,6 +1192,10 @@
     function syncEditors() {
       try {
         state.env = parseJsonObject($("envEditor").value || "{}", "Environment");
+        if (!state.env.testUserPrivateKey) {
+          delete state.encryptedEnv.testUserPrivateKey;
+          lastPrivateKeyForEncryption = "";
+        }
         state.vars = parseJsonObject($("varsEditor").value || "{}", "Runtime variables");
         renderRequest();
         renderVars();
@@ -1245,6 +1304,7 @@
       if (!state.env.repoRoot && health.repoRoot) {
         state.env.repoRoot = health.repoRoot;
       }
+      await restoreEncryptedEnv();
       render();
     }
 
