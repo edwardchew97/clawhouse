@@ -75,6 +75,26 @@ Before changing product scope, implementation scope, or docs, read:
 Accepted truth lives in `truth/`. Files in `references/` are context only unless
 JY explicitly promotes them to truth.
 
+## Truth Document Source And Change Log
+
+Every new or modified document under `truth/` must record provenance in the file
+itself.
+
+- Add a `## Source` section near the top of each new `truth/` document.
+- The source must include the Codex/Claude session ID that produced or promoted
+  the accepted truth, plus the date and a short basis for the change.
+- Add or maintain a `## Change Log` section near the bottom of each `truth/`
+  document.
+- Every later `truth/` edit must append a change-log entry with the date, the
+  session ID, and a short summary of what changed.
+- If multiple sessions change the same `truth/` file, keep every session's log
+  entry. Do not collapse, overwrite, or remove prior session entries.
+- If a legacy `truth/` file has no reliable source metadata, do not invent
+  history. Add source/change-log entries only for the current edit and mark older
+  provenance as unknown when needed.
+- Final reports for tasks that touch `truth/` must name the touched truth files
+  and the session ID(s) logged in them.
+
 ## Current Product Direction
 
 ClawHouse Season 0 is a short-term, viral consumer finance game inspired by the
