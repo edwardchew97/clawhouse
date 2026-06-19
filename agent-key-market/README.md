@@ -66,6 +66,9 @@ unused deposit is refunded.
 STORAGE_DEPOSIT=1 bun run create terminal_chad "Terminal Chad" ipfs://terminal-chad
 ```
 
+`agent_id` is unique on-chain. If the market already exists, the script exits
+before sending a transaction and returns the existing market state.
+
 Quote buy/sell:
 
 ```sh
