@@ -635,55 +635,6 @@
       }
     }
 
-    .running-strip {
-      display: grid;
-      gap: 8px;
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border);
-      background: #fffdf8;
-    }
-
-    .running-line {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-    }
-
-    .running-title {
-      color: var(--strong);
-      font-size: 13px;
-      font-weight: 650;
-      white-space: nowrap;
-    }
-
-    .running-target {
-      min-width: 0;
-      color: var(--default);
-      font-family: var(--mono);
-      font-size: 12px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .running-steps {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-      gap: 7px;
-    }
-
-    .running-step {
-      min-width: 0;
-      padding: 7px 8px;
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      background: #ffffff;
-      color: var(--default);
-      font-size: 12px;
-      line-height: 1.35;
-    }
-
     .result-summary {
       display: grid;
       gap: 8px;
@@ -700,6 +651,11 @@
       box-shadow: inset 3px 0 0 var(--red);
     }
 
+    .result-summary.running {
+      background: #fffdf8;
+      box-shadow: inset 3px 0 0 var(--amber);
+    }
+
     .result-heading {
       display: flex;
       align-items: center;
@@ -711,6 +667,12 @@
       color: var(--strong);
       font-size: 14px;
       font-weight: 650;
+    }
+
+    .result-title.with-spinner {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .result-message {
@@ -758,6 +720,12 @@
       place-items: center;
       color: var(--default);
       font-size: 13px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stream-empty.small {
+      min-height: 96px;
     }
 
     .result-code {
@@ -1874,6 +1842,18 @@
       `;
     }
 
+    function resultPlaceholderBlock(title, message, meta) {
+      return `
+        <div class="response-panel-block">
+          <div class="result-panel-head">
+            <span>${escapeHtml(title)}</span>
+            <span class="result-panel-meta">${escapeHtml(meta || "waiting")}</span>
+          </div>
+          <div class="stream-empty small">${escapeHtml(message)}</div>
+        </div>
+      `;
+    }
+
     function resultCodeBlock(content) {
       return `
         <div class="result-code">
@@ -1891,28 +1871,26 @@
       const notes = Array.isArray(step.runningNotes) && step.runningNotes.length
         ? step.runningNotes
         : defaultRunningNotes(step);
-      const logLines = [
-        targetLabel,
-        ...notes.map((note) => `- ${note}`)
-      ].join("\n");
       const activeTab = normalizedResponseTab();
       const runnerInfo = {
+        status: "running",
         target: targetLabel,
         runnerUrl: runnerUrl(step),
         stepId: step.id,
-        type: step.type
+        type: step.type,
+        expectedWork: notes
       };
       const bodyPanel = `
-        <div class="running-strip">
-          <div class="running-line">
-            <span class="running-title">Running real action</span>
-            <span class="running-target">${escapeHtml(targetLabel)}</span>
+        <div class="result-summary running">
+          <div class="result-heading">
+            <div class="result-title with-spinner">
+              <span class="spinner" aria-hidden="true"></span>
+              <span>Sending request</span>
+            </div>
           </div>
-          <div class="running-steps">
-            ${notes.map((note) => `<div class="running-step">${escapeHtml(note)}</div>`).join("")}
-          </div>
+          <div class="result-message">${escapeHtml(targetLabel)}</div>
         </div>
-        ${resultPanelBlock("Runner log", logLines, "waiting")}
+        ${resultPlaceholderBlock("Body", "Waiting for the response body. It will appear here in the same format after the runner returns.", "waiting")}
       `;
       return `
         <div class="response-console running">
@@ -1925,8 +1903,8 @@
           </div>
           ${responsePanel("body", activeTab, bodyPanel)}
           ${responsePanel("runner", activeTab, resultPanelBlock("Runner metadata", JSON.stringify(runnerInfo, null, 2), "JSON"))}
-          ${responsePanel("streams", activeTab, `<div class="stream-empty">Streams will appear after the runner returns.</div>`)}
-          ${responsePanel("full", activeTab, `<div class="stream-empty">Full runner response will appear after completion.</div>`)}
+          ${responsePanel("streams", activeTab, resultPlaceholderBlock("Streams", "Waiting for stdout, stderr, or raw text from the runner.", "waiting"))}
+          ${responsePanel("full", activeTab, resultPlaceholderBlock("Full runner response", "Full runner response will appear here after completion.", "waiting"))}
         </div>
       `;
     }
