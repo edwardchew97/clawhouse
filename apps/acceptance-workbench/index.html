@@ -126,6 +126,33 @@
       gap: 4px;
     }
 
+    .access-filter-row {
+      display: flex;
+      gap: 4px;
+      margin-left: 12px;
+      padding: 1px 0 3px 9px;
+      border-left: 1px solid var(--border);
+    }
+
+    .access-filter-button {
+      min-height: 24px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--subtle);
+      padding: 3px 7px;
+      font-size: 12px;
+      line-height: 1.2;
+      cursor: pointer;
+    }
+
+    .access-filter-button.active,
+    .access-filter-button:hover {
+      border-color: var(--border-strong);
+      background: var(--selected);
+      color: var(--strong);
+    }
+
     #flowList {
       display: grid;
       gap: 6px;
@@ -210,7 +237,7 @@
 
     .step-button {
       display: grid;
-      grid-template-columns: 52px minmax(0, 1fr);
+      grid-template-columns: 52px minmax(0, 1fr) auto;
       align-items: center;
       gap: 8px;
       width: 100%;
@@ -234,6 +261,24 @@
     .step-button.active strong {
       color: var(--strong);
       font-weight: 600;
+    }
+
+    .access-tag {
+      justify-self: end;
+      border-radius: 5px;
+      background: var(--selected);
+      color: var(--subtle);
+      padding: 2px 5px;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .access-tag.protected {
+      color: var(--red);
+    }
+
+    .access-tag.public {
+      color: var(--green);
     }
 
     .verb {
@@ -1099,6 +1144,7 @@
       env: { ...defaultEnv, ...pruneObsoleteEnv(persisted.env || {}), testUserPrivateKey: "" },
       encryptedEnv: persisted.encryptedEnv || {},
       collapsedFlows: persisted.collapsedFlows || {},
+      accessFilters: persisted.accessFilters || {},
       vars: persisted.vars || {},
       inputs: persisted.inputs || {},
       requestTemplates: persisted.requestTemplates || {},
@@ -1119,6 +1165,12 @@
       { id: "runner", label: "Runner" },
       { id: "streams", label: "Streams" },
       { id: "full", label: "Full" }
+    ];
+
+    const accessFilterDefs = [
+      { id: "all", label: "All" },
+      { id: "public", label: "Public" },
+      { id: "protected", label: "Protected" }
     ];
 
     const $ = (id) => document.getElementById(id);
@@ -1146,6 +1198,7 @@
         env: persistableEnv(),
         encryptedEnv: state.encryptedEnv,
         collapsedFlows: state.collapsedFlows,
+        accessFilters: state.accessFilters,
         vars: state.vars,
         inputs: state.inputs,
         requestTemplates: state.requestTemplates
@@ -1267,6 +1320,62 @@
       if (step.type === "http") return step.method || "GET";
       if (step.type === "near-view") return "VIEW";
       return "SCRIPT";
+    }
+
+    function stepAccess(step) {
+      if (step.access === "public" || step.access === "protected") return step.access;
+      return "";
+    }
+
+    function accessLabel(step) {
+      const access = stepAccess(step);
+      if (access === "public") return "Public";
+      if (access === "protected") return "Protected";
+      return "";
+    }
+
+    function flowHasAccessFilter(flow) {
+      return flow.steps.some((step) => stepAccess(step));
+    }
+
+    function flowAccessFilter(flow, flowIndex) {
+      const key = flowCollapseKey(flow, flowIndex);
+      const selected = state.accessFilters[key];
+      if (selected === "public" || selected === "protected") return selected;
+      return "all";
+    }
+
+    function matchesSidebarFilters(flow, step, needle, accessFilter) {
+      if (accessFilter !== "all" && stepAccess(step) !== accessFilter) return false;
+      if (!needle) return true;
+      return `${flow.name} ${step.name} ${step.id} ${step.type} ${step.access || ""}`.toLowerCase().includes(needle);
+    }
+
+    function sidebarSteps(flow, flowIndex, needle = state.filter.trim().toLowerCase()) {
+      const accessFilter = flowHasAccessFilter(flow) ? flowAccessFilter(flow, flowIndex) : "all";
+      return flow.steps
+        .map((step, stepIndex) => ({ step, stepIndex }))
+        .filter(({ step }) => matchesSidebarFilters(flow, step, needle, accessFilter));
+    }
+
+    function renderAccessFilter(flow, flowIndex, activeFilter) {
+      const counts = { all: flow.steps.length, public: 0, protected: 0 };
+      for (const step of flow.steps) {
+        const access = stepAccess(step);
+        if (access) counts[access] += 1;
+      }
+      return `
+        <div class="access-filter-row" role="group" aria-label="${escapeAttr(flow.name)} access filter">
+          ${accessFilterDefs.map((filter) => `
+            <button
+              type="button"
+              class="access-filter-button ${activeFilter === filter.id ? "active" : ""}"
+              data-access-flow="${flowIndex}"
+              data-access-filter="${escapeAttr(filter.id)}"
+            >${escapeHtml(filter.label)} ${escapeHtml(String(counts[filter.id]))}</button>
+          `).join("")}
+        </div>
+      `;
     }
 
     function runnerPath(step = activeStep()) {
@@ -1502,14 +1611,12 @@
       $("flowList").innerHTML = state.spec.flows.map((flow, flowIndex) => {
         const flowKey = flowCollapseKey(flow, flowIndex);
         const stepsId = `flow-steps-${flowIndex}`;
+        const hasAccessFilter = flowHasAccessFilter(flow);
+        const activeAccessFilter = hasAccessFilter ? flowAccessFilter(flow, flowIndex) : "all";
         const isCollapsed = !needle && state.collapsedFlows[flowKey] === true;
-        const steps = flow.steps
-          .map((step, stepIndex) => ({ step, stepIndex }))
-          .filter(({ step }) => {
-            if (!needle) return true;
-            return `${flow.name} ${step.name} ${step.id} ${step.type}`.toLowerCase().includes(needle);
-          });
+        const steps = sidebarSteps(flow, flowIndex, needle);
         if (!steps.length) return "";
+        const countLabel = steps.length === flow.steps.length ? String(flow.steps.length) : `${steps.length}/${flow.steps.length}`;
         return `
           <div class="flow-block">
             <button
@@ -1523,13 +1630,15 @@
                 <span class="flow-chevron" aria-hidden="true"></span>
                 <span class="flow-name">${escapeHtml(flow.name)}</span>
               </span>
-              <span class="sidebar-label">${flow.steps.length}</span>
+              <span class="sidebar-label">${escapeHtml(countLabel)}</span>
             </button>
+            ${hasAccessFilter ? renderAccessFilter(flow, flowIndex, activeAccessFilter) : ""}
             <div id="${stepsId}" class="step-list" ${isCollapsed ? "hidden" : ""}>
               ${steps.map(({ step, stepIndex }) => `
                 <button type="button" class="step-button ${flowIndex === state.activeFlow && stepIndex === state.activeStep ? "active" : ""}" data-flow="${flowIndex}" data-step="${stepIndex}">
                   <span class="verb ${escapeAttr(methodLabel(step).toLowerCase())}">${escapeHtml(methodLabel(step))}</span>
                   <strong>${escapeHtml(step.name)}</strong>
+                  ${accessLabel(step) ? `<span class="access-tag ${escapeAttr(stepAccess(step))}">${escapeHtml(accessLabel(step))}</span>` : ""}
                 </button>
               `).join("")}
             </div>
@@ -1545,6 +1654,26 @@
           state.collapsedFlows[flowKey] = state.collapsedFlows[flowKey] !== true;
           renderSidebar();
           persist();
+        });
+      });
+
+      document.querySelectorAll("[data-access-filter]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const flowIndex = Number(button.dataset.accessFlow);
+          const flow = state.spec.flows[flowIndex];
+          const flowKey = flowCollapseKey(flow, flowIndex);
+          const nextFilter = button.dataset.accessFilter;
+          if (nextFilter === "all") {
+            delete state.accessFilters[flowKey];
+          } else {
+            state.accessFilters[flowKey] = nextFilter;
+          }
+
+          const visibleSteps = sidebarSteps(flow, flowIndex);
+          if (state.activeFlow === flowIndex && !visibleSteps.some(({ stepIndex }) => stepIndex === state.activeStep)) {
+            state.activeStep = visibleSteps[0]?.stepIndex || 0;
+          }
+          render();
         });
       });
 
