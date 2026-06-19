@@ -529,8 +529,7 @@
       min-height: 180px;
     }
 
-    .result-empty,
-    .result-running {
+    .result-empty {
       min-height: 180px;
       display: grid;
       place-items: center;
@@ -539,6 +538,58 @@
       background: #fafafa;
       color: var(--default);
       font-size: 13px;
+    }
+
+    .result-running {
+      min-height: 180px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #fafafa;
+      display: grid;
+      align-content: center;
+    }
+
+    .running-card {
+      display: grid;
+      gap: 10px;
+      max-width: 760px;
+    }
+
+    .running-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .running-title {
+      color: var(--strong);
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .running-target {
+      color: var(--default);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .running-steps {
+      margin: 0;
+      padding-left: 20px;
+      display: grid;
+      gap: 7px;
+      color: var(--strong);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .running-steps li::marker {
+      color: var(--subtle);
+      font-weight: 650;
     }
 
     .result-summary {
@@ -1460,6 +1511,48 @@
       `;
     }
 
+    function renderRunningResult(step, startedAt, targetLabel) {
+      const notes = Array.isArray(step.runningNotes) && step.runningNotes.length
+        ? step.runningNotes
+        : defaultRunningNotes(step);
+      return `
+        <div class="result-running">
+          <div class="running-card">
+            <div class="running-heading">
+              <div class="running-title">Running real action</div>
+              <span class="pill warn">started ${escapeHtml(startedAt)}</span>
+            </div>
+            <div class="running-target">${escapeHtml(targetLabel)}</div>
+            <ol class="running-steps">
+              ${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}
+            </ol>
+          </div>
+        </div>
+      `;
+    }
+
+    function defaultRunningNotes(step) {
+      if (step.type === "near-view") {
+        return [
+          "Calling a NEAR RPC view method.",
+          "No private key, gas, or transaction is used.",
+          "Waiting for the RPC response and parsing returned state."
+        ];
+      }
+      if (step.type === "http") {
+        return [
+          "Sending the HTTP request to the configured backend.",
+          "Waiting for the backend response.",
+          "Parsing the response and extracting runtime variables."
+        ];
+      }
+      return [
+        "Starting the allowlisted local script.",
+        "Waiting for the script to call its real backend, RPC, or chain target.",
+        "Parsing stdout, stderr, and structured JSON output."
+      ];
+    }
+
     function resultMessage(result, parsedJson, ok) {
       const parsed = parsedJson && typeof parsedJson === "object" && !Array.isArray(parsedJson)
         ? parsedJson
@@ -1502,7 +1595,7 @@
 
       $("fireStep").disabled = true;
       $("resultMeta").innerHTML = `<span class="pill warn">running</span><span class="pill">started ${startedAt}</span>`;
-      $("resultBox").innerHTML = `<div class="result-running">Running real action...</div>`;
+      $("resultBox").innerHTML = renderRunningResult(step, startedAt, targetLabel);
       $("responseTarget").textContent = targetLabel;
 
       try {

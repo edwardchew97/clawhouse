@@ -26,6 +26,11 @@
               "allowedMarkets": "{{allowedMarkets}}"
             }
           },
+          "runningNotes": [
+            "Sending the draft payload to the creator API.",
+            "Waiting for the backend to store the draft and return identifiers.",
+            "Extracting draftId, capsuleHash, and approvalUrl for later steps."
+          ],
           "inputs": {
             "creatorHandle": "@grandmaquant",
             "agentName": "Grandma Quant",
@@ -48,6 +53,10 @@
           "headers": {
             "authorization": "Bearer {{apiToken}}"
           },
+          "runningNotes": [
+            "Fetching the saved draft from the backend.",
+            "Checking that the draft id from the previous step resolves to real data."
+          ],
           "inputs": {},
           "setVars": {}
         },
@@ -65,6 +74,11 @@
             "approvedCapsuleHash": "{{capsuleHash}}",
             "reviewer": "{{reviewer}}"
           },
+          "runningNotes": [
+            "Sending the approval decision to the creator backend.",
+            "Waiting for the backend to create a deployment request.",
+            "Extracting deployRequestId for follow-up verification."
+          ],
           "inputs": {},
           "setVars": {
             "deployRequestId": "response.json.deployRequestId"
@@ -90,6 +104,12 @@
             "{{metadataUri}}"
           ],
           "cwd": "{{repoRoot}}/agent-key-market",
+          "runningNotes": [
+            "Checking NEAR testnet to see whether this agent key market already exists.",
+            "If it is new, signing a create transaction with the test user account.",
+            "Broadcasting the transaction to NEAR testnet and waiting for the raw outcome.",
+            "Extracting txHash and the created market state from the transaction result."
+          ],
           "inputs": {
             "agentId": "terminal_chad",
             "agentName": "Terminal Chad",
@@ -114,6 +134,11 @@
             "{{keyAmount}}"
           ],
           "cwd": "{{repoRoot}}/agent-key-market",
+          "runningNotes": [
+            "Calling a NEAR view method through the local quote script.",
+            "No private key, gas, or transaction is used for this quote.",
+            "Calculating the bonding-curve price, fees, and max buy cost."
+          ],
           "inputs": {
             "keyAmount": "1"
           },
@@ -136,6 +161,12 @@
             "{{buyMaxPriceNear}}"
           ],
           "cwd": "{{repoRoot}}/agent-key-market",
+          "runningNotes": [
+            "Using the previous quote as max_price protection.",
+            "Signing a buy transaction with the test user account.",
+            "Attaching NEAR for the key price, fees, and storage deposit.",
+            "Waiting for NEAR testnet to return the raw transaction outcome and txHash."
+          ],
           "inputs": {
             "STORAGE_DEPOSIT": "0.2"
           },
@@ -156,6 +187,11 @@
             "agent_id": "{{agentId}}",
             "holder_id": "{{testUserAccountId}}"
           },
+          "runningNotes": [
+            "Calling NEAR RPC view state directly; this does not sign or send a transaction.",
+            "Reading the agent market state and holder balance after the buy.",
+            "Extracting supply, reserve, and holder balance for comparison."
+          ],
           "inputs": {},
           "setVars": {
             "keySupply": "response.json.agent.supply",
@@ -176,6 +212,11 @@
             "{{keyAmount}}"
           ],
           "cwd": "{{repoRoot}}/agent-key-market",
+          "runningNotes": [
+            "Calling a NEAR view method through the local quote script.",
+            "No private key, gas, or transaction is used for this quote.",
+            "Calculating the expected sell payout and min_payout guard."
+          ],
           "inputs": {},
           "setVars": {
             "minPayoutNear": "response.json.payout_near",
@@ -195,6 +236,12 @@
             "{{minPayoutNear}}"
           ],
           "cwd": "{{repoRoot}}/agent-key-market",
+          "runningNotes": [
+            "Using the previous quote as min_payout protection.",
+            "Signing a sell transaction with the test user account.",
+            "Broadcasting the sell to NEAR testnet and waiting for the raw outcome.",
+            "Extracting txHash, updated supply, holder balance, and reserve."
+          ],
           "inputs": {},
           "setVars": {
             "sellTxHash": "response.json.txHash",
@@ -224,6 +271,11 @@
             "user_id": "{{holderId}}",
             "message": "{{agentMessage}}"
           },
+          "runningNotes": [
+            "Sending a real webhook request to the configured IronClaw endpoint.",
+            "Waiting for the service to accept the message and create a job.",
+            "Extracting the job id for the result fetch step."
+          ],
           "inputs": {
             "holderId": "holder-36",
             "agentMessage": "Give a one-paragraph room update for the latest key-market move."
@@ -241,6 +293,10 @@
           "headers": {
             "authorization": "Bearer {{ironclawWebhookSecret}}"
           },
+          "runningNotes": [
+            "Fetching the IronClaw job created by the webhook step.",
+            "Waiting for the backend to return the current job status or result."
+          ],
           "inputs": {},
           "setVars": {}
         }
@@ -269,6 +325,11 @@
             "{{leverage}}"
           ],
           "cwd": "{{repoRoot}}/outlayer-policy-checker",
+          "runningNotes": [
+            "Running the local OutLayer policy checker script.",
+            "Evaluating the requested notional, max position, asset, and leverage inputs.",
+            "Returning the allow/deny decision as structured JSON."
+          ],
           "inputs": {
             "asset": "BTC",
             "notionalUsd": "80",
