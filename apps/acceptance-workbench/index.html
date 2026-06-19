@@ -129,9 +129,7 @@
     .access-filter-row {
       display: flex;
       gap: 4px;
-      margin-left: 12px;
-      padding: 1px 0 3px 9px;
-      border-left: 1px solid var(--border);
+      margin-top: 8px;
     }
 
     .access-filter-button {
@@ -1018,6 +1016,7 @@
           <span class="workspace-pill">Local</span>
         </div>
         <input id="filter" class="search" placeholder="Filter requests" />
+        <div id="accessFilter" class="access-filter-row" role="group" aria-label="Request access filter"></div>
       </div>
       <div class="sidebar-section">
         <div class="sidebar-label">Collections</div>
@@ -1144,7 +1143,7 @@
       env: { ...defaultEnv, ...pruneObsoleteEnv(persisted.env || {}), testUserPrivateKey: "" },
       encryptedEnv: persisted.encryptedEnv || {},
       collapsedFlows: persisted.collapsedFlows || {},
-      accessFilters: persisted.accessFilters || {},
+      accessFilter: persisted.accessFilter || "all",
       vars: persisted.vars || {},
       inputs: persisted.inputs || {},
       requestTemplates: persisted.requestTemplates || {},
@@ -1198,7 +1197,7 @@
         env: persistableEnv(),
         encryptedEnv: state.encryptedEnv,
         collapsedFlows: state.collapsedFlows,
-        accessFilters: state.accessFilters,
+        accessFilter: currentAccessFilter(),
         vars: state.vars,
         inputs: state.inputs,
         requestTemplates: state.requestTemplates
@@ -1334,48 +1333,69 @@
       return "";
     }
 
-    function flowHasAccessFilter(flow) {
-      return flow.steps.some((step) => stepAccess(step));
-    }
-
-    function flowAccessFilter(flow, flowIndex) {
-      const key = flowCollapseKey(flow, flowIndex);
-      const selected = state.accessFilters[key];
+    function currentAccessFilter() {
+      const selected = state.accessFilter;
       if (selected === "public" || selected === "protected") return selected;
       return "all";
     }
 
-    function matchesSidebarFilters(flow, step, needle, accessFilter) {
+    function matchesSidebarFilters(flow, step, needle) {
+      const accessFilter = currentAccessFilter();
       if (accessFilter !== "all" && stepAccess(step) !== accessFilter) return false;
       if (!needle) return true;
       return `${flow.name} ${step.name} ${step.id} ${step.type} ${step.access || ""}`.toLowerCase().includes(needle);
     }
 
     function sidebarSteps(flow, flowIndex, needle = state.filter.trim().toLowerCase()) {
-      const accessFilter = flowHasAccessFilter(flow) ? flowAccessFilter(flow, flowIndex) : "all";
       return flow.steps
         .map((step, stepIndex) => ({ step, stepIndex }))
-        .filter(({ step }) => matchesSidebarFilters(flow, step, needle, accessFilter));
+        .filter(({ step }) => matchesSidebarFilters(flow, step, needle));
     }
 
-    function renderAccessFilter(flow, flowIndex, activeFilter) {
-      const counts = { all: flow.steps.length, public: 0, protected: 0 };
-      for (const step of flow.steps) {
-        const access = stepAccess(step);
-        if (access) counts[access] += 1;
+    function firstVisibleStepRef() {
+      const needle = state.filter.trim().toLowerCase();
+      for (let flowIndex = 0; flowIndex < state.spec.flows.length; flowIndex += 1) {
+        const step = sidebarSteps(state.spec.flows[flowIndex], flowIndex, needle)[0];
+        if (step) return { flowIndex, stepIndex: step.stepIndex };
       }
-      return `
-        <div class="access-filter-row" role="group" aria-label="${escapeAttr(flow.name)} access filter">
-          ${accessFilterDefs.map((filter) => `
-            <button
-              type="button"
-              class="access-filter-button ${activeFilter === filter.id ? "active" : ""}"
-              data-access-flow="${flowIndex}"
-              data-access-filter="${escapeAttr(filter.id)}"
-            >${escapeHtml(filter.label)} ${escapeHtml(String(counts[filter.id]))}</button>
-          `).join("")}
-        </div>
-      `;
+      return null;
+    }
+
+    function ensureActiveStepVisible() {
+      const flow = state.spec.flows[state.activeFlow];
+      if (!flow) return;
+      if (sidebarSteps(flow, state.activeFlow).some(({ stepIndex }) => stepIndex === state.activeStep)) return;
+      const next = firstVisibleStepRef();
+      if (!next) return;
+      state.activeFlow = next.flowIndex;
+      state.activeStep = next.stepIndex;
+    }
+
+    function renderAccessFilter() {
+      const activeFilter = currentAccessFilter();
+      const counts = { all: 0, public: 0, protected: 0 };
+      for (const flow of state.spec.flows) {
+        for (const step of flow.steps) {
+          counts.all += 1;
+          const access = stepAccess(step);
+          if (access) counts[access] += 1;
+        }
+      }
+      $("accessFilter").innerHTML = accessFilterDefs.map((filter) => `
+        <button
+          type="button"
+          class="access-filter-button ${activeFilter === filter.id ? "active" : ""}"
+          data-access-filter="${escapeAttr(filter.id)}"
+        >${escapeHtml(filter.label)} ${escapeHtml(String(counts[filter.id]))}</button>
+      `).join("");
+
+      document.querySelectorAll("[data-access-filter]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.accessFilter = button.dataset.accessFilter || "all";
+          ensureActiveStepVisible();
+          render();
+        });
+      });
     }
 
     function runnerPath(step = activeStep()) {
@@ -1597,6 +1617,7 @@
     }
 
     function render() {
+      renderAccessFilter();
       renderSidebar();
       renderTopbar();
       renderRequest();
@@ -1611,9 +1632,8 @@
       $("flowList").innerHTML = state.spec.flows.map((flow, flowIndex) => {
         const flowKey = flowCollapseKey(flow, flowIndex);
         const stepsId = `flow-steps-${flowIndex}`;
-        const hasAccessFilter = flowHasAccessFilter(flow);
-        const activeAccessFilter = hasAccessFilter ? flowAccessFilter(flow, flowIndex) : "all";
-        const isCollapsed = !needle && state.collapsedFlows[flowKey] === true;
+        const hasActiveFilter = Boolean(needle) || currentAccessFilter() !== "all";
+        const isCollapsed = !hasActiveFilter && state.collapsedFlows[flowKey] === true;
         const steps = sidebarSteps(flow, flowIndex, needle);
         if (!steps.length) return "";
         const countLabel = steps.length === flow.steps.length ? String(flow.steps.length) : `${steps.length}/${flow.steps.length}`;
@@ -1632,7 +1652,6 @@
               </span>
               <span class="sidebar-label">${escapeHtml(countLabel)}</span>
             </button>
-            ${hasAccessFilter ? renderAccessFilter(flow, flowIndex, activeAccessFilter) : ""}
             <div id="${stepsId}" class="step-list" ${isCollapsed ? "hidden" : ""}>
               ${steps.map(({ step, stepIndex }) => `
                 <button type="button" class="step-button ${flowIndex === state.activeFlow && stepIndex === state.activeStep ? "active" : ""}" data-flow="${flowIndex}" data-step="${stepIndex}">
@@ -1654,26 +1673,6 @@
           state.collapsedFlows[flowKey] = state.collapsedFlows[flowKey] !== true;
           renderSidebar();
           persist();
-        });
-      });
-
-      document.querySelectorAll("[data-access-filter]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const flowIndex = Number(button.dataset.accessFlow);
-          const flow = state.spec.flows[flowIndex];
-          const flowKey = flowCollapseKey(flow, flowIndex);
-          const nextFilter = button.dataset.accessFilter;
-          if (nextFilter === "all") {
-            delete state.accessFilters[flowKey];
-          } else {
-            state.accessFilters[flowKey] = nextFilter;
-          }
-
-          const visibleSteps = sidebarSteps(flow, flowIndex);
-          if (state.activeFlow === flowIndex && !visibleSteps.some(({ stepIndex }) => stepIndex === state.activeStep)) {
-            state.activeStep = visibleSteps[0]?.stepIndex || 0;
-          }
-          render();
         });
       });
 
