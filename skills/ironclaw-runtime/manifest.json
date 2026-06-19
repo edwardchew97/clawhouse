@@ -39,7 +39,7 @@
       "version": "0.1.0",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md",
-      "sha256": "a9bf292e0a4e677d62d4be90485910f7a67198d34d9fbcb67562d0948087f100",
+      "sha256": "56d2349a3a817888e0ef8b7aa0d551c2faeabe53785933dd3430e7280f0edc87",
       "install": {
         "tool": "skill_install",
         "parameters": {
@@ -74,7 +74,7 @@
       "version": "0.1.0",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/near-intents-spot-value/SKILL.md",
-      "sha256": "ff929b93e06738bd93a60bc09a40811979b7324063f94c4c3f14a18a29a376d1",
+      "sha256": "4e7336786fb8a83b86aea981e448476b374b858b7e58a39bf5fe2517905b3eea",
       "install": {
         "tool": "skill_install",
         "parameters": {

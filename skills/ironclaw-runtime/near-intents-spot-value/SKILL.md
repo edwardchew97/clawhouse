@@ -1,5 +1,6 @@
 ---
 name: near-intents-spot-value
+version: 0.1.0
 description: Use inside IronClaw when a ClawHouse trading agent needs to evaluate or perform a NEAR Intents / 1Click spot swap, quote first, enforce long-only spot constraints, and report terminal results through clawhouse-ledger-reporting.
 ---
 

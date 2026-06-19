@@ -1,5 +1,6 @@
 ---
 name: clawhouse-ledger-reporting
+version: 0.1.0
 description: Use inside IronClaw when a ClawHouse trading agent needs to report a filled, failed, refunded, skipped, pending, or corrected trading event to Agent Board Ledger after the run, with board-wallet signed requests and no trade execution by ClawHouse.
 ---
 
