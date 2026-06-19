@@ -523,6 +523,120 @@
       line-height: 1.5;
     }
 
+    .result-view {
+      display: grid;
+      gap: 10px;
+      min-height: 180px;
+    }
+
+    .result-empty,
+    .result-running {
+      min-height: 180px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #fafafa;
+      color: var(--default);
+      font-size: 13px;
+    }
+
+    .result-summary {
+      display: grid;
+      gap: 8px;
+      padding: 11px;
+      border: 1px solid var(--border);
+      border-left-width: 3px;
+      border-radius: 7px;
+      background: #ffffff;
+    }
+
+    .result-summary.ok {
+      border-left-color: var(--green);
+    }
+
+    .result-summary.fail {
+      border-left-color: var(--red);
+    }
+
+    .result-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .result-title {
+      color: var(--strong);
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .result-message {
+      color: var(--default);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 8px;
+    }
+
+    .result-kv {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #fcfcfb;
+    }
+
+    .result-kv-label {
+      color: var(--subtle);
+      font-size: 12px;
+      font-weight: 560;
+    }
+
+    .result-kv-value {
+      color: var(--strong);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .result-section {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+    .result-section > summary {
+      cursor: pointer;
+      padding: 9px 10px;
+      color: var(--strong);
+      font-size: 13px;
+      font-weight: 620;
+      background: #fcfcfb;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .result-section:not([open]) > summary {
+      border-bottom: 0;
+    }
+
+    .result-section .light-code {
+      border: 0;
+      border-radius: 0;
+      max-height: 360px;
+    }
+
     .pill-row {
       display: flex;
       align-items: center;
@@ -770,7 +884,9 @@
             </div>
           </div>
           <div class="response-body">
-            <pre id="resultBox" class="code">No response yet.</pre>
+            <div id="resultBox" class="result-view">
+              <div class="result-empty">No response yet.</div>
+            </div>
             <div class="pill-row">
               <span class="pill" id="varCount">0 runtime vars</span>
             </div>
@@ -1281,9 +1397,95 @@
         ${result.status ? `<span class="pill">status ${result.status}</span>` : ""}
         ${result.exitCode !== undefined ? `<span class="pill">exit ${result.exitCode}</span>` : ""}
       `;
-      $("resultBox").textContent = JSON.stringify(result, null, 2);
+      $("resultBox").innerHTML = renderReadableResult(result, startedAt);
       $("responseTarget").textContent = targetLabel;
       $("copyDebug").disabled = !state.lastDebugPacket;
+    }
+
+    function renderReadableResult(result, startedAt) {
+      const ok = Boolean(result.ok);
+      const parsedJson = result.json ?? parseJsonText(result.stdout);
+      const rows = [
+        ["Started", startedAt],
+        ["Duration", result.durationMs !== undefined ? `${result.durationMs} ms` : ""],
+        ["HTTP status", result.status],
+        ["Exit code", result.exitCode],
+        ["Command", formatCommand(result.command)],
+        ["Working dir", result.cwd]
+      ].filter(([, value]) => value !== undefined && value !== null && value !== "");
+      const sections = [];
+
+      if (parsedJson !== null && parsedJson !== undefined) {
+        sections.push(resultSection("Parsed response JSON", JSON.stringify(parsedJson, null, 2), true));
+      }
+      if (typeof result.stdout === "string" && result.stdout.trim()) {
+        sections.push(resultSection("Raw stdout", result.stdout, false));
+      }
+      if (typeof result.stderr === "string" && result.stderr.trim()) {
+        sections.push(resultSection("Raw stderr", result.stderr, !ok));
+      }
+      if (typeof result.text === "string" && result.text.trim() && result.text !== result.stdout) {
+        sections.push(resultSection("Raw response text", result.text, false));
+      }
+      sections.push(resultSection("Full runner response", JSON.stringify(result, null, 2), false));
+
+      return `
+        <div class="result-summary ${ok ? "ok" : "fail"}">
+          <div class="result-heading">
+            <div class="result-title">${ok ? "Step completed" : "Step failed"}</div>
+            <span class="pill ${ok ? "ok" : "fail"}">${ok ? "success" : "failed"}</span>
+          </div>
+          <div class="result-message">${escapeHtml(resultMessage(result, parsedJson, ok))}</div>
+          ${rows.length ? `<div class="result-grid">${rows.map(resultRow).join("")}</div>` : ""}
+        </div>
+        ${sections.join("")}
+      `;
+    }
+
+    function resultRow([label, value]) {
+      return `
+        <div class="result-kv">
+          <div class="result-kv-label">${escapeHtml(label)}</div>
+          <div class="result-kv-value">${escapeHtml(String(value))}</div>
+        </div>
+      `;
+    }
+
+    function resultSection(title, content, open) {
+      return `
+        <details class="result-section" ${open ? "open" : ""}>
+          <summary>${escapeHtml(title)}</summary>
+          <pre class="light-code">${escapeHtml(content)}</pre>
+        </details>
+      `;
+    }
+
+    function resultMessage(result, parsedJson, ok) {
+      const parsed = parsedJson && typeof parsedJson === "object" && !Array.isArray(parsedJson)
+        ? parsedJson
+        : null;
+      const messages = [
+        typeof result.error === "string" ? result.error : "",
+        parsed && typeof parsed.error === "string" ? parsed.error : "",
+        parsed && typeof parsed.nextStep === "string" ? parsed.nextStep : "",
+        result.rpc?.error ? JSON.stringify(result.rpc.error) : ""
+      ].filter(Boolean);
+      if (messages.length) return messages.join("\n");
+      if (ok) return "The runner returned a successful response.";
+      return "The runner returned a failed response. The full command, streams, and raw payload are below.";
+    }
+
+    function formatCommand(command) {
+      return Array.isArray(command) ? command.join(" ") : command || "";
+    }
+
+    function parseJsonText(value) {
+      if (typeof value !== "string" || !value.trim()) return null;
+      try {
+        return JSON.parse(value);
+      } catch {
+        return null;
+      }
     }
 
     async function fireStep() {
@@ -1300,7 +1502,7 @@
 
       $("fireStep").disabled = true;
       $("resultMeta").innerHTML = `<span class="pill warn">running</span><span class="pill">started ${startedAt}</span>`;
-      $("resultBox").textContent = "Running real action...";
+      $("resultBox").innerHTML = `<div class="result-running">Running real action...</div>`;
       $("responseTarget").textContent = targetLabel;
 
       try {
