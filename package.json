@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "ledger:dev": "cd apps/agent-board-ledger && bun run dev",
+    "ledger:db:migrate:neon": "cd apps/agent-board-ledger && bun run db:migrate:neon",
+    "ledger:db:check:neon": "cd apps/agent-board-ledger && bun run db:check:neon",
     "ledger:test": "cd apps/agent-board-ledger && bun test",
     "ledger:typecheck": "cd apps/agent-board-ledger && bun run typecheck",
     "workbench": "bun scripts/workbench.ts",
