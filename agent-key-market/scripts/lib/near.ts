@@ -92,19 +92,30 @@ export function formatTransactionResult(
   raw: unknown,
   extra: Record<string, unknown> = {},
 ) {
-  const response = raw as {
-    transaction?: { hash?: string };
-    transaction_outcome?: { id?: string };
-  };
+  const txHash = extractTransactionHash(raw);
+  if (!txHash) {
+    throw new Error("Transaction completed, but NEAR did not return a transaction hash");
+  }
 
   return {
     ok: true,
     methodName,
-    txHash: response.transaction?.hash ?? response.transaction_outcome?.id ?? "",
+    txHash,
     result: getTransactionLastResult(raw as never),
     raw,
     ...extra,
   };
+}
+
+export function extractTransactionHash(raw: unknown): string {
+  const response = asRecord(raw);
+  return firstString([
+    asRecord(response.transaction).hash,
+    asRecord(response.transaction_outcome).id,
+    response.transaction_hash,
+    response.txHash,
+    response.hash,
+  ]);
 }
 
 export function requiredArg(name: string, index: number): string {
@@ -164,6 +175,19 @@ function firstEnv(names: string[]): string | undefined {
     if (value) return value;
   }
   return undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function firstString(values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value) return value;
+  }
+  return "";
 }
 
 function toNearString(value: unknown): string {

@@ -13,6 +13,7 @@ const envPath = join(repoRoot, ".env");
 const encryptedPrefix = "enc:v1:";
 const codexBinary = process.env.ACCEPTANCE_WORKBENCH_CODEX_BINARY
   || "/Applications/Codex.app/Contents/Resources/codex";
+const runnerTimeoutMs = 180_000;
 
 loadDotEnv(envPath);
 
@@ -357,7 +358,13 @@ async function runHttp(payload: JsonRecord) {
     init.body = typeof payload.body === "string" ? payload.body : JSON.stringify(payload.body);
   }
   const started = Date.now();
-  const response = await fetch(String(payload.url), init);
+  const timeout = timeoutSignal();
+  let response: Response;
+  try {
+    response = await fetch(String(payload.url), { ...init, signal: timeout.signal });
+  } finally {
+    timeout.clear();
+  }
   const bodyText = await response.text();
   let bodyJson: unknown = null;
   try {
@@ -390,11 +397,18 @@ async function runNearView(payload: JsonRecord) {
       args_base64: argsBase64
     }
   };
-  const response = await fetch(String(payload.rpcUrl), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(rpcBody)
-  });
+  const timeout = timeoutSignal();
+  let response: Response;
+  try {
+    response = await fetch(String(payload.rpcUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(rpcBody),
+      signal: timeout.signal
+    });
+  } finally {
+    timeout.clear();
+  }
   const rpcJson = await response.json() as JsonRecord;
   const result = asObject(rpcJson.result);
   const bytes = Array.isArray(result.result) ? result.result as number[] : [];
@@ -480,11 +494,16 @@ async function runScript(payload: JsonRecord) {
       NEAR_NODE_URL: nearRpcUrl
     }
   });
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    proc.kill();
+  }, runnerTimeoutMs);
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited
-  ]);
+  ]).finally(() => clearTimeout(timeout));
   let parsed: unknown = null;
   try {
     parsed = stdout.trim() ? JSON.parse(stdout) : null;
@@ -492,14 +511,27 @@ async function runScript(payload: JsonRecord) {
     parsed = null;
   }
   return {
-    ok: exitCode === 0,
+    ok: !timedOut && exitCode === 0,
     exitCode,
+    timedOut,
     durationMs: Date.now() - started,
     command: [command, ...args],
     cwd,
     stdout,
     stderr,
+    error: timedOut ? `Script timed out after ${runnerTimeoutMs} ms` : undefined,
     json: parsed
+  };
+}
+
+function timeoutSignal() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort(`Runner timed out after ${runnerTimeoutMs} ms`);
+  }, runnerTimeoutMs);
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timeout)
   };
 }
 
