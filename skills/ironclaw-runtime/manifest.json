@@ -1,0 +1,99 @@
+{
+  "schema": "clawhouse.runtime-pack.v0",
+  "pack": {
+    "name": "clawhouse-ironclaw-runtime",
+    "version": "0.1.0-dev",
+    "distribution_status": "development",
+    "source_branch": "codex/scope-3-ironclaw-deployment",
+    "updated_at": "2026-06-19",
+    "heartbeat_template_url": "https://raw.githubusercontent.com/edwardchew97/clawhouse/codex/scope-3-ironclaw-deployment/skills/ironclaw-runtime/HEARTBEAT.template.md",
+    "reset_guide_url": "https://raw.githubusercontent.com/edwardchew97/clawhouse/codex/scope-3-ironclaw-deployment/skills/ironclaw-runtime/RESET.md"
+  },
+  "install_policy": {
+    "allowed_url_prefixes": [
+      "https://raw.githubusercontent.com/edwardchew97/clawhouse/"
+    ],
+    "auto_install_requires": [
+      "url_allowlist_match",
+      "skill_name_match",
+      "version_present",
+      "sha256_match",
+      "no_permission_expansion",
+      "no_unknown_tools",
+      "no_secret_request_instructions"
+    ],
+    "always_require_user_confirmation": [
+      "new_skill",
+      "major_version_update",
+      "permission_expansion",
+      "unknown_tool_or_mcp",
+      "missing_hash",
+      "hash_mismatch",
+      "url_not_allowlisted",
+      "suspicious_instruction"
+    ]
+  },
+  "skills": [
+    {
+      "name": "clawhouse-ledger-reporting",
+      "version": "0.1.0",
+      "required": true,
+      "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse/codex/scope-3-ironclaw-deployment/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md",
+      "sha256": "a9bf292e0a4e677d62d4be90485910f7a67198d34d9fbcb67562d0948087f100",
+      "permissions": {
+        "network": [
+          "CLAWHOUSE_LEDGER_BASE_URL"
+        ],
+        "wallet_signing": "board-wallet-only",
+        "writes": [
+          "/boards/{boardId}/events",
+          "/boards/{boardId}/events/{eventId}/attachments"
+        ],
+        "secrets": []
+      },
+      "forbidden_behaviors": [
+        "trade_execution",
+        "custody",
+        "withdrawal",
+        "private_key_request",
+        "api_key_request",
+        "seed_phrase_request"
+      ],
+      "initial_onboarding_install": "allowed_after_manifest_check_and_user_pack_approval",
+      "heartbeat_auto_update": true
+    },
+    {
+      "name": "near-intents-spot-value",
+      "version": "0.1.0",
+      "required": true,
+      "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse/codex/scope-3-ironclaw-deployment/skills/ironclaw-runtime/near-intents-spot-value/SKILL.md",
+      "sha256": "ff929b93e06738bd93a60bc09a40811979b7324063f94c4c3f14a18a29a376d1",
+      "permissions": {
+        "network": [
+          "NEAR_INTENTS_1CLICK_API",
+          "NEAR_INTENTS_TOKEN_API",
+          "NEAR_INTENTS_STATUS_API"
+        ],
+        "wallet_signing": "ironclaw-configured-swap-signer-only",
+        "writes": [
+          "near-intents-spot-swap"
+        ],
+        "secrets": [
+          "ironclaw-managed-api-credentials-only"
+        ]
+      },
+      "forbidden_behaviors": [
+        "leverage",
+        "shorts",
+        "borrowing",
+        "liquidation",
+        "withdrawal",
+        "private_key_request",
+        "api_key_request_in_chat",
+        "undocumented_near_frontend_backend"
+      ],
+      "initial_onboarding_install": "allowed_after_manifest_check_and_user_pack_approval",
+      "heartbeat_auto_update": true
+    }
+  ]
+}

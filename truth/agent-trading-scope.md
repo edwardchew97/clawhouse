@@ -21,7 +21,22 @@ replace Scope V0 key trading.
 - Amendment basis: JY confirmed that V0 creator onboarding should use manual
   IronClaw strategy upload. ClawHouse/Codex/Claude generate a non-secret
   strategy package, while IronClaw owns API keys, wallet/private keys,
-  activation, execution, and runtime.
+  activation, execution, and runtime. This amendment is historical and was
+  superseded by the later IronClaw-side onboarding decision below.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-19
+- Amendment basis: JY clarified that ClawHouse does not need a pre-trade Order
+  Intent as the backend contract. V0 needs IronClaw-side onboarding with a
+  manifest-verified runtime skill pack: one skill for Agent Board Ledger
+  reporting, one skill for NEAR Intents spot value, and future trading value
+  skills added through the same checked manifest/heartbeat update path.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-19
+- Amendment basis: The IronClaw runtime skill pack was materialized in the repo
+  as development artifacts under `skills/ironclaw-runtime/`: manifest,
+  reporting skill, NEAR Intents spot value skill, heartbeat template, and
+  reset/retest guide. Production hosting, signatures, and exact IronClaw
+  installer mechanics remain unverified.
 
 ## One Sentence
 
@@ -107,14 +122,30 @@ Do not treat NEAR Intents as:
 Hyperliquid perps remain a future, separate Agent Trading expansion. They should
 not be mixed into current V0 unless JY explicitly reopens that direction.
 
-## Manual Strategy Package Boundary
+## IronClaw Runtime Skill Pack Boundary
 
-V0 strategy onboarding is manual upload, not API-key delegation.
+V0 strategy onboarding happens inside IronClaw, not through ClawHouse holding an
+IronClaw API key or ClawHouse executing a pre-trade order intent.
 
-ClawHouse, Codex, and Claude may generate a non-secret strategy package for the
-creator to review and manually upload/import into IronClaw. This package is a
-strategy/config artifact. It is not a trade order, not a ClawHouse execution
-request, and not proof that the strategy is already active in IronClaw.
+ClawHouse provides a runtime skill pack for IronClaw:
+
+- `clawhouse-ledger-reporting`: tells the agent how to report completed,
+  failed, refunded, skipped, or corrected trading events to Agent Board Ledger.
+- `near-intents-spot-value`: tells the agent how to evaluate and execute NEAR
+  Intents / 1Click spot swaps from inside IronClaw.
+- future trading value skills: separate venue/value adapters added through the
+  same manifest verification path.
+
+The ClawHouse onboarding skill runs inside the target IronClaw agent. It should:
+
+- collect agent name, description, avatar reference, and trading strategy;
+- read the ClawHouse runtime manifest;
+- verify required runtime skill URL allowlist, name, version, sha256 hash, and
+  permission declaration;
+- install or guide the user through installing the required runtime skills;
+- write the draft strategy/profile inside IronClaw memory/workspace;
+- configure heartbeat checks for future runtime manifest updates;
+- run dry checks and keep the strategy inactive until user confirmation.
 
 The package must not contain:
 
@@ -128,139 +159,70 @@ The package must not contain:
 
 IronClaw owns:
 
-- importing and validating the strategy package;
+- onboarding skill execution;
+- runtime skill installation;
 - user approval and activation inside IronClaw;
 - API key, secret, wallet, and private-key storage;
 - the execution loop;
 - quote/trade submission through IronClaw-controlled tooling;
-- deciding whether a proposed action is executable;
-- reporting events back to ClawHouse or Agent Board Ledger when configured.
+- deciding whether a proposed action is executable.
 
 ClawHouse owns only:
 
-- producing the strategy package draft;
-- recording package hash/version and public metadata when provided;
+- publishing the onboarding skill, runtime skills, and manifest;
+- receiving agent-reported events and notes through Agent Board Ledger;
+- recording runtime pack version/hash and public metadata when provided;
 - displaying public identity and observed performance through Agent Board
   Ledger.
 
-### What IronClaw Needs To Execute
+### Reporting Contract
 
-IronClaw cannot safely execute a vague instruction like "trade well" or "buy low,
-sell high." The package needs enough structure for IronClaw to turn strategy into
-an order intent inside its own runtime.
+ClawHouse does not need a pre-trade Order Intent as the backend contract.
 
-The minimum execution-ready strategy document should define:
+After a trade run, IronClaw reports facts and notes to Agent Board Ledger. The
+agent report may include:
 
-- agent identity: name, description, avatar reference, and trading style;
-- venue/asset boundary: current V0 target is NEAR Intents spot activity;
-- allowed actions: hold, spot swap, rebalance, and report reason;
-- forbidden actions: withdrawals, leverage, shorts, borrowing, perps,
-  liquidations, and unmanaged venues;
-- decision loop: what context IronClaw should inspect before proposing a trade;
-- cadence/triggers: manual, daily, event-based, or another explicit schedule;
-- risk rails: max position size, max trade notional, daily loss limit, max
-  drawdown, slippage cap, and stop conditions;
-- order-intent output shape: the fields IronClaw should produce before it calls
-  its own execution tooling;
-- reporting contract: reason required, event report required, and optional Agent
-  Board Ledger hints;
-- secret policy: package contains no secrets.
+- `reason`: human-readable explanation;
+- `metadata.order`: structured summary of the agent's own run/order, not an
+  instruction for ClawHouse to execute;
+- `metadata.region`: optional region tag when configured;
+- `tx_hash`;
+- `intent_id`;
+- `asset_in` and `amount_in`;
+- `asset_out` and `amount_out`;
+- `status_claim`: filled, failed, refunded, skipped, pending, or unknown.
 
-### ClawHouse Strategy Package v0
+Agent Board Ledger records what happened. It does not approve, quote, sign, or
+execute the trade.
 
-Canonical artifact: `clawhouse_strategy_package.v0.json`.
+### Runtime Manifest And Update Checks
 
-Authoring previews can be Markdown or YAML for readability, but the machine
-artifact should be JSON so it can be hashed, validated, versioned, and imported
-without ambiguous parsing.
+Runtime skills must be installed from a ClawHouse-controlled manifest.
 
-Minimum fields:
+Current development manifest artifact:
 
-- `schema`: must be `clawhouse.strategy_package.v0`;
-- `package_id`;
-- `created_at`;
-- `created_by`;
-- `agent`: `name`, `description`, `avatar_reference`, `trading_style`;
-- `ironclaw`: `import_mode`, `activation`, `wallet_source`,
-  `api_key_required_by_clawhouse`;
-- `strategy`: `objective`, `thesis`, `allowed_actions`, `allowed_assets`,
-  `base_asset`, `decision_loop`, `cadence`, `exit_conditions`;
-- `risk`: `max_position_pct`, `max_trade_notional_usd`, `daily_loss_limit_pct`,
-  `max_drawdown_pct`, `max_slippage_bps`, `allow_leverage`, `allow_shorts`,
-  `allow_withdrawals`;
-- `order_intent_template`: the expected proposed-action shape IronClaw should
-  produce internally before execution;
-- `reporting`: `reason_required`, `report_after_trade`, `ledger_hint`;
-- `secrets`: must be `none_included`;
-- `metadata`: package notes and optional hash/version fields.
+- repo path: `skills/ironclaw-runtime/manifest.json`;
+- status: development distribution only;
+- branch URLs may be used for manual testing;
+- production distribution must later move to a stable ClawHouse-controlled URL
+  and verified signature/hash policy.
 
-Example:
+The manifest should declare:
 
-```json
-{
-  "schema": "clawhouse.strategy_package.v0",
-  "package_id": "chsp_example_001",
-  "created_at": "2026-06-19T00:00:00Z",
-  "created_by": "clawhouse_creator_skill",
-  "agent": {
-    "name": "Near Spot Scout",
-    "description": "A cautious NEAR ecosystem spot trader that explains every move.",
-    "avatar_reference": "manual-upload-or-public-url",
-    "trading_style": "long-only NEAR ecosystem momentum"
-  },
-  "ironclaw": {
-    "import_mode": "manual_upload",
-    "activation": "inside_ironclaw",
-    "wallet_source": "ironclaw_managed",
-    "api_key_required_by_clawhouse": false
-  },
-  "strategy": {
-    "objective": "Grow a small spot portfolio while avoiding leverage and withdrawals.",
-    "thesis": "Prefer NEAR and approved ecosystem assets when momentum and liquidity are healthy; otherwise hold USDC.",
-    "allowed_actions": ["hold", "spot_swap", "rebalance", "report_reason"],
-    "allowed_assets": [
-      { "symbol": "USDC", "chain": "near" },
-      { "symbol": "NEAR", "chain": "near" }
-    ],
-    "base_asset": { "symbol": "USDC", "chain": "near" },
-    "decision_loop": "Before each proposed trade, inspect current holdings, recent price movement, liquidity, risk limits, and the last trade reason.",
-    "cadence": "daily_or_manual",
-    "exit_conditions": ["daily_loss_limit_hit", "max_drawdown_hit", "asset_removed_from_allowed_list"]
-  },
-  "risk": {
-    "max_position_pct": 35,
-    "max_trade_notional_usd": 25,
-    "daily_loss_limit_pct": 5,
-    "max_drawdown_pct": 15,
-    "max_slippage_bps": 100,
-    "allow_leverage": false,
-    "allow_shorts": false,
-    "allow_withdrawals": false
-  },
-  "order_intent_template": {
-    "action": "hold | spot_swap | rebalance",
-    "from_asset": "asset symbol when swapping",
-    "to_asset": "asset symbol when swapping",
-    "amount_policy": "fixed_usd | percent_of_portfolio | no_trade",
-    "max_slippage_bps": "number",
-    "reason": "plain-language reason required before execution",
-    "risk_check": "must pass package risk rails before execution"
-  },
-  "reporting": {
-    "reason_required": true,
-    "report_after_trade": true,
-    "ledger_hint": "agent_board_ledger"
-  },
-  "secrets": "none_included",
-  "metadata": {
-    "notes": "Manual upload package. User must activate inside IronClaw."
-  }
-}
-```
+- pack name and version;
+- skill name;
+- skill version;
+- skill URL;
+- sha256 hash;
+- whether the skill is required;
+- required permissions/tools;
+- forbidden behaviors;
+- whether the update may auto-install or requires user confirmation.
 
-The exact IronClaw importer, parser, validation errors, and activation UX remain
-implementation/partner-confirmation work. Until that is verified, this schema is
-ClawHouse's target contract, not a claim that IronClaw already supports the file.
+Heartbeat may periodically check the manifest. It can only auto-install updates
+that pass URL allowlist, hash/signature, name, version, and permission checks.
+New skills, major version updates, permission expansion, unknown tools/MCPs, or
+suspicious content must stop for user confirmation.
 
 ## Non-Negotiable Product Rules
 
@@ -508,8 +470,9 @@ The first Agent Trading slice is done only when:
 - holder/key-gated read API is scoped as a read surface, not key trading;
 - no OutLayer, pre-trade validation, ClawHouse quote, ClawHouse execution,
   Hyperliquid, leverage, shorts, liquidation, or copy trading is required.
-- a non-secret `clawhouse_strategy_package.v0.json` can be generated for manual
-  IronClaw upload without requiring ClawHouse to execute or activate it.
+- IronClaw-side onboarding can verify and install the required ClawHouse runtime
+  skills from a hash-pinned manifest without requiring ClawHouse to execute or
+  activate the agent.
 
 ## Open Decisions
 
@@ -522,12 +485,17 @@ The first Agent Trading slice is done only when:
 - What price freshness threshold blocks leaderboard updates?
 - What should be public versus key-holder-only in the event timeline?
 - What proof is enough to compute PnL for confidential activity?
-- Whether IronClaw will accept `clawhouse_strategy_package.v0.json` directly or
-  require a wrapper, script, or different import API.
-- What exact validation errors IronClaw should return for invalid strategy
-  packages.
-- What minimum package hash/version should ClawHouse display publicly after
-  manual upload.
+- Whether IronClaw `skill_install` can install every runtime skill directly from
+  the onboarding skill, or whether the UI must ask the user to approve some
+  installations.
+- What exact trust level and permissions externally hosted ClawHouse skills
+  receive after URL installation.
+- Whether IronClaw requires a restart/refresh before newly installed runtime
+  skills become active.
+- What exact runtime pack version/hash should ClawHouse display publicly after
+  onboarding.
+- What production URL and signing mechanism ClawHouse should use for runtime
+  manifests after the development branch is replaced.
 
 ## Change Log
 
@@ -540,6 +508,14 @@ The first Agent Trading slice is done only when:
   observation, event, reconciliation, portfolio, PnL, and read-access layer.
 - 2026-06-19 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added the V0 manual
   IronClaw strategy package boundary and target
-  `clawhouse_strategy_package.v0.json` format, making ClawHouse/Codex/Claude
-  responsible only for a non-secret package draft while IronClaw owns keys,
-  wallet custody, activation, and execution.
+  `clawhouse_strategy_package.v0.json` format as an interim direction. This was
+  later superseded by IronClaw-side onboarding.
+- 2026-06-19 - `019ede0e-a276-7bc2-a6da-ded485719308` - Superseded the manual
+  strategy-package / pre-trade Order Intent boundary with IronClaw-side
+  onboarding and a manifest-verified runtime skill pack: reporting to Agent
+  Board Ledger, NEAR Intents spot value, heartbeat update checks, and future
+  trading value skills.
+- 2026-06-19 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added concrete
+  development runtime-pack artifacts under `skills/ironclaw-runtime/` and kept
+  production hosting, signatures, and exact IronClaw install mechanics as open
+  verification items.
