@@ -14,6 +14,12 @@ replaces the previous Trade Engine direction for current V0 work.
   attachments/corrections/retractions/analysis notes, runs cron discovery and
   reconciliation, computes portfolio and PnL snapshots, records DB events, and
   can later serve holder/key-gated read APIs.
+- Amendment session: `019ede10-c43f-76f1-ab2d-68b0fabf9802`
+- Amendment date: 2026-06-19
+- Amendment basis: JY confirmed that V0 Agent Board Ledger write
+  authentication should be based on the agent/IronClaw-managed board wallet,
+  with each write request wallet-signed and verified by board/wallet binding,
+  signature validity, fresh timestamp, unused nonce, and request body hash.
 
 ## One Sentence
 
@@ -82,6 +88,60 @@ Minimum fields:
 Board registration does not imply ClawHouse controls the wallet. It only means
 Agent Board Ledger is responsible for observing and accounting for it.
 
+## Wallet-Signed Write Authentication
+
+V0 Agent Board Ledger write authentication uses only the agent/IronClaw-managed
+board wallet. Long-lived tokens are not used for agent write authentication.
+
+Every write request from an agent/IronClaw must be signed by the board wallet
+registered to that board.
+
+This applies to:
+
+- creating or reporting an agent event;
+- attaching a later reason;
+- attaching a correction;
+- attaching a retraction label;
+- attaching an investigation note;
+- attaching post-trade analysis;
+- attaching a final summary.
+
+For every signed write, the service must verify:
+
+- the `board_id` exists;
+- the signing wallet is registered and bound to that board;
+- the signature is valid for the canonical request payload;
+- the timestamp is fresh enough for the accepted clock-skew window;
+- the nonce has not already been used for that board/wallet;
+- the `body_hash` matches the exact request body received by the service.
+
+Minimum authentication envelope fields:
+
+- `wallet_address` or `account_id`;
+- public key or key id when the chain/tooling requires it for verification;
+- `signature`;
+- `signature_scheme` or chain namespace when needed;
+- `timestamp`;
+- `nonce`;
+- `body_hash`.
+
+`tx_hash`, `intent_id`, and `client_event_id` are event association,
+deduplication, and idempotency evidence. They are not identity credentials and
+must not replace wallet-signature verification.
+
+Creating an event may include a reason, or may omit the reason. Later
+attachments can add reason, correction, retraction, investigation, analysis, or
+summary entries, but those attachment writes must also be append-only and use the
+same wallet-signed authentication boundary.
+
+Key-holder or normal user read authentication is separate from agent write
+authentication. Do not mix the agent wallet-signature write flow with holder/key
+read-access checks.
+
+Agent Board Ledger does not host trading private keys, does not sign trades for
+an agent, and does not execute trades on an agent's behalf. The wallet signature
+is only used to authenticate ledger writes.
+
 ## Wallet Watcher Cron
 
 Agent Board Ledger must run a scheduled watcher for tracked boards.
@@ -112,6 +172,8 @@ Minimum event fields:
 - `client_event_id`
 - `agent_id`
 - `board_id`
+- `wallet_address` or `account_id`
+- wallet-signature authentication envelope
 - `event_type`
 - `tx_hash` or `intent_id` when available
 - `status_claim`
@@ -126,6 +188,9 @@ Minimum event fields:
 The event inbox must be idempotent. Re-sending the same `client_event_id`,
 `tx_hash`, or `intent_id` should merge into the existing event timeline instead
 of creating a duplicate trade.
+
+Idempotency does not prove identity. The inbox still needs a valid board-wallet
+signature for every agent-reported write.
 
 ## Event Timeline And Attachments
 
@@ -144,6 +209,9 @@ Allowed attachments:
 
 Reasons and corrections should be append-only. Do not overwrite old reasoning
 because the product value is the agent's decision trail.
+
+Every agent-submitted attachment must use the same board-wallet signed write
+authentication as event creation.
 
 Important boundary:
 
@@ -294,6 +362,7 @@ Agent Board Ledger owns append-only records for:
 
 - `agent_boards`
 - `tracked_wallets`
+- `write_auth_nonces`
 - `agent_events`
 - `event_attachments`
 - `wallet_observations`
@@ -310,6 +379,8 @@ Minimum write rules:
 - store raw observed data before derived PnL;
 - keep agent claims separate from reconciled wallet facts;
 - make duplicate detection explicit;
+- store enough wallet-signature, timestamp, nonce, and body-hash audit data to
+  prove a write passed authentication without storing private keys;
 - link PnL snapshots to the holding and price snapshots used;
 - mark stale, missing, unknown, and confidential-limited states explicitly.
 
@@ -331,6 +402,8 @@ Boundary:
 - read access checks are allowed here;
 - buying, selling, pricing, or settling keys remains the key-market contract's
   scope, not Agent Board Ledger's scope.
+- key-holder/user read authentication is separate from agent wallet-signed write
+  authentication.
 
 ## Confidential Activity Boundary
 
@@ -363,6 +436,8 @@ Agent Board Ledger does not own:
 - swap execution;
 - settlement submission;
 - custody or signing;
+- hosting trading private keys;
+- signing trades for agents;
 - key trading;
 - key PnL;
 - private rooms;
@@ -383,6 +458,12 @@ Agent/reporting:
 - agent later attaches a reason, correction, retraction, or analysis note;
 - agent tries to "withdraw" a past statement, which must be stored as a new
   timeline entry rather than deleting history.
+- agent signs with a wallet that is not registered to the board;
+- agent reuses a nonce;
+- agent signs a body whose hash does not match the received request body;
+- agent sends a stale timestamp;
+- agent sends a valid `tx_hash`, `intent_id`, or `client_event_id` without a
+  valid wallet signature.
 
 Cron/discovery:
 
@@ -422,9 +503,13 @@ The first Agent Board Ledger slice is complete when:
 - one agent board can be registered with a tracked wallet/account;
 - starting balances are recorded;
 - wallet watcher cron can run and write observations;
-- an agent can report a trade event with or without reason;
-- a later reason, correction, retraction, or analysis note can attach to the
-  same event;
+- an agent can report a wallet-signed trade event with or without reason;
+- the service rejects agent writes when the board/wallet binding, signature,
+  timestamp, nonce, or body hash check fails;
+- `tx_hash`, `intent_id`, and `client_event_id` support event association and
+  idempotency but are not treated as identity credentials;
+- a later wallet-signed reason, correction, retraction, investigation note, or
+  analysis note can attach to the same event;
 - cron can create `discovered_without_reason` for unreported wallet activity;
 - duplicate reports and cron/report races merge into one event timeline;
 - wallet balances can be reconciled into holding snapshots;
@@ -434,12 +519,15 @@ The first Agent Board Ledger slice is complete when:
 - top-ups, withdrawals, refunds, dust, unknown assets, stale prices, and
   confidential visibility limits are represented explicitly;
 - public and holder-gated read shapes are available or clearly stubbed;
-- no OutLayer, pre-trade validation, quote, execute, settle, custody,
-  Hyperliquid, leverage, shorts, liquidation, or copy trading is required.
+- no OutLayer, pre-trade validation, quote, execute, settle, custody, hosted
+  trading private keys, agent trade signing, Hyperliquid, leverage, shorts,
+  liquidation, or copy trading is required.
 
 ## Open Decisions
 
 - What cron cadence should V0 use for live boards?
+- What exact canonical signed payload format should V0 use?
+- What timestamp freshness window and nonce retention period should V0 use?
 - Which wallet/account APIs are reliable enough for watcher discovery?
 - Which price source and staleness threshold should gate leaderboard freshness?
 - What fields are public versus key-holder-only?
@@ -455,3 +543,8 @@ The first Agent Board Ledger slice is complete when:
   Trade Engine direction with Agent Board Ledger as the V0 observation,
   event-timeline, wallet-reconciliation, portfolio, PnL, DB, and read-access
   scope.
+- 2026-06-19 - `019ede10-c43f-76f1-ab2d-68b0fabf9802` - Added the accepted V0
+  wallet-signed write-authentication boundary for agent/IronClaw ledger writes,
+  including board-wallet binding, signature, timestamp, nonce, body-hash checks,
+  transaction identifier boundaries, append-only signed attachments, read/write
+  auth separation, and no-custody/no-trade-signing limits.

@@ -1,4 +1,12 @@
-import { generateNearWallet, inspectNearWallet } from "./wallet";
+import { readFile } from "node:fs/promises";
+import {
+  buildAgentBoardLedgerRequestPayload,
+  generateNearWallet,
+  hashRequestBody,
+  inspectNearWallet,
+  signAgentBoardLedgerRequest,
+  verifyAgentBoardLedgerRequestSignature,
+} from "./wallet";
 
 type CliIo = {
   stdout: (message: string) => void;
@@ -8,6 +16,18 @@ type CliIo = {
 type ParsedOptions = {
   out?: string;
   keyFile?: string;
+  method?: string;
+  path?: string;
+  body?: string;
+  bodyFile?: string;
+  bodyHash?: string;
+  timestamp?: string;
+  nonce?: string;
+  boardId?: string;
+  agentId?: string;
+  publicKey?: string;
+  walletAddress?: string;
+  signature?: string;
   overwrite: boolean;
   help: boolean;
 };
@@ -18,6 +38,8 @@ Usage:
   bun run generate -- --out <local-key-file> [--overwrite]
   bun run inspect -- --key-file <local-key-file>
   bun run read-public -- --key-file <local-key-file>
+  bun run sign-request -- --key-file <local-key-file> --method POST --path <path> --body <json> --board-id <id> --agent-id <id> [--timestamp <value>] [--nonce <value>]
+  bun run verify-request -- --public-key <key> --wallet-address <address> --signature <signature> --method POST --path <path> --body <json> --board-id <id> --agent-id <id> --timestamp <value> --nonce <value>
 
 This tool stores a plaintext local dev NEAR private key in the exact file path
 you provide. Keep generated key files under an ignored local path such as work/.
@@ -67,6 +89,69 @@ export async function runCli(
       return 0;
     }
 
+    if (command === "sign-request") {
+      requireOption(options.keyFile, "--key-file <local-key-file>");
+      requireOption(options.method, "--method <method>");
+      requireOption(options.path, "--path <path>");
+      requireOption(options.boardId, "--board-id <id>");
+      requireOption(options.agentId, "--agent-id <id>");
+      const body = await readBodyOption(options);
+      const bodyHash = resolveBodyHashOption(options, body);
+
+      printJson(
+        io,
+        await signAgentBoardLedgerRequest({
+          keyFile: options.keyFile,
+          method: options.method,
+          path: options.path,
+          body,
+          bodyHash,
+          timestamp: options.timestamp,
+          nonce: options.nonce,
+          boardId: options.boardId,
+          agentId: options.agentId,
+        }),
+      );
+      return 0;
+    }
+
+    if (command === "verify-request") {
+      requireOption(options.publicKey, "--public-key <key>");
+      requireOption(options.walletAddress, "--wallet-address <address>");
+      requireOption(options.signature, "--signature <signature>");
+      requireOption(options.method, "--method <method>");
+      requireOption(options.path, "--path <path>");
+      requireOption(options.timestamp, "--timestamp <value>");
+      requireOption(options.nonce, "--nonce <value>");
+      requireOption(options.boardId, "--board-id <id>");
+      requireOption(options.agentId, "--agent-id <id>");
+
+      const body = await readBodyOption(options);
+      const bodyHash = resolveBodyHashOption(options, body);
+      const payload = buildAgentBoardLedgerRequestPayload({
+        method: options.method,
+        path: options.path,
+        bodyHash,
+        timestamp: options.timestamp,
+        nonce: options.nonce,
+        boardId: options.boardId,
+        agentId: options.agentId,
+        walletAddress: options.walletAddress,
+      });
+
+      printJson(io, {
+        ok: verifyAgentBoardLedgerRequestSignature({
+          ...payload,
+          publicKey: options.publicKey,
+          signature: options.signature,
+        }),
+        ...payload,
+        publicKey: options.publicKey,
+        signature: options.signature,
+      });
+      return 0;
+    }
+
     throw new Error(`Unknown command: ${command}`);
   } catch (error) {
     io.stderr(`${error instanceof Error ? error.message : String(error)}\n`);
@@ -101,11 +186,95 @@ function parseOptions(args: string[]): ParsedOptions {
       index += 1;
       continue;
     }
+    if (arg === "--method") {
+      options.method = readOptionValue(args, index, "--method");
+      index += 1;
+      continue;
+    }
+    if (arg === "--path") {
+      options.path = readOptionValue(args, index, "--path");
+      index += 1;
+      continue;
+    }
+    if (arg === "--body") {
+      options.body = readOptionValue(args, index, "--body");
+      index += 1;
+      continue;
+    }
+    if (arg === "--body-file") {
+      options.bodyFile = readOptionValue(args, index, "--body-file");
+      index += 1;
+      continue;
+    }
+    if (arg === "--body-sha256") {
+      options.bodyHash = readOptionValue(args, index, "--body-sha256");
+      index += 1;
+      continue;
+    }
+    if (arg === "--timestamp") {
+      options.timestamp = readOptionValue(args, index, "--timestamp");
+      index += 1;
+      continue;
+    }
+    if (arg === "--nonce") {
+      options.nonce = readOptionValue(args, index, "--nonce");
+      index += 1;
+      continue;
+    }
+    if (arg === "--board-id") {
+      options.boardId = readOptionValue(args, index, "--board-id");
+      index += 1;
+      continue;
+    }
+    if (arg === "--agent-id") {
+      options.agentId = readOptionValue(args, index, "--agent-id");
+      index += 1;
+      continue;
+    }
+    if (arg === "--public-key") {
+      options.publicKey = readOptionValue(args, index, "--public-key");
+      index += 1;
+      continue;
+    }
+    if (arg === "--wallet-address") {
+      options.walletAddress = readOptionValue(args, index, "--wallet-address");
+      index += 1;
+      continue;
+    }
+    if (arg === "--signature") {
+      options.signature = readOptionValue(args, index, "--signature");
+      index += 1;
+      continue;
+    }
 
     throw new Error(`Unknown option: ${arg}`);
   }
 
   return options;
+}
+
+async function readBodyOption(options: ParsedOptions): Promise<string> {
+  if (options.body !== undefined && options.bodyFile !== undefined) {
+    throw new Error("Pass only one of --body or --body-file");
+  }
+  if (options.bodyFile !== undefined) {
+    return await readFile(options.bodyFile, "utf8");
+  }
+  return options.body ?? "";
+}
+
+function resolveBodyHashOption(options: ParsedOptions, body: string): string {
+  const bodyHash = hashRequestBody(body);
+  if (options.bodyHash !== undefined && options.bodyHash !== bodyHash) {
+    throw new Error("Provided --body-sha256 does not match request body");
+  }
+  return options.bodyHash ?? bodyHash;
+}
+
+function requireOption<T>(value: T | undefined, message: string): asserts value is T {
+  if (value === undefined || value === "") {
+    throw new Error(`Missing ${message}`);
+  }
 }
 
 function readOptionValue(args: string[], index: number, name: string): string {

@@ -4,9 +4,14 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { runCli } from "./cli";
 import {
+  buildAgentBoardLedgerRequestPayload,
   generateNearWallet,
+  hashRequestBody,
   inspectNearWallet,
   publicInfoFromPublicKey,
+  signAgentBoardLedgerRequest,
+  serializeAgentBoardLedgerRequestPayload,
+  verifyAgentBoardLedgerRequestSignature,
 } from "./wallet";
 
 const tempRoots: string[] = [];
@@ -153,6 +158,410 @@ describe("NEAR wallet local dev keystore", () => {
     ).rejects.toThrow("not a URL");
     await expect(generateNearWallet({ keyFile: directoryPath })).rejects.toThrow(
       "points to a directory",
+    );
+  });
+});
+
+describe("Agent Board Ledger request signatures", () => {
+  test("signs a canonical request payload that can be verified", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+    const body = JSON.stringify({ tx_hash: "tx-1", reason: "rebalance" });
+    await generateNearWallet({ keyFile });
+
+    const signed = await signAgentBoardLedgerRequest({
+      keyFile,
+      method: "post",
+      path: "/boards/board-1/events",
+      body,
+      timestamp: "2026-06-19T00:00:00.000Z",
+      nonce: "nonce-1",
+      boardId: "board-1",
+      agentId: "agent-1",
+    });
+
+    expect(signed.method).toBe("POST");
+    expect(signed.bodyHash).toBe(hashRequestBody(body));
+    expect(signed.signature).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(signed.headers).toMatchObject({
+      "x-clawhouse-wallet-address": signed.walletAddress,
+      "x-clawhouse-public-key": signed.publicKey,
+      "x-clawhouse-timestamp": "2026-06-19T00:00:00.000Z",
+      "x-clawhouse-nonce": "nonce-1",
+      "x-clawhouse-body-sha256": hashRequestBody(body),
+      "x-clawhouse-signature": signed.signature,
+    });
+    expect(Object.keys(signed.headers).sort()).toEqual(
+      [
+        "x-clawhouse-body-sha256",
+        "x-clawhouse-nonce",
+        "x-clawhouse-public-key",
+        "x-clawhouse-signature",
+        "x-clawhouse-timestamp",
+        "x-clawhouse-wallet-address",
+      ].sort(),
+    );
+
+    expect(
+      verifyAgentBoardLedgerRequestSignature({
+        publicKey: signed.publicKey,
+        walletAddress: signed.walletAddress,
+        signature: signed.signature,
+        method: "POST",
+        path: "/boards/board-1/events",
+        body,
+        timestamp: "2026-06-19T00:00:00.000Z",
+        nonce: "nonce-1",
+        boardId: "board-1",
+        agentId: "agent-1",
+      }),
+    ).toBe(true);
+  });
+
+  test("rejects a signature when the request body is tampered with", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+    await generateNearWallet({ keyFile });
+
+    const signed = await signAgentBoardLedgerRequest({
+      keyFile,
+      method: "POST",
+      path: "/boards/board-1/events",
+      body: JSON.stringify({ side: "buy", amount: "100" }),
+      timestamp: "2026-06-19T00:00:00.000Z",
+      nonce: "nonce-1",
+      boardId: "board-1",
+      agentId: "agent-1",
+    });
+
+    expect(
+      verifyAgentBoardLedgerRequestSignature({
+        publicKey: signed.publicKey,
+        walletAddress: signed.walletAddress,
+        signature: signed.signature,
+        method: "POST",
+        path: "/boards/board-1/events",
+        body: JSON.stringify({ side: "buy", amount: "101" }),
+        timestamp: "2026-06-19T00:00:00.000Z",
+        nonce: "nonce-1",
+        boardId: "board-1",
+        agentId: "agent-1",
+      }),
+    ).toBe(false);
+  });
+
+  test("refuses to sign if private and public key material do not match", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+    const otherKeyFile = join(root, "other-wallet.json");
+    await generateNearWallet({ keyFile });
+    await generateNearWallet({ keyFile: otherKeyFile });
+
+    const keyStore = JSON.parse(await readFile(keyFile, "utf8"));
+    const otherKeyStore = JSON.parse(await readFile(otherKeyFile, "utf8"));
+    keyStore.private_key = otherKeyStore.private_key;
+    await writeFile(keyFile, JSON.stringify(keyStore, null, 2));
+
+    await expect(
+      signAgentBoardLedgerRequest({
+        keyFile,
+        method: "POST",
+        path: "/boards/board-1/events",
+        body: "{}",
+        timestamp: "2026-06-19T00:00:00.000Z",
+        nonce: "nonce-1",
+        boardId: "board-1",
+        agentId: "agent-1",
+      }),
+    ).rejects.toThrow("private_key does not match public_key");
+  });
+
+  test("includes timestamp and nonce in the canonical payload", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+    await generateNearWallet({ keyFile });
+
+    const first = await signAgentBoardLedgerRequest({
+      keyFile,
+      method: "POST",
+      path: "/boards/board-1/events",
+      body: "{}",
+      timestamp: "2026-06-19T00:00:00.000Z",
+      nonce: "nonce-1",
+      boardId: "board-1",
+      agentId: "agent-1",
+    });
+    const second = await signAgentBoardLedgerRequest({
+      keyFile,
+      method: "POST",
+      path: "/boards/board-1/events",
+      body: "{}",
+      timestamp: "2026-06-19T00:00:01.000Z",
+      nonce: "nonce-2",
+      boardId: "board-1",
+      agentId: "agent-1",
+    });
+    const payload = buildAgentBoardLedgerRequestPayload({
+      method: "POST",
+      path: "/boards/board-1/events",
+      body: "{}",
+      timestamp: "2026-06-19T00:00:00.000Z",
+      nonce: "nonce-1",
+      boardId: "board-1",
+      agentId: "agent-1",
+      walletAddress: first.walletAddress,
+    });
+
+    expect(first.signature).not.toBe(second.signature);
+    expect(serializeAgentBoardLedgerRequestPayload(payload)).toBe(
+      JSON.stringify({
+        domain: "clawhouse.agent-board-ledger.v0",
+        version: 1,
+        method: "POST",
+        path: "/boards/board-1/events",
+        bodyHash: hashRequestBody("{}"),
+        timestamp: "2026-06-19T00:00:00.000Z",
+        nonce: "nonce-1",
+        boardId: "board-1",
+        agentId: "agent-1",
+        walletAddress: first.walletAddress,
+      }),
+    );
+  });
+
+  test("sign-request and verify-request commands never print private material", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+    const body = JSON.stringify({ tx_hash: "tx-1" });
+    await generateNearWallet({ keyFile });
+
+    const keyStore = JSON.parse(await readFile(keyFile, "utf8"));
+    const signStdout: string[] = [];
+    const signStderr: string[] = [];
+    const signExitCode = await runCli(
+      [
+        "sign-request",
+        "--key-file",
+        keyFile,
+        "--method",
+        "POST",
+        "--path",
+        "/boards/board-1/events",
+        "--body",
+        body,
+        "--board-id",
+        "board-1",
+        "--agent-id",
+        "agent-1",
+        "--timestamp",
+        "2026-06-19T00:00:00.000Z",
+        "--nonce",
+        "nonce-1",
+      ],
+      {
+        stdout: (message) => signStdout.push(message),
+        stderr: (message) => signStderr.push(message),
+      },
+    );
+
+    expect(signExitCode).toBe(0);
+    expect(signStderr.join("")).toBe("");
+
+    const signed = JSON.parse(signStdout.join(""));
+    expect(signed.headers["x-clawhouse-signature"]).toBe(signed.signature);
+
+    const verifyStdout: string[] = [];
+    const verifyStderr: string[] = [];
+    const verifyExitCode = await runCli(
+      [
+        "verify-request",
+        "--public-key",
+        signed.publicKey,
+        "--wallet-address",
+        signed.walletAddress,
+        "--signature",
+        signed.signature,
+        "--method",
+        "POST",
+        "--path",
+        "/boards/board-1/events",
+        "--body",
+        body,
+        "--board-id",
+        "board-1",
+        "--agent-id",
+        "agent-1",
+        "--timestamp",
+        "2026-06-19T00:00:00.000Z",
+        "--nonce",
+        "nonce-1",
+      ],
+      {
+        stdout: (message) => verifyStdout.push(message),
+        stderr: (message) => verifyStderr.push(message),
+      },
+    );
+
+    expect(verifyExitCode).toBe(0);
+    expect(verifyStderr.join("")).toBe("");
+    expect(JSON.parse(verifyStdout.join("")).ok).toBe(true);
+
+    const combinedOutput = [
+      signStdout.join(""),
+      signStderr.join(""),
+      verifyStdout.join(""),
+      verifyStderr.join(""),
+    ].join("");
+    expect(combinedOutput).not.toContain(keyStore.private_key);
+    expect(combinedOutput).not.toContain(
+      keyStore.private_key.replace("ed25519:", ""),
+    );
+  });
+
+  test("verify-request reports ok false for a tampered body", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+    await generateNearWallet({ keyFile });
+
+    const signed = await signAgentBoardLedgerRequest({
+      keyFile,
+      method: "POST",
+      path: "/boards/board-1/events",
+      body: JSON.stringify({ side: "buy", amount: "100" }),
+      timestamp: "2026-06-19T00:00:00.000Z",
+      nonce: "nonce-1",
+      boardId: "board-1",
+      agentId: "agent-1",
+    });
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const exitCode = await runCli(
+      [
+        "verify-request",
+        "--public-key",
+        signed.publicKey,
+        "--wallet-address",
+        signed.walletAddress,
+        "--signature",
+        signed.signature,
+        "--method",
+        "POST",
+        "--path",
+        "/boards/board-1/events",
+        "--body",
+        JSON.stringify({ side: "buy", amount: "101" }),
+        "--board-id",
+        "board-1",
+        "--agent-id",
+        "agent-1",
+        "--timestamp",
+        "2026-06-19T00:00:00.000Z",
+        "--nonce",
+        "nonce-1",
+      ],
+      {
+        stdout: (message) => stdout.push(message),
+        stderr: (message) => stderr.push(message),
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr.join("")).toBe("");
+    expect(JSON.parse(stdout.join("")).ok).toBe(false);
+  });
+
+  test("sign-request accepts a body file", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+    const bodyFile = join(root, "body.json");
+    const body = JSON.stringify({ tx_hash: "tx-from-file" });
+    await generateNearWallet({ keyFile });
+    await writeFile(bodyFile, body);
+
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const exitCode = await runCli(
+      [
+        "sign-request",
+        "--key-file",
+        keyFile,
+        "--method",
+        "POST",
+        "--path",
+        "/boards/board-1/events",
+        "--body-file",
+        bodyFile,
+        "--board-id",
+        "board-1",
+        "--agent-id",
+        "agent-1",
+        "--timestamp",
+        "2026-06-19T00:00:00.000Z",
+        "--nonce",
+        "nonce-1",
+      ],
+      {
+        stdout: (message) => stdout.push(message),
+        stderr: (message) => stderr.push(message),
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr.join("")).toBe("");
+
+    const signed = JSON.parse(stdout.join(""));
+    expect(signed.bodyHash).toBe(hashRequestBody(body));
+    expect(
+      verifyAgentBoardLedgerRequestSignature({
+        publicKey: signed.publicKey,
+        walletAddress: signed.walletAddress,
+        signature: signed.signature,
+        method: "POST",
+        path: "/boards/board-1/events",
+        body,
+        timestamp: "2026-06-19T00:00:00.000Z",
+        nonce: "nonce-1",
+        boardId: "board-1",
+        agentId: "agent-1",
+      }),
+    ).toBe(true);
+  });
+
+  test("sign-request rejects a mismatched explicit body hash", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+    await generateNearWallet({ keyFile });
+
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const exitCode = await runCli(
+      [
+        "sign-request",
+        "--key-file",
+        keyFile,
+        "--method",
+        "POST",
+        "--path",
+        "/boards/board-1/events",
+        "--body",
+        "{}",
+        "--body-sha256",
+        "0".repeat(64),
+        "--board-id",
+        "board-1",
+        "--agent-id",
+        "agent-1",
+      ],
+      {
+        stdout: (message) => stdout.push(message),
+        stderr: (message) => stderr.push(message),
+      },
+    );
+
+    expect(exitCode).toBe(1);
+    expect(stdout.join("")).toBe("");
+    expect(stderr.join("")).toContain(
+      "Provided --body-sha256 does not match request body",
     );
   });
 });

@@ -4,11 +4,15 @@ import {
   keyToImplicitAddress,
   type KeyPairString,
 } from "@near-js/crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 export const LOCAL_DEV_KEYSTORE_SCHEMA =
   "clawhouse.near.local-dev-keystore.v1";
+export const AGENT_BOARD_LEDGER_SIGNATURE_DOMAIN =
+  "clawhouse.agent-board-ledger.v0";
+export const AGENT_BOARD_LEDGER_SIGNATURE_VERSION = 1;
 
 export type NearWalletPublicInfo = {
   walletAddress: string;
@@ -34,6 +38,50 @@ type GenerateWalletOptions = {
 type InspectWalletOptions = {
   keyFile: string;
   cwd?: string;
+};
+
+type AgentBoardLedgerRequestInput = {
+  method: string;
+  path: string;
+  body?: string;
+  bodyHash?: string;
+  timestamp?: string;
+  nonce?: string;
+  boardId: string;
+  agentId: string;
+  walletAddress: string;
+};
+
+type SignAgentBoardLedgerRequestOptions = Omit<
+  AgentBoardLedgerRequestInput,
+  "walletAddress"
+> & {
+  keyFile: string;
+  cwd?: string;
+};
+
+export type AgentBoardLedgerCanonicalPayload = {
+  domain: typeof AGENT_BOARD_LEDGER_SIGNATURE_DOMAIN;
+  version: typeof AGENT_BOARD_LEDGER_SIGNATURE_VERSION;
+  method: string;
+  path: string;
+  bodyHash: string;
+  timestamp: string;
+  nonce: string;
+  boardId: string;
+  agentId: string;
+  walletAddress: string;
+};
+
+export type SignedAgentBoardLedgerRequest = NearWalletPublicInfo &
+  AgentBoardLedgerCanonicalPayload & {
+    signature: string;
+    headers: Record<string, string>;
+  };
+
+export type VerifyAgentBoardLedgerRequestOptions = AgentBoardLedgerRequestInput & {
+  publicKey: string;
+  signature: string;
 };
 
 export async function generateNearWallet(
@@ -81,6 +129,114 @@ export async function inspectNearWallet(
   return publicInfo;
 }
 
+export async function signAgentBoardLedgerRequest(
+  options: SignAgentBoardLedgerRequestOptions,
+): Promise<SignedAgentBoardLedgerRequest> {
+  const keyFile = resolveLocalKeyFilePath(options.keyFile, options.cwd);
+  const raw = await readFile(keyFile, "utf8");
+  const keyStore = parseKeyStore(raw, keyFile);
+  const publicInfo = publicInfoFromPublicKey(keyStore.public_key, keyFile);
+
+  if (keyStore.account_id !== publicInfo.walletAddress) {
+    throw new Error("Key file account_id does not match public_key");
+  }
+  if (keyStore.key_id !== publicInfo.keyId) {
+    throw new Error("Key file key_id does not match public_key");
+  }
+  const keyPair = KeyPair.fromString(keyStore.private_key);
+  if (keyPair.getPublicKey().toString() !== publicInfo.publicKey) {
+    throw new Error("Key file private_key does not match public_key");
+  }
+
+  const payload = buildAgentBoardLedgerRequestPayload({
+    ...options,
+    walletAddress: publicInfo.walletAddress,
+  });
+  const message = new TextEncoder().encode(
+    serializeAgentBoardLedgerRequestPayload(payload),
+  );
+  const signature = encodeBase64Url(keyPair.sign(message).signature);
+
+  return {
+    ...publicInfo,
+    ...payload,
+    signature,
+    headers: {
+      "x-clawhouse-wallet-address": publicInfo.walletAddress,
+      "x-clawhouse-public-key": publicInfo.publicKey,
+      "x-clawhouse-timestamp": payload.timestamp,
+      "x-clawhouse-nonce": payload.nonce,
+      "x-clawhouse-body-sha256": payload.bodyHash,
+      "x-clawhouse-signature": signature,
+    },
+  };
+}
+
+export function buildAgentBoardLedgerRequestPayload(
+  input: AgentBoardLedgerRequestInput,
+): AgentBoardLedgerCanonicalPayload {
+  const bodyHash = input.bodyHash ?? hashRequestBody(input.body ?? "");
+
+  if (!/^[0-9a-f]{64}$/.test(bodyHash)) {
+    throw new Error("bodyHash must be a sha256 hex string");
+  }
+
+  return {
+    domain: AGENT_BOARD_LEDGER_SIGNATURE_DOMAIN,
+    version: AGENT_BOARD_LEDGER_SIGNATURE_VERSION,
+    method: normalizeRequired(input.method, "method").toUpperCase(),
+    path: normalizeRequired(input.path, "path"),
+    bodyHash,
+    timestamp: input.timestamp ?? new Date().toISOString(),
+    nonce: input.nonce ?? randomUUID(),
+    boardId: normalizeRequired(input.boardId, "boardId"),
+    agentId: normalizeRequired(input.agentId, "agentId"),
+    walletAddress: normalizeRequired(input.walletAddress, "walletAddress"),
+  };
+}
+
+export function serializeAgentBoardLedgerRequestPayload(
+  payload: AgentBoardLedgerCanonicalPayload,
+): string {
+  return JSON.stringify({
+    domain: payload.domain,
+    version: payload.version,
+    method: payload.method,
+    path: payload.path,
+    bodyHash: payload.bodyHash,
+    timestamp: payload.timestamp,
+    nonce: payload.nonce,
+    boardId: payload.boardId,
+    agentId: payload.agentId,
+    walletAddress: payload.walletAddress,
+  });
+}
+
+export function verifyAgentBoardLedgerRequestSignature(
+  options: VerifyAgentBoardLedgerRequestOptions,
+): boolean {
+  const publicInfo = publicInfoFromPublicKey(options.publicKey, "");
+  if (publicInfo.walletAddress !== options.walletAddress) {
+    return false;
+  }
+
+  const payload = buildAgentBoardLedgerRequestPayload(options);
+  const message = new TextEncoder().encode(
+    serializeAgentBoardLedgerRequestPayload(payload),
+  );
+  const signature = decodeBase64Url(options.signature);
+
+  if (!signature) {
+    return false;
+  }
+
+  return PublicKey.fromString(options.publicKey).verify(message, signature);
+}
+
+export function hashRequestBody(body: string): string {
+  return createHash("sha256").update(body, "utf8").digest("hex");
+}
+
 export function publicInfoFromPublicKey(
   publicKey: string,
   keyFile: string,
@@ -122,6 +278,32 @@ export function resolveLocalKeyFilePath(
   }
 
   return resolve(cwd, keyFile);
+}
+
+function normalizeRequired(value: string, name: string): string {
+  if (!value || value.trim() === "") {
+    throw new Error(`Missing ${name}`);
+  }
+  return value;
+}
+
+function encodeBase64Url(bytes: Uint8Array): string {
+  return Buffer.from(bytes)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/u, "");
+}
+
+function decodeBase64Url(value: string): Uint8Array | undefined {
+  if (!/^[A-Za-z0-9_-]+$/u.test(value)) {
+    return undefined;
+  }
+
+  const padded = value.padEnd(value.length + ((4 - (value.length % 4)) % 4), "=");
+  return new Uint8Array(
+    Buffer.from(padded.replace(/-/g, "+").replace(/_/g, "/"), "base64"),
+  );
 }
 
 async function prepareKeyFilePath(keyFile: string, overwrite: boolean) {
