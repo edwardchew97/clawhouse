@@ -306,6 +306,10 @@
       color: var(--amber);
     }
 
+    .verb.todo {
+      color: var(--red);
+    }
+
     .workspace {
       min-width: 0;
       display: grid;
@@ -404,6 +408,12 @@
 
     .button.primary:hover {
       background: #111111;
+    }
+
+    .button.primary:disabled {
+      border-color: var(--border-strong);
+      background: #eeeeee;
+      color: var(--default);
     }
 
     .button:disabled {
@@ -507,6 +517,11 @@
     .request-target {
       font-family: var(--mono);
       font-size: 12px;
+    }
+
+    .request-target.pending {
+      color: var(--subtle);
+      background: #fbfbfb;
     }
 
     .input[readonly] {
@@ -901,6 +916,11 @@
     .pill.warn {
       color: var(--amber);
       background: #faf3e5;
+    }
+
+    .pill.pending {
+      color: var(--red);
+      background: #fbefed;
     }
 
     .response-shell {
@@ -1315,10 +1335,24 @@
       return null;
     }
 
+    function isPendingStep(step = activeStep()) {
+      return step.type === "pending" || step.status === "未完成" || step.implemented === false;
+    }
+
+    function pendingReason(step = activeStep()) {
+      return step.pendingReason || step.description || "This acceptance step is not implemented yet.";
+    }
+
     function methodLabel(step = activeStep()) {
+      if (isPendingStep(step)) return "未完成";
       if (step.type === "http") return step.method || "GET";
       if (step.type === "near-view") return "VIEW";
       return "SCRIPT";
+    }
+
+    function methodClass(step = activeStep()) {
+      if (isPendingStep(step)) return "todo";
+      return methodLabel(step).toLowerCase();
     }
 
     function stepAccess(step) {
@@ -1399,17 +1433,20 @@
     }
 
     function runnerPath(step = activeStep()) {
+      if (isPendingStep(step)) return "";
       if (step.type === "http") return "/run/http";
       if (step.type === "near-view") return "/run/near-view";
       return "/run/script";
     }
 
     function runnerUrl(step = activeStep()) {
+      if (isPendingStep(step)) return "";
       return `${location.origin}${runnerPath(step)}`;
     }
 
     function requestTemplate(step = activeStep()) {
       if (state.requestTemplates[step.id] !== undefined) return state.requestTemplates[step.id];
+      if (isPendingStep(step)) return pendingReason(step);
       if (step.type === "http") return step.url || "";
       if (step.type === "near-view") return `${step.contractId || ""} :: ${step.methodName || ""}`;
       return `${step.command || ""} ${(step.args || []).join(" ")}`;
@@ -1643,6 +1680,7 @@
     }
 
     function resolvedTarget(step = activeStep()) {
+      if (isPendingStep(step)) return `未完成: ${pendingReason(step)}`;
       const vars = allVars(step);
       if (step.type === "http") return interpolate(requestTemplate(step), vars);
       if (step.type === "near-view") {
@@ -1658,6 +1696,13 @@
     }
 
     function previewPayload(step = activeStep()) {
+      if (isPendingStep(step)) {
+        return {
+          status: "未完成",
+          runnable: false,
+          reason: pendingReason(step)
+        };
+      }
       const vars = allVars(step);
       if (step.type === "http") {
         return {
@@ -1725,7 +1770,7 @@
             <div id="${stepsId}" class="step-list" ${isCollapsed ? "hidden" : ""}>
               ${steps.map(({ step, stepIndex }) => `
                 <button type="button" class="step-button ${flowIndex === state.activeFlow && stepIndex === state.activeStep ? "active" : ""}" data-flow="${flowIndex}" data-step="${stepIndex}">
-                  <span class="verb ${escapeAttr(methodLabel(step).toLowerCase())}">${escapeHtml(methodLabel(step))}</span>
+                  <span class="verb ${escapeAttr(methodClass(step))}">${escapeHtml(methodLabel(step))}</span>
                   <strong>${escapeHtml(step.name)}</strong>
                   ${accessLabel(step) ? `<span class="access-tag ${escapeAttr(stepAccess(step))}">${escapeHtml(accessLabel(step))}</span>` : ""}
                 </button>
@@ -1773,17 +1818,26 @@
       const flow = activeFlow();
       const step = activeStep();
       const method = methodLabel(step);
+      const pending = isPendingStep(step);
       $("stepName").textContent = step.name;
       $("stepDescription").textContent = step.description || "No description has been added for this request yet.";
       $("stepType").textContent = `${flow.name} / ${step.id}`;
       $("methodSelect").innerHTML = `<option>${method}</option>`;
+      $("methodSelect").disabled = pending;
       $("requestTarget").value = requestTemplate(step);
-      $("requestTarget").readOnly = step.type !== "http";
-      $("requestPills").innerHTML = `
-        <span class="pill">${step.type}</span>
-        <span class="pill">${Object.keys(step.setVars || {}).length} extracts</span>
-      `;
-      $("responseTarget").textContent = `Ready to send to ${resolvedTarget(step)}`;
+      $("requestTarget").readOnly = pending || step.type !== "http";
+      $("requestTarget").classList.toggle("pending", pending);
+      $("fireStep").disabled = pending;
+      $("fireStep").textContent = pending ? "未完成" : "Send";
+      $("requestPills").innerHTML = pending
+        ? `<span class="pill pending">未完成</span>`
+        : `
+          <span class="pill">${step.type}</span>
+          <span class="pill">${Object.keys(step.setVars || {}).length} extracts</span>
+        `;
+      $("responseTarget").textContent = pending
+        ? resolvedTarget(step)
+        : `Ready to send to ${resolvedTarget(step)}`;
     }
 
     function renderTabs() {
@@ -1864,6 +1918,12 @@
     }
 
     function bodyPayload(step) {
+      if (isPendingStep(step)) {
+        return {
+          status: "未完成",
+          reason: pendingReason(step)
+        };
+      }
       if (step.type === "http") return interpolate(step.body, allVars(step));
       if (step.type === "near-view") return interpolate(step.args || {}, allVars(step));
       if (step.type === "script") {
@@ -1919,15 +1979,16 @@
     }
 
     function renderPreview(step) {
+      const payload = previewPayload(step);
       const preview = {
         runner: {
           method: "POST",
           url: runnerUrl(step),
           payload: step.type === "script"
             ? { stepId: step.id, env: displayEnv(), inputs: currentInputs(), vars: state.vars }
-            : previewPayload(step)
+            : payload
         },
-        resolvedAction: previewPayload(step)
+        resolvedAction: payload
       };
       $("tabBody").innerHTML = `<pre class="light-code">${escapeHtml(JSON.stringify(preview, null, 2))}</pre>`;
     }
@@ -2260,6 +2321,10 @@
       if (state.envOpen && !syncEditors()) return;
       const flow = activeFlow();
       const step = activeStep();
+      if (isPendingStep(step)) {
+        showToast("This user-story step is marked 未完成.");
+        return;
+      }
       const target = runnerPath(step);
       const startedAt = new Date().toLocaleTimeString();
       const startedMs = performance.now();
@@ -2313,7 +2378,7 @@
         );
         renderResult(result, startedAt, targetLabel);
       } finally {
-        $("fireStep").disabled = false;
+        $("fireStep").disabled = isPendingStep(activeStep());
         persist();
       }
     }
