@@ -1082,19 +1082,28 @@
     const storageKey = "clawhouse.acceptance.workbench.v2";
     const defaultEnv = {
       repoRoot: "",
-      baseUrl: "http://127.0.0.1:3000",
-      apiToken: "",
       nearRpcUrl: "https://rpc.testnet.near.org",
       contractId: "clawhouse-key-20260619125948.testnet",
       nearNetworkId: "testnet",
       testUserAccountId: "",
       testUserPrivateKey: "",
-      accountId: "",
-      reviewer: "JY",
-      ironclawBaseUrl: "",
-      ironclawWebhookUrl: "",
-      ironclawWebhookSecret: ""
+      accountId: ""
     };
+
+    const obsoleteEnvKeys = [
+      "baseUrl",
+      "apiToken",
+      "reviewer",
+      "ironclawBaseUrl",
+      "ironclawWebhookUrl",
+      "ironclawWebhookSecret"
+    ];
+
+    function pruneObsoleteEnv(env) {
+      const next = { ...env };
+      for (const key of obsoleteEnvKeys) delete next[key];
+      return next;
+    }
 
     const persisted = loadState();
     const state = {
@@ -1104,7 +1113,7 @@
       activeTab: persisted.activeTab || "params",
       envOpen: persisted.envOpen || false,
       filter: "",
-      env: { ...defaultEnv, ...(persisted.env || {}), testUserPrivateKey: "" },
+      env: { ...defaultEnv, ...pruneObsoleteEnv(persisted.env || {}), testUserPrivateKey: "" },
       encryptedEnv: persisted.encryptedEnv || {},
       vars: persisted.vars || {},
       inputs: persisted.inputs || {},
@@ -1216,6 +1225,25 @@
 
     function activeStep() {
       return activeFlow().steps[state.activeStep];
+    }
+
+    function normalizeSelection() {
+      const flows = Array.isArray(state.spec?.flows) ? state.spec.flows : [];
+      if (!flows.length) {
+        state.activeFlow = 0;
+        state.activeStep = 0;
+        return;
+      }
+      if (state.activeFlow < 0 || state.activeFlow >= flows.length) {
+        state.activeFlow = 0;
+      }
+      const steps = Array.isArray(flows[state.activeFlow]?.steps) ? flows[state.activeFlow].steps : [];
+      if (state.activeStep < 0 || state.activeStep >= steps.length) {
+        state.activeStep = 0;
+      }
+      if (!tabs.some((tab) => tab.id === state.activeTab)) {
+        state.activeTab = "params";
+      }
     }
 
     function currentInputs(step = activeStep()) {
@@ -2111,6 +2139,7 @@
         fetch("/health").then((res) => res.json())
       ]);
       state.spec = spec;
+      normalizeSelection();
       if (!state.env.repoRoot && health.repoRoot) {
         state.env.repoRoot = health.repoRoot;
       }
