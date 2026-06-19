@@ -3,14 +3,42 @@
   "version": "0.1.0",
   "flows": [
     {
-      "id": "key-market",
-      "name": "NEAR Key Market",
-      "purpose": "Verify Scope V0 contract behavior through local scripts and NEAR RPC state reads.",
+      "id": "agent-registration-story",
+      "name": "Agent Registration",
+      "purpose": "Acceptance story for registering a curated ClawHouse agent: official onboarding boundary, key market creation, ledger board setup, and the unfinished public profile handoff.",
       "steps": [
         {
-          "id": "key.create",
+          "id": "agentRegistration.pending.ironclawCreatorOnboarding",
+          "name": "IronClaw Creator Onboarding",
+          "description": "The creator should start from the official IronClaw onboarding and produce a ClawHouse-approved agent package. 未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "protected",
+          "pendingReason": "The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
+          "inputs": {},
+          "setVars": {},
+          "runningNotes": [
+            "未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet."
+          ]
+        },
+        {
+          "id": "agentRegistration.pending.ironclawWalletBinding",
+          "name": "Bind Agent Wallet Metadata",
+          "description": "The approved agent should expose public wallet metadata that ClawHouse can store without private key material. 未完成: Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "protected",
+          "pendingReason": "Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet.",
+          "inputs": {},
+          "setVars": {},
+          "runningNotes": [
+            "未完成: Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet."
+          ]
+        },
+        {
+          "id": "agentRegistration.key.create",
           "name": "Create Agent Key Market",
-          "description": "Creates a NEAR testnet agent key market by running the local create script with the selected agent id, display name, metadata URI, and storage deposit. Use a new agentId when validating market creation.",
+          "description": "Creates a real NEAR testnet key market for the approved agent. Change agentId before sending if the market already exists.",
           "type": "script",
           "access": "protected",
           "command": "bun",
@@ -40,367 +68,9 @@
           }
         },
         {
-          "id": "key.quoteBuy",
-          "name": "Quote Buy",
-          "description": "Calls the contract quote path for buying keys without signing a transaction. It returns the bonding-curve cost, fees, and max-price value that the Buy Key step uses as protection.",
-          "type": "script",
-          "access": "public",
-          "command": "bun",
-          "args": [
-            "run",
-            "quote",
-            "buy",
-            "{{agentId}}",
-            "{{keyAmount}}"
-          ],
-          "cwd": "{{repoRoot}}/agent-key-market",
-          "runningNotes": [
-            "Calling a NEAR view method through the local quote script.",
-            "No private key, gas, or transaction is used for this quote.",
-            "Calculating the bonding-curve price, fees, and max buy cost."
-          ],
-          "inputs": {
-            "agentId": "",
-            "keyAmount": "1"
-          },
-          "fillDefaultsWhenEmpty": [
-            "keyAmount"
-          ],
-          "setVars": {
-            "keyAmount": "response.json.amount",
-            "buyMaxPriceNear": "response.json.total_cost_near",
-            "buyQuoteYocto": "response.json.total_cost"
-          }
-        },
-        {
-          "id": "key.buy",
-          "name": "Buy Key",
-          "description": "Sends a real NEAR testnet buy_key transaction for the selected agent market using the test user account and the previous buy quote as max-price protection.",
-          "type": "script",
-          "access": "protected",
-          "command": "bun",
-          "args": [
-            "run",
-            "buy",
-            "{{agentId}}",
-            "{{keyAmount}}",
-            "{{buyMaxPriceNear}}"
-          ],
-          "cwd": "{{repoRoot}}/agent-key-market",
-          "runningNotes": [
-            "Using the previous quote as max_price protection.",
-            "Signing a buy transaction with the test user account.",
-            "Attaching NEAR for the key price, fees, and storage deposit.",
-            "Waiting for NEAR testnet to return the raw transaction outcome and txHash."
-          ],
-          "inputs": {
-            "agentId": "",
-            "keyAmount": "1",
-            "buyMaxPriceNear": "",
-            "STORAGE_DEPOSIT": "0.2"
-          },
-          "fillDefaultsWhenEmpty": [
-            "keyAmount"
-          ],
-          "autoFill": [
-            {
-              "input": "buyMaxPriceNear",
-              "stepId": "key.quoteBuy",
-              "source": "response.json.total_cost_near",
-              "requiredInputs": [
-                "agentId",
-                "keyAmount"
-              ]
-            }
-          ],
-          "setVars": {
-            "buyTxHash": "response.json.txHash",
-            "supplyAfterBuy": "response.json.result.supply_after",
-            "holderBalanceAfterBuy": "response.json.result.trader_balance_after",
-            "reserveAfterBuyYocto": "response.json.result.reserve_after"
-          }
-        },
-        {
-          "id": "key.stateAfterBuy",
-          "name": "Read Contract State After Buy",
-          "description": "Reads contract state through a NEAR view call after a buy. It verifies market supply, reserve, and the selected holder balance without sending a transaction.",
-          "type": "near-view",
-          "access": "public",
-          "contractId": "{{contractId}}",
-          "methodName": "get_state",
-          "args": {
-            "agent_id": "{{agentId}}",
-            "holder_id": "{{testUserAccountId}}"
-          },
-          "runningNotes": [
-            "Calling NEAR RPC view state directly; this does not sign or send a transaction.",
-            "Reading the agent market state and holder balance after the buy.",
-            "Extracting supply, reserve, and holder balance for comparison."
-          ],
-          "inputs": {
-            "agentId": "",
-            "testUserAccountId": ""
-          },
-          "setVars": {
-            "keySupply": "response.json.agent.supply",
-            "reserveYocto": "response.json.agent.reserve",
-            "holderBalance": "response.json.holder_balance"
-          }
-        },
-        {
-          "id": "key.quoteSell",
-          "name": "Quote Sell",
-          "description": "Calls the contract quote path for selling keys without signing a transaction. It returns the expected payout and min-payout guard that the Sell Key step uses.",
-          "type": "script",
-          "access": "public",
-          "command": "bun",
-          "args": [
-            "run",
-            "quote",
-            "sell",
-            "{{agentId}}",
-            "{{keyAmount}}"
-          ],
-          "cwd": "{{repoRoot}}/agent-key-market",
-          "runningNotes": [
-            "Calling a NEAR view method through the local quote script.",
-            "No private key, gas, or transaction is used for this quote.",
-            "Calculating the expected sell payout and min_payout guard."
-          ],
-          "inputs": {
-            "agentId": "",
-            "keyAmount": "1"
-          },
-          "fillDefaultsWhenEmpty": [
-            "keyAmount"
-          ],
-          "setVars": {
-            "minPayoutNear": "response.json.payout_near",
-            "sellQuoteYocto": "response.json.payout"
-          }
-        },
-        {
-          "id": "key.sell",
-          "name": "Sell Key",
-          "description": "Sends a real NEAR testnet sell_key transaction for the selected agent market using the test user account and the previous sell quote as min-payout protection.",
-          "type": "script",
-          "access": "protected",
-          "command": "bun",
-          "args": [
-            "run",
-            "sell",
-            "{{agentId}}",
-            "{{keyAmount}}",
-            "{{minPayoutNear}}"
-          ],
-          "cwd": "{{repoRoot}}/agent-key-market",
-          "runningNotes": [
-            "Using the previous quote as min_payout protection.",
-            "Signing a sell transaction with the test user account.",
-            "Broadcasting the sell to NEAR testnet and waiting for the raw outcome.",
-            "Extracting txHash, updated supply, holder balance, and reserve."
-          ],
-          "inputs": {
-            "agentId": "",
-            "keyAmount": "1",
-            "minPayoutNear": ""
-          },
-          "fillDefaultsWhenEmpty": [
-            "keyAmount"
-          ],
-          "autoFill": [
-            {
-              "input": "minPayoutNear",
-              "stepId": "key.quoteSell",
-              "source": "response.json.payout_near",
-              "requiredInputs": [
-                "agentId",
-                "keyAmount"
-              ]
-            }
-          ],
-          "setVars": {
-            "sellTxHash": "response.json.txHash",
-            "supplyAfterSell": "response.json.result.supply_after",
-            "holderBalanceAfterSell": "response.json.result.trader_balance_after",
-            "reserveAfterSellYocto": "response.json.result.reserve_after"
-          }
-        }
-      ]
-    },
-    {
-      "id": "near-wallet-onboarding",
-      "name": "NEAR Wallet Onboarding",
-      "purpose": "Verify the local NEAR wallet tool creates a test wallet artifact, exposes public metadata, refuses duplicate overwrite, and keeps private key material out of Workbench responses.",
-      "steps": [
-        {
-          "id": "wallet.generate",
-          "name": "Generate Test Wallet",
-          "description": "Runs the local wallet generator and writes a test wallet artifact under the configured work path. The response is expected to expose only public wallet metadata, not private key material.",
-          "type": "script",
-          "access": "protected",
-          "command": "bun",
-          "args": [
-            "run",
-            "generate",
-            "--",
-            "--out",
-            "{{repoRoot}}/{{walletArtifactRelativePath}}",
-            "--overwrite"
-          ],
-          "cwd": "{{repoRoot}}/tools/near-wallet",
-          "redactPrivateKeyOutput": true,
-          "forbiddenOutputIncludes": [
-            "privateKey",
-            "private_key",
-            "secretKey",
-            "secret_key",
-            "mnemonic"
-          ],
-          "runningNotes": [
-            "Running the allowlisted local NEAR wallet generator.",
-            "Writing the generated test wallet artifact under work/acceptance-workbench.",
-            "Returning only public wallet metadata to the Workbench response."
-          ],
-          "inputs": {
-            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
-          },
-          "setVars": {
-            "walletArtifactRelativePath": "inputs.walletArtifactRelativePath",
-            "walletAddress": "response.json.walletAddress",
-            "publicKey": "response.json.publicKey",
-            "keyId": "response.json.keyId"
-          }
-        },
-        {
-          "id": "wallet.inspectPublic",
-          "name": "Inspect Public Metadata",
-          "description": "Reads the generated wallet artifact through the local wallet inspect command and returns the public wallet address, public key, and key id for later acceptance steps.",
-          "type": "script",
-          "access": "public",
-          "command": "bun",
-          "args": [
-            "run",
-            "inspect",
-            "--",
-            "--key-file",
-            "{{repoRoot}}/{{walletArtifactRelativePath}}"
-          ],
-          "cwd": "{{repoRoot}}/tools/near-wallet",
-          "redactPrivateKeyOutput": true,
-          "forbiddenOutputIncludes": [
-            "privateKey",
-            "private_key",
-            "secretKey",
-            "secret_key",
-            "mnemonic"
-          ],
-          "runningNotes": [
-            "Reading the generated wallet artifact through the local wallet tool.",
-            "Requesting the public inspect view only.",
-            "Extracting walletAddress, publicKey, and keyId for later checks."
-          ],
-          "inputs": {
-            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
-          },
-          "fillDefaultsWhenEmpty": [
-            "walletArtifactRelativePath"
-          ],
-          "setVars": {
-            "walletAddress": "response.json.walletAddress",
-            "publicKey": "response.json.publicKey",
-            "keyId": "response.json.keyId"
-          }
-        },
-        {
-          "id": "wallet.duplicateRefusesOverwrite",
-          "name": "Duplicate Generation Refuses Overwrite",
-          "description": "Runs wallet generation against an existing artifact without --overwrite and expects the command to fail. This verifies the tool refuses accidental key replacement.",
-          "type": "script",
-          "access": "protected",
-          "command": "bun",
-          "args": [
-            "run",
-            "generate",
-            "--",
-            "--out",
-            "{{repoRoot}}/{{walletArtifactRelativePath}}"
-          ],
-          "cwd": "{{repoRoot}}/tools/near-wallet",
-          "expectedExitCode": 1,
-          "expectedOutputIncludes": "overwrite",
-          "redactPrivateKeyOutput": true,
-          "forbiddenOutputIncludes": [
-            "privateKey",
-            "private_key",
-            "secretKey",
-            "secret_key",
-            "mnemonic"
-          ],
-          "runningNotes": [
-            "Running the same generator against the existing wallet artifact.",
-            "Expecting the tool to refuse overwrite with exit code 1 and output that mentions overwrite.",
-            "Confirming the refusal text is visible without private key material."
-          ],
-          "inputs": {
-            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
-          },
-          "fillDefaultsWhenEmpty": [
-            "walletArtifactRelativePath"
-          ],
-          "setVars": {}
-        },
-        {
-          "id": "wallet.inspectPublicAfterDuplicate",
-          "name": "Inspect Public Metadata After Refusal",
-          "description": "Inspects the wallet artifact after the duplicate-generation refusal to confirm the existing public metadata is still readable and private key material stays out of the Workbench response.",
-          "type": "script",
-          "access": "public",
-          "command": "bun",
-          "args": [
-            "run",
-            "inspect",
-            "--",
-            "--key-file",
-            "{{repoRoot}}/{{walletArtifactRelativePath}}"
-          ],
-          "cwd": "{{repoRoot}}/tools/near-wallet",
-          "redactPrivateKeyOutput": true,
-          "forbiddenOutputIncludes": [
-            "privateKey",
-            "private_key",
-            "secretKey",
-            "secret_key",
-            "mnemonic"
-          ],
-          "runningNotes": [
-            "Reading the wallet artifact after the duplicate-generation refusal.",
-            "Checking that the artifact still exposes the same public metadata.",
-            "If privateKey or secretKey appears as a redacted field, the public inspect path still leaked a private field name."
-          ],
-          "inputs": {
-            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
-          },
-          "fillDefaultsWhenEmpty": [
-            "walletArtifactRelativePath"
-          ],
-          "setVars": {
-            "walletAddress": "response.json.walletAddress",
-            "publicKey": "response.json.publicKey",
-            "keyId": "response.json.keyId"
-          }
-        }
-      ]
-    },
-    {
-      "id": "agent-board-ledger",
-      "name": "Agent Board Ledger",
-      "purpose": "Expose and verify the V0 ledger HTTP API for board registration, observations, accounting evidence, cron reconciliation, portfolio, PnL, read access, wallet-signed events, and full script-backed flows through the real local service.",
-      "steps": [
-        {
-          "id": "ledger.apiHealth",
+          "id": "agentRegistration.ledger.health",
           "name": "GET /health",
-          "description": "Calls the local Agent Board Ledger health endpoint. Use this first to confirm the backend is reachable and can report its database connection state.",
+          "description": "Checks that the local Agent Board Ledger backend is reachable before registering the agent board.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -420,9 +90,9 @@
           }
         },
         {
-          "id": "ledger.apiCreateBoard",
-          "name": "POST /boards",
-          "description": "Creates or registers an agent board through the Ledger HTTP API using the admin authorization header. The returned board id is stored for later observation, readback, and PnL steps.",
+          "id": "agentRegistration.ledger.createBoard",
+          "name": "Register Agent Board",
+          "description": "Registers the approved agent in Agent Board Ledger so the agent has a board id, wallet metadata, and a starting value for later trade reporting.",
           "type": "http",
           "access": "protected",
           "method": "POST",
@@ -473,9 +143,9 @@
           }
         },
         {
-          "id": "ledger.apiGetBoard",
-          "name": "GET /boards/:id",
-          "description": "Reads a single board by id through the Ledger API. Public boards can be read directly; holder-gated boards require a valid read token in the headers.",
+          "id": "agentRegistration.ledger.getBoard",
+          "name": "Verify Agent Board",
+          "description": "Reads the registered board back by id to confirm the user-facing agent board record exists.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -501,207 +171,105 @@
           }
         },
         {
-          "id": "ledger.apiCreateObservation",
-          "name": "POST /boards/:id/observations",
-          "description": "Writes a service-authorized wallet observation for a board. This is the input evidence cron uses to build events, portfolio snapshots, and PnL calculations.",
-          "type": "http",
-          "access": "protected",
-          "method": "POST",
-          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/observations",
-          "headers": {
-            "content-type": "application/json",
-            "authorization": "{{ledgerAuthorizationHeader}}"
-          },
-          "body": {
-            "wallet_address": "{{ledgerWalletAddress}}",
-            "current_value_usd": "{{ledgerCurrentValueUsd}}",
-            "topup_usd": "{{ledgerTopupUsd}}",
-            "withdrawal_usd": "{{ledgerWithdrawalUsd}}",
-            "client_event_id": "{{ledgerClientEventId}}",
-            "tx_hash": "{{ledgerTxHash}}",
-            "intent_id": "{{ledgerIntentId}}",
-            "status_claim": "observed_on_wallet",
-            "asset_in": "{{ledgerAssetIn}}",
-            "amount_in": "{{ledgerAmountIn}}",
-            "asset_out": "{{ledgerAssetOut}}",
-            "amount_out": "{{ledgerAmountOut}}",
-            "metadata": {
-              "source": "acceptance-workbench-api"
-            }
-          },
+          "id": "agentRegistration.key.quoteBuy",
+          "name": "Verify Initial Key Price",
+          "description": "Reads the first buy quote after market creation so a PM can see the market is priceable before users buy.",
+          "type": "script",
+          "access": "public",
+          "command": "bun",
+          "args": [
+            "run",
+            "quote",
+            "buy",
+            "{{agentId}}",
+            "{{keyAmount}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
           "runningNotes": [
-            "Calling the real service-authorized observation API.",
-            "This is how the backend records an observed wallet/portfolio state before cron calculates PnL.",
-            "ledgerAuthorizationHeader must be formatted as Bearer <AGENT_BOARD_LEDGER_ADMIN_TOKEN>."
+            "Calling a NEAR view method through the local quote script.",
+            "No private key, gas, or transaction is used for this quote.",
+            "Calculating the bonding-curve price, fees, and max buy cost."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
-            "ledgerAuthorizationHeader": "",
-            "ledgerBoardId": "",
-            "ledgerWalletAddress": "",
-            "ledgerCurrentValueUsd": "112",
-            "ledgerTopupUsd": "0",
-            "ledgerWithdrawalUsd": "0",
-            "ledgerClientEventId": "",
-            "ledgerTxHash": "",
-            "ledgerIntentId": "",
-            "ledgerAssetIn": "USDC",
-            "ledgerAmountIn": "25",
-            "ledgerAssetOut": "NEAR",
-            "ledgerAmountOut": "10"
+            "agentId": "",
+            "keyAmount": "1"
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
-            "ledgerCurrentValueUsd",
-            "ledgerTopupUsd",
-            "ledgerWithdrawalUsd",
-            "ledgerAssetIn",
-            "ledgerAmountIn",
-            "ledgerAssetOut",
-            "ledgerAmountOut"
+            "keyAmount"
           ],
           "setVars": {
-            "ledgerObservationId": "response.json.json.observation.id",
-            "ledgerObservedAt": "response.json.json.observation.observed_at",
-            "ledgerClientEventId": "response.json.json.observation.client_event_id",
-            "ledgerTxHash": "response.json.json.observation.tx_hash",
-            "ledgerIntentId": "response.json.json.observation.intent_id"
+            "keyAmount": "response.json.amount",
+            "buyMaxPriceNear": "response.json.total_cost_near",
+            "buyQuoteYocto": "response.json.total_cost"
           }
         },
         {
-          "id": "ledger.apiCreatePrice",
-          "name": "POST /boards/:id/prices",
-          "description": "Writes an explicit asset price snapshot for the board. Use it before cron when a PnL readback should be tied to visible pricing evidence.",
-          "type": "http",
-          "access": "protected",
-          "method": "POST",
-          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/prices",
-          "headers": {
-            "content-type": "application/json",
-            "authorization": "{{ledgerAuthorizationHeader}}"
-          },
-          "body": {
-            "asset_id": "{{ledgerPriceAssetId}}",
-            "asset_symbol": "{{ledgerPriceAssetSymbol}}",
-            "price_usd": "{{ledgerPriceUsd}}",
-            "price_source": "{{ledgerPriceSource}}",
-            "observed_at": "{{ledgerObservedAt}}"
-          },
+          "id": "agentRegistration.pending.agentProfilePublish",
+          "name": "Publish Public Agent Profile",
+          "description": "The registered agent should appear as a user-facing profile with market price, board summary, and metadata. 未完成: The public ClawHouse agent profile/listing surface is not implemented in this repo yet.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "public",
+          "pendingReason": "The public ClawHouse agent profile/listing surface is not implemented in this repo yet.",
+          "inputs": {},
+          "setVars": {},
           "runningNotes": [
-            "Calling the real price snapshot API.",
-            "Use this before cron when you want a PnL snapshot to link to explicit pricing evidence."
-          ],
-          "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
-            "ledgerAuthorizationHeader": "",
-            "ledgerBoardId": "",
-            "ledgerPriceAssetId": "native:near",
-            "ledgerPriceAssetSymbol": "NEAR",
-            "ledgerPriceUsd": "2",
-            "ledgerPriceSource": "acceptance-workbench-api",
-            "ledgerObservedAt": ""
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
-            "ledgerPriceAssetId",
-            "ledgerPriceAssetSymbol",
-            "ledgerPriceUsd",
-            "ledgerPriceSource"
-          ],
-          "setVars": {
-            "ledgerPriceSnapshotId": "response.json.json.prices.0.id"
-          }
+            "未完成: The public ClawHouse agent profile/listing surface is not implemented in this repo yet."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "user-browses-agent-story",
+      "name": "User Browses Agent",
+      "purpose": "Acceptance story for a public user discovering an agent and reading the public board, price, timeline, and performance evidence that currently exists.",
+      "steps": [
+        {
+          "id": "userBrowsesAgent.pending.publicAgentDiscovery",
+          "name": "Open Agent Discovery List",
+          "description": "A user should be able to open a ClawHouse discovery list and pick a curated agent. 未完成: The user-facing discovery/listing page and API are not implemented yet.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "public",
+          "pendingReason": "The user-facing discovery/listing page and API are not implemented yet.",
+          "inputs": {},
+          "setVars": {},
+          "runningNotes": [
+            "未完成: The user-facing discovery/listing page and API are not implemented yet."
+          ]
         },
         {
-          "id": "ledger.apiCreateBalanceChange",
-          "name": "POST /boards/:id/balance-changes",
-          "description": "Writes service-authorized balance-change evidence for an asset. It can link the accounting entry back to an observation, tx hash, or NEAR Intent id.",
+          "id": "userBrowsesAgent.ledger.getBoard",
+          "name": "Read Agent Board",
+          "description": "Reads the selected agent board through the real Ledger API. Public boards should return without a read token.",
           "type": "http",
-          "access": "protected",
-          "method": "POST",
-          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/balance-changes",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}",
           "headers": {
-            "content-type": "application/json",
-            "authorization": "{{ledgerAuthorizationHeader}}"
-          },
-          "body": {
-            "asset_id": "{{ledgerBalanceAssetId}}",
-            "asset_symbol": "{{ledgerBalanceAssetSymbol}}",
-            "normalized_amount": "{{ledgerNormalizedAmount}}",
-            "delta_amount": "{{ledgerDeltaAmount}}",
-            "delta_value_usd": "{{ledgerDeltaValueUsd}}",
-            "change_type": "{{ledgerChangeType}}",
-            "source_observation_id": "{{ledgerObservationId}}",
-            "tx_hash": "{{ledgerTxHash}}",
-            "intent_id": "{{ledgerIntentId}}",
-            "metadata": {
-              "source": "acceptance-workbench-api"
-            }
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
           },
           "runningNotes": [
-            "Calling the real balance-change API.",
-            "This records accounting evidence for the wallet and can link back to an observation, tx hash, or intent id."
+            "Reading a board through the real GET /boards/:id API.",
+            "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
           ],
           "inputs": {
             "ledgerBaseUrl": "http://127.0.0.1:4321",
-            "ledgerAuthorizationHeader": "",
             "ledgerBoardId": "",
-            "ledgerBalanceAssetId": "native:near",
-            "ledgerBalanceAssetSymbol": "NEAR",
-            "ledgerNormalizedAmount": "56",
-            "ledgerDeltaAmount": "6",
-            "ledgerDeltaValueUsd": "12",
-            "ledgerChangeType": "trade",
-            "ledgerObservationId": "",
-            "ledgerTxHash": "",
-            "ledgerIntentId": ""
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
-            "ledgerBalanceAssetId",
-            "ledgerBalanceAssetSymbol",
-            "ledgerNormalizedAmount",
-            "ledgerDeltaAmount",
-            "ledgerDeltaValueUsd",
-            "ledgerChangeType"
-          ],
-          "setVars": {
-            "ledgerBalanceChangeId": "response.json.json.balance_changes.0.id"
-          }
-        },
-        {
-          "id": "ledger.apiCronTick",
-          "name": "POST /cron/tick",
-          "description": "Runs the Ledger reconciliation endpoint. It converts observations and accounting evidence into events, holding snapshots, and PnL snapshots.",
-          "type": "http",
-          "access": "protected",
-          "method": "POST",
-          "url": "{{ledgerBaseUrl}}/cron/tick",
-          "headers": {
-            "content-type": "application/json",
-            "authorization": "{{ledgerAuthorizationHeader}}"
-          },
-          "body": {},
-          "runningNotes": [
-            "Calling the real cron reconciliation API.",
-            "This links observed activity to events, creates holding snapshots, and calculates PnL."
-          ],
-          "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
-            "ledgerAuthorizationHeader": ""
+            "ledgerReadToken": ""
           },
           "fillDefaultsWhenEmpty": [
             "ledgerBaseUrl"
           ],
           "setVars": {
-            "ledgerCronStatus": "response.json.json.status",
-            "ledgerSnapshotsCreated": "response.json.json.summary.snapshotsCreated"
+            "ledgerBoardId": "response.json.json.id",
+            "ledgerWalletAddress": "response.json.json.wallet_address"
           }
         },
         {
-          "id": "ledger.apiListEvents",
-          "name": "GET /boards/:id/events",
-          "description": "Reads the board event timeline through the Ledger API. Use this after observations, signed events, or cron to confirm the timeline that users would inspect.",
+          "id": "userBrowsesAgent.ledger.listEvents",
+          "name": "Read Agent Timeline",
+          "description": "Reads the board event timeline that a browsing user would inspect before deciding whether to buy a key.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -727,9 +295,9 @@
           }
         },
         {
-          "id": "ledger.apiGetPortfolio",
-          "name": "GET /boards/:id/portfolio",
-          "description": "Reads the latest portfolio snapshot for a board. This verifies the public or token-gated portfolio readback produced by cron reconciliation.",
+          "id": "userBrowsesAgent.ledger.getPortfolio",
+          "name": "Read Portfolio Snapshot",
+          "description": "Reads the latest public or token-gated portfolio snapshot for the selected agent board.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -754,9 +322,9 @@
           }
         },
         {
-          "id": "ledger.apiGetPnl",
-          "name": "GET /boards/:id/pnl",
-          "description": "Reads the latest PnL snapshot for a board. Use it to verify current PnL, total PnL percentage, and the snapshot created from prior evidence.",
+          "id": "userBrowsesAgent.ledger.getPnl",
+          "name": "Read PnL Snapshot",
+          "description": "Reads the latest PnL snapshot so a browsing user can evaluate performance evidence.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -782,35 +350,9 @@
           }
         },
         {
-          "id": "ledger.apiListBalanceChanges",
-          "name": "GET /boards/:id/balance-changes",
-          "description": "Reads stored balance-change evidence for the board. This lets developers verify that wallet accounting entries were persisted and can be audited.",
-          "type": "http",
-          "access": "public",
-          "method": "GET",
-          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/balance-changes",
-          "headers": {
-            "x-clawhouse-read-token": "{{ledgerReadToken}}"
-          },
-          "runningNotes": [
-            "Reading balance-change evidence through the real GET /boards/:id/balance-changes API."
-          ],
-          "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
-            "ledgerBoardId": "",
-            "ledgerReadToken": ""
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
-          "setVars": {
-            "ledgerBalanceChangeId": "response.json.json.balance_changes.0.id"
-          }
-        },
-        {
-          "id": "ledger.apiListPrices",
-          "name": "GET /boards/:id/prices",
-          "description": "Reads stored price snapshots for the board. This lets developers confirm the exact pricing evidence available for PnL calculations.",
+          "id": "userBrowsesAgent.ledger.listPrices",
+          "name": "Read Price Evidence",
+          "description": "Reads stored price evidence that supports the agent board performance calculation.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -834,9 +376,171 @@
           }
         },
         {
-          "id": "ledger.apiReadAccessCheck",
-          "name": "POST /boards/:id/read-access/checks",
-          "description": "Creates a service-authorized read-access check and optional read token for a requester wallet. Use this before testing holder-gated board readback.",
+          "id": "userBrowsesAgent.key.quoteBuy",
+          "name": "Preview Key Buy Cost",
+          "description": "Shows the live bonding-curve quote a user would see before deciding to buy a key.",
+          "type": "script",
+          "access": "public",
+          "command": "bun",
+          "args": [
+            "run",
+            "quote",
+            "buy",
+            "{{agentId}}",
+            "{{keyAmount}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
+          "runningNotes": [
+            "Calling a NEAR view method through the local quote script.",
+            "No private key, gas, or transaction is used for this quote.",
+            "Calculating the bonding-curve price, fees, and max buy cost."
+          ],
+          "inputs": {
+            "agentId": "",
+            "keyAmount": "1"
+          },
+          "fillDefaultsWhenEmpty": [
+            "keyAmount"
+          ],
+          "setVars": {
+            "keyAmount": "response.json.amount",
+            "buyMaxPriceNear": "response.json.total_cost_near",
+            "buyQuoteYocto": "response.json.total_cost"
+          }
+        },
+        {
+          "id": "userBrowsesAgent.pending.shareCardReceipt",
+          "name": "Render Share Card",
+          "description": "A user should be able to share a receipt-style card for the agent or market moment. 未完成: Receipt/share-card rendering is not implemented yet.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "public",
+          "pendingReason": "Receipt/share-card rendering is not implemented yet.",
+          "inputs": {},
+          "setVars": {},
+          "runningNotes": [
+            "未完成: Receipt/share-card rendering is not implemented yet."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "user-buys-key-story",
+      "name": "User Buys Key",
+      "purpose": "Acceptance story for a user quoting a key, buying it through a real NEAR testnet transaction, and using the result to unlock holder-facing reads where implemented.",
+      "steps": [
+        {
+          "id": "userBuysKey.key.quoteBuy",
+          "name": "Quote Buy Price",
+          "description": "Gets the current bonding-curve cost, fees, and max-price guard before the user signs a buy transaction.",
+          "type": "script",
+          "access": "public",
+          "command": "bun",
+          "args": [
+            "run",
+            "quote",
+            "buy",
+            "{{agentId}}",
+            "{{keyAmount}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
+          "runningNotes": [
+            "Calling a NEAR view method through the local quote script.",
+            "No private key, gas, or transaction is used for this quote.",
+            "Calculating the bonding-curve price, fees, and max buy cost."
+          ],
+          "inputs": {
+            "agentId": "",
+            "keyAmount": "1"
+          },
+          "fillDefaultsWhenEmpty": [
+            "keyAmount"
+          ],
+          "setVars": {
+            "keyAmount": "response.json.amount",
+            "buyMaxPriceNear": "response.json.total_cost_near",
+            "buyQuoteYocto": "response.json.total_cost"
+          }
+        },
+        {
+          "id": "userBuysKey.key.buy",
+          "name": "Buy Key On NEAR",
+          "description": "Sends a real NEAR testnet buy_key transaction using the configured test user account and private key.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "run",
+            "buy",
+            "{{agentId}}",
+            "{{keyAmount}}",
+            "{{buyMaxPriceNear}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
+          "runningNotes": [
+            "Using the previous quote as max_price protection.",
+            "Signing a buy transaction with the test user account.",
+            "Attaching NEAR for the key price, fees, and storage deposit.",
+            "Waiting for NEAR testnet to return the raw transaction outcome and txHash."
+          ],
+          "inputs": {
+            "agentId": "",
+            "keyAmount": "1",
+            "buyMaxPriceNear": "",
+            "STORAGE_DEPOSIT": "0.2"
+          },
+          "fillDefaultsWhenEmpty": [
+            "keyAmount"
+          ],
+          "autoFill": [
+            {
+              "input": "buyMaxPriceNear",
+              "stepId": "userBuysKey.key.quoteBuy",
+              "source": "response.json.total_cost_near",
+              "requiredInputs": [
+                "agentId",
+                "keyAmount"
+              ]
+            }
+          ],
+          "setVars": {
+            "buyTxHash": "response.json.txHash",
+            "supplyAfterBuy": "response.json.result.supply_after",
+            "holderBalanceAfterBuy": "response.json.result.trader_balance_after",
+            "reserveAfterBuyYocto": "response.json.result.reserve_after"
+          }
+        },
+        {
+          "id": "userBuysKey.key.stateAfterBuy",
+          "name": "Verify Holder Balance",
+          "description": "Reads NEAR contract state after the buy to confirm supply, reserve, and the buyer holder balance.",
+          "type": "near-view",
+          "access": "public",
+          "contractId": "{{contractId}}",
+          "methodName": "get_state",
+          "args": {
+            "agent_id": "{{agentId}}",
+            "holder_id": "{{testUserAccountId}}"
+          },
+          "runningNotes": [
+            "Calling NEAR RPC view state directly; this does not sign or send a transaction.",
+            "Reading the agent market state and holder balance after the buy.",
+            "Extracting supply, reserve, and holder balance for comparison."
+          ],
+          "inputs": {
+            "agentId": "",
+            "testUserAccountId": ""
+          },
+          "setVars": {
+            "keySupply": "response.json.agent.supply",
+            "reserveYocto": "response.json.agent.reserve",
+            "holderBalance": "response.json.holder_balance"
+          }
+        },
+        {
+          "id": "userBuysKey.ledger.readAccessCheck",
+          "name": "Create Holder Read Token",
+          "description": "Creates a service-authorized read-access check and optional read token that can be used for holder-gated Ledger readback.",
           "type": "http",
           "access": "protected",
           "method": "POST",
@@ -881,161 +585,155 @@
           }
         },
         {
-          "id": "ledger.apiSignedEventTemplate",
-          "name": "POST /boards/:id/events",
-          "description": "Exposes the raw wallet-signed event endpoint. Developers must provide matching signature headers for the exact request body, or use the signed script flow to generate them.",
+          "id": "userBuysKey.ledger.getBoard",
+          "name": "Read Board With Token",
+          "description": "Reads the agent board using the read token created for the buyer where the board is holder-gated.",
           "type": "http",
-          "access": "protected",
-          "method": "POST",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
+          "runningNotes": [
+            "Reading a board through the real GET /boards/:id API.",
+            "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerBoardId": "response.json.json.id",
+            "ledgerWalletAddress": "response.json.json.wallet_address"
+          }
+        },
+        {
+          "id": "userBuysKey.ledger.listEvents",
+          "name": "Read Holder Timeline",
+          "description": "Reads the event timeline after key purchase to verify the holder can inspect agent evidence.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events",
           "headers": {
-            "content-type": "application/json",
-            "x-clawhouse-wallet-address": "{{ledgerWalletAddress}}",
-            "x-clawhouse-public-key": "{{ledgerPublicKey}}",
-            "x-clawhouse-timestamp": "{{ledgerSignatureTimestamp}}",
-            "x-clawhouse-nonce": "{{ledgerSignatureNonce}}",
-            "x-clawhouse-body-sha256": "{{ledgerBodySha256}}",
-            "x-clawhouse-signature": "{{ledgerSignature}}"
-          },
-          "body": {
-            "client_event_id": "{{ledgerClientEventId}}",
-            "tx_hash": "{{ledgerTxHash}}",
-            "intent_id": "{{ledgerIntentId}}",
-            "event_type": "agent_reported",
-            "status_claim": "{{ledgerStatusClaim}}",
-            "asset_in": "{{ledgerAssetIn}}",
-            "amount_in": "{{ledgerAmountIn}}",
-            "asset_out": "{{ledgerAssetOut}}",
-            "amount_out": "{{ledgerAmountOut}}",
-            "reason": "{{ledgerReason}}",
-            "metadata": {
-              "source": "acceptance-workbench-api"
-            }
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
           },
           "runningNotes": [
-            "This exposes the raw wallet-signed event API.",
-            "The backend will reject this request unless the signature headers match the exact request body.",
-            "Use the signed script flow when you want Workbench to generate the wallet signature automatically."
+            "Reading the event timeline through the real GET /boards/:id/events API.",
+            "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
           ],
           "inputs": {
             "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
-            "ledgerWalletAddress": "",
-            "ledgerPublicKey": "",
-            "ledgerSignatureTimestamp": "",
-            "ledgerSignatureNonce": "",
-            "ledgerBodySha256": "",
-            "ledgerSignature": "",
-            "ledgerClientEventId": "",
-            "ledgerTxHash": "",
-            "ledgerIntentId": "",
-            "ledgerStatusClaim": "filled",
-            "ledgerAssetIn": "USDC",
-            "ledgerAmountIn": "25",
-            "ledgerAssetOut": "NEAR",
-            "ledgerAmountOut": "10",
-            "ledgerReason": "Raw API event submitted from Workbench."
+            "ledgerReadToken": ""
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
-            "ledgerStatusClaim",
-            "ledgerAssetIn",
-            "ledgerAmountIn",
-            "ledgerAssetOut",
-            "ledgerAmountOut",
-            "ledgerReason"
+            "ledgerBaseUrl"
           ],
           "setVars": {
-            "ledgerEventId": "response.json.json.event.id"
+            "ledgerEventId": "response.json.json.events.0.id",
+            "ledgerEventCount": "response.json.json.events.length"
           }
         },
         {
-          "id": "ledger.apiSignedAttachmentTemplate",
-          "name": "POST /boards/:id/events/:eventId/attachments",
-          "description": "Exposes the raw wallet-signed event attachment endpoint. Developers must provide matching signature headers for the exact request body, or use the signed script flow to generate them.",
+          "id": "userBuysKey.ledger.getPortfolio",
+          "name": "Read Holder Portfolio",
+          "description": "Reads the latest portfolio snapshot as the holder-facing detail view.",
           "type": "http",
-          "access": "protected",
-          "method": "POST",
-          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events/{{ledgerEventId}}/attachments",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/portfolio",
           "headers": {
-            "content-type": "application/json",
-            "x-clawhouse-wallet-address": "{{ledgerWalletAddress}}",
-            "x-clawhouse-public-key": "{{ledgerPublicKey}}",
-            "x-clawhouse-timestamp": "{{ledgerSignatureTimestamp}}",
-            "x-clawhouse-nonce": "{{ledgerSignatureNonce}}",
-            "x-clawhouse-body-sha256": "{{ledgerBodySha256}}",
-            "x-clawhouse-signature": "{{ledgerSignature}}"
-          },
-          "body": {
-            "attachment_type": "{{ledgerAttachmentType}}",
-            "reason": "{{ledgerAttachmentReason}}",
-            "metadata": {
-              "source": "acceptance-workbench-api"
-            }
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
           },
           "runningNotes": [
-            "This exposes the raw wallet-signed attachment API.",
-            "The backend will reject this request unless the signature headers match the exact request body.",
-            "Use the signed script flow when you want Workbench to generate the wallet signature automatically."
+            "Reading the latest portfolio snapshot through the real GET /boards/:id/portfolio API."
           ],
           "inputs": {
             "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
-            "ledgerEventId": "",
-            "ledgerWalletAddress": "",
-            "ledgerPublicKey": "",
-            "ledgerSignatureTimestamp": "",
-            "ledgerSignatureNonce": "",
-            "ledgerBodySha256": "",
-            "ledgerSignature": "",
-            "ledgerAttachmentType": "analysis",
-            "ledgerAttachmentReason": "Raw API attachment submitted from Workbench."
+            "ledgerReadToken": ""
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
-            "ledgerAttachmentType",
-            "ledgerAttachmentReason"
+            "ledgerBaseUrl"
           ],
           "setVars": {
-            "ledgerAttachmentId": "response.json.json.attachment.id"
+            "ledgerHoldingSnapshotId": "response.json.json.latest.id",
+            "ledgerCurrentValueUsd": "response.json.json.latest.current_value_usd"
           }
         },
         {
-          "id": "ledger.neonMigrate",
-          "name": "Migrate Neon Schema",
-          "description": "Runs the Ledger Neon migration script with the database URL passed through the script environment. It creates or updates the tables required by board, event, accounting, read-access, and audit flows.",
-          "type": "script",
-          "access": "protected",
-          "command": "bun",
-          "args": [
-            "scripts/migrate-neon.ts"
-          ],
-          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
-          "redactPrivateKeyOutput": true,
-          "forbiddenOutputIncludes": [
-            "privateKey",
-            "private_key",
-            "secretKey",
-            "secret_key",
-            "mnemonic"
-          ],
+          "id": "userBuysKey.ledger.getPnl",
+          "name": "Read Holder PnL",
+          "description": "Reads the latest PnL snapshot as the holder-facing performance view.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/pnl",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
           "runningNotes": [
-            "Uses the editable ledgerDatabaseUrl input as an environment variable; the database URL is not placed in command-line arguments.",
-            "Creates or updates the Neon Postgres schema for boards, events, observations, accounting snapshots, read access checks, and audit events.",
-            "Returns a redacted connection string, table list, and small row-count health check."
+            "Reading the latest PnL snapshot through the real GET /boards/:id/pnl API."
           ],
           "inputs": {
-            "ledgerDatabaseUrl": ""
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
           },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
           "setVars": {
-            "ledgerNeonProvider": "response.json.provider",
-            "ledgerNeonMissingTables": "response.json.missing"
+            "ledgerPnlSnapshotId": "response.json.json.latest.id",
+            "ledgerPnlUsd": "response.json.json.latest.pnl_usd",
+            "ledgerTotalPnlPct": "response.json.json.latest.total_pnl_pct"
           }
         },
         {
-          "id": "ledger.fullFlow",
-          "name": "Run Signed Ledger Flow",
-          "description": "Runs a complete script-backed Ledger acceptance flow against the local service: wallet setup, board registration, signed event and attachment writes, observation, cron, event readback, portfolio, and PnL.",
+          "id": "userBuysKey.pending.productionHolderGate",
+          "name": "Live Holder Gate From Key Balance",
+          "description": "The product should grant holder detail access directly from the live NEAR key balance after purchase. 未完成: Current Ledger read tokens are service-authorized acceptance records; full production holder gating against the live key market is not complete.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "protected",
+          "pendingReason": "Current Ledger read tokens are service-authorized acceptance records; full production holder gating against the live key market is not complete.",
+          "inputs": {},
+          "setVars": {},
+          "runningNotes": [
+            "未完成: Current Ledger read tokens are service-authorized acceptance records; full production holder gating against the live key market is not complete."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "agent-reports-trade-story",
+      "name": "Agent Reports Trade",
+      "purpose": "Acceptance story for an agent writing trade/accounting evidence into Agent Board Ledger and users reading the reconciled timeline, portfolio, and PnL.",
+      "steps": [
+        {
+          "id": "agentReportsTrade.pending.ironclawAutoSignedReport",
+          "name": "IronClaw Auto-Signed Trade Report",
+          "description": "The production agent runtime should automatically sign and submit trade events after real agent activity. 未完成: The automatic IronClaw runtime-to-Ledger reporting path is not implemented here; use the script-backed signed flow or explicit API steps below for acceptance.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "protected",
+          "pendingReason": "The automatic IronClaw runtime-to-Ledger reporting path is not implemented here; use the script-backed signed flow or explicit API steps below for acceptance.",
+          "inputs": {},
+          "setVars": {},
+          "runningNotes": [
+            "未完成: The automatic IronClaw runtime-to-Ledger reporting path is not implemented here; use the script-backed signed flow or explicit API steps below for acceptance."
+          ]
+        },
+        {
+          "id": "agentReportsTrade.ledger.fullFlow",
+          "name": "Run Signed Report Flow",
+          "description": "Runs the real local signed Ledger flow: wallet setup, board registration, signed event and attachment, observation, cron, event readback, portfolio, and PnL.",
           "type": "script",
           "access": "protected",
           "command": "bun",
@@ -1112,9 +810,881 @@
           }
         },
         {
-          "id": "ledger.edgeCases",
+          "id": "agentReportsTrade.ledger.createObservation",
+          "name": "Write Wallet Observation",
+          "description": "Writes service-authorized wallet observation evidence for a board through the real Ledger API.",
+          "type": "http",
+          "access": "protected",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/observations",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "wallet_address": "{{ledgerWalletAddress}}",
+            "current_value_usd": "{{ledgerCurrentValueUsd}}",
+            "topup_usd": "{{ledgerTopupUsd}}",
+            "withdrawal_usd": "{{ledgerWithdrawalUsd}}",
+            "client_event_id": "{{ledgerClientEventId}}",
+            "tx_hash": "{{ledgerTxHash}}",
+            "intent_id": "{{ledgerIntentId}}",
+            "status_claim": "observed_on_wallet",
+            "asset_in": "{{ledgerAssetIn}}",
+            "amount_in": "{{ledgerAmountIn}}",
+            "asset_out": "{{ledgerAssetOut}}",
+            "amount_out": "{{ledgerAmountOut}}",
+            "metadata": {
+              "source": "acceptance-workbench-api"
+            }
+          },
+          "runningNotes": [
+            "Calling the real service-authorized observation API.",
+            "This is how the backend records an observed wallet/portfolio state before cron calculates PnL.",
+            "ledgerAuthorizationHeader must be formatted as Bearer <AGENT_BOARD_LEDGER_ADMIN_TOKEN>."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "ledgerBoardId": "",
+            "ledgerWalletAddress": "",
+            "ledgerCurrentValueUsd": "112",
+            "ledgerTopupUsd": "0",
+            "ledgerWithdrawalUsd": "0",
+            "ledgerClientEventId": "",
+            "ledgerTxHash": "",
+            "ledgerIntentId": "",
+            "ledgerAssetIn": "USDC",
+            "ledgerAmountIn": "25",
+            "ledgerAssetOut": "NEAR",
+            "ledgerAmountOut": "10"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerCurrentValueUsd",
+            "ledgerTopupUsd",
+            "ledgerWithdrawalUsd",
+            "ledgerAssetIn",
+            "ledgerAmountIn",
+            "ledgerAssetOut",
+            "ledgerAmountOut"
+          ],
+          "setVars": {
+            "ledgerObservationId": "response.json.json.observation.id",
+            "ledgerObservedAt": "response.json.json.observation.observed_at",
+            "ledgerClientEventId": "response.json.json.observation.client_event_id",
+            "ledgerTxHash": "response.json.json.observation.tx_hash",
+            "ledgerIntentId": "response.json.json.observation.intent_id"
+          }
+        },
+        {
+          "id": "agentReportsTrade.ledger.createPrice",
+          "name": "Write Price Evidence",
+          "description": "Writes explicit price evidence that later PnL snapshots can reference.",
+          "type": "http",
+          "access": "protected",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/prices",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "asset_id": "{{ledgerPriceAssetId}}",
+            "asset_symbol": "{{ledgerPriceAssetSymbol}}",
+            "price_usd": "{{ledgerPriceUsd}}",
+            "price_source": "{{ledgerPriceSource}}",
+            "observed_at": "{{ledgerObservedAt}}"
+          },
+          "runningNotes": [
+            "Calling the real price snapshot API.",
+            "Use this before cron when you want a PnL snapshot to link to explicit pricing evidence."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "ledgerBoardId": "",
+            "ledgerPriceAssetId": "native:near",
+            "ledgerPriceAssetSymbol": "NEAR",
+            "ledgerPriceUsd": "2",
+            "ledgerPriceSource": "acceptance-workbench-api",
+            "ledgerObservedAt": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerPriceAssetId",
+            "ledgerPriceAssetSymbol",
+            "ledgerPriceUsd",
+            "ledgerPriceSource"
+          ],
+          "setVars": {
+            "ledgerPriceSnapshotId": "response.json.json.prices.0.id"
+          }
+        },
+        {
+          "id": "agentReportsTrade.ledger.createBalanceChange",
+          "name": "Write Balance Change",
+          "description": "Writes service-authorized balance-change evidence for a trade or accounting event.",
+          "type": "http",
+          "access": "protected",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/balance-changes",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "asset_id": "{{ledgerBalanceAssetId}}",
+            "asset_symbol": "{{ledgerBalanceAssetSymbol}}",
+            "normalized_amount": "{{ledgerNormalizedAmount}}",
+            "delta_amount": "{{ledgerDeltaAmount}}",
+            "delta_value_usd": "{{ledgerDeltaValueUsd}}",
+            "change_type": "{{ledgerChangeType}}",
+            "source_observation_id": "{{ledgerObservationId}}",
+            "tx_hash": "{{ledgerTxHash}}",
+            "intent_id": "{{ledgerIntentId}}",
+            "metadata": {
+              "source": "acceptance-workbench-api"
+            }
+          },
+          "runningNotes": [
+            "Calling the real balance-change API.",
+            "This records accounting evidence for the wallet and can link back to an observation, tx hash, or intent id."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "ledgerBoardId": "",
+            "ledgerBalanceAssetId": "native:near",
+            "ledgerBalanceAssetSymbol": "NEAR",
+            "ledgerNormalizedAmount": "56",
+            "ledgerDeltaAmount": "6",
+            "ledgerDeltaValueUsd": "12",
+            "ledgerChangeType": "trade",
+            "ledgerObservationId": "",
+            "ledgerTxHash": "",
+            "ledgerIntentId": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerBalanceAssetId",
+            "ledgerBalanceAssetSymbol",
+            "ledgerNormalizedAmount",
+            "ledgerDeltaAmount",
+            "ledgerDeltaValueUsd",
+            "ledgerChangeType"
+          ],
+          "setVars": {
+            "ledgerBalanceChangeId": "response.json.json.balance_changes.0.id"
+          }
+        },
+        {
+          "id": "agentReportsTrade.ledger.cronTick",
+          "name": "Reconcile Ledger",
+          "description": "Runs the real cron reconciliation endpoint so observations and accounting evidence become events, snapshots, and PnL.",
+          "type": "http",
+          "access": "protected",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/cron/tick",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {},
+          "runningNotes": [
+            "Calling the real cron reconciliation API.",
+            "This links observed activity to events, creates holding snapshots, and calculates PnL."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerCronStatus": "response.json.json.status",
+            "ledgerSnapshotsCreated": "response.json.json.summary.snapshotsCreated"
+          }
+        },
+        {
+          "id": "agentReportsTrade.ledger.listEvents",
+          "name": "Verify Timeline Event",
+          "description": "Reads the event timeline after reporting and reconciliation to confirm the user-visible event exists.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
+          "runningNotes": [
+            "Reading the event timeline through the real GET /boards/:id/events API.",
+            "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerEventId": "response.json.json.events.0.id",
+            "ledgerEventCount": "response.json.json.events.length"
+          }
+        },
+        {
+          "id": "agentReportsTrade.ledger.getPortfolio",
+          "name": "Verify Portfolio Snapshot",
+          "description": "Reads the latest portfolio snapshot produced from the reported evidence.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/portfolio",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
+          "runningNotes": [
+            "Reading the latest portfolio snapshot through the real GET /boards/:id/portfolio API."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerHoldingSnapshotId": "response.json.json.latest.id",
+            "ledgerCurrentValueUsd": "response.json.json.latest.current_value_usd"
+          }
+        },
+        {
+          "id": "agentReportsTrade.ledger.getPnl",
+          "name": "Verify PnL Snapshot",
+          "description": "Reads the latest PnL snapshot produced from the reported evidence.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/pnl",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
+          "runningNotes": [
+            "Reading the latest PnL snapshot through the real GET /boards/:id/pnl API."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerPnlSnapshotId": "response.json.json.latest.id",
+            "ledgerPnlUsd": "response.json.json.latest.pnl_usd",
+            "ledgerTotalPnlPct": "response.json.json.latest.total_pnl_pct"
+          }
+        }
+      ]
+    },
+    {
+      "id": "user-sells-key-story",
+      "name": "User Sells Key",
+      "purpose": "Acceptance story for a key holder quoting a sell, selling through a real NEAR transaction, and verifying the post-sale state and unfinished access revocation boundary.",
+      "steps": [
+        {
+          "id": "userSellsKey.key.quoteSell",
+          "name": "Quote Sell Payout",
+          "description": "Gets the current sell payout and min-payout guard before the user signs a sell transaction.",
+          "type": "script",
+          "access": "public",
+          "command": "bun",
+          "args": [
+            "run",
+            "quote",
+            "sell",
+            "{{agentId}}",
+            "{{keyAmount}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
+          "runningNotes": [
+            "Calling a NEAR view method through the local quote script.",
+            "No private key, gas, or transaction is used for this quote.",
+            "Calculating the expected sell payout and min_payout guard."
+          ],
+          "inputs": {
+            "agentId": "",
+            "keyAmount": "1"
+          },
+          "fillDefaultsWhenEmpty": [
+            "keyAmount"
+          ],
+          "setVars": {
+            "minPayoutNear": "response.json.payout_near",
+            "sellQuoteYocto": "response.json.payout"
+          }
+        },
+        {
+          "id": "userSellsKey.key.sell",
+          "name": "Sell Key On NEAR",
+          "description": "Sends a real NEAR testnet sell_key transaction using the configured test user account and previous sell quote.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "run",
+            "sell",
+            "{{agentId}}",
+            "{{keyAmount}}",
+            "{{minPayoutNear}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
+          "runningNotes": [
+            "Using the previous quote as min_payout protection.",
+            "Signing a sell transaction with the test user account.",
+            "Broadcasting the sell to NEAR testnet and waiting for the raw outcome.",
+            "Extracting txHash, updated supply, holder balance, and reserve."
+          ],
+          "inputs": {
+            "agentId": "",
+            "keyAmount": "1",
+            "minPayoutNear": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "keyAmount"
+          ],
+          "autoFill": [
+            {
+              "input": "minPayoutNear",
+              "stepId": "userSellsKey.key.quoteSell",
+              "source": "response.json.payout_near",
+              "requiredInputs": [
+                "agentId",
+                "keyAmount"
+              ]
+            }
+          ],
+          "setVars": {
+            "sellTxHash": "response.json.txHash",
+            "supplyAfterSell": "response.json.result.supply_after",
+            "holderBalanceAfterSell": "response.json.result.trader_balance_after",
+            "reserveAfterSellYocto": "response.json.result.reserve_after"
+          }
+        },
+        {
+          "id": "userSellsKey.key.stateAfterSell",
+          "name": "Verify Post-Sale Contract State",
+          "description": "Reads NEAR contract state after the sell to confirm supply, reserve, and the seller holder balance.",
+          "type": "near-view",
+          "access": "public",
+          "contractId": "{{contractId}}",
+          "methodName": "get_state",
+          "args": {
+            "agent_id": "{{agentId}}",
+            "holder_id": "{{testUserAccountId}}"
+          },
+          "runningNotes": [
+            "Calling NEAR RPC view state directly; this does not sign or send a transaction.",
+            "Reading the agent market state and holder balance after the buy.",
+            "Extracting supply, reserve, and holder balance for comparison."
+          ],
+          "inputs": {
+            "agentId": "",
+            "testUserAccountId": ""
+          },
+          "setVars": {
+            "keySupply": "response.json.agent.supply",
+            "reserveYocto": "response.json.agent.reserve",
+            "holderBalance": "response.json.holder_balance"
+          }
+        },
+        {
+          "id": "userSellsKey.ledger.readAccessCheck",
+          "name": "Record Access Check After Sell",
+          "description": "Creates a service-authorized read-access check that can be set to denied when validating post-sale access behavior.",
+          "type": "http",
+          "access": "protected",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/read-access/checks",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "requester_wallet_address": "{{ledgerRequesterWalletAddress}}",
+            "access_level": "{{ledgerAccessLevel}}",
+            "access_result": "{{ledgerAccessResult}}",
+            "read_token": "{{ledgerReadToken}}",
+            "expires_at": "{{ledgerReadTokenExpiresAt}}",
+            "reason": "acceptance-workbench-api"
+          },
+          "runningNotes": [
+            "Calling the service-authorized read-access check API.",
+            "Use this to issue a read token for holder-gated board readback."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "ledgerBoardId": "",
+            "ledgerRequesterWalletAddress": "holder.testnet",
+            "ledgerAccessLevel": "key_holder_detail",
+            "ledgerAccessResult": "denied",
+            "ledgerReadToken": "",
+            "ledgerReadTokenExpiresAt": "2030-01-01T00:00:00.000Z"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerRequesterWalletAddress",
+            "ledgerAccessLevel",
+            "ledgerAccessResult",
+            "ledgerReadToken",
+            "ledgerReadTokenExpiresAt"
+          ],
+          "setVars": {
+            "ledgerReadAccessCheckId": "response.json.json.check.id",
+            "ledgerReadToken": "inputs.ledgerReadToken"
+          }
+        },
+        {
+          "id": "userSellsKey.pending.revokeHolderAccessAfterSell",
+          "name": "Automatically Revoke Holder Access",
+          "description": "After a user sells below the holder threshold, holder-gated reads should stop working without manual service intervention. 未完成: Automatic revocation from live key balance and token expiry enforcement after sell are not complete.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "protected",
+          "pendingReason": "Automatic revocation from live key balance and token expiry enforcement after sell are not complete.",
+          "inputs": {},
+          "setVars": {},
+          "runningNotes": [
+            "未完成: Automatic revocation from live key balance and token expiry enforcement after sell are not complete."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "developer-setup-edge-cases-story",
+      "name": "Developer Setup & Edge Cases",
+      "purpose": "Acceptance story for developer-only setup, local wallet artifact safety, raw API templates, migrations, and script-backed regression checks.",
+      "steps": [
+        {
+          "id": "developerSetup.ledger.health",
+          "name": "Check Ledger Service",
+          "description": "Calls the Ledger health endpoint before running setup or edge-case scripts.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/health",
+          "runningNotes": [
+            "Calling the real Agent Board Ledger /health endpoint.",
+            "Use this first to confirm the local backend is running and connected to Neon/Postgres."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerHealthDb": "response.json.json.db"
+          }
+        },
+        {
+          "id": "developerSetup.ledger.neonMigrate",
+          "name": "Migrate Ledger Schema",
+          "description": "Runs the real Neon migration script for Agent Board Ledger schema setup.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "scripts/migrate-neon.ts"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Uses the editable ledgerDatabaseUrl input as an environment variable; the database URL is not placed in command-line arguments.",
+            "Creates or updates the Neon Postgres schema for boards, events, observations, accounting snapshots, read access checks, and audit events.",
+            "Returns a redacted connection string, table list, and small row-count health check."
+          ],
+          "inputs": {
+            "ledgerDatabaseUrl": ""
+          },
+          "setVars": {
+            "ledgerNeonProvider": "response.json.provider",
+            "ledgerNeonMissingTables": "response.json.missing"
+          }
+        },
+        {
+          "id": "developerSetup.wallet.generate",
+          "name": "Generate Local Test Wallet",
+          "description": "Generates a local test wallet artifact for development acceptance and returns only public metadata.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "run",
+            "generate",
+            "--",
+            "--out",
+            "{{repoRoot}}/{{walletArtifactRelativePath}}",
+            "--overwrite"
+          ],
+          "cwd": "{{repoRoot}}/tools/near-wallet",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Running the allowlisted local NEAR wallet generator.",
+            "Writing the generated test wallet artifact under work/acceptance-workbench.",
+            "Returning only public wallet metadata to the Workbench response."
+          ],
+          "inputs": {
+            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
+          },
+          "setVars": {
+            "walletArtifactRelativePath": "inputs.walletArtifactRelativePath",
+            "walletAddress": "response.json.walletAddress",
+            "publicKey": "response.json.publicKey",
+            "keyId": "response.json.keyId"
+          }
+        },
+        {
+          "id": "developerSetup.wallet.inspectPublic",
+          "name": "Inspect Local Wallet Public Metadata",
+          "description": "Reads the local wallet artifact through the public inspect path and verifies private key material is not returned.",
+          "type": "script",
+          "access": "public",
+          "command": "bun",
+          "args": [
+            "run",
+            "inspect",
+            "--",
+            "--key-file",
+            "{{repoRoot}}/{{walletArtifactRelativePath}}"
+          ],
+          "cwd": "{{repoRoot}}/tools/near-wallet",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Reading the generated wallet artifact through the local wallet tool.",
+            "Requesting the public inspect view only.",
+            "Extracting walletAddress, publicKey, and keyId for later checks."
+          ],
+          "inputs": {
+            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
+          },
+          "fillDefaultsWhenEmpty": [
+            "walletArtifactRelativePath"
+          ],
+          "setVars": {
+            "walletAddress": "response.json.walletAddress",
+            "publicKey": "response.json.publicKey",
+            "keyId": "response.json.keyId"
+          }
+        },
+        {
+          "id": "developerSetup.wallet.duplicateRefusesOverwrite",
+          "name": "Verify Wallet Overwrite Refusal",
+          "description": "Attempts duplicate wallet generation without overwrite and expects the local tool to refuse replacing the artifact.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "run",
+            "generate",
+            "--",
+            "--out",
+            "{{repoRoot}}/{{walletArtifactRelativePath}}"
+          ],
+          "cwd": "{{repoRoot}}/tools/near-wallet",
+          "expectedExitCode": 1,
+          "expectedOutputIncludes": "overwrite",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Running the same generator against the existing wallet artifact.",
+            "Expecting the tool to refuse overwrite with exit code 1 and output that mentions overwrite.",
+            "Confirming the refusal text is visible without private key material."
+          ],
+          "inputs": {
+            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
+          },
+          "fillDefaultsWhenEmpty": [
+            "walletArtifactRelativePath"
+          ],
+          "setVars": {}
+        },
+        {
+          "id": "developerSetup.wallet.inspectPublicAfterDuplicate",
+          "name": "Inspect Wallet After Refusal",
+          "description": "Reads the wallet artifact after overwrite refusal to confirm public metadata is still available and private key material is still hidden.",
+          "type": "script",
+          "access": "public",
+          "command": "bun",
+          "args": [
+            "run",
+            "inspect",
+            "--",
+            "--key-file",
+            "{{repoRoot}}/{{walletArtifactRelativePath}}"
+          ],
+          "cwd": "{{repoRoot}}/tools/near-wallet",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Reading the wallet artifact after the duplicate-generation refusal.",
+            "Checking that the artifact still exposes the same public metadata.",
+            "If privateKey or secretKey appears as a redacted field, the public inspect path still leaked a private field name."
+          ],
+          "inputs": {
+            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
+          },
+          "fillDefaultsWhenEmpty": [
+            "walletArtifactRelativePath"
+          ],
+          "setVars": {
+            "walletAddress": "response.json.walletAddress",
+            "publicKey": "response.json.publicKey",
+            "keyId": "response.json.keyId"
+          }
+        },
+        {
+          "id": "developerSetup.ledger.signedEventTemplate",
+          "name": "Raw Signed Event Endpoint",
+          "description": "Exposes the real wallet-signed event endpoint for developers who provide matching signature headers manually.",
+          "type": "http",
+          "access": "protected",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events",
+          "headers": {
+            "content-type": "application/json",
+            "x-clawhouse-wallet-address": "{{ledgerWalletAddress}}",
+            "x-clawhouse-public-key": "{{ledgerPublicKey}}",
+            "x-clawhouse-timestamp": "{{ledgerSignatureTimestamp}}",
+            "x-clawhouse-nonce": "{{ledgerSignatureNonce}}",
+            "x-clawhouse-body-sha256": "{{ledgerBodySha256}}",
+            "x-clawhouse-signature": "{{ledgerSignature}}"
+          },
+          "body": {
+            "client_event_id": "{{ledgerClientEventId}}",
+            "tx_hash": "{{ledgerTxHash}}",
+            "intent_id": "{{ledgerIntentId}}",
+            "event_type": "agent_reported",
+            "status_claim": "{{ledgerStatusClaim}}",
+            "asset_in": "{{ledgerAssetIn}}",
+            "amount_in": "{{ledgerAmountIn}}",
+            "asset_out": "{{ledgerAssetOut}}",
+            "amount_out": "{{ledgerAmountOut}}",
+            "reason": "{{ledgerReason}}",
+            "metadata": {
+              "source": "acceptance-workbench-api"
+            }
+          },
+          "runningNotes": [
+            "This exposes the raw wallet-signed event API.",
+            "The backend will reject this request unless the signature headers match the exact request body.",
+            "Use the signed script flow when you want Workbench to generate the wallet signature automatically."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerWalletAddress": "",
+            "ledgerPublicKey": "",
+            "ledgerSignatureTimestamp": "",
+            "ledgerSignatureNonce": "",
+            "ledgerBodySha256": "",
+            "ledgerSignature": "",
+            "ledgerClientEventId": "",
+            "ledgerTxHash": "",
+            "ledgerIntentId": "",
+            "ledgerStatusClaim": "filled",
+            "ledgerAssetIn": "USDC",
+            "ledgerAmountIn": "25",
+            "ledgerAssetOut": "NEAR",
+            "ledgerAmountOut": "10",
+            "ledgerReason": "Raw API event submitted from Workbench."
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerStatusClaim",
+            "ledgerAssetIn",
+            "ledgerAmountIn",
+            "ledgerAssetOut",
+            "ledgerAmountOut",
+            "ledgerReason"
+          ],
+          "setVars": {
+            "ledgerEventId": "response.json.json.event.id"
+          }
+        },
+        {
+          "id": "developerSetup.ledger.signedAttachmentTemplate",
+          "name": "Raw Signed Attachment Endpoint",
+          "description": "Exposes the real wallet-signed attachment endpoint for developers who provide matching signature headers manually.",
+          "type": "http",
+          "access": "protected",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events/{{ledgerEventId}}/attachments",
+          "headers": {
+            "content-type": "application/json",
+            "x-clawhouse-wallet-address": "{{ledgerWalletAddress}}",
+            "x-clawhouse-public-key": "{{ledgerPublicKey}}",
+            "x-clawhouse-timestamp": "{{ledgerSignatureTimestamp}}",
+            "x-clawhouse-nonce": "{{ledgerSignatureNonce}}",
+            "x-clawhouse-body-sha256": "{{ledgerBodySha256}}",
+            "x-clawhouse-signature": "{{ledgerSignature}}"
+          },
+          "body": {
+            "attachment_type": "{{ledgerAttachmentType}}",
+            "reason": "{{ledgerAttachmentReason}}",
+            "metadata": {
+              "source": "acceptance-workbench-api"
+            }
+          },
+          "runningNotes": [
+            "This exposes the raw wallet-signed attachment API.",
+            "The backend will reject this request unless the signature headers match the exact request body.",
+            "Use the signed script flow when you want Workbench to generate the wallet signature automatically."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerEventId": "",
+            "ledgerWalletAddress": "",
+            "ledgerPublicKey": "",
+            "ledgerSignatureTimestamp": "",
+            "ledgerSignatureNonce": "",
+            "ledgerBodySha256": "",
+            "ledgerSignature": "",
+            "ledgerAttachmentType": "analysis",
+            "ledgerAttachmentReason": "Raw API attachment submitted from Workbench."
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerAttachmentType",
+            "ledgerAttachmentReason"
+          ],
+          "setVars": {
+            "ledgerAttachmentId": "response.json.json.attachment.id"
+          }
+        },
+        {
+          "id": "developerSetup.ledger.fullFlow",
+          "name": "Run Full Ledger Regression Flow",
+          "description": "Runs the script-backed happy path against the real local Ledger service.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "scripts/workbench-flow.ts",
+            "--base-url",
+            "{{ledgerBaseUrl}}",
+            "--key-file",
+            "{{ledgerWalletFile}}",
+            "--board-id",
+            "{{ledgerBoardId}}",
+            "--agent-id",
+            "{{ledgerAgentId}}",
+            "--starting-value-usd",
+            "{{ledgerStartingValueUsd}}",
+            "--current-value-usd",
+            "{{ledgerCurrentValueUsd}}",
+            "--client-event-id",
+            "{{ledgerClientEventId}}",
+            "--tx-hash",
+            "{{ledgerTxHash}}",
+            "--intent-id",
+            "{{ledgerIntentId}}"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Calling the real local Agent Board Ledger service; the step fails if the service is not running.",
+            "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAdminToken.",
+            "Creating or reusing a local Workbench wallet artifact under work/ and registering a board with its public wallet metadata.",
+            "Signing the event and attachment requests with the board wallet before sending them to the Ledger HTTP API.",
+            "Passing ledgerAdminToken through the Workbench script environment, not through command-line arguments.",
+            "Writing a service-authorized wallet observation, running service-authorized cron reconciliation, then reading events, portfolio, and PnL back from the Ledger."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAdminToken": "local-ledger-admin-token",
+            "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
+            "ledgerBoardId": "",
+            "ledgerAgentId": "ironclaw-workbench",
+            "ledgerStartingValueUsd": "100",
+            "ledgerCurrentValueUsd": "112",
+            "ledgerClientEventId": "",
+            "ledgerTxHash": "",
+            "ledgerIntentId": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerAdminToken",
+            "ledgerWalletFile",
+            "ledgerAgentId",
+            "ledgerStartingValueUsd",
+            "ledgerCurrentValueUsd"
+          ],
+          "setVars": {
+            "ledgerBoardId": "response.json.boardId",
+            "ledgerWalletAddress": "response.json.wallet.walletAddress",
+            "ledgerPublicKey": "response.json.wallet.publicKey",
+            "ledgerClientEventId": "response.json.clientEventId",
+            "ledgerTxHash": "response.json.txHash",
+            "ledgerIntentId": "response.json.intentId",
+            "ledgerEventId": "response.json.event.id",
+            "ledgerAttachmentId": "response.json.attachment.id",
+            "ledgerEventCount": "response.json.summary.eventCount",
+            "ledgerAttachmentCount": "response.json.summary.attachmentCount",
+            "ledgerPnlUsd": "response.json.summary.pnlUsd"
+          }
+        },
+        {
+          "id": "developerSetup.ledger.edgeCases",
           "name": "Run Ledger Edge Cases",
-          "description": "Runs the script-backed Ledger edge-case suite against the local service. It verifies rejection cases, holder-gated readback, mocked NEAR RPC paths, FT evidence, signed writes, cron idempotency, and PnL linkage.",
+          "description": "Runs the script-backed edge-case suite against the real local Ledger service.",
           "type": "script",
           "access": "protected",
           "command": "bun",
@@ -1178,6 +1748,20 @@
             "ledgerEdgePassedChecks": "response.json.summary.passed",
             "ledgerEdgeFailedChecks": "response.json.summary.failed"
           }
+        },
+        {
+          "id": "developerSetup.pending.productionRuntimeManifestHosting",
+          "name": "Production Runtime Manifest Hosting",
+          "description": "The production agent runtime should publish a signed, installable manifest and hosting metadata that developers can verify. 未完成: Production manifest hosting, signature verification, and installer verification remain unfinished.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "protected",
+          "pendingReason": "Production manifest hosting, signature verification, and installer verification remain unfinished.",
+          "inputs": {},
+          "setVars": {},
+          "runningNotes": [
+            "未完成: Production manifest hosting, signature verification, and installer verification remain unfinished."
+          ]
         }
       ]
     }
