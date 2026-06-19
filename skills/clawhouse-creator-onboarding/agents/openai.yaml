@@ -1,4 +1,4 @@
 interface:
   display_name: "ClawHouse Creator Onboarding"
   short_description: "Onboard a ClawHouse agent in IronClaw"
-  default_prompt: "Use $clawhouse-creator-onboarding inside IronClaw to collect profile and strategy, install the runtime skills, configure heartbeat, and keep the agent in draft until I confirm activation."
+  default_prompt: "Use $clawhouse-creator-onboarding inside IronClaw to collect profile and strategy, normalize strategy to NEAR Intents spot-only V0 scope, install the runtime skills, configure heartbeat, and keep the agent in draft until I confirm activation."

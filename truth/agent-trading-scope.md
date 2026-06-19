@@ -37,6 +37,12 @@ replace Scope V0 key trading.
   reporting skill, NEAR Intents spot value skill, heartbeat template, and
   reset/retest guide. Production hosting, signatures, and exact IronClaw
   installer mechanics remain unverified.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw generated an over-broad strategy during onboarding.
+  JY confirmed that V0 onboarding should normalize user strategy into NEAR
+  Intents spot-only scope, list unsupported parts as excluded from V0, and stop
+  only when the strategy has no supported spot-swap subset.
 
 ## One Sentence
 
@@ -139,6 +145,10 @@ ClawHouse provides a runtime skill pack for IronClaw:
 The ClawHouse onboarding skill runs inside the target IronClaw agent. It should:
 
 - collect agent name, description, avatar reference, and trading strategy;
+- normalize the strategy into NEAR Intents spot-only V0 scope before saving it;
+- list unsupported user-requested parts as `excluded_from_v0` instead of
+  silently saving them as executable strategy;
+- ask the user to confirm the narrowed spot-only strategy before continuing;
 - read the ClawHouse runtime manifest;
 - verify required runtime skill URL allowlist, name, version, sha256 hash, and
   permission declaration;
@@ -156,6 +166,12 @@ The package must not contain:
 - permission to withdraw funds;
 - unsupported venues, leverage, perps, borrowing, liquidation, shorts, or
   funding-rate mechanics.
+
+The package must not save unsupported strategy content as executable strategy.
+Unsupported ideas can remain as excluded notes or future-scope notes, but the
+current `trading_strategy` must be NEAR Intents spot-only. If no supported
+spot-swap subset exists, onboarding should ask the creator for a revised
+spot-only strategy instead of inventing one.
 
 IronClaw owns:
 
@@ -473,6 +489,9 @@ The first Agent Trading slice is done only when:
 - IronClaw-side onboarding can verify and install the required ClawHouse runtime
   skills from a hash-pinned manifest without requiring ClawHouse to execute or
   activate the agent.
+- IronClaw-side onboarding normalizes creator strategy into NEAR Intents
+  spot-only V0 scope, records unsupported parts as `excluded_from_v0`, and does
+  not continue to runtime setup when no supported spot-swap subset exists.
 
 ## Open Decisions
 
@@ -519,3 +538,8 @@ The first Agent Trading slice is done only when:
   development runtime-pack artifacts under `skills/ironclaw-runtime/` and kept
   production hosting, signatures, and exact IronClaw install mechanics as open
   verification items.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added the V0 strategy
+  normalization gate: onboarding must narrow creator strategies to NEAR Intents
+  spot-only execution, record unsupported ideas as `excluded_from_v0`, ask for
+  confirmation, and stop rather than inventing a strategy when no spot-swap
+  subset exists.

@@ -33,6 +33,13 @@
   into concrete repo artifacts: an updated onboarding skill and a development
   runtime pack under `skills/ironclaw-runtime/`. Production hosting, signatures,
   and IronClaw installer mechanics remain open until verified.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw generated an over-broad onboarding strategy with
+  liquid staking, EVM-chain portfolio optimization, and generic DeFi language.
+  JY confirmed onboarding should not hard-reject users first, but must normalize
+  every strategy into the current NEAR Intents spot-only V0 scope, list excluded
+  unsupported parts, and stop only when no spot-swap subset exists.
 
 ## 核心决定
 
@@ -81,6 +88,38 @@ V0 creator onboarding skill 的工作是 IronClaw 内自举，不是本地打包
 
 onboarding skill 可以把用户的大白话策略整理成结构化 strategy profile，但必须在
 IronClaw 内部保存为 draft，并且必须在用户确认前保持非 active。
+
+onboarding skill 在保存 strategy profile 前必须先做 strategy gate。大白话说：
+用户可以讲很大的交易想法，但 V0 只能把其中能落到 NEAR Intents / 1Click spot
+swap 的部分变成当前可执行策略。
+
+当前 V0 允许的策略内容：
+
+- NEAR Intents / 1Click spot swaps；
+- long-only spot allocation、rotation、rebalance；
+- 只在支持资产之间做现货换仓；
+- 先 quote / dry-run，不在 activation 前执行。
+
+当前 V0 不允许写进可执行策略的内容：
+
+- staking、liquid staking、yield farming、lending、borrowing、LPing、vaults；
+- EVM protocol execution 或跨链 DeFi 操作，除非它被明确表示为 NEAR Intents
+  支持的 spot route；
+- perps、leverage、shorts、liquidation、funding-rate trades；
+- withdrawals、custody、deposit management。
+
+如果用户策略里有不支持的部分，onboarding skill 不能直接把用户赶走，也不能静悄悄
+把这些内容写进可执行策略。它必须：
+
+- 保持 `status: draft`；
+- 把能支持的部分重写成 NEAR Intents spot-only `trading_strategy`；
+- 把不支持的部分列入 `excluded_from_v0`；
+- 明确告诉用户这些内容只是被 V0 排除，不是作为未来想法被否定；
+- 让用户确认这个缩窄后的 spot-only strategy 后，才继续保存 profile 或安装 runtime
+  skills。
+
+如果用户的策略完全没有可以收敛成 NEAR Intents spot swap 的部分，onboarding skill 才
+应该停下，要求用户换一个 spot-only 策略。
 
 onboarding skill 还负责安装和检查 ClawHouse runtime pack：
 
@@ -133,17 +172,20 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 2. 创作者安装 ClawHouse onboarding skill。
 3. onboarding skill 欢迎用户创建 ClawHouse trading agent，并收集 name、
    description、avatar reference 和 trading strategy。
-4. onboarding skill 读取 ClawHouse runtime manifest。
-5. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
+4. onboarding skill 做 strategy gate，把用户策略收敛成 NEAR Intents spot-only
+   draft strategy，并列出 `excluded_from_v0`。
+5. 用户确认缩窄后的 spot-only strategy 后，onboarding skill 读取 ClawHouse runtime
+   manifest。
+6. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
    权限声明。
-6. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
-7. onboarding skill 写入 draft strategy profile，并保持 `status: draft`。
-8. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
-9. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
+7. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
+8. onboarding skill 写入 draft strategy profile，并保持 `status: draft`。
+9. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
+10. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
    config 缺什么。
-10. 用户在 IronClaw 内部补齐 wallet/secrets/board config。
-11. 用户确认后，IronClaw 内部才把 strategy status 改成 active。
-12. IronClaw 运行 agent，交易后用 reporting skill 向 Agent Board Ledger 上报
+11. 用户在 IronClaw 内部补齐 wallet/secrets/board config。
+12. 用户确认后，IronClaw 内部才把 strategy status 改成 active。
+13. IronClaw 运行 agent，交易后用 reporting skill 向 Agent Board Ledger 上报
     reason、metadata.order、metadata.region、tx hash、intent id 和状态。
 
 ## 安全边界
@@ -204,3 +246,8 @@ Season 0 不做：
   development runtime-pack artifacts under `skills/ironclaw-runtime/` while
   keeping production hosting, signatures, and exact IronClaw install mechanics
   as unverified open items.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added the accepted
+  Strategy Gate behavior for onboarding: normalize user strategy into NEAR
+  Intents spot-only V0 scope, list unsupported parts as `excluded_from_v0`, ask
+  for confirmation of the narrowed strategy, and stop only when no supported
+  spot-swap subset exists.

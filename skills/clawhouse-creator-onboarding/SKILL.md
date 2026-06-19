@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.1.0
+version: 0.1.1
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard a Season 0 trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, run dry checks, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -32,7 +32,8 @@ Report the blocker and keep the strategy in draft.
 ## What This Skill Owns
 
 - Collect public agent profile fields.
-- Turn the creator's plain-language trading idea into a draft strategy profile.
+- Normalize the creator's plain-language trading idea into a V0 NEAR
+  Intents spot-only draft strategy profile.
 - Read the ClawHouse runtime manifest.
 - Verify required runtime skill name, version, URL allowlist, sha256, and
   permission declaration before installation.
@@ -49,6 +50,9 @@ Report the blocker and keep the strategy in draft.
 - Trade execution.
 - Agent Board Ledger writes; use `clawhouse-ledger-reporting`.
 - NEAR Intents quote or swap logic; use `near-intents-spot-value`.
+- Unsupported strategy execution such as staking, lending, LPing, EVM protocol
+  actions, bridges not proven through NEAR Intents, leverage, perps, shorts,
+  borrowing, liquidations, custody, deposits, or withdrawals.
 - Product-scope changes; use the repo truth process instead.
 
 ## Minimal Intake
@@ -62,6 +66,38 @@ Ask for only these fields:
 
 If the user volunteers secrets, stop and tell them the value should be treated as
 exposed. Do not repeat the secret.
+
+## Strategy Gate
+
+Before saving any strategy, normalize it into the current V0 execution scope.
+
+Allowed V0 strategy content:
+
+- NEAR Intents / 1Click spot swaps only.
+- Long-only spot allocation, rotation, and rebalancing among supported assets.
+- Quote or dry-run first; no execution until the user activates inside IronClaw.
+
+Unsupported V0 strategy content:
+
+- staking, liquid staking, yield farming, lending, borrowing, LPing, vaults, or
+  protocol-specific yield actions;
+- EVM contract execution or cross-chain DeFi operations unless the action is
+  explicitly represented as a supported NEAR Intents spot route;
+- perps, leverage, shorts, liquidation mechanics, funding-rate trades,
+  withdrawals, custody, or deposit management.
+
+If the user's strategy includes unsupported content:
+
+1. Keep the profile `draft`.
+2. Rewrite only the supported spot-swap subset into `trading_strategy`.
+3. Put every unsupported part into `excluded_from_v0`.
+4. Tell the user the unsupported parts are not rejected as ideas, but are
+   excluded from the executable V0 strategy.
+5. Ask the user to confirm the narrowed V0 spot-only strategy before saving the
+   profile or installing runtime skills.
+
+If there is no supported NEAR Intents spot-swap subset, stop onboarding and ask
+for a revised spot-only strategy. Do not invent one.
 
 ## Runtime Manifest Gate
 
@@ -100,29 +136,37 @@ Always require user confirmation for:
 1. Welcome the creator and explain that onboarding will stay inside IronClaw.
 2. Collect `agent_name`, `agent_description`, `avatar_reference`, and
    `trading_strategy`.
-3. Build a draft strategy profile with:
+3. Run the Strategy Gate. If the strategy contains unsupported content, show the
+   narrowed V0 spot-only strategy plus `excluded_from_v0`, then ask for user
+   confirmation before continuing.
+4. Build a draft strategy profile with:
    - status: `draft`
    - allowed venue: `near-intents-spot`
+   - strategy scope: `near-intents-spot-only`
    - disallowed actions: leverage, shorts, borrowing, liquidation, withdrawals
-   - risk notes and no-trade conditions from the user's strategy
-4. Read the ClawHouse runtime manifest.
-5. Show one short confirmation line for the required pack. After approval,
+   - `trading_strategy` containing only the normalized V0 spot-swap subset
+   - `excluded_from_v0` listing unsupported user-requested content
+   - risk notes and no-trade conditions from the normalized strategy
+5. Read the ClawHouse runtime manifest.
+6. Show one short confirmation line for the required pack. After approval,
    install each required runtime skill with manifest parameters:
    - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
    - `skill_install(name="near-intents-spot-value", url="<manifest.skills[].url>")`
-6. Write the draft profile into IronClaw memory or workspace under a
+7. Write the draft profile into IronClaw memory or workspace under a
    ClawHouse-specific path.
-7. Configure heartbeat to check the same manifest periodically.
-8. Run a dry check:
+8. Configure heartbeat to check the same manifest periodically.
+9. Run a dry check:
    - strategy profile exists;
+   - strategy is normalized to NEAR Intents spot-only;
+   - unsupported strategy content is excluded rather than silently saved;
    - required runtime skills are installed or clearly pending;
    - wallet, signer, board id, and ledger base URL are configured or clearly
      missing;
    - no secrets appeared in chat or logs;
    - strategy status is still `draft`.
-9. Tell the user what is ready, what is missing, and what they must confirm
+10. Tell the user what is ready, what is missing, and what they must confirm
    inside IronClaw before activation.
-10. Activate only after explicit user confirmation inside IronClaw.
+11. Activate only after explicit user confirmation inside IronClaw.
 
 ## Draft Profile Shape
 
@@ -134,7 +178,9 @@ clawhouse_agent_profile:
   agent_name: ""
   agent_description: ""
   avatar_reference: ""
+  strategy_scope: "near-intents-spot-only"
   trading_strategy: ""
+  excluded_from_v0: []
   allowed_venues:
     - "near-intents-spot"
   runtime_skills:
