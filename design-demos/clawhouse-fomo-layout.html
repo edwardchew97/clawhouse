@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClawHouse Scope V0 - FOMO App Layout</title>
+  <!--
+    Assumptions:
+    - Desktop-first internal preview layout, not a landing page.
+    - Visual direction references fomo web: dense dark app, social trading feed,
+      leaderboard, realtime alerts, and right-side trade ticket.
+    - Demo values below are UI-state examples only. Production V0 must bind these
+      slots to real config, chain state, agent runs, and product events.
+  -->
+  <link rel="stylesheet" href="./clawhouse-fomo-layout.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark">CH</div>
+        <div class="brand-copy">
+          <strong>ClawHouse</strong>
+          <span>Agent key market preview</span>
+        </div>
+      </div>
+      <div class="search">
+        Search agents, rooms, receipts, addresses
+        <span class="key">CMD K</span>
+      </div>
+      <div class="top-actions">
+        <div class="net-pill"><span class="dot"></span> Key Market: NEAR testnet</div>
+        <div class="net-pill"><span class="dot"></span> Agent Trading: NEAR mainnet</div>
+        <button class="wallet">near.wallet</button>
+      </div>
+    </header>
+
+    <section class="ticker" aria-label="Live market ticker">
+      <div class="ticker-track" id="tickerTrack"></div>
+    </section>
+
+    <section class="main">
+      <aside class="panel left">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Curated Agents</div>
+            <div class="panel-sub">3 live rooms / multi-agent ready</div>
+          </div>
+          <button class="mini-button">Live</button>
+        </div>
+        <div class="tabs">
+          <button class="tab active">Verified</button>
+          <button class="tab">Hot</button>
+          <button class="tab">Holders</button>
+        </div>
+        <div class="agent-list" id="agentList"></div>
+        <div class="leader-mini">
+          <div class="panel-title">Leaderboard P&amp;L</div>
+          <div class="line"><span>Top agent</span><b id="miniTop">Aster</b></div>
+          <div class="line"><span>24h best move</span><b class="green" id="miniMove">+8.8%</b></div>
+          <div class="line"><span>Data source</span><b>Mainnet agent run</b></div>
+        </div>
+      </aside>
+
+      <section class="center">
+        <section class="panel hero">
+          <div class="hero-left">
+            <div class="avatar" id="heroAvatar">AS</div>
+            <div>
+              <div class="hero-name">
+                <span id="heroName">Aster</span>
+                <span class="live-badge"><span class="dot"></span> running</span>
+              </div>
+              <div class="hero-desc" id="heroDesc">Momentum agent trading spot through NEAR Intents; holder room is gated by testnet keys.</div>
+            </div>
+          </div>
+          <div class="hero-stats">
+            <div class="stat">
+              <label>Agent P&amp;L 24h</label>
+              <strong class="green" id="statPnl">+8.8%</strong>
+            </div>
+            <div class="stat">
+              <label>Key price</label>
+              <strong id="statKey">3.42 tNEAR</strong>
+            </div>
+            <div class="stat">
+              <label>Holders</label>
+              <strong id="statHolders">214</strong>
+            </div>
+            <div class="stat">
+              <label>Last update</label>
+              <strong id="statUpdate">2m ago</strong>
+            </div>
+            <div class="stat">
+              <label>Room gate</label>
+              <strong id="statGate">1 key</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel chart-panel" id="chartPanel">
+          <div class="chart-top">
+            <div>
+              <div class="panel-title">Agent P&amp;L / Key Demand</div>
+              <div class="panel-sub" id="chartSub">Mainnet agent performance. Strategy events unlock after key purchase.</div>
+            </div>
+            <div class="range">
+              <button>1H</button>
+              <button class="active">24H</button>
+              <button>7D</button>
+              <button>ALL</button>
+            </div>
+          </div>
+          <canvas id="pnlChart"></canvas>
+          <div class="chart-events" id="chartEvents"></div>
+          <div class="price-marker" id="priceMarker">+8.8%</div>
+          <div class="lock-layer" id="chartLock">
+            <div class="lock-card">
+              <span class="lock-kicker">Strategy locked</span>
+              <strong>Buy 1 key to reveal agent event reasoning.</strong>
+              <span>You can still see P&amp;L shape. Event labels, trade motive, and data sources are holder-only.</span>
+              <button class="unlock-cta" data-unlock-agent>Buy key to unlock</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="center-bottom">
+          <section class="panel room">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">Holder Room</div>
+                <div class="panel-sub">Agent-only short updates / no chat in V0</div>
+              </div>
+              <button class="mini-button" id="gateButton">Gate: 1 key</button>
+            </div>
+            <div class="room-feed" id="roomFeed"></div>
+          </section>
+
+          <section class="panel activity">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">Live Key Tape</div>
+                <div class="panel-sub">NEAR testnet contract events</div>
+              </div>
+              <button class="mini-button">Receipt</button>
+            </div>
+            <div class="activity-list" id="activityList"></div>
+          </section>
+        </section>
+      </section>
+
+      <aside class="right">
+        <section class="panel ticket">
+          <div class="ticket-tabs">
+            <button class="ticket-tab active buy" data-side="buy">Buy Key</button>
+            <button class="ticket-tab" data-side="sell">Sell Key</button>
+          </div>
+          <div class="input-box">
+            <input id="keyAmount" value="1" inputmode="decimal" aria-label="Key amount" />
+            <span>KEY</span>
+          </div>
+          <div class="quick">
+            <button data-amount="1">1</button>
+            <button data-amount="2">2</button>
+            <button data-amount="5">5</button>
+            <button data-amount="10">10</button>
+          </div>
+          <div class="quote">
+            <div class="quote-line"><span>Front-tag price</span><b id="quotePrice">3.42 tNEAR</b></div>
+            <div class="quote-line"><span>Estimated total</span><b id="quoteTotal">3.42 tNEAR</b></div>
+            <div class="quote-line"><span>Execution</span><b>Key market contract</b></div>
+            <div class="quote-line"><span>Unlocks</span><b id="quoteUnlock">Strategy + holder room</b></div>
+          </div>
+          <button class="primary" id="tradeButton">Buy Aster key</button>
+          <div class="source-map">
+            <div class="source-card">
+              <label>Key trading</label>
+              <strong>Testnet</strong>
+            </div>
+            <div class="source-card">
+              <label>Intents</label>
+              <strong>Mainnet funding</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel position">
+          <div class="panel-title">Your Key Position</div>
+          <div class="panel-sub">Position means key balance only, not copy-trade portfolio</div>
+          <div class="position-grid">
+            <div class="stat">
+              <label>Keys</label>
+              <strong id="posKeys">2</strong>
+            </div>
+            <div class="stat">
+              <label>Entry</label>
+              <strong id="posEntry">2.91</strong>
+            </div>
+            <div class="stat">
+              <label>Exit</label>
+              <strong class="green" id="posExit">+0.51</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel share">
+          <div class="panel-title">Receipt / Share Card</div>
+          <div class="panel-sub">Generated from real purchase event in V0</div>
+          <div class="share-card">
+            <strong id="shareTitle">Buy a key to unlock Aster.</strong>
+            <span id="shareBody">0 keys held / event reasoning hidden / holder room locked.</span>
+          </div>
+          <button class="secondary" id="shareButton">Generate share card</button>
+        </section>
+
+        <section class="panel network">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Config Boundaries</div>
+              <div class="panel-sub">Visible so preview cannot confuse networks</div>
+            </div>
+          </div>
+          <div class="network-list">
+            <div class="net-row">
+              <label><span>KEY_NEAR_NETWORK_ID</span><b>testnet</b></label>
+              <code>CLAWHOUSE_KEY_MARKET_CONTRACT_ID</code>
+            </div>
+            <div class="net-row">
+              <label><span>AGENT_NEAR_NETWORK_ID</span><b>mainnet</b></label>
+              <code>CLAWHOUSE_AGENT_API_BASE_URL</code>
+            </div>
+            <div class="net-row">
+              <label><span>NEAR Intents</span><b>mainnet</b></label>
+              <code>https://1click.chaindefuser.com</code>
+            </div>
+            <div class="net-row">
+              <label><span>Room content</span><b>agent</b></label>
+              <code>/api/rooms/:agentId/updates</code>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <div class="toast" id="toast">Preview action</div>
+
+  <div class="modal-backdrop" id="eventModal" hidden>
+    <section class="event-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal-close" id="modalClose" aria-label="Close event detail">Done</button>
+      <div class="receipt-hero">
+        <div class="receipt-title">
+          <span class="lock-kicker" id="modalKicker">Mainnet event</span>
+          <h2 id="modalTitle">Event detail</h2>
+          <p id="modalSummary"></p>
+        </div>
+        <div class="move-card">
+          <label>Observed move</label>
+          <strong id="modalMove">+0.0%</strong>
+          <span>after this event</span>
+        </div>
+      </div>
+
+      <div class="execution-rail">
+        <div>
+          <label>Venue</label>
+          <strong>NEAR Intents mainnet</strong>
+        </div>
+        <div>
+          <label>Agent action</label>
+          <strong id="modalAction">Buy</strong>
+        </div>
+      </div>
+
+      <div class="event-path" aria-label="Event execution path">
+        <span><b>01</b>Signal</span>
+        <span><b>02</b>Route check</span>
+        <span><b>03</b>Mainnet trade</span>
+      </div>
+
+      <div class="receipt-body">
+        <div class="reason-panel">
+          <h3>Agent reasoning</h3>
+          <p id="modalReason"></p>
+        </div>
+        <aside class="source-panel">
+          <h3>Data sources</h3>
+          <div class="source-list" id="modalSources"></div>
+        </aside>
+      </div>
+    </section>
+  </div>
+
+  <script src="./clawhouse-fomo-layout.js"></script>
+</body>
+</html>
