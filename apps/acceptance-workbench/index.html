@@ -765,7 +765,7 @@
               <span id="responseTarget" class="tab-meta">No request sent.</span>
             </div>
             <div class="pill-row">
-              <button id="copyDebug" class="mini-button" disabled>Copy Debug Prompt</button>
+              <button id="openDebugThread" class="mini-button" disabled>Open Debug Thread</button>
               <div id="resultMeta" class="pill-row"></div>
             </div>
           </div>
@@ -1283,7 +1283,7 @@
       `;
       $("resultBox").textContent = JSON.stringify(result, null, 2);
       $("responseTarget").textContent = targetLabel;
-      $("copyDebug").disabled = !state.lastDebugPacket;
+      $("openDebugThread").disabled = !state.lastDebugPacket;
     }
 
     async function fireStep() {
@@ -1348,20 +1348,6 @@
       };
     }
 
-    function buildDebugPrompt() {
-      if (!state.lastDebugPacket) return "";
-      return [
-        "ClawHouse Acceptance Workbench debug request.",
-        "",
-        "Please debug this real local acceptance-workbench run. Follow AGENTS.md worktree discipline before editing. Do not use simulated output.",
-        "",
-        "Debug packet:",
-        "```json",
-        JSON.stringify(state.lastDebugPacket, null, 2),
-        "```"
-      ].join("\n");
-    }
-
     function sanitizeSecrets(value) {
       if (Array.isArray(value)) return value.map((item) => sanitizeSecrets(item));
       if (value && typeof value === "object") {
@@ -1377,27 +1363,33 @@
       return value;
     }
 
-    async function copyDebugPrompt() {
-      const text = buildDebugPrompt();
-      if (!text) return;
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.setAttribute("readonly", "");
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        textarea.remove();
-      }
-      const button = $("copyDebug");
+    async function openDebugThread() {
+      if (!state.lastDebugPacket) return;
+      const button = $("openDebugThread");
       const original = button.textContent;
-      button.textContent = "Copied";
+      button.disabled = true;
+      button.textContent = "Opening...";
+      try {
+        const response = await fetch("/codex/debug-thread", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ packet: state.lastDebugPacket })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) {
+          throw new Error(result.error || "Unable to create Codex thread");
+        }
+        button.textContent = "Opened";
+        showToast(`Debug thread created: ${String(result.threadId).slice(0, 8)}`);
+      } catch (error) {
+        button.textContent = original;
+        button.disabled = !state.lastDebugPacket;
+        showToast(`Debug thread failed: ${error.message}`);
+        return;
+      }
       setTimeout(() => {
         button.textContent = original;
+        button.disabled = !state.lastDebugPacket;
       }, 1200);
     }
 
@@ -1464,7 +1456,7 @@
     });
 
     $("fireStep").addEventListener("click", fireStep);
-    $("copyDebug").addEventListener("click", copyDebugPrompt);
+    $("openDebugThread").addEventListener("click", openDebugThread);
 
     boot().catch((error) => {
       $("resultBox").textContent = error.message;
