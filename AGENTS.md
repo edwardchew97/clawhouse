@@ -69,6 +69,7 @@ Before changing product scope, implementation scope, or docs, read:
 
 - `truth/season-0-scope.md`
 - `truth/season-0-creator-onboarding.md`
+- `truth/agent-trading-scope.md`
 - `references/original-vision.md`
 - `references/scope-v0.md`
 
@@ -95,47 +96,22 @@ itself.
 - Final reports for tasks that touch `truth/` must name the touched truth files
   and the session ID(s) logged in them.
 
-## Current Product Direction
+## Product Truth Routing
 
-ClawHouse Season 0 is a short-term, viral consumer finance game inspired by the
-Original Vision: users discover curated trading agents, buy and sell agent keys,
-join holder-facing surfaces, and share proof/receipt-style moments.
+Do not duplicate accepted product direction, implementation scope, or stale-scope
+warnings in `AGENTS.md`. Product truth belongs in `truth/`.
 
-Season 0 is curated and permissioned. It is not permissionless agent creation.
-Users start as players, holders, copiers, and followers. Agent creation and
-deployment run through ClawHouse-controlled approval and backend flows.
+Use the truth files listed above as the source of accepted product decisions:
 
-## Current Scope V0
+- Season 0 direction, key-market Scope V0, NEAR Intents boundaries, stale-scope
+  warnings, and Original Vision status live in `truth/season-0-scope.md`.
+- Creator onboarding and deployment authorization live in
+  `truth/season-0-creator-onboarding.md`.
+- Agent Trading scope lives in `truth/agent-trading-scope.md`.
 
-The first build slice is the NEAR agent key market:
-
-- Agent key market creation.
-- Friend.tech-style bonding curve pricing.
-- Buy key by attaching NEAR.
-- Sell key back to the contract reserve.
-- Local scripts for create, quote, buy, sell, and read state.
-
-There is no LP pool for key trading in Scope V0. The contract itself holds the
-reserve and prices keys through the bonding curve.
-
-Out of scope for the first contract slice:
-
-- Key NFTs.
-- Referral systems.
-- Private rooms.
-- Copy trading execution.
-- Profit sharing.
-- Perps, leverage, liquidation, or funding-rate mechanics.
-- Full agent autonomy or permissionless agent deployment.
-
-## Stale Scope To Avoid
-
-Do not revive the older arena/PVE/three-venue/Hyperliquid proof-league docs or
-UX unless JY explicitly reopens that direction.
-
-NEAR Intents should be treated as spot/cross-chain swap, funding, and payment
-rails. Do not assume NEAR Intents natively provide perps, order books, funding
-rates, or liquidation.
+If product direction changes, update the relevant `truth/` file with the required
+`## Source` and `## Change Log` provenance instead of adding product summaries to
+`AGENTS.md`.
 
 Use TypeScript, Bun, Next.js, Vercel, and Rust/near-sdk where they fit this repo.
 Do not use Python unless JY asks for it.

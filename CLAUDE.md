@@ -8,5 +8,6 @@ For product or implementation decisions, read these first:
 
 - [truth/season-0-scope.md](./truth/season-0-scope.md)
 - [truth/season-0-creator-onboarding.md](./truth/season-0-creator-onboarding.md)
+- [truth/agent-trading-scope.md](./truth/agent-trading-scope.md)
 - [references/scope-v0.md](./references/scope-v0.md)
 - [references/original-vision.md](./references/original-vision.md)
