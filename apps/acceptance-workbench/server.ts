@@ -428,8 +428,8 @@ async function runScript(payload: JsonRecord) {
   const payloadEnv = asObject(payload.env);
   const variables = {
     ...payloadEnv,
-    ...asObject(payload.inputs),
     ...asObject(payload.vars),
+    ...asObject(payload.inputs),
     repoRoot
   };
   const command = String(interpolate(step.command, variables));
