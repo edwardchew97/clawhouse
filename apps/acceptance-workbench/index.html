@@ -479,30 +479,6 @@
       box-shadow: 0 0 0 2px rgba(41, 41, 41, 0.08);
     }
 
-    .target-strip {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-      background: #fcfcfb;
-    }
-
-    .target-item {
-      display: grid;
-      gap: 3px;
-      min-width: 0;
-    }
-
-    .target-value {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--strong);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
     .tabs {
       display: flex;
       align-items: center;
@@ -940,8 +916,7 @@
         height: auto;
       }
 
-      .env-drawer,
-      .target-strip {
+      .env-drawer {
         grid-template-columns: 1fr;
       }
 
@@ -1053,17 +1028,6 @@
             <select id="methodSelect" class="select"></select>
             <input id="requestTarget" class="input request-target" />
             <button id="fireStep" class="button primary">Send</button>
-          </div>
-
-          <div class="target-strip">
-            <div class="target-item">
-              <span class="tab-meta">Runner URL</span>
-              <span id="runnerUrl" class="target-value"></span>
-            </div>
-            <div class="target-item">
-              <span class="tab-meta">Resolved Target</span>
-              <span id="resolvedTarget" class="target-value"></span>
-            </div>
           </div>
 
           <nav id="tabs" class="tabs"></nav>
@@ -1621,8 +1585,6 @@
         <span class="pill">${step.type}</span>
         <span class="pill">${Object.keys(step.setVars || {}).length} extracts</span>
       `;
-      $("runnerUrl").textContent = `POST ${runnerUrl(step)}`;
-      $("resolvedTarget").textContent = resolvedTarget(step);
       $("responseTarget").textContent = `Ready to send to ${resolvedTarget(step)}`;
     }
 
