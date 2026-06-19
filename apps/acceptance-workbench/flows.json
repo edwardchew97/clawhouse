@@ -371,6 +371,86 @@
           }
         }
       ]
+    },
+    {
+      "id": "agent-board-ledger",
+      "name": "Agent Board Ledger",
+      "purpose": "Verify the V0 ledger records wallet-signed agent events, append-only attachments, wallet observations, cron reconciliation, portfolio, and PnL through the real local HTTP service.",
+      "steps": [
+        {
+          "id": "ledger.fullFlow",
+          "name": "Run Signed Ledger Flow",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "scripts/workbench-flow.ts",
+            "--base-url",
+            "{{ledgerBaseUrl}}",
+            "--key-file",
+            "{{ledgerWalletFile}}",
+            "--board-id",
+            "{{ledgerBoardId}}",
+            "--agent-id",
+            "{{ledgerAgentId}}",
+            "--starting-value-usd",
+            "{{ledgerStartingValueUsd}}",
+            "--current-value-usd",
+            "{{ledgerCurrentValueUsd}}",
+            "--client-event-id",
+            "{{ledgerClientEventId}}",
+            "--tx-hash",
+            "{{ledgerTxHash}}",
+            "--intent-id",
+            "{{ledgerIntentId}}"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Calling the real local Agent Board Ledger service; the step fails if the service is not running.",
+            "Creating or reusing a local Workbench wallet artifact under work/ and registering a board with its public wallet metadata.",
+            "Signing the event and attachment requests with the board wallet before sending them to the Ledger HTTP API.",
+            "Writing a wallet observation, running cron reconciliation, then reading events, portfolio, and PnL back from the Ledger."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
+            "ledgerBoardId": "",
+            "ledgerAgentId": "ironclaw-workbench",
+            "ledgerStartingValueUsd": "100",
+            "ledgerCurrentValueUsd": "112",
+            "ledgerClientEventId": "",
+            "ledgerTxHash": "",
+            "ledgerIntentId": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerWalletFile",
+            "ledgerAgentId",
+            "ledgerStartingValueUsd",
+            "ledgerCurrentValueUsd"
+          ],
+          "setVars": {
+            "ledgerBoardId": "response.json.boardId",
+            "ledgerWalletAddress": "response.json.wallet.walletAddress",
+            "ledgerPublicKey": "response.json.wallet.publicKey",
+            "ledgerClientEventId": "response.json.clientEventId",
+            "ledgerTxHash": "response.json.txHash",
+            "ledgerIntentId": "response.json.intentId",
+            "ledgerEventId": "response.json.event.id",
+            "ledgerAttachmentId": "response.json.attachment.id",
+            "ledgerEventCount": "response.json.summary.eventCount",
+            "ledgerAttachmentCount": "response.json.summary.attachmentCount",
+            "ledgerPnlUsd": "response.json.summary.pnlUsd"
+          }
+        }
+      ]
     }
   ]
 }

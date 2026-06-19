@@ -6,6 +6,8 @@
     "generate": "bun run src/cli.ts generate",
     "inspect": "bun run src/cli.ts inspect",
     "read-public": "bun run src/cli.ts read-public",
+    "sign-request": "bun run src/cli.ts sign-request",
+    "verify-request": "bun run src/cli.ts verify-request",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
