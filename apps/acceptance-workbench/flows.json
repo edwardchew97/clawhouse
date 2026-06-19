@@ -378,6 +378,36 @@
       "purpose": "Verify the V0 ledger records wallet-signed agent events, append-only attachments, wallet observations, cron reconciliation, portfolio, and PnL through the real local HTTP service.",
       "steps": [
         {
+          "id": "ledger.neonMigrate",
+          "name": "Migrate Neon Schema",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "scripts/migrate-neon.ts"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Uses the editable ledgerDatabaseUrl input as an environment variable; the database URL is not placed in command-line arguments.",
+            "Creates or updates the Neon Postgres schema for boards, events, observations, accounting snapshots, read access checks, and audit events.",
+            "Returns a redacted connection string, table list, and small row-count health check."
+          ],
+          "inputs": {
+            "ledgerDatabaseUrl": ""
+          },
+          "setVars": {
+            "ledgerNeonProvider": "response.json.provider",
+            "ledgerNeonMissingTables": "response.json.missing"
+          }
+        },
+        {
           "id": "ledger.fullFlow",
           "name": "Run Signed Ledger Flow",
           "type": "script",
@@ -414,12 +444,15 @@
           ],
           "runningNotes": [
             "Calling the real local Agent Board Ledger service; the step fails if the service is not running.",
+            "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAdminToken.",
             "Creating or reusing a local Workbench wallet artifact under work/ and registering a board with its public wallet metadata.",
             "Signing the event and attachment requests with the board wallet before sending them to the Ledger HTTP API.",
-            "Writing a wallet observation, running cron reconciliation, then reading events, portfolio, and PnL back from the Ledger."
+            "Passing ledgerAdminToken through the Workbench script environment, not through command-line arguments.",
+            "Writing a service-authorized wallet observation, running service-authorized cron reconciliation, then reading events, portfolio, and PnL back from the Ledger."
           ],
           "inputs": {
             "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAdminToken": "local-ledger-admin-token",
             "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
             "ledgerBoardId": "",
             "ledgerAgentId": "ironclaw-workbench",
@@ -431,6 +464,7 @@
           },
           "fillDefaultsWhenEmpty": [
             "ledgerBaseUrl",
+            "ledgerAdminToken",
             "ledgerWalletFile",
             "ledgerAgentId",
             "ledgerStartingValueUsd",
@@ -448,6 +482,72 @@
             "ledgerEventCount": "response.json.summary.eventCount",
             "ledgerAttachmentCount": "response.json.summary.attachmentCount",
             "ledgerPnlUsd": "response.json.summary.pnlUsd"
+          }
+        },
+        {
+          "id": "ledger.edgeCases",
+          "name": "Run Ledger Edge Cases",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "scripts/workbench-edge-cases.ts",
+            "--base-url",
+            "{{ledgerBaseUrl}}",
+            "--key-file",
+            "{{ledgerEdgeWalletFile}}",
+            "--board-id",
+            "{{ledgerEdgeBoardId}}",
+            "--agent-id",
+            "{{ledgerAgentId}}",
+            "--starting-value-usd",
+            "{{ledgerStartingValueUsd}}",
+            "--current-value-usd",
+            "{{ledgerCurrentValueUsd}}"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Calling the real local Agent Board Ledger service; the step fails if the service is not running.",
+            "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAdminToken.",
+            "Using the editable ledgerAdminToken input through the script environment, not through command-line arguments.",
+            "Verifying unauthenticated observations and future observed_at values are rejected through HTTP.",
+            "Verifying holder-gated board reads reject missing read tokens and accept a read token only after the Ledger checks a NEAR key-market holder balance through RPC.",
+            "Starting a local mock NEAR RPC inside the script to exercise Ledger's real NEAR call_function paths without external credentials.",
+            "Verifying the NEAR FT watcher reads ft_metadata and ft_balance_of through RPC, writes price/balance evidence, and links the resulting PnL snapshot.",
+            "Writing price snapshots and balance changes through service-authorized API calls.",
+            "Verifying signed event creation, signed attachments, service-authorized observations, cron reconciliation, and PnL readback still work.",
+            "Verifying PnL links to the accepted price snapshot.",
+            "Running cron twice and failing if the second tick creates duplicate snapshots or advances freshness without new observations."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAdminToken": "local-ledger-admin-token",
+            "ledgerEdgeWalletFile": "work/acceptance-workbench/agent-board-ledger/edge-wallet.json",
+            "ledgerEdgeBoardId": "",
+            "ledgerAgentId": "ironclaw-workbench",
+            "ledgerStartingValueUsd": "100",
+            "ledgerCurrentValueUsd": "112"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerAdminToken",
+            "ledgerEdgeWalletFile",
+            "ledgerAgentId",
+            "ledgerStartingValueUsd",
+            "ledgerCurrentValueUsd"
+          ],
+          "setVars": {
+            "ledgerEdgeRejectionBoardId": "response.json.boards.rejectionBoardId",
+            "ledgerEdgeFlowBoardId": "response.json.boards.flowBoardId",
+            "ledgerEdgePassedChecks": "response.json.summary.passed",
+            "ledgerEdgeFailedChecks": "response.json.summary.failed"
           }
         }
       ]
