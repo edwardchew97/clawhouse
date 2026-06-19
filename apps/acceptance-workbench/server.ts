@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, normalize } from "node:path";
 
@@ -8,6 +9,10 @@ const appDir = import.meta.dir;
 const repoRoot = normalize(join(appDir, "../.."));
 const port = Number(Bun.argv.find((arg) => arg.startsWith("--port="))?.split("=")[1] ?? "4317");
 const flowsPath = join(appDir, "flows.json");
+const envPath = join(repoRoot, ".env");
+const encryptedPrefix = "enc:v1:";
+
+loadDotEnv(envPath);
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
@@ -30,6 +35,31 @@ function asObject(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
 }
 
+function loadDotEnv(path: string) {
+  if (!existsSync(path)) return;
+  const raw = readFileSync(path, "utf8");
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (!match) continue;
+    const [, key, rawValue] = match;
+    if (process.env[key] !== undefined) continue;
+    process.env[key] = unquoteEnvValue(rawValue);
+  }
+}
+
+function unquoteEnvValue(value: string) {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
 function interpolate(value: unknown, variables: JsonRecord): unknown {
   if (typeof value === "string") {
     return value.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => {
@@ -47,6 +77,53 @@ function interpolate(value: unknown, variables: JsonRecord): unknown {
 
 async function loadFlows() {
   return JSON.parse(await readFile(flowsPath, "utf8")) as JsonRecord;
+}
+
+function getEncryptionKey() {
+  const raw = process.env.ACCEPTANCE_WORKBENCH_ENCRYPTION_KEY;
+  if (!raw) {
+    throw new Error("Missing ACCEPTANCE_WORKBENCH_ENCRYPTION_KEY in .env");
+  }
+
+  const encoded = raw.startsWith("base64:") ? raw.slice("base64:".length) : raw;
+  const key = Buffer.from(encoded, "base64");
+  if (key.length !== 32) {
+    throw new Error("ACCEPTANCE_WORKBENCH_ENCRYPTION_KEY must be base64 for 32 bytes");
+  }
+  return key;
+}
+
+function encryptValue(value: string) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", getEncryptionKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${encryptedPrefix}${iv.toString("base64url")}.${tag.toString("base64url")}.${ciphertext.toString("base64url")}`;
+}
+
+function decryptValue(value: string) {
+  if (!value.startsWith(encryptedPrefix)) {
+    throw new Error("Encrypted value has an unsupported format");
+  }
+  const parts = value.slice(encryptedPrefix.length).split(".");
+  if (parts.length !== 3) {
+    throw new Error("Encrypted value is malformed");
+  }
+  const [ivPart, tagPart, ciphertextPart] = parts;
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    getEncryptionKey(),
+    Buffer.from(ivPart, "base64url")
+  );
+  decipher.setAuthTag(Buffer.from(tagPart, "base64url"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(ciphertextPart, "base64url")),
+    decipher.final()
+  ]).toString("utf8");
+}
+
+function hasEncryptionKey() {
+  return Boolean(process.env.ACCEPTANCE_WORKBENCH_ENCRYPTION_KEY);
 }
 
 function findScriptStep(flows: JsonRecord, stepId: string): JsonRecord | null {
@@ -231,7 +308,26 @@ Bun.serve({
         return text(await readFile(flowsPath, "utf8"), "application/json; charset=utf-8");
       }
       if (request.method === "GET" && url.pathname === "/health") {
-        return json({ ok: true, repoRoot, flowsPath });
+        return json({
+          ok: true,
+          repoRoot,
+          flowsPath,
+          encryptedEnvConfigured: hasEncryptionKey()
+        });
+      }
+      if (request.method === "POST" && url.pathname === "/crypto/encrypt") {
+        const payload = await readJson<JsonRecord>(request);
+        return json({
+          ok: true,
+          ciphertext: encryptValue(String(payload.value || ""))
+        });
+      }
+      if (request.method === "POST" && url.pathname === "/crypto/decrypt") {
+        const payload = await readJson<JsonRecord>(request);
+        return json({
+          ok: true,
+          value: decryptValue(String(payload.ciphertext || ""))
+        });
       }
       if (request.method === "POST" && url.pathname === "/run/http") {
         return json(await runHttp(await readJson<JsonRecord>(request)));
