@@ -62,6 +62,14 @@ The test: Every changed line should trace directly to the user's request.
 - Do not leave untracked draft files in the main checkout. Temporary artifacts belong under ignored paths such as `work/` or `artifacts/`; source/product artifacts must belong to a branch and PR.
 - Final reports for writing tasks must state the worktree path, branch name, PR link or reason no PR was made, and any remaining dirty/untracked files.
 
+## Acceptance Workbench Coverage
+
+- For every code-backed feature, bug fix, or behavior change, update `apps/acceptance-workbench/flows.json`, the Workbench UI, or the Workbench runner whenever the changed behavior can be verified through a real request, script, or readback flow.
+- Workbench coverage must be PM-verifiable: inputs stay editable, steps run only when JY clicks Send or Open Debug Thread, and outputs must come from the real local/API/contract path rather than simulated success data.
+- When a code change is already covered by an existing Workbench flow, final reports must name the existing flow/step used for verification.
+- When Workbench coverage is not added for a code change, final reports must explicitly state why, such as internal-only code, no PM-visible behavior, already-covered behavior, or unavailable external credentials/infrastructure.
+- Do not add Workbench flows for documentation-only changes unless JY explicitly asks for a docs acceptance path.
+
 ## Imported Claude Cowork project instructions
 
 ## ClawHouse Project Source Of Truth
