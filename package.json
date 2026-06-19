@@ -1,0 +1,9 @@
+{
+  "name": "clawhouse",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "workbench": "bun scripts/workbench.ts",
+    "workbench:once": "bun apps/acceptance-workbench/server.ts --port=4318"
+  }
+}

@@ -15,7 +15,16 @@ reproducible yet.
 ## Run
 
 ```sh
-bun apps/acceptance-workbench/server.ts
+bun run workbench
+```
+
+This pins the Workbench to port `4318` and restarts it if the server process
+exits. Stop it with `Ctrl-C`.
+
+For a one-shot server without restart behavior:
+
+```sh
+bun run workbench:once
 ```
 
 The local server reads the encryption key from the repo root `.env`:
@@ -27,7 +36,7 @@ ACCEPTANCE_WORKBENCH_ENCRYPTION_KEY=base64-encoded-32-byte-key
 Then open:
 
 ```txt
-http://127.0.0.1:4317
+http://127.0.0.1:4318
 ```
 
 ## Model
