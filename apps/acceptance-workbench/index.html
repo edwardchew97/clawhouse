@@ -555,8 +555,7 @@
     }
 
     .response-console-bar,
-    .result-section > summary,
-    .result-section-static {
+    .result-panel-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -576,19 +575,27 @@
     }
 
     .response-tab {
+      appearance: none;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: transparent;
       color: var(--default);
+      cursor: pointer;
+      font-family: inherit;
       font-size: 12px;
       font-weight: 560;
+      padding: 0 0 7px;
       white-space: nowrap;
     }
 
     .response-tab.active {
+      border-bottom-color: var(--strong);
       color: var(--strong);
       font-weight: 650;
     }
 
-    .response-tab.muted {
-      color: var(--subtle);
+    .response-tab:hover {
+      color: var(--strong);
     }
 
     .metric {
@@ -714,66 +721,43 @@
       overflow-wrap: anywhere;
     }
 
-    .result-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .result-kv {
-      display: grid;
-      gap: 3px;
-      min-width: 0;
-      width: min(210px, 100%);
-      padding: 7px 8px;
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      background: #fcfcfb;
-    }
-
-    .result-kv-label {
-      color: var(--subtle);
-      font-size: 12px;
-      font-weight: 560;
-    }
-
-    .result-kv-value {
-      color: var(--strong);
-      font-family: var(--mono);
-      font-size: 12px;
-      line-height: 1.45;
-      overflow-wrap: anywhere;
-    }
-
-    .result-section {
-      border-bottom: 1px solid var(--border);
+    .response-panel {
       background: #ffffff;
+    }
+
+    .response-panel[hidden] {
+      display: none;
+    }
+
+    .response-panel-block {
+      border-bottom: 1px solid var(--border);
       overflow: hidden;
     }
 
-    .result-section:last-child {
+    .response-panel-block:last-child {
       border-bottom: 0;
     }
 
-    .result-section > summary {
-      cursor: pointer;
+    .result-panel-head {
       color: var(--strong);
       font-size: 13px;
       font-weight: 620;
     }
 
-    .result-section:not([open]) > summary {
-      border-bottom: 0;
-    }
-
-    .result-section-meta {
+    .result-panel-meta {
       color: var(--subtle);
       font-family: var(--mono);
       font-size: 12px;
       font-weight: 520;
       white-space: nowrap;
+    }
+
+    .stream-empty {
+      display: grid;
+      min-height: 128px;
+      place-items: center;
+      color: var(--default);
+      font-size: 13px;
     }
 
     .result-code {
@@ -1111,6 +1095,7 @@
       activeFlow: 0,
       activeStep: 0,
       activeTab: persisted.activeTab || "params",
+      responseTab: persisted.responseTab || "body",
       envOpen: persisted.envOpen || false,
       filter: "",
       env: { ...defaultEnv, ...pruneObsoleteEnv(persisted.env || {}), testUserPrivateKey: "" },
@@ -1128,6 +1113,13 @@
       { id: "body", label: "Body / Args" },
       { id: "vars", label: "Vars" },
       { id: "preview", label: "Preview" }
+    ];
+
+    const responseTabDefs = [
+      { id: "body", label: "Body" },
+      { id: "runner", label: "Runner" },
+      { id: "streams", label: "Streams" },
+      { id: "full", label: "Full" }
     ];
 
     const $ = (id) => document.getElementById(id);
@@ -1150,6 +1142,7 @@
     function writePersistedState() {
       localStorage.setItem(storageKey, JSON.stringify({
         activeTab: state.activeTab,
+        responseTab: state.responseTab,
         envOpen: state.envOpen,
         env: persistableEnv(),
         encryptedEnv: state.encryptedEnv,
@@ -1761,12 +1754,12 @@
         ${result.status ? `<span class="pill">status ${result.status}</span>` : ""}
         ${result.exitCode !== undefined ? `<span class="pill">exit ${result.exitCode}</span>` : ""}
       `;
-      $("resultBox").innerHTML = renderReadableResult(result, startedAt);
+      $("resultBox").innerHTML = renderReadableResult(result, targetLabel);
       $("responseTarget").textContent = targetLabel;
       $("openDebugThread").disabled = !state.lastDebugPacket;
     }
 
-    function renderReadableResult(result, startedAt) {
+    function renderReadableResult(result, targetLabel) {
       const ok = Boolean(result.ok);
       const parsedJson = result.json ?? parseJsonText(result.stdout);
       const stdout = typeof result.stdout === "string" ? result.stdout : "";
@@ -1790,94 +1783,90 @@
         bodySource = "stdout";
       }
 
-      const rows = [
-        ["Started", startedAt],
-        ["Duration", result.durationMs !== undefined ? `${result.durationMs} ms` : ""],
-        ["HTTP status", result.status],
-        ["Exit code", result.exitCode]
-      ].filter(([, value]) => value !== undefined && value !== null && value !== "");
       const runnerMeta = Object.fromEntries([
+        ["target", targetLabel],
         ["command", formatCommand(result.command)],
         ["workingDir", result.cwd]
       ].filter(([, value]) => value !== undefined && value !== null && value !== ""));
-      const sections = [];
-
-      sections.push(resultSection("Body", bodyContent, true, bodyMeta));
-      if (Object.keys(runnerMeta).length) {
-        sections.push(resultSection("Runner metadata", JSON.stringify(runnerMeta, null, 2), false, "JSON"));
-      }
-      if (stdout.trim() && bodySource !== "stdout") {
-        sections.push(resultSection("Raw stdout", stdout, false, "Stream"));
-      }
-      if (stderr.trim()) {
-        sections.push(resultSection("Raw stderr", stderr, !ok, "Stream"));
-      }
-      if (text.trim() && bodySource !== "text" && text !== stdout) {
-        sections.push(resultSection("Raw response text", text, false, "Text"));
-      }
-      sections.push(resultSection("Full runner response", JSON.stringify(result, null, 2), false, "Runner JSON"));
-
-      const statusMetric = result.status
-        ? `Status ${result.status}`
-        : result.exitCode !== undefined
-          ? `Exit ${result.exitCode}`
-          : ok ? "OK" : "Failed";
-      const durationMetric = result.durationMs !== undefined ? `${result.durationMs} ms` : "";
+      const activeTab = normalizedResponseTab();
+      const streamBlocks = [
+        stdout.trim() ? resultPanelBlock("Raw stdout", stdout, "Stream") : "",
+        stderr.trim() ? resultPanelBlock("Raw stderr", stderr, "Stream") : "",
+        text.trim() && bodySource !== "text" && text !== stdout
+          ? resultPanelBlock("Raw response text", text, "Text")
+          : ""
+      ].filter(Boolean);
+      const bodyPanel = `
+        <div class="result-summary ${ok ? "ok" : "fail"}">
+          <div class="result-heading">
+            <div class="result-title">${ok ? "Step completed" : "Step failed"}</div>
+          </div>
+          <div class="result-message">${escapeHtml(resultMessage(result, parsedJson, ok))}</div>
+        </div>
+        ${resultPanelBlock("Body", bodyContent, bodyMeta)}
+      `;
+      const runnerPanel = Object.keys(runnerMeta).length
+        ? resultPanelBlock("Runner metadata", JSON.stringify(runnerMeta, null, 2), "JSON")
+        : `<div class="stream-empty">No runner metadata returned.</div>`;
+      const streamsPanel = streamBlocks.length
+        ? streamBlocks.join("")
+        : `<div class="stream-empty">No stdout, stderr, or raw response stream returned.</div>`;
+      const fullPanel = resultPanelBlock("Full runner response", JSON.stringify(result, null, 2), "Runner JSON");
 
       return `
         <div class="response-console ${ok ? "ok" : "fail"}">
           <div class="response-console-bar">
-            <div class="response-tabs">
-              <span class="response-tab active">Body</span>
-              <span class="response-tab muted">Runner</span>
-              <span class="response-tab muted">Streams</span>
-            </div>
+            ${renderResponseTabs(activeTab)}
             <div class="response-metrics">
-              <span class="metric ${ok ? "ok" : "fail"}">${escapeHtml(statusMetric)}</span>
-              ${durationMetric ? `<span class="metric">${escapeHtml(durationMetric)}</span>` : ""}
+              <span class="metric">${escapeHtml(bodyMeta)}</span>
               <span class="metric">${escapeHtml(byteSize(bodyContent))}</span>
             </div>
           </div>
-          <div class="result-summary ${ok ? "ok" : "fail"}">
-            <div class="result-heading">
-              <div class="result-title">${ok ? "Step completed" : "Step failed"}</div>
-              <span class="pill ${ok ? "ok" : "fail"}">${ok ? "success" : "failed"}</span>
-            </div>
-            <div class="result-message">${escapeHtml(resultMessage(result, parsedJson, ok))}</div>
-          </div>
-          ${rows.length ? `<div class="result-grid">${rows.map(resultRow).join("")}</div>` : ""}
-          ${sections.join("")}
+          ${responsePanel("body", activeTab, bodyPanel)}
+          ${responsePanel("runner", activeTab, runnerPanel)}
+          ${responsePanel("streams", activeTab, streamsPanel)}
+          ${responsePanel("full", activeTab, fullPanel)}
         </div>
       `;
     }
 
-    function resultRow([label, value]) {
+    function normalizedResponseTab() {
+      if (!responseTabDefs.some((tab) => tab.id === state.responseTab)) {
+        state.responseTab = "body";
+      }
+      return state.responseTab;
+    }
+
+    function renderResponseTabs(activeTab) {
       return `
-        <div class="result-kv">
-          <div class="result-kv-label">${escapeHtml(label)}</div>
-          <div class="result-kv-value">${escapeHtml(String(value))}</div>
+        <div class="response-tabs" role="tablist" aria-label="Response panels">
+          ${responseTabDefs.map((tab) => `
+            <button
+              type="button"
+              class="response-tab ${tab.id === activeTab ? "active" : ""}"
+              data-response-tab="${escapeAttr(tab.id)}"
+              role="tab"
+              aria-selected="${tab.id === activeTab ? "true" : "false"}"
+            >${escapeHtml(tab.label)}</button>
+          `).join("")}
         </div>
       `;
     }
 
-    function resultSection(title, content, open, meta) {
+    function responsePanel(id, activeTab, content) {
       return `
-        <details class="result-section" ${open ? "open" : ""}>
-          <summary>
-            <span>${escapeHtml(title)}</span>
-            <span class="result-section-meta">${escapeHtml(meta || "Raw")} · ${escapeHtml(byteSize(content))}</span>
-          </summary>
-          ${resultCodeBlock(content)}
-        </details>
+        <div class="response-panel" data-response-panel="${escapeAttr(id)}" role="tabpanel" ${id === activeTab ? "" : "hidden"}>
+          ${content}
+        </div>
       `;
     }
 
-    function resultStaticSection(title, content, meta) {
+    function resultPanelBlock(title, content, meta) {
       return `
-        <div class="result-section">
-          <div class="result-section-static">
+        <div class="response-panel-block">
+          <div class="result-panel-head">
             <span>${escapeHtml(title)}</span>
-            <span class="result-section-meta">${escapeHtml(meta || "Live")}</span>
+            <span class="result-panel-meta">${escapeHtml(meta || "Raw")} · ${escapeHtml(byteSize(content))}</span>
           </div>
           ${resultCodeBlock(content)}
         </div>
@@ -1897,7 +1886,7 @@
       `;
     }
 
-    function renderRunningResult(step, startedAt, targetLabel) {
+    function renderRunningResult(step, targetLabel) {
       const notes = Array.isArray(step.runningNotes) && step.runningNotes.length
         ? step.runningNotes
         : defaultRunningNotes(step);
@@ -1905,30 +1894,38 @@
         targetLabel,
         ...notes.map((note) => `- ${note}`)
       ].join("\n");
+      const activeTab = normalizedResponseTab();
+      const runnerInfo = {
+        target: targetLabel,
+        runnerUrl: runnerUrl(step),
+        stepId: step.id,
+        type: step.type
+      };
+      const bodyPanel = `
+        <div class="running-strip">
+          <div class="running-line">
+            <span class="running-title">Running real action</span>
+            <span class="running-target">${escapeHtml(targetLabel)}</span>
+          </div>
+          <div class="running-steps">
+            ${notes.map((note) => `<div class="running-step">${escapeHtml(note)}</div>`).join("")}
+          </div>
+        </div>
+        ${resultPanelBlock("Runner log", logLines, "waiting")}
+      `;
       return `
         <div class="response-console running">
           <div class="response-console-bar">
-            <div class="response-tabs">
-              <span class="response-tab active">Body</span>
-              <span class="response-tab muted">Runner</span>
-              <span class="response-tab muted">Streams</span>
-            </div>
+            ${renderResponseTabs(activeTab)}
             <div class="response-metrics">
               <span class="spinner" aria-hidden="true"></span>
               <span class="metric warn">Sending</span>
-              <span class="metric">started ${escapeHtml(startedAt)}</span>
             </div>
           </div>
-          <div class="running-strip">
-            <div class="running-line">
-              <span class="running-title">Running real action</span>
-              <span class="running-target">${escapeHtml(targetLabel)}</span>
-            </div>
-            <div class="running-steps">
-              ${notes.map((note) => `<div class="running-step">${escapeHtml(note)}</div>`).join("")}
-            </div>
-          </div>
-          ${resultStaticSection("Runner log", logLines, "waiting")}
+          ${responsePanel("body", activeTab, bodyPanel)}
+          ${responsePanel("runner", activeTab, resultPanelBlock("Runner metadata", JSON.stringify(runnerInfo, null, 2), "JSON"))}
+          ${responsePanel("streams", activeTab, `<div class="stream-empty">Streams will appear after the runner returns.</div>`)}
+          ${responsePanel("full", activeTab, `<div class="stream-empty">Full runner response will appear after completion.</div>`)}
         </div>
       `;
     }
@@ -2009,8 +2006,9 @@
           ? { stepId: step.id, env: state.env, inputs: currentInputs(), vars: state.vars }
           : preview;
 
+        state.responseTab = "body";
         $("resultMeta").innerHTML = `<span class="pill warn">running</span><span class="pill">started ${startedAt}</span>`;
-        $("resultBox").innerHTML = renderRunningResult(step, startedAt, targetLabel);
+        $("resultBox").innerHTML = renderRunningResult(step, targetLabel);
         $("responseTarget").textContent = targetLabel;
 
         const response = await fetch(target, {
@@ -2052,6 +2050,18 @@
       if (!event.metaKey || event.key !== "Enter" || $("fireStep").disabled) return;
       event.preventDefault();
       fireStep();
+    }
+
+    function applyResponseTabState() {
+      const activeTab = normalizedResponseTab();
+      $("resultBox").querySelectorAll("[data-response-tab]").forEach((button) => {
+        const isActive = button.dataset.responseTab === activeTab;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+      });
+      $("resultBox").querySelectorAll("[data-response-panel]").forEach((panel) => {
+        panel.hidden = panel.dataset.responsePanel !== activeTab;
+      });
     }
 
     function buildDebugPacket(flow, step, startedAt, targetLabel, payload, result) {
@@ -2186,6 +2196,13 @@
 
     $("fireStep").addEventListener("click", fireStep);
     $("openDebugThread").addEventListener("click", openDebugThread);
+    $("resultBox").addEventListener("click", (event) => {
+      const button = event.target.closest?.("[data-response-tab]");
+      if (!button) return;
+      state.responseTab = button.dataset.responseTab || "body";
+      applyResponseTabState();
+      persist();
+    });
     document.addEventListener("keydown", handleSendShortcut);
 
     boot().catch((error) => {
