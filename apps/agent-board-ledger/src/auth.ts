@@ -1,9 +1,10 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { PublicKey } from "@near-js/crypto";
 
 export const AUTH_DOMAIN = "clawhouse.agent-board-ledger.v0";
 export const AUTH_VERSION = 1;
 export const AUTH_FRESHNESS_MS = 5 * 60 * 1000;
+export const ADMIN_TOKEN_ENV = "AGENT_BOARD_LEDGER_ADMIN_TOKEN";
 
 export type CanonicalAuthPayload = {
   domain: typeof AUTH_DOMAIN;
@@ -82,6 +83,32 @@ export function timestampIsFresh(timestamp: string, nowMs = Date.now()) {
   return parsed <= nowMs + 60_000 && nowMs - parsed <= AUTH_FRESHNESS_MS;
 }
 
+export function assertServiceBearer(headers: Headers, configuredToken: string | null | undefined) {
+  const expected = configuredToken?.trim();
+  if (!expected) {
+    throw new ServiceAuthError(`${ADMIN_TOKEN_ENV} is not configured`, 500);
+  }
+
+  const authorization = headers.get("authorization")?.trim();
+  if (!authorization) {
+    throw new ServiceAuthError("Missing service authorization");
+  }
+  if (!authorization.toLowerCase().startsWith("bearer ")) {
+    throw new ServiceAuthError("Invalid service authorization scheme");
+  }
+
+  const token = authorization.slice("bearer ".length).trim();
+  if (!tokensMatch(token, expected)) {
+    throw new ServiceAuthError("Invalid service authorization");
+  }
+}
+
+function tokensMatch(actual: string, expected: string) {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
 function requiredHeader(headers: Headers, name: string) {
   const value = headers.get(name);
   if (!value || value.trim() === "") {
@@ -92,4 +119,13 @@ function requiredHeader(headers: Headers, name: string) {
 
 export class AuthError extends Error {
   readonly status = 401;
+}
+
+export class ServiceAuthError extends Error {
+  constructor(
+    message: string,
+    readonly status = 401,
+  ) {
+    super(message);
+  }
 }

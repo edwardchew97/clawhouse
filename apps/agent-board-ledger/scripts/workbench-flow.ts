@@ -12,6 +12,7 @@ import {
 type Options = {
   baseUrl: string;
   keyFile: string;
+  serviceToken?: string;
   boardId?: string;
   agentId: string;
   startingValueUsd: number;
@@ -34,7 +35,7 @@ async function main() {
   const txHash = options.txHash || `near-tx-${runId}`;
   const intentId = options.intentId || `near-intent-${runId}`;
 
-  const board = await postJson(options.baseUrl, "/boards", {
+  const board = await servicePostJson(options, "/boards", {
     board_id: boardId,
     agent_id: options.agentId,
     wallet_address: wallet.walletAddress,
@@ -82,7 +83,7 @@ async function main() {
     },
   );
 
-  const observation = await postJson(options.baseUrl, `/boards/${boardId}/observations`, {
+  const observation = await servicePostJson(options, `/boards/${boardId}/observations`, {
     wallet_address: wallet.walletAddress,
     current_value_usd: options.currentValueUsd,
     client_event_id: clientEventId,
@@ -98,7 +99,7 @@ async function main() {
     },
   });
 
-  const cron = await postJson(options.baseUrl, "/cron/tick", {});
+  const cron = await servicePostJson(options, "/cron/tick", {});
   const events = await getJson(options.baseUrl, `/boards/${boardId}/events`);
   const portfolio = await getJson(options.baseUrl, `/boards/${boardId}/portfolio`);
   const pnl = await getJson(options.baseUrl, `/boards/${boardId}/pnl`);
@@ -167,10 +168,14 @@ async function signedPostJson(
   });
 }
 
-async function postJson(baseUrl: string, path: string, body: JsonRecord) {
-  return await requestJson(baseUrl, path, {
+async function servicePostJson(options: Options, path: string, body: JsonRecord) {
+  if (!options.serviceToken) {
+    throw new Error("Missing ledgerAdminToken input or AGENT_BOARD_LEDGER_ADMIN_TOKEN for service-authorized ledger writes");
+  }
+
+  return await requestJson(options.baseUrl, path, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: serviceHeaders(options.serviceToken),
     body: JSON.stringify(body),
   });
 }
@@ -213,6 +218,9 @@ function parseArgs(args: string[]): Options {
   return {
     baseUrl: values["base-url"] || "http://127.0.0.1:4321",
     keyFile: resolvePath(values["key-file"] || "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json"),
+    serviceToken: optionalString(values["admin-token"])
+      ?? optionalString(process.env.AGENT_BOARD_LEDGER_ADMIN_TOKEN)
+      ?? optionalString(process.env.ledgerAdminToken),
     boardId: optionalString(values["board-id"]),
     agentId: values["agent-id"] || "ironclaw-workbench",
     startingValueUsd: numberOption(values["starting-value-usd"], 100, "starting-value-usd"),
@@ -237,6 +245,13 @@ function numberOption(value: string | undefined, fallback: number, name: string)
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) throw new Error(`Invalid --${name}: ${value}`);
   return parsed;
+}
+
+function serviceHeaders(serviceToken: string) {
+  return {
+    "content-type": "application/json",
+    authorization: `Bearer ${serviceToken}`,
+  };
 }
 
 function ensureTrailingSlash(value: string) {
