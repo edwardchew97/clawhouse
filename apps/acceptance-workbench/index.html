@@ -552,6 +552,30 @@
       background: #fbefed;
     }
 
+    .toast {
+      position: fixed;
+      top: 66px;
+      right: 18px;
+      z-index: 20;
+      padding: 8px 11px;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: #ffffff;
+      color: var(--strong);
+      box-shadow: 0 10px 30px rgba(41, 41, 41, 0.12);
+      font-size: 12px;
+      font-weight: 560;
+      opacity: 0;
+      transform: translateY(-6px);
+      pointer-events: none;
+      transition: opacity 140ms ease, transform 140ms ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
     .pill.warn {
       color: var(--amber);
       background: #faf3e5;
@@ -753,6 +777,7 @@
       </section>
     </main>
   </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script>
     const storageKey = "clawhouse.acceptance.workbench.v2";
@@ -1216,6 +1241,18 @@
       return parsed;
     }
 
+    let toastTimer = null;
+
+    function showToast(message) {
+      const toast = $("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove("show");
+      }, 1600);
+    }
+
     function applySetVars(step, result) {
       const mappings = step.setVars || {};
       const source = {
@@ -1320,7 +1357,9 @@
     });
 
     $("saveEnv").addEventListener("click", () => {
-      syncEditors();
+      if (syncEditors()) {
+        showToast("Environment saved");
+      }
     });
 
     $("clearVars").addEventListener("click", () => {
