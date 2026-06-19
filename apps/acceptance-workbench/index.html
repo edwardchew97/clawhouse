@@ -464,12 +464,19 @@
 
     .tab-body {
       padding: 14px;
-      min-height: 230px;
     }
 
     .fields {
       display: grid;
       gap: 9px;
+    }
+
+    .params-fields {
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    }
+
+    .params-fields .kv-row {
+      grid-template-columns: minmax(120px, 170px) minmax(0, 1fr);
     }
 
     .kv-row {
@@ -835,6 +842,14 @@
       }
 
       .kv-row {
+        grid-template-columns: 1fr;
+      }
+
+      .params-fields {
+        grid-template-columns: 1fr;
+      }
+
+      .params-fields .kv-row {
         grid-template-columns: 1fr;
       }
     }
@@ -1308,7 +1323,7 @@
       const inputs = currentInputs();
       const keys = Object.keys(inputs);
       $("tabBody").innerHTML = keys.length ? `
-        <div class="fields">
+        <div class="fields params-fields">
           ${keys.map((key) => `
             <div class="kv-row">
               <input class="input" value="${escapeAttr(key)}" readonly />
