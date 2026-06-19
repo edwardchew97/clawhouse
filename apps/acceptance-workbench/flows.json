@@ -392,6 +392,7 @@
           "name": "GET /health",
           "description": "Calls the local Agent Board Ledger health endpoint. Use this first to confirm the backend is reachable and can report its database connection state.",
           "type": "http",
+          "access": "public",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/health",
           "runningNotes": [
@@ -413,6 +414,7 @@
           "name": "POST /boards",
           "description": "Creates or registers an agent board through the Ledger HTTP API using the admin authorization header. The returned board id is stored for later observation, readback, and PnL steps.",
           "type": "http",
+          "access": "protected",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards",
           "headers": {
@@ -465,6 +467,7 @@
           "name": "GET /boards/:id",
           "description": "Reads a single board by id through the Ledger API. Public boards can be read directly; holder-gated boards require a valid read token in the headers.",
           "type": "http",
+          "access": "public",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}",
           "headers": {
@@ -492,6 +495,7 @@
           "name": "POST /boards/:id/observations",
           "description": "Writes a service-authorized wallet observation for a board. This is the input evidence cron uses to build events, portfolio snapshots, and PnL calculations.",
           "type": "http",
+          "access": "protected",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/observations",
           "headers": {
@@ -559,6 +563,7 @@
           "name": "POST /boards/:id/prices",
           "description": "Writes an explicit asset price snapshot for the board. Use it before cron when a PnL readback should be tied to visible pricing evidence.",
           "type": "http",
+          "access": "protected",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/prices",
           "headers": {
@@ -602,6 +607,7 @@
           "name": "POST /boards/:id/balance-changes",
           "description": "Writes service-authorized balance-change evidence for an asset. It can link the accounting entry back to an observation, tx hash, or NEAR Intent id.",
           "type": "http",
+          "access": "protected",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/balance-changes",
           "headers": {
@@ -658,6 +664,7 @@
           "name": "POST /cron/tick",
           "description": "Runs the Ledger reconciliation endpoint. It converts observations and accounting evidence into events, holding snapshots, and PnL snapshots.",
           "type": "http",
+          "access": "protected",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/cron/tick",
           "headers": {
@@ -686,6 +693,7 @@
           "name": "GET /boards/:id/events",
           "description": "Reads the board event timeline through the Ledger API. Use this after observations, signed events, or cron to confirm the timeline that users would inspect.",
           "type": "http",
+          "access": "public",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events",
           "headers": {
@@ -713,6 +721,7 @@
           "name": "GET /boards/:id/portfolio",
           "description": "Reads the latest portfolio snapshot for a board. This verifies the public or token-gated portfolio readback produced by cron reconciliation.",
           "type": "http",
+          "access": "public",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/portfolio",
           "headers": {
@@ -739,6 +748,7 @@
           "name": "GET /boards/:id/pnl",
           "description": "Reads the latest PnL snapshot for a board. Use it to verify current PnL, total PnL percentage, and the snapshot created from prior evidence.",
           "type": "http",
+          "access": "public",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/pnl",
           "headers": {
@@ -766,6 +776,7 @@
           "name": "GET /boards/:id/balance-changes",
           "description": "Reads stored balance-change evidence for the board. This lets developers verify that wallet accounting entries were persisted and can be audited.",
           "type": "http",
+          "access": "public",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/balance-changes",
           "headers": {
@@ -791,6 +802,7 @@
           "name": "GET /boards/:id/prices",
           "description": "Reads stored price snapshots for the board. This lets developers confirm the exact pricing evidence available for PnL calculations.",
           "type": "http",
+          "access": "public",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/prices",
           "headers": {
@@ -816,6 +828,7 @@
           "name": "POST /boards/:id/read-access/checks",
           "description": "Creates a service-authorized read-access check and optional read token for a requester wallet. Use this before testing holder-gated board readback.",
           "type": "http",
+          "access": "protected",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/read-access/checks",
           "headers": {
@@ -862,6 +875,7 @@
           "name": "POST /boards/:id/events",
           "description": "Exposes the raw wallet-signed event endpoint. Developers must provide matching signature headers for the exact request body, or use the signed script flow to generate them.",
           "type": "http",
+          "access": "protected",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events",
           "headers": {
@@ -930,6 +944,7 @@
           "name": "POST /boards/:id/events/:eventId/attachments",
           "description": "Exposes the raw wallet-signed event attachment endpoint. Developers must provide matching signature headers for the exact request body, or use the signed script flow to generate them.",
           "type": "http",
+          "access": "protected",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events/{{ledgerEventId}}/attachments",
           "headers": {
@@ -980,6 +995,7 @@
           "name": "Migrate Neon Schema",
           "description": "Runs the Ledger Neon migration script with the database URL passed through the script environment. It creates or updates the tables required by board, event, accounting, read-access, and audit flows.",
           "type": "script",
+          "access": "protected",
           "command": "bun",
           "args": [
             "scripts/migrate-neon.ts"
@@ -1011,6 +1027,7 @@
           "name": "Run Signed Ledger Flow",
           "description": "Runs a complete script-backed Ledger acceptance flow against the local service: wallet setup, board registration, signed event and attachment writes, observation, cron, event readback, portfolio, and PnL.",
           "type": "script",
+          "access": "protected",
           "command": "bun",
           "args": [
             "scripts/workbench-flow.ts",
@@ -1089,6 +1106,7 @@
           "name": "Run Ledger Edge Cases",
           "description": "Runs the script-backed Ledger edge-case suite against the local service. It verifies rejection cases, holder-gated readback, mocked NEAR RPC paths, FT evidence, signed writes, cron idempotency, and PnL linkage.",
           "type": "script",
+          "access": "protected",
           "command": "bun",
           "args": [
             "scripts/workbench-edge-cases.ts",
