@@ -1464,28 +1464,37 @@
       return inputKeysFrom(step, templateVars(step.headers || {}));
     }
 
+    function targetInputKeys(step) {
+      const inputs = currentInputs(step);
+      const keys = new Set();
+      if (step.type === "http") {
+        templateVars(requestTemplate(step)).forEach((key) => keys.add(key));
+      }
+      if (step.type === "near-view") {
+        templateVars(step.contractId || "").forEach((key) => keys.add(key));
+        templateVars(step.methodName || "").forEach((key) => keys.add(key));
+      }
+      if (step.type === "script") {
+        templateVars(step.command || "").forEach((key) => keys.add(key));
+        templateVars(step.cwd || "").forEach((key) => keys.add(key));
+      }
+      return Object.keys(inputs).filter((key) => keys.has(key));
+    }
+
     function bodyInputKeys(step) {
       if (step.type === "http") return inputKeysFrom(step, templateVars(step.body));
       if (step.type === "near-view") return inputKeysFrom(step, templateVars(step.args || {}));
-      if (step.type === "script") return inputKeysFrom(step, templateVars(step.args || []));
+      if (step.type === "script") {
+        const inputs = currentInputs(step);
+        const targetVars = new Set(targetInputKeys(step));
+        return Object.keys(inputs).filter((key) => !targetVars.has(key));
+      }
       return [];
     }
 
     function paramsInputKeys(step) {
       const inputs = currentInputs(step);
-      const targetVars = new Set();
-      if (step.type === "http") {
-        templateVars(requestTemplate(step)).forEach((key) => targetVars.add(key));
-      }
-      if (step.type === "near-view") {
-        templateVars(step.contractId || "").forEach((key) => targetVars.add(key));
-        templateVars(step.methodName || "").forEach((key) => targetVars.add(key));
-      }
-      if (step.type === "script") {
-        templateVars(step.command || "").forEach((key) => targetVars.add(key));
-        templateVars(step.cwd || "").forEach((key) => targetVars.add(key));
-      }
-
+      const targetVars = new Set(targetInputKeys(step));
       const headerVars = new Set(headerInputKeys(step));
       const bodyVars = new Set(bodyInputKeys(step));
       return Object.keys(inputs).filter((key) => {
