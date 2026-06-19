@@ -1433,6 +1433,67 @@
       return String(value ?? "");
     }
 
+    function templateVars(value) {
+      const keys = new Set();
+      const visit = (item) => {
+        if (typeof item === "string") {
+          for (const match of item.matchAll(/\{\{([^}]+)\}\}/g)) {
+            const key = match[1]?.trim();
+            if (key) keys.add(key);
+          }
+          return;
+        }
+        if (Array.isArray(item)) {
+          item.forEach(visit);
+          return;
+        }
+        if (item && typeof item === "object") {
+          Object.values(item).forEach(visit);
+        }
+      };
+      visit(value);
+      return keys;
+    }
+
+    function inputKeysFrom(step, keys) {
+      const inputs = currentInputs(step);
+      return Object.keys(inputs).filter((key) => keys.has(key));
+    }
+
+    function headerInputKeys(step) {
+      return inputKeysFrom(step, templateVars(step.headers || {}));
+    }
+
+    function bodyInputKeys(step) {
+      if (step.type === "http") return inputKeysFrom(step, templateVars(step.body));
+      if (step.type === "near-view") return inputKeysFrom(step, templateVars(step.args || {}));
+      if (step.type === "script") return inputKeysFrom(step, templateVars(step.args || []));
+      return [];
+    }
+
+    function paramsInputKeys(step) {
+      const inputs = currentInputs(step);
+      const targetVars = new Set();
+      if (step.type === "http") {
+        templateVars(requestTemplate(step)).forEach((key) => targetVars.add(key));
+      }
+      if (step.type === "near-view") {
+        templateVars(step.contractId || "").forEach((key) => targetVars.add(key));
+        templateVars(step.methodName || "").forEach((key) => targetVars.add(key));
+      }
+      if (step.type === "script") {
+        templateVars(step.command || "").forEach((key) => targetVars.add(key));
+        templateVars(step.cwd || "").forEach((key) => targetVars.add(key));
+      }
+
+      const headerVars = new Set(headerInputKeys(step));
+      const bodyVars = new Set(bodyInputKeys(step));
+      return Object.keys(inputs).filter((key) => {
+        if (targetVars.has(key)) return true;
+        return !headerVars.has(key) && !bodyVars.has(key);
+      });
+    }
+
     function interpolate(value, vars) {
       if (typeof value === "string") {
         return value.replace(/\{\{([^}]+)\}\}/g, (_, key) => {
@@ -1737,10 +1798,9 @@
       if (state.activeTab === "preview") renderPreview(step);
     }
 
-    function renderParams(step) {
-      const inputs = currentInputs();
-      const keys = Object.keys(inputs);
-      $("tabBody").innerHTML = keys.length ? `
+    function renderInputFields(step, keys, emptyText) {
+      const inputs = currentInputs(step);
+      return keys.length ? `
         <div class="fields params-fields">
           ${keys.map((key) => `
             <div class="kv-row">
@@ -1749,11 +1809,15 @@
             </div>
           `).join("")}
         </div>
-      ` : `<div class="empty">This step has no request inputs.</div>`;
+      ` : `<div class="empty">${escapeHtml(emptyText)}</div>`;
+    }
+
+    function bindInputFields(step, onInput = () => {}) {
       document.querySelectorAll("[data-input]").forEach((input) => {
         input.addEventListener("input", () => {
-          currentInputs()[input.dataset.input] = input.value;
+          currentInputs(step)[input.dataset.input] = input.value;
           renderRequest();
+          onInput();
           if (state.activeTab === "preview") renderPreview(step);
           persist();
           queueAutoFill();
@@ -1761,27 +1825,63 @@
       });
     }
 
+    function renderParams(step) {
+      $("tabBody").innerHTML = renderInputFields(
+        step,
+        paramsInputKeys(step),
+        "No URL/path or unclassified inputs for this step."
+      );
+      bindInputFields(step);
+    }
+
     function renderHeaders(step) {
-      const headers = step.type === "http" ? interpolate(step.headers || {}, allVars()) : {};
-      $("tabBody").innerHTML = Object.keys(headers).length
-        ? `<pre class="light-code">${escapeHtml(JSON.stringify(headers, null, 2))}</pre>`
-        : `<div class="empty">No headers for this step.</div>`;
+      if (step.type !== "http") {
+        $("tabBody").innerHTML = `<div class="empty">No headers for this step.</div>`;
+        return;
+      }
+      const keys = headerInputKeys(step);
+      const headers = interpolate(step.headers || {}, allVars(step));
+      const preview = Object.keys(headers).length
+        ? `<pre id="headersPreview" class="light-code">${escapeHtml(JSON.stringify(headers, null, 2))}</pre>`
+        : "";
+      $("tabBody").innerHTML = `
+        ${renderInputFields(step, keys, "No editable header inputs for this step.")}
+        ${preview}
+      `;
+      bindInputFields(step, () => {
+        const previewElement = document.getElementById("headersPreview");
+        if (previewElement) previewElement.textContent = JSON.stringify(interpolate(step.headers || {}, allVars(step)), null, 2);
+      });
+    }
+
+    function bodyPayload(step) {
+      if (step.type === "http") return interpolate(step.body, allVars(step));
+      if (step.type === "near-view") return interpolate(step.args || {}, allVars(step));
+      if (step.type === "script") {
+        return {
+          command: step.command,
+          args: interpolate(step.args || [], allVars(step)),
+          cwd: interpolate(step.cwd, allVars(step))
+        };
+      }
+      return undefined;
     }
 
     function renderBody(step) {
-      let payload;
-      if (step.type === "http") payload = interpolate(step.body, allVars());
-      if (step.type === "near-view") payload = interpolate(step.args || {}, allVars());
-      if (step.type === "script") {
-        payload = {
-          command: step.command,
-          args: interpolate(step.args || [], allVars()),
-          cwd: interpolate(step.cwd, allVars())
-        };
-      }
-      $("tabBody").innerHTML = payload === undefined
-        ? `<div class="empty">No body for this step.</div>`
-        : `<pre class="light-code">${escapeHtml(JSON.stringify(payload, null, 2))}</pre>`;
+      const keys = bodyInputKeys(step);
+      const payload = bodyPayload(step);
+      const preview = payload === undefined
+        ? ""
+        : `<pre id="bodyPreview" class="light-code">${escapeHtml(JSON.stringify(payload, null, 2))}</pre>`;
+      $("tabBody").innerHTML = `
+        ${renderInputFields(step, keys, "No editable body or argument inputs for this step.")}
+        ${preview}
+      `;
+      bindInputFields(step, () => {
+        const previewElement = document.getElementById("bodyPreview");
+        const payload = bodyPayload(step);
+        if (previewElement && payload !== undefined) previewElement.textContent = JSON.stringify(payload, null, 2);
+      });
     }
 
     function renderVarsTab(step) {
