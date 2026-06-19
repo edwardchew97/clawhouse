@@ -1043,7 +1043,7 @@
               <span id="responseTarget" class="tab-meta">No request sent.</span>
             </div>
             <div class="pill-row">
-              <button id="openDebugThread" class="mini-button" disabled>Open Debug Thread</button>
+              <button id="copyDebugContext" class="mini-button" disabled>Copy Debug Context</button>
               <div id="resultMeta" class="pill-row"></div>
             </div>
           </div>
@@ -1704,6 +1704,7 @@
         queueAutoFill();
         return true;
       } catch (error) {
+        state.lastDebugPacket = null;
         renderResult({ ok: false, error: error.message }, new Date().toLocaleTimeString(), "Invalid JSON");
         return false;
       }
@@ -1756,7 +1757,7 @@
       `;
       $("resultBox").innerHTML = renderReadableResult(result, targetLabel);
       $("responseTarget").textContent = targetLabel;
-      $("openDebugThread").disabled = !state.lastDebugPacket;
+      $("copyDebugContext").disabled = !state.lastDebugPacket;
     }
 
     function renderReadableResult(result, targetLabel) {
@@ -1997,6 +1998,8 @@
       let payload = null;
 
       $("fireStep").disabled = true;
+      state.lastDebugPacket = null;
+      $("copyDebugContext").disabled = true;
 
       try {
         await ensureAutoFillForStep(step);
@@ -2078,6 +2081,13 @@
           url: runnerUrl(step)
         },
         target: targetLabel,
+        request: {
+          method: methodLabel(step),
+          template: requestTemplate(step),
+          resolvedTarget: resolvedTarget(step),
+          inputs: sanitizeSecrets(currentInputs()),
+          environment: sanitizeSecrets(state.env)
+        },
         requestPayload: sanitizeSecrets(payload),
         response: sanitizeSecrets(result),
         runtimeVars: sanitizeSecrets(state.vars),
@@ -2100,28 +2110,52 @@
       return value;
     }
 
-    async function openDebugThread() {
+    function buildDebugClipboardText(packet) {
+      const safePacket = sanitizeSecrets(packet);
+      return [
+        "ClawHouse Acceptance Workbench debug context.",
+        "",
+        "I manually pressed Send in the local Workbench. Debug the concrete failure or unexpected output from this packet. Start with the most likely cause and the next reproducible check. Do not assume the flow works unless it can be reproduced from this context.",
+        "",
+        "Debug packet:",
+        "```json",
+        JSON.stringify(safePacket, null, 2),
+        "```"
+      ].join("\n");
+    }
+
+    async function copyTextToClipboard(text) {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand("copy");
+      textarea.remove();
+      if (!copied) throw new Error("Clipboard API unavailable");
+    }
+
+    async function copyDebugContext() {
       if (!state.lastDebugPacket) return;
-      const button = $("openDebugThread");
+      const button = $("copyDebugContext");
       const original = button.textContent;
       button.disabled = true;
-      button.textContent = "Opening...";
+      button.textContent = "Copying...";
       try {
-        const response = await fetch("/codex/debug-thread", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ packet: state.lastDebugPacket })
-        });
-        const result = await response.json();
-        if (!response.ok || !result.ok) {
-          throw new Error(result.error || "Unable to create Codex thread");
-        }
-        button.textContent = "Opened";
-        showToast(`Debug thread created: ${String(result.threadId).slice(0, 8)}`);
+        await copyTextToClipboard(buildDebugClipboardText(state.lastDebugPacket));
+        button.textContent = "Copied";
+        showToast("Debug context copied");
       } catch (error) {
         button.textContent = original;
         button.disabled = !state.lastDebugPacket;
-        showToast(`Debug thread failed: ${error.message}`);
+        const message = error instanceof Error ? error.message : String(error);
+        showToast(`Copy failed: ${message}`);
         return;
       }
       setTimeout(() => {
@@ -2195,7 +2229,7 @@
     });
 
     $("fireStep").addEventListener("click", fireStep);
-    $("openDebugThread").addEventListener("click", openDebugThread);
+    $("copyDebugContext").addEventListener("click", copyDebugContext);
     $("resultBox").addEventListener("click", (event) => {
       const button = event.target.closest?.("[data-response-tab]");
       if (!button) return;
