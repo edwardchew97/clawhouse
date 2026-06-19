@@ -1622,6 +1622,12 @@
       }
     }
 
+    function handleSendShortcut(event) {
+      if (!event.metaKey || event.key !== "Enter" || $("fireStep").disabled) return;
+      event.preventDefault();
+      fireStep();
+    }
+
     function buildDebugPacket(flow, step, startedAt, targetLabel, payload, result) {
       return {
         project: "ClawHouse",
@@ -1752,6 +1758,7 @@
 
     $("fireStep").addEventListener("click", fireStep);
     $("openDebugThread").addEventListener("click", openDebugThread);
+    document.addEventListener("keydown", handleSendShortcut);
 
     boot().catch((error) => {
       $("resultBox").textContent = error.message;
