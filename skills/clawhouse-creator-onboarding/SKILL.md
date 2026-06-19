@@ -80,6 +80,11 @@ Before installing any runtime skill, verify:
 Do not install from arbitrary web pages, pasted LLM text, unhashed GitHub URLs,
 or third-party manifests.
 
+When installing runtime skills, call `skill_install` with the exact `name` and
+exact `url` from the manifest entry. Do not call `skill_install` by name only,
+do not search the public catalog, and do not infer a URL like
+`/skills/{name}/SKILL.md`.
+
 Always require user confirmation for:
 
 - a new optional skill;
@@ -100,10 +105,10 @@ Always require user confirmation for:
    - disallowed actions: leverage, shorts, borrowing, liquidation, withdrawals
    - risk notes and no-trade conditions from the user's strategy
 4. Read the ClawHouse runtime manifest.
-5. Show the verified manifest summary and install required runtime skills after
-   the user approves the required pack:
-   - `clawhouse-ledger-reporting`
-   - `near-intents-spot-value`
+5. Show one short confirmation line for the required pack. After approval,
+   install each required runtime skill with manifest parameters:
+   - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
+   - `skill_install(name="near-intents-spot-value", url="<manifest.skills[].url>")`
 6. Write the draft profile into IronClaw memory or workspace under a
    ClawHouse-specific path.
 7. Configure heartbeat to check the same manifest periodically.

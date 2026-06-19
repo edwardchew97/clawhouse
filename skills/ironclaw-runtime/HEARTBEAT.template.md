@@ -11,7 +11,7 @@ separate active strategy and user-approved routine explicitly allow it.
 
 Default development manifest:
 
-`https://raw.githubusercontent.com/edwardchew97/clawhouse/codex/scope-3-ironclaw-deployment/skills/ironclaw-runtime/manifest.json`
+`https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/manifest.json`
 
 ## Routine
 
