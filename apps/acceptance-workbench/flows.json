@@ -143,6 +143,9 @@
             "agentId": "",
             "keyAmount": "1"
           },
+          "fillDefaultsWhenEmpty": [
+            "keyAmount"
+          ],
           "setVars": {
             "keyAmount": "response.json.amount",
             "buyMaxPriceNear": "response.json.total_cost_near",
@@ -170,10 +173,24 @@
           ],
           "inputs": {
             "agentId": "",
-            "keyAmount": "",
+            "keyAmount": "1",
             "buyMaxPriceNear": "",
             "STORAGE_DEPOSIT": "0.2"
           },
+          "fillDefaultsWhenEmpty": [
+            "keyAmount"
+          ],
+          "autoFill": [
+            {
+              "input": "buyMaxPriceNear",
+              "stepId": "key.quoteBuy",
+              "source": "response.json.total_cost_near",
+              "requiredInputs": [
+                "agentId",
+                "keyAmount"
+              ]
+            }
+          ],
           "setVars": {
             "buyTxHash": "response.json.txHash",
             "supplyAfterBuy": "response.json.result.supply_after",
@@ -226,8 +243,11 @@
           ],
           "inputs": {
             "agentId": "",
-            "keyAmount": ""
+            "keyAmount": "1"
           },
+          "fillDefaultsWhenEmpty": [
+            "keyAmount"
+          ],
           "setVars": {
             "minPayoutNear": "response.json.payout_near",
             "sellQuoteYocto": "response.json.payout"
@@ -254,9 +274,23 @@
           ],
           "inputs": {
             "agentId": "",
-            "keyAmount": "",
+            "keyAmount": "1",
             "minPayoutNear": ""
           },
+          "fillDefaultsWhenEmpty": [
+            "keyAmount"
+          ],
+          "autoFill": [
+            {
+              "input": "minPayoutNear",
+              "stepId": "key.quoteSell",
+              "source": "response.json.payout_near",
+              "requiredInputs": [
+                "agentId",
+                "keyAmount"
+              ]
+            }
+          ],
           "setVars": {
             "sellTxHash": "response.json.txHash",
             "supplyAfterSell": "response.json.result.supply_after",
@@ -335,8 +369,11 @@
             "Extracting walletAddress, publicKey, and keyId for later checks."
           ],
           "inputs": {
-            "walletArtifactRelativePath": ""
+            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
           },
+          "fillDefaultsWhenEmpty": [
+            "walletArtifactRelativePath"
+          ],
           "setVars": {
             "walletAddress": "response.json.walletAddress",
             "publicKey": "response.json.publicKey",
@@ -372,8 +409,11 @@
             "Confirming the refusal text is visible without private key material."
           ],
           "inputs": {
-            "walletArtifactRelativePath": ""
+            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
           },
+          "fillDefaultsWhenEmpty": [
+            "walletArtifactRelativePath"
+          ],
           "setVars": {}
         },
         {
@@ -403,8 +443,11 @@
             "If privateKey or secretKey appears as a redacted field, the public inspect path still leaked a private field name."
           ],
           "inputs": {
-            "walletArtifactRelativePath": ""
+            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
           },
+          "fillDefaultsWhenEmpty": [
+            "walletArtifactRelativePath"
+          ],
           "setVars": {
             "walletAddress": "response.json.walletAddress",
             "publicKey": "response.json.publicKey",

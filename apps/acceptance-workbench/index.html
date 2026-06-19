@@ -1008,6 +1008,8 @@
     ];
 
     const $ = (id) => document.getElementById(id);
+    const autoFillInFlight = new Map();
+    let autoFillTimer = null;
 
     function loadState() {
       try {
@@ -1102,16 +1104,28 @@
       return activeFlow().steps[state.activeStep];
     }
 
-    function currentInputs() {
-      const step = activeStep();
+    function currentInputs(step = activeStep()) {
       const defaults = step.inputs || {};
+      const fillDefaultsWhenEmpty = new Set(step.fillDefaultsWhenEmpty || []);
       state.inputs[step.id] ||= {};
       for (const [key, value] of Object.entries(defaults)) {
-        if (!(key in state.inputs[step.id])) {
+        if (
+          !(key in state.inputs[step.id])
+          || (fillDefaultsWhenEmpty.has(key) && state.inputs[step.id][key] === "" && value !== "")
+        ) {
           state.inputs[step.id][key] = value;
         }
       }
       return state.inputs[step.id];
+    }
+
+    function findStepById(stepId) {
+      for (const flow of state.spec.flows) {
+        for (const step of flow.steps) {
+          if (step.id === stepId) return step;
+        }
+      }
+      return null;
     }
 
     function methodLabel(step = activeStep()) {
@@ -1137,9 +1151,9 @@
       return `${step.command || ""} ${(step.args || []).join(" ")}`;
     }
 
-    function allVars() {
+    function allVars(step = activeStep()) {
       const vars = { ...state.env, ...state.vars };
-      for (const [key, value] of Object.entries(currentInputs())) {
+      for (const [key, value] of Object.entries(currentInputs(step))) {
         if (value !== undefined && value !== null && value !== "") {
           vars[key] = value;
         }
@@ -1176,8 +1190,126 @@
       }, source);
     }
 
+    function hasValue(value) {
+      return value !== undefined && value !== null && String(value).trim() !== "";
+    }
+
+    function autoFillRules(step = activeStep()) {
+      return Array.isArray(step.autoFill) ? step.autoFill : [];
+    }
+
+    function queueAutoFill() {
+      if (!state.spec || !autoFillRules(activeStep()).length) return;
+      if (autoFillTimer) clearTimeout(autoFillTimer);
+      autoFillTimer = setTimeout(() => {
+        autoFillTimer = null;
+        applyAutoFillRules(activeStep()).catch((error) => {
+          console.warn(error);
+        });
+      }, 200);
+    }
+
+    async function ensureAutoFillForStep(step) {
+      if (!autoFillRules(step).length) return;
+      const summary = await applyAutoFillRules(step);
+      const missing = autoFillRules(step)
+        .filter((rule) => !hasValue(currentInputs(step)[rule.input]))
+        .map((rule) => rule.input);
+      if (!missing.length) return;
+      const detail = [...summary.errors, ...summary.skipped].filter(Boolean).join(" ");
+      throw new Error(
+        `Could not auto-fill ${missing.join(", ")}. Run the quote step first or enter the value manually.${detail ? ` ${detail}` : ""}`
+      );
+    }
+
+    async function applyAutoFillRules(step) {
+      const summary = { changed: false, errors: [], skipped: [] };
+      for (const rule of autoFillRules(step)) {
+        const result = await applyAutoFillRule(step, rule);
+        summary.changed = summary.changed || result.changed;
+        if (result.error) summary.errors.push(result.error);
+        if (result.skipped) summary.skipped.push(result.skipped);
+      }
+      if (summary.changed) {
+        renderRequest();
+        renderVars();
+        if (state.activeTab === "preview") renderPreview(step);
+        persist();
+      }
+      return summary;
+    }
+
+    async function applyAutoFillRule(step, rule) {
+      const targetInputs = currentInputs(step);
+      if (!rule.input || hasValue(targetInputs[rule.input])) {
+        return { changed: false };
+      }
+
+      const sourceStep = findStepById(rule.stepId);
+      if (!sourceStep) {
+        return { changed: false, error: `Auto-fill source step not found: ${rule.stepId}` };
+      }
+
+      const vars = allVars(step);
+      const missingInputs = (rule.requiredInputs || []).filter((key) => !hasValue(vars[key]));
+      if (missingInputs.length) {
+        return { changed: false, skipped: `Waiting for ${missingInputs.join(", ")} before auto-fill.` };
+      }
+
+      const flightKey = `${step.id}:${rule.input}:${rule.stepId}:${(rule.requiredInputs || []).map((key) => vars[key]).join(":")}`;
+      if (!autoFillInFlight.has(flightKey)) {
+        autoFillInFlight.set(
+          flightKey,
+          runAutoFillSource(step, rule, sourceStep, vars).finally(() => {
+            autoFillInFlight.delete(flightKey);
+          })
+        );
+      }
+      return autoFillInFlight.get(flightKey);
+    }
+
+    async function runAutoFillSource(step, rule, sourceStep, vars) {
+      const sourceInputs = { ...(sourceStep.inputs || {}), ...(state.inputs[sourceStep.id] || {}) };
+      for (const key of Object.keys(sourceInputs)) {
+        if (hasValue(vars[key])) sourceInputs[key] = String(vars[key]);
+      }
+
+      const response = await fetch(runnerPath(sourceStep), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          stepId: sourceStep.id,
+          env: state.env,
+          inputs: sourceInputs,
+          vars: state.vars
+        })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        return { changed: false, error: `Auto-fill ${rule.input} failed from ${sourceStep.name}.` };
+      }
+
+      const value = getPath({ response: result }, rule.source || "");
+      if (!hasValue(value)) {
+        return { changed: false, error: `Auto-fill ${rule.input} did not return ${rule.source}.` };
+      }
+
+      const targetInputs = currentInputs(step);
+      if (hasValue(targetInputs[rule.input])) {
+        return { changed: false };
+      }
+
+      targetInputs[rule.input] = String(value);
+      state.vars[rule.input] = String(value);
+      document.querySelectorAll("[data-input]").forEach((input) => {
+        if (input.dataset.input === rule.input) input.value = String(value);
+      });
+      showToast(`Auto-filled ${rule.input}`);
+      return { changed: true };
+    }
+
     function resolvedTarget(step = activeStep()) {
-      const vars = allVars();
+      const vars = allVars(step);
       if (step.type === "http") return interpolate(requestTemplate(step), vars);
       if (step.type === "near-view") {
         const rpc = vars.nearRpcUrl || "";
@@ -1192,7 +1324,7 @@
     }
 
     function previewPayload(step = activeStep()) {
-      const vars = allVars();
+      const vars = allVars(step);
       if (step.type === "http") {
         return {
           target: runnerPath(step),
@@ -1227,6 +1359,7 @@
       renderTabs();
       renderVars();
       persist();
+      queueAutoFill();
     }
 
     function renderSidebar() {
@@ -1338,6 +1471,7 @@
           renderRequest();
           if (state.activeTab === "preview") renderPreview(step);
           persist();
+          queueAutoFill();
         });
       });
     }
@@ -1432,6 +1566,7 @@
         renderVars();
         if (state.activeTab === "preview") renderPreview(activeStep());
         persist();
+        queueAutoFill();
         return true;
       } catch (error) {
         renderResult({ ok: false, error: error.message }, new Date().toLocaleTimeString(), "Invalid JSON");
@@ -1620,20 +1755,25 @@
       if (state.envOpen && !syncEditors()) return;
       const flow = activeFlow();
       const step = activeStep();
-      const preview = previewPayload(step);
       const target = runnerPath(step);
       const startedAt = new Date().toLocaleTimeString();
-      const targetLabel = `${methodLabel(step)} ${resolvedTarget(step)}`;
-      const payload = target === "/run/script"
-        ? { stepId: step.id, env: state.env, inputs: currentInputs(), vars: state.vars }
-        : preview;
+      let targetLabel = `${methodLabel(step)} ${resolvedTarget(step)}`;
+      let payload = null;
 
       $("fireStep").disabled = true;
-      $("resultMeta").innerHTML = `<span class="pill warn">running</span><span class="pill">started ${startedAt}</span>`;
-      $("resultBox").innerHTML = renderRunningResult(step, startedAt, targetLabel);
-      $("responseTarget").textContent = targetLabel;
 
       try {
+        await ensureAutoFillForStep(step);
+        const preview = previewPayload(step);
+        targetLabel = `${methodLabel(step)} ${resolvedTarget(step)}`;
+        payload = target === "/run/script"
+          ? { stepId: step.id, env: state.env, inputs: currentInputs(), vars: state.vars }
+          : preview;
+
+        $("resultMeta").innerHTML = `<span class="pill warn">running</span><span class="pill">started ${startedAt}</span>`;
+        $("resultBox").innerHTML = renderRunningResult(step, startedAt, targetLabel);
+        $("responseTarget").textContent = targetLabel;
+
         const response = await fetch(target, {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1649,7 +1789,16 @@
       } catch (error) {
         const result = { ok: false, error: error.message };
         state.lastResult = result;
-        state.lastDebugPacket = buildDebugPacket(flow, step, startedAt, targetLabel, payload, result);
+        state.lastDebugPacket = buildDebugPacket(
+          flow,
+          step,
+          startedAt,
+          targetLabel,
+          payload || (target === "/run/script"
+            ? { stepId: step.id, env: state.env, inputs: currentInputs(), vars: state.vars }
+            : previewPayload(step)),
+          result
+        );
         renderResult(result, startedAt, targetLabel);
       } finally {
         $("fireStep").disabled = false;
@@ -1780,6 +1929,7 @@
       if (state.activeTab === "vars") renderVarsTab(activeStep());
       if (state.activeTab === "preview") renderPreview(activeStep());
       persist();
+      queueAutoFill();
     });
 
     $("requestTarget").addEventListener("input", () => {
