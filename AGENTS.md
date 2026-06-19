@@ -79,6 +79,7 @@ Before changing product scope, implementation scope, or docs, read:
 - `truth/season-0-scope.md`
 - `truth/season-0-creator-onboarding.md`
 - `truth/agent-trading-scope.md`
+- `truth/agent-board-ledger-scope.md`
 - `references/original-vision.md`
 - `references/scope-v0.md`
 
@@ -117,6 +118,9 @@ Use the truth files listed above as the source of accepted product decisions:
 - Creator onboarding and deployment authorization live in
   `truth/season-0-creator-onboarding.md`.
 - Agent Trading scope lives in `truth/agent-trading-scope.md`.
+- Agent Board Ledger observation, event timeline, wallet reconciliation,
+  portfolio, PnL, DB, and read-access scope lives in
+  `truth/agent-board-ledger-scope.md`.
 
 If product direction changes, update the relevant `truth/` file with the required
 `## Source` and `## Change Log` provenance instead of adding product summaries to

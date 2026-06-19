@@ -2,6 +2,16 @@
 
 这是 ClawHouse 当前已接受的产品方向。后续讨论产品、写 PRD、写代码、拆 monorepo 时，默认按这里理解。
 
+## Source
+
+- Legacy provenance before 2026-06-19: unknown.
+- Amendment session: `019ede10-c43f-76f1-ab2d-68b0fabf9802`
+- Date: 2026-06-19
+- Basis: JY confirmed that Scope V0 does not use OutLayer, OutLayer policy, or
+  any OutLayer gate, and that current agent trading work should be scoped as
+  Agent Board Ledger observation/accounting rather than a pre-trade execution
+  engine.
+
 ## 一句话
 
 ClawHouse Season 0 是一个短期、会传播的消费级金融游戏：用户围绕一批精选 trading agents 买卖 access keys，看排行、进 holder-facing surface、分享收益/身份卡，并通过 NEAR 相关能力完成支付、资金流转和风险辅助。
@@ -52,6 +62,23 @@ Scope V0 的第一刀是 NEAR 上的 agent key market。
 - 用户买 key 时 attach NEAR。
 - 用户卖 key 时 burn key，contract 从 reserve 里退 NEAR。
 
+## Scope V0 OutLayer Boundary
+
+Scope V0 不做任何 OutLayer、OutLayer policy 或 OutLayer gate。
+
+这条边界同时适用于：
+
+- V0 agent key market；
+- V0 Agent Board Ledger；
+- 当前 agent board 交易记录、钱包观察、portfolio 和 PnL 记录。
+
+大白话：这一版不要等 OutLayer，也不要把 OutLayer 写成 V0 的依赖。
+Agent 如果自己发交易，成了就记录，失败就记录失败；ClawHouse 这一层不在
+交易前拦截、审批、quote 或 execute。
+
+如果其他旧 truth 或 reference 提到 OutLayer 作为 creator/runtime/policy 的
+可能目标，不要把它读成当前 Scope V0 key market 或 Agent Board Ledger 的依赖。
+
 ## NEAR Intents Boundary
 
 NEAR Intents 在当前 scope 里主要用于：
@@ -94,6 +121,7 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
 - 杠杆、爆仓、资金费率。
 - key profit sharing。
 - permissionless agent creation。
+- 任何 V0 OutLayer / OutLayer policy / OutLayer gate。
 - 本地 Codex / Claude / skill 直接部署 IronClaw 或修改 OutLayer funds policy。
 - 把旧 `docs/prd/v0-scope.md` 方向当作当前 scope。
 
@@ -111,3 +139,9 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
 - copy-with-constraints 的未来方向。
 
 但 Scope V0 只先落地 key market，不一次性做完整 Original Vision。
+
+## Change Log
+
+- 2026-06-19 - `019ede10-c43f-76f1-ab2d-68b0fabf9802` - Added required
+  provenance metadata and made Scope V0's no-OutLayer boundary explicit for the
+  key market and Agent Board Ledger work.
