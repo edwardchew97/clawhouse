@@ -10,6 +10,7 @@
         {
           "id": "key.create",
           "name": "Create Agent Key Market",
+          "description": "Creates a NEAR testnet agent key market by running the local create script with the selected agent id, display name, metadata URI, and storage deposit. Use a new agentId when validating market creation.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -40,6 +41,7 @@
         {
           "id": "key.quoteBuy",
           "name": "Quote Buy",
+          "description": "Calls the contract quote path for buying keys without signing a transaction. It returns the bonding-curve cost, fees, and max-price value that the Buy Key step uses as protection.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -71,6 +73,7 @@
         {
           "id": "key.buy",
           "name": "Buy Key",
+          "description": "Sends a real NEAR testnet buy_key transaction for the selected agent market using the test user account and the previous buy quote as max-price protection.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -117,6 +120,7 @@
         {
           "id": "key.stateAfterBuy",
           "name": "Read Contract State After Buy",
+          "description": "Reads contract state through a NEAR view call after a buy. It verifies market supply, reserve, and the selected holder balance without sending a transaction.",
           "type": "near-view",
           "contractId": "{{contractId}}",
           "methodName": "get_state",
@@ -142,6 +146,7 @@
         {
           "id": "key.quoteSell",
           "name": "Quote Sell",
+          "description": "Calls the contract quote path for selling keys without signing a transaction. It returns the expected payout and min-payout guard that the Sell Key step uses.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -172,6 +177,7 @@
         {
           "id": "key.sell",
           "name": "Sell Key",
+          "description": "Sends a real NEAR testnet sell_key transaction for the selected agent market using the test user account and the previous sell quote as min-payout protection.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -224,6 +230,7 @@
         {
           "id": "wallet.generate",
           "name": "Generate Test Wallet",
+          "description": "Runs the local wallet generator and writes a test wallet artifact under the configured work path. The response is expected to expose only public wallet metadata, not private key material.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -261,6 +268,7 @@
         {
           "id": "wallet.inspectPublic",
           "name": "Inspect Public Metadata",
+          "description": "Reads the generated wallet artifact through the local wallet inspect command and returns the public wallet address, public key, and key id for later acceptance steps.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -299,6 +307,7 @@
         {
           "id": "wallet.duplicateRefusesOverwrite",
           "name": "Duplicate Generation Refuses Overwrite",
+          "description": "Runs wallet generation against an existing artifact without --overwrite and expects the command to fail. This verifies the tool refuses accidental key replacement.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -335,6 +344,7 @@
         {
           "id": "wallet.inspectPublicAfterDuplicate",
           "name": "Inspect Public Metadata After Refusal",
+          "description": "Inspects the wallet artifact after the duplicate-generation refusal to confirm the existing public metadata is still readable and private key material stays out of the Workbench response.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -380,6 +390,7 @@
         {
           "id": "ledger.apiHealth",
           "name": "GET /health",
+          "description": "Calls the local Agent Board Ledger health endpoint. Use this first to confirm the backend is reachable and can report its database connection state.",
           "type": "http",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/health",
@@ -400,6 +411,7 @@
         {
           "id": "ledger.apiCreateBoard",
           "name": "POST /boards",
+          "description": "Creates or registers an agent board through the Ledger HTTP API using the admin authorization header. The returned board id is stored for later observation, readback, and PnL steps.",
           "type": "http",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards",
@@ -451,6 +463,7 @@
         {
           "id": "ledger.apiGetBoard",
           "name": "GET /boards/:id",
+          "description": "Reads a single board by id through the Ledger API. Public boards can be read directly; holder-gated boards require a valid read token in the headers.",
           "type": "http",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}",
@@ -477,6 +490,7 @@
         {
           "id": "ledger.apiCreateObservation",
           "name": "POST /boards/:id/observations",
+          "description": "Writes a service-authorized wallet observation for a board. This is the input evidence cron uses to build events, portfolio snapshots, and PnL calculations.",
           "type": "http",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/observations",
@@ -543,6 +557,7 @@
         {
           "id": "ledger.apiCreatePrice",
           "name": "POST /boards/:id/prices",
+          "description": "Writes an explicit asset price snapshot for the board. Use it before cron when a PnL readback should be tied to visible pricing evidence.",
           "type": "http",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/prices",
@@ -585,6 +600,7 @@
         {
           "id": "ledger.apiCreateBalanceChange",
           "name": "POST /boards/:id/balance-changes",
+          "description": "Writes service-authorized balance-change evidence for an asset. It can link the accounting entry back to an observation, tx hash, or NEAR Intent id.",
           "type": "http",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/balance-changes",
@@ -640,6 +656,7 @@
         {
           "id": "ledger.apiCronTick",
           "name": "POST /cron/tick",
+          "description": "Runs the Ledger reconciliation endpoint. It converts observations and accounting evidence into events, holding snapshots, and PnL snapshots.",
           "type": "http",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/cron/tick",
@@ -667,6 +684,7 @@
         {
           "id": "ledger.apiListEvents",
           "name": "GET /boards/:id/events",
+          "description": "Reads the board event timeline through the Ledger API. Use this after observations, signed events, or cron to confirm the timeline that users would inspect.",
           "type": "http",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events",
@@ -693,6 +711,7 @@
         {
           "id": "ledger.apiGetPortfolio",
           "name": "GET /boards/:id/portfolio",
+          "description": "Reads the latest portfolio snapshot for a board. This verifies the public or token-gated portfolio readback produced by cron reconciliation.",
           "type": "http",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/portfolio",
@@ -718,6 +737,7 @@
         {
           "id": "ledger.apiGetPnl",
           "name": "GET /boards/:id/pnl",
+          "description": "Reads the latest PnL snapshot for a board. Use it to verify current PnL, total PnL percentage, and the snapshot created from prior evidence.",
           "type": "http",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/pnl",
@@ -744,6 +764,7 @@
         {
           "id": "ledger.apiListBalanceChanges",
           "name": "GET /boards/:id/balance-changes",
+          "description": "Reads stored balance-change evidence for the board. This lets developers verify that wallet accounting entries were persisted and can be audited.",
           "type": "http",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/balance-changes",
@@ -768,6 +789,7 @@
         {
           "id": "ledger.apiListPrices",
           "name": "GET /boards/:id/prices",
+          "description": "Reads stored price snapshots for the board. This lets developers confirm the exact pricing evidence available for PnL calculations.",
           "type": "http",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/prices",
@@ -792,6 +814,7 @@
         {
           "id": "ledger.apiReadAccessCheck",
           "name": "POST /boards/:id/read-access/checks",
+          "description": "Creates a service-authorized read-access check and optional read token for a requester wallet. Use this before testing holder-gated board readback.",
           "type": "http",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/read-access/checks",
@@ -837,6 +860,7 @@
         {
           "id": "ledger.apiSignedEventTemplate",
           "name": "POST /boards/:id/events",
+          "description": "Exposes the raw wallet-signed event endpoint. Developers must provide matching signature headers for the exact request body, or use the signed script flow to generate them.",
           "type": "http",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events",
@@ -904,6 +928,7 @@
         {
           "id": "ledger.apiSignedAttachmentTemplate",
           "name": "POST /boards/:id/events/:eventId/attachments",
+          "description": "Exposes the raw wallet-signed event attachment endpoint. Developers must provide matching signature headers for the exact request body, or use the signed script flow to generate them.",
           "type": "http",
           "method": "POST",
           "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/events/{{ledgerEventId}}/attachments",
@@ -953,6 +978,7 @@
         {
           "id": "ledger.neonMigrate",
           "name": "Migrate Neon Schema",
+          "description": "Runs the Ledger Neon migration script with the database URL passed through the script environment. It creates or updates the tables required by board, event, accounting, read-access, and audit flows.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -983,6 +1009,7 @@
         {
           "id": "ledger.fullFlow",
           "name": "Run Signed Ledger Flow",
+          "description": "Runs a complete script-backed Ledger acceptance flow against the local service: wallet setup, board registration, signed event and attachment writes, observation, cron, event readback, portfolio, and PnL.",
           "type": "script",
           "command": "bun",
           "args": [
@@ -1060,6 +1087,7 @@
         {
           "id": "ledger.edgeCases",
           "name": "Run Ledger Edge Cases",
+          "description": "Runs the script-backed Ledger edge-case suite against the local service. It verifies rejection cases, holder-gated readback, mocked NEAR RPC paths, FT evidence, signed writes, cron idempotency, and PnL linkage.",
           "type": "script",
           "command": "bun",
           "args": [

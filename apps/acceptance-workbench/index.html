@@ -420,6 +420,14 @@
       min-width: 0;
     }
 
+    .request-description {
+      max-width: 860px;
+      margin: 2px 0 0;
+      color: var(--default);
+      font-size: 13px;
+      line-height: 1.42;
+    }
+
     h1,
     h2 {
       margin: 0;
@@ -529,7 +537,7 @@
     }
 
     .params-fields {
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      grid-template-columns: 1fr;
     }
 
     .params-fields .kv-row {
@@ -1035,6 +1043,7 @@
           <div class="request-head">
             <div class="title-block">
               <h1 id="stepName">Request</h1>
+              <p id="stepDescription" class="request-description"></p>
               <span id="stepType" class="tab-meta"></span>
             </div>
             <div id="requestPills" class="pill-row"></div>
@@ -1603,6 +1612,7 @@
       const step = activeStep();
       const method = methodLabel(step);
       $("stepName").textContent = step.name;
+      $("stepDescription").textContent = step.description || "No description has been added for this request yet.";
       $("stepType").textContent = `${flow.name} / ${step.id}`;
       $("methodSelect").innerHTML = `<option>${method}</option>`;
       $("requestTarget").value = requestTemplate(step);
