@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join, normalize } from "node:path";
+import { isAbsolute, join, normalize } from "node:path";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -142,6 +142,37 @@ function sanitizeSecrets(value: unknown): unknown {
     }));
   }
   return value;
+}
+
+function redactPrivateKeyText(value: string) {
+  return value
+    .replace(
+      /("(?:private[_-]?key|secret[_-]?key|seed[_-]?phrase|mnemonic)"\s*:\s*")[^"]*(")/gi,
+      "$1[redacted]$2"
+    )
+    .replace(
+      /((?:private[_-]?key|secret[_-]?key|seed[_-]?phrase|mnemonic)\s*[:=]\s*)[^\s,}]+/gi,
+      "$1[redacted]"
+    );
+}
+
+function redactPrivateKeyOutput(value: unknown): unknown {
+  if (typeof value === "string") return redactPrivateKeyText(value);
+  return sanitizeSecrets(value);
+}
+
+function stringList(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function repoRootPathViolation(values: string[]) {
+  return values.find((value) => {
+    if (!isAbsolute(value)) return false;
+    const normalized = normalize(value);
+    return normalized !== repoRoot && !normalized.startsWith(`${repoRoot}/`);
+  });
 }
 
 function buildCodexDebugPrompt(packet: unknown) {
@@ -449,11 +480,21 @@ async function runScript(payload: JsonRecord) {
   const command = String(interpolate(step.command, variables));
   const args = interpolate(step.args ?? [], variables) as string[];
   const cwd = normalize(String(interpolate(step.cwd ?? repoRoot, variables)));
+  const unsafeAbsoluteArg = repoRootPathViolation(args);
 
-  if (!cwd.startsWith(repoRoot)) {
+  if (cwd !== repoRoot && !cwd.startsWith(`${repoRoot}/`)) {
     return {
       ok: false,
       error: `Refusing to run outside repo root: ${cwd}`
+    };
+  }
+
+  if (unsafeAbsoluteArg) {
+    return {
+      ok: false,
+      command: [command, ...args],
+      cwd,
+      error: `Refusing absolute script argument outside repo root: ${unsafeAbsoluteArg}`
     };
   }
 
@@ -510,17 +551,38 @@ async function runScript(payload: JsonRecord) {
   } catch {
     parsed = null;
   }
+  const expectedExitCode = Number.isInteger(step.expectedExitCode) ? Number(step.expectedExitCode) : 0;
+  const expectedOutputIncludes = typeof step.expectedOutputIncludes === "string"
+    ? step.expectedOutputIncludes
+    : "";
+  const exitMatched = exitCode === expectedExitCode;
+  const combinedOutput = `${stdout}\n${stderr}`;
+  const outputMatched = !expectedOutputIncludes
+    || combinedOutput.toLowerCase().includes(expectedOutputIncludes.toLowerCase());
+  const forbiddenOutputMatch = stringList(step.forbiddenOutputIncludes).find((text) => (
+    combinedOutput.toLowerCase().includes(text.toLowerCase())
+  ));
+  const redactOutput = step.redactPrivateKeyOutput === true;
   return {
-    ok: !timedOut && exitCode === 0,
+    ok: !timedOut && exitMatched && outputMatched && !forbiddenOutputMatch,
     exitCode,
+    ...(step.expectedExitCode !== undefined ? { expectedExitCode } : {}),
+    ...(expectedOutputIncludes ? { expectedOutputIncludes } : {}),
+    ...(forbiddenOutputMatch ? { forbiddenOutputMatch } : {}),
     timedOut,
     durationMs: Date.now() - started,
     command: [command, ...args],
     cwd,
-    stdout,
-    stderr,
-    error: timedOut ? `Script timed out after ${runnerTimeoutMs} ms` : undefined,
-    json: parsed
+    stdout: redactOutput ? redactPrivateKeyText(stdout) : stdout,
+    stderr: redactOutput ? redactPrivateKeyText(stderr) : stderr,
+    error: timedOut
+      ? `Script timed out after ${runnerTimeoutMs} ms`
+      : !exitMatched
+        ? `Script exited ${exitCode}; expected ${expectedExitCode}`
+        : !outputMatched
+          ? `Script output did not include expected text: ${expectedOutputIncludes}`
+          : forbiddenOutputMatch ? `Script output included forbidden text: ${forbiddenOutputMatch}` : undefined,
+    json: redactOutput ? redactPrivateKeyOutput(parsed) : parsed
   };
 }
 

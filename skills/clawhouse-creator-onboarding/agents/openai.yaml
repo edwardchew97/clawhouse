@@ -1,0 +1,4 @@
+interface:
+  display_name: "ClawHouse Creator Onboarding"
+  short_description: "Draft safe ClawHouse creator onboarding"
+  default_prompt: "Use $clawhouse-creator-onboarding to prepare a Season 0 creator agent draft with public NEAR wallet metadata only."

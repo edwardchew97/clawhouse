@@ -2,6 +2,16 @@
 
 这是 ClawHouse Season 0 创作者 onboarding 的已接受事实。后续做产品、写实现、写说明时，Season 0 都按这里的流程理解。
 
+## Source
+
+- Legacy provenance: unknown; this document existed before required source
+  metadata was added.
+- Current edit session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Date: 2026-06-19
+- Basis: JY confirmed that Season 0 creator/agent onboarding includes NEAR wallet
+  onboarding, with V0 limited to NEAR wallet scope and strict no-secret,
+  no-direct-deployment boundaries.
+
 ## 核心决定
 
 Season 0 不是开放的 permissionless agent 创建。Season 0 是有权限边界的创作者 onboarding。
@@ -9,6 +19,22 @@ Season 0 不是开放的 permissionless agent 创建。Season 0 是有权限边�
 创作者可以在本地用 `skill.md` / agent skill，通过 Codex 或 Claude 生成格式化的 agent draft / capsule。这个本地 agent skill 只负责帮创作者整理和提交草稿，不负责部署，不拿 NearAI / ION 或 OutLayer 的管理员权限，也不直接管理资金策略。
 
 真正的部署和策略更新，必须经过 ClawHouse 的网页确认页，由创作者明确批准后，才由 ClawHouse backend 执行。
+
+## NEAR 钱包 onboarding
+
+Season 0 创作者 / agent onboarding 包含 NEAR wallet onboarding。V0 只使用
+NEAR wallet；其他 wallet 类型、chain signer 或资金签名方案都不是当前 V0
+默认范围，除非 JY 之后单独确认。
+
+正确的产品边界是：ClawHouse 必须提供一个简单的创作者-facing skill，并配套一个固定版本、开源的 NEAR wallet tool / repo / module，用来生成或绑定 agent wallet。
+
+这是 ClawHouse 自己负责的 scope，或 ClawHouse 选择的 partner integration work，建立在 IronClaw / TEE / CVM primitives 之上。不要写成 IronClaw 已经默认内置 wallet generator 或 financial signer。
+
+wallet tool 必须使用标准 crypto libraries 和 CSPRNG 生成 key material，不能用 LLM 生成 key material。
+
+private keys 绝不能进入 LLM / chat context、tool output、MCP、普通 logs，或用户可见的 Workbench response。本地 skill 和工具流程只能返回或使用 public wallet address、public key、key id 这类公开标识。
+
+本地 skill 可以准备 wallet 生成 / 绑定结果和 agent draft，但实际部署、runtime 更新、资金 policy 安装或更新仍然必须经过 ClawHouse approval page 和 ClawHouse backend。local skill 不能直接部署 IronClaw，也不能直接修改 funds policy。
 
 ## 角色
 
@@ -51,3 +77,14 @@ Season 0 不做：
 - 本地 skill / Codex / Claude 直接部署 agent。
 - 本地 skill / Codex / Claude 直接编辑 OutLayer funds policy。
 - 给本地工具 unmanaged NearAI / ION admin access。
+- 把 NEAR wallet 生成 / 绑定说成 IronClaw 默认内置能力。
+- 让 private keys 进入 LLM、chat、MCP、tool output、普通 logs 或 Workbench
+  response。
+
+## Change Log
+
+- 2026-06-19 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added the
+  accepted NEAR wallet onboarding boundary for Season 0 creator/agent
+  onboarding, including NEAR-wallet-only V0 scope, the ClawHouse-owned wallet
+  tool requirement, no-LLM-key-material rule, no-secret-output rule, and the
+  approval-page/backend gate for runtime and funds-policy changes.

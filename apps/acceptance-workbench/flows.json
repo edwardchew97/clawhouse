@@ -253,6 +253,147 @@
       ]
     },
     {
+      "id": "near-wallet-onboarding",
+      "name": "NEAR Wallet Onboarding",
+      "purpose": "Verify the local NEAR wallet tool creates a test wallet artifact, exposes public metadata, refuses duplicate overwrite, and keeps private key material out of Workbench responses.",
+      "steps": [
+        {
+          "id": "wallet.generate",
+          "name": "Generate Test Wallet",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "run",
+            "generate",
+            "--",
+            "--out",
+            "{{repoRoot}}/{{walletArtifactRelativePath}}",
+            "--overwrite"
+          ],
+          "cwd": "{{repoRoot}}/tools/near-wallet",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Running the allowlisted local NEAR wallet generator.",
+            "Writing the generated test wallet artifact under work/acceptance-workbench.",
+            "Returning only public wallet metadata to the Workbench response."
+          ],
+          "inputs": {
+            "walletArtifactRelativePath": "work/acceptance-workbench/near-wallet/workbench-test-wallet.json"
+          },
+          "setVars": {
+            "walletArtifactRelativePath": "inputs.walletArtifactRelativePath",
+            "walletAddress": "response.json.walletAddress",
+            "publicKey": "response.json.publicKey",
+            "keyId": "response.json.keyId"
+          }
+        },
+        {
+          "id": "wallet.inspectPublic",
+          "name": "Inspect Public Metadata",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "run",
+            "inspect",
+            "--",
+            "--key-file",
+            "{{repoRoot}}/{{walletArtifactRelativePath}}"
+          ],
+          "cwd": "{{repoRoot}}/tools/near-wallet",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Reading the generated wallet artifact through the local wallet tool.",
+            "Requesting the public inspect view only.",
+            "Extracting walletAddress, publicKey, and keyId for later checks."
+          ],
+          "inputs": {},
+          "setVars": {
+            "walletAddress": "response.json.walletAddress",
+            "publicKey": "response.json.publicKey",
+            "keyId": "response.json.keyId"
+          }
+        },
+        {
+          "id": "wallet.duplicateRefusesOverwrite",
+          "name": "Duplicate Generation Refuses Overwrite",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "run",
+            "generate",
+            "--",
+            "--out",
+            "{{repoRoot}}/{{walletArtifactRelativePath}}"
+          ],
+          "cwd": "{{repoRoot}}/tools/near-wallet",
+          "expectedExitCode": 1,
+          "expectedOutputIncludes": "overwrite",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Running the same generator against the existing wallet artifact.",
+            "Expecting the tool to refuse overwrite with exit code 1 and output that mentions overwrite.",
+            "Confirming the refusal text is visible without private key material."
+          ],
+          "inputs": {},
+          "setVars": {}
+        },
+        {
+          "id": "wallet.inspectPublicAfterDuplicate",
+          "name": "Inspect Public Metadata After Refusal",
+          "type": "script",
+          "command": "bun",
+          "args": [
+            "run",
+            "inspect",
+            "--",
+            "--key-file",
+            "{{repoRoot}}/{{walletArtifactRelativePath}}"
+          ],
+          "cwd": "{{repoRoot}}/tools/near-wallet",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Reading the wallet artifact after the duplicate-generation refusal.",
+            "Checking that the artifact still exposes the same public metadata.",
+            "If privateKey or secretKey appears as a redacted field, the public inspect path still leaked a private field name."
+          ],
+          "inputs": {},
+          "setVars": {
+            "walletAddress": "response.json.walletAddress",
+            "publicKey": "response.json.publicKey",
+            "keyId": "response.json.keyId"
+          }
+        }
+      ]
+    },
+    {
       "id": "ironclaw",
       "name": "IronClaw Runtime",
       "purpose": "Verify a deployed/self-hosted IronClaw instance accepts a real webhook message.",
