@@ -38,6 +38,12 @@ function asObject(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
 }
 
+function withoutEmptyValues(value: JsonRecord): JsonRecord {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== "")
+  );
+}
+
 function loadDotEnv(path: string) {
   if (!existsSync(path)) return;
   const raw = readFileSync(path, "utf8");
@@ -471,10 +477,12 @@ async function runScript(payload: JsonRecord) {
   }
 
   const payloadEnv = asObject(payload.env);
+  const payloadVars = asObject(payload.vars);
+  const payloadInputs = withoutEmptyValues(asObject(payload.inputs));
   const variables = {
     ...payloadEnv,
-    ...asObject(payload.vars),
-    ...asObject(payload.inputs),
+    ...payloadVars,
+    ...payloadInputs,
     repoRoot
   };
   const command = String(interpolate(step.command, variables));
@@ -511,8 +519,8 @@ async function runScript(payload: JsonRecord) {
   const scriptEnv = Object.fromEntries(
     Object.entries({
       ...payloadEnv,
-      ...asObject(payload.vars),
-      ...asObject(payload.inputs)
+      ...payloadVars,
+      ...payloadInputs
     }).map(([key, value]) => [key, String(value ?? "")])
   );
   const nearAccountId = String(payloadEnv.testUserAccountId || payloadEnv.accountId || "");

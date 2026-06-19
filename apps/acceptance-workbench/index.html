@@ -1089,7 +1089,13 @@
 
     function currentInputs() {
       const step = activeStep();
-      state.inputs[step.id] ||= { ...(step.inputs || {}) };
+      const defaults = step.inputs || {};
+      state.inputs[step.id] ||= {};
+      for (const [key, value] of Object.entries(defaults)) {
+        if (!(key in state.inputs[step.id])) {
+          state.inputs[step.id][key] = value;
+        }
+      }
       return state.inputs[step.id];
     }
 
@@ -1117,7 +1123,21 @@
     }
 
     function allVars() {
-      return { ...state.env, ...state.vars, ...currentInputs() };
+      const vars = { ...state.env, ...state.vars };
+      for (const [key, value] of Object.entries(currentInputs())) {
+        if (value !== undefined && value !== null && value !== "") {
+          vars[key] = value;
+        }
+      }
+      return vars;
+    }
+
+    function inputDisplayValue(key, value) {
+      if (value === undefined || value === null || value === "") {
+        const fallback = state.vars[key] ?? state.env[key];
+        if (fallback !== undefined && fallback !== null) return String(fallback);
+      }
+      return String(value ?? "");
     }
 
     function interpolate(value, vars) {
@@ -1292,7 +1312,7 @@
           ${keys.map((key) => `
             <div class="kv-row">
               <input class="input" value="${escapeAttr(key)}" readonly />
-              <input class="input" data-input="${escapeAttr(key)}" value="${escapeAttr(String(inputs[key]))}" />
+              <input class="input" data-input="${escapeAttr(key)}" value="${escapeAttr(inputDisplayValue(key, inputs[key]))}" />
             </div>
           `).join("")}
         </div>
