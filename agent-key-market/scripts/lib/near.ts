@@ -49,7 +49,7 @@ export async function callFunction(
 ) {
   const env = readEnv();
   const account = await getAccount(env);
-  return account.callFunction({
+  return account.callFunctionRaw({
     contractId: env.contractId,
     methodName,
     args,
