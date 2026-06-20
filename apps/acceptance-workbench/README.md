@@ -49,6 +49,26 @@ http://127.0.0.1:4318
 - Script execution is allowlisted by step id. The browser cannot run arbitrary
   shell commands.
 
+## Environment Targets
+
+Use the top-right environment selector to choose the target before sending a
+step:
+
+- `Local`: uses `http://127.0.0.1:4321` for the local ClawHouse backend.
+- `Dev`: integration/dev profile. Paste the current dev or preview backend URL
+  into `ledgerBaseUrl` before sending backend requests.
+- `Staging`: uses the deployed staging backend
+  `https://clawhouse-backend-staging.vercel.app`.
+- `Production`: uses the deployed production backend
+  `https://clawhouse-backend-prod.vercel.app`.
+
+Each target has its own Environment JSON in browser localStorage. Public URLs
+and empty secret fields are safe to keep in source, but real credentials are not.
+Do not commit filled values for `ledgerAuthorizationHeader`, `ledgerAdminToken`,
+`ledgerDatabaseUrl`, `testUserPrivateKey`, `CRON_SECRET`, `DATABASE_URL`, or
+other tokens. Fill them only through the local Workbench Environment drawer or
+through your local `.env`.
+
 ## NEAR Test User
 
 Open the workbench, click `Environment` in the top-right, then fill these fields
