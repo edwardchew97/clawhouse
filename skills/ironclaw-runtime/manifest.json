@@ -4,14 +4,14 @@
     "name": "clawhouse-ironclaw-runtime",
     "version": "0.1.0-dev",
     "distribution_status": "development",
-    "source_branch": "public-onboarding-kit-main",
+    "source_branch": "gh-pages",
     "updated_at": "2026-06-19",
-    "heartbeat_template_url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/HEARTBEAT.template.md",
-    "reset_guide_url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/RESET.md"
+    "heartbeat_template_url": "https://edwardchew97.github.io/clawhouse-onboarding-kit/skills/ironclaw-runtime/HEARTBEAT.template.md",
+    "reset_guide_url": "https://edwardchew97.github.io/clawhouse-onboarding-kit/skills/ironclaw-runtime/RESET.md"
   },
   "install_policy": {
     "allowed_url_prefixes": [
-      "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/"
+      "https://edwardchew97.github.io/clawhouse-onboarding-kit/"
     ],
     "auto_install_requires": [
       "url_allowlist_match",
@@ -38,13 +38,13 @@
       "name": "clawhouse-ledger-reporting",
       "version": "0.1.0",
       "required": true,
-      "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md",
+      "url": "https://edwardchew97.github.io/clawhouse-onboarding-kit/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md",
       "sha256": "56d2349a3a817888e0ef8b7aa0d551c2faeabe53785933dd3430e7280f0edc87",
       "install": {
         "tool": "skill_install",
         "parameters": {
           "name": "clawhouse-ledger-reporting",
-          "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md"
+          "url": "https://edwardchew97.github.io/clawhouse-onboarding-kit/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md"
         }
       },
       "permissions": {
@@ -73,13 +73,13 @@
       "name": "near-intents-spot-value",
       "version": "0.1.0",
       "required": true,
-      "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/near-intents-spot-value/SKILL.md",
+      "url": "https://edwardchew97.github.io/clawhouse-onboarding-kit/skills/ironclaw-runtime/near-intents-spot-value/SKILL.md",
       "sha256": "4e7336786fb8a83b86aea981e448476b374b858b7e58a39bf5fe2517905b3eea",
       "install": {
         "tool": "skill_install",
         "parameters": {
           "name": "near-intents-spot-value",
-          "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/near-intents-spot-value/SKILL.md"
+          "url": "https://edwardchew97.github.io/clawhouse-onboarding-kit/skills/ironclaw-runtime/near-intents-spot-value/SKILL.md"
         }
       },
       "permissions": {

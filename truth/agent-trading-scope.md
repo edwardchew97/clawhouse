@@ -43,6 +43,19 @@ replace Scope V0 key trading.
   JY confirmed that V0 onboarding should normalize user strategy into NEAR
   Intents spot-only scope, list unsupported parts as excluded from V0, and stop
   only when the strategy has no supported spot-swap subset.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: JY tested the IronClaw onboarding path and found that
+  delegated default generation still invented cross-chain yield farming and
+  plain `confirm` repeated pending requirements. The accepted Agent Trading
+  boundary now requires NEAR Intents spot-only defaults and explicit draft
+  confirmation semantics before activation.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw testing showed same-name `skill_install` did not
+  update the already installed onboarding skill. Agent Trading onboarding now
+  requires installed-version readback before continuing, with remove/reinstall
+  required when IronClaw still shows an old onboarding skill version.
 
 ## One Sentence
 
@@ -172,6 +185,25 @@ Unsupported ideas can remain as excluded notes or future-scope notes, but the
 current `trading_strategy` must be NEAR Intents spot-only. If no supported
 spot-swap subset exists, onboarding should ask the creator for a revised
 spot-only strategy instead of inventing one.
+
+If the creator delegates strategy generation by saying "you decide" or similar,
+the default strategy must already be NEAR Intents spot-only. The agent must not
+invent cross-chain yield farming, staking, lending, Aave, Compound, Lido,
+LPing, vaults, EVM protocol execution, leverage, perps, shorts, or custody as
+default V0 strategy content.
+
+Plain `confirm` confirms the narrowed draft strategy/profile only. It does not
+activate trading while wallet, signer, board, ledger, or NEAR Intents readiness
+blockers remain. After draft confirmation, onboarding should report
+`activation_blockers` and one concrete next setup action instead of repeating
+the same pending task list.
+
+The onboarding skill must also prove it is the current required installed
+version before continuing. Same-name `skill_install` is not sufficient proof of
+update because IronClaw can keep an older installed skill active. If IronClaw
+still shows an old onboarding version, onboarding must stop until the user
+removes the old skill in Settings > Skills and reinstalls from the approved
+ClawHouse URL.
 
 IronClaw owns:
 
@@ -465,6 +497,10 @@ These are not current V0 requirements:
 - Hyperliquid perps;
 - leverage, liquidation, shorts, borrowing, or funding-rate mechanics;
 - agent custody/key-management infrastructure.
+- delegated onboarding defaults that generate unsupported DeFi strategy;
+- treating plain `confirm` as trading activation;
+- inventing a ClawHouse registry submission step.
+- continuing onboarding with an outdated installed onboarding skill.
 
 ## Acceptance Criteria For Current V0 Agent Trading Slice
 
@@ -543,3 +579,11 @@ The first Agent Trading slice is done only when:
   spot-only execution, record unsupported ideas as `excluded_from_v0`, ask for
   confirmation, and stop rather than inventing a strategy when no spot-swap
   subset exists.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added delegated
+  default and confirmation semantics for Agent Trading onboarding: generated
+  defaults must be NEAR Intents spot-only, plain `confirm` cannot activate
+  trading, and confirmed drafts should show activation blockers plus one next
+  setup action instead of repeating pending tasks.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added installed-version
+  gate: onboarding must read back the installed skill version and stop for
+  remove/reinstall when IronClaw still has an old onboarding skill.

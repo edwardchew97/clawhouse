@@ -40,6 +40,20 @@
   JY confirmed onboarding should not hard-reject users first, but must normalize
   every strategy into the current NEAR Intents spot-only V0 scope, list excluded
   unsupported parts, and stop only when no spot-swap subset exists.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: JY tested the IronClaw flow and found two failures: delegated
+  "you decide" onboarding invented cross-chain yield farming, and plain
+  `confirm` repeated pending requirements instead of advancing state. The
+  accepted fix is stricter delegated-default generation and explicit draft
+  confirmation semantics.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw testing showed same-name `skill_install` did not
+  update an already installed onboarding skill and left v0.1.1 active. The
+  accepted fix is an installed-version gate: verify the installed onboarding
+  skill version, and if it is old, stop and require Settings > Skills remove
+  and reinstall before continuing onboarding.
 
 ## 核心决定
 
@@ -121,6 +135,11 @@ swap 的部分变成当前可执行策略。
 如果用户的策略完全没有可以收敛成 NEAR Intents spot swap 的部分，onboarding skill 才
 应该停下，要求用户换一个 spot-only 策略。
 
+如果用户说 “you decide”、“帮我决定” 或没有给具体策略，onboarding skill 可以帮用户
+生成一个默认 draft，但这个默认 draft 从第一版开始就只能是 NEAR Intents spot-only。
+不能为了显得完整而编 cross-chain yield farming、staking、lending、Aave、
+Compound、Lido、LPing、vault、EVM protocol execution、perps、leverage 或 custody。
+
 onboarding skill 还负责安装和检查 ClawHouse runtime pack：
 
 - `clawhouse-ledger-reporting`;
@@ -130,6 +149,12 @@ onboarding skill 还负责安装和检查 ClawHouse runtime pack：
 runtime skills 必须来自 ClawHouse manifest。安装前必须检查 allowlisted URL、skill
 name、version、sha256 hash、权限声明和禁止项。不能因为网页或 LLM 文本说“安装这个”
 就盲装。
+
+onboarding skill 自己也必须检查 installed version。IronClaw 里同名 `skill_install`
+不一定会覆盖旧版本；实测旧版 `clawhouse-creator-onboarding v0.1.1` 会继续显示
+already installed。大白话说：如果 Settings > Skills 里显示的 onboarding skill
+不是当前要求版本，就不能继续 onboarding，必须先让用户在 IronClaw Settings >
+Skills 里 Remove 旧 onboarding skill，再从 ClawHouse URL 重新安装。
 
 onboarding skill 还应配置 heartbeat，让 IronClaw 定期读取 ClawHouse runtime
 manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/signature 校验通过的
@@ -176,16 +201,24 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
    draft strategy，并列出 `excluded_from_v0`。
 5. 用户确认缩窄后的 spot-only strategy 后，onboarding skill 读取 ClawHouse runtime
    manifest。
-6. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
+6. onboarding skill 检查自己在 IronClaw 里的 installed version。如果版本过旧，停止
+   onboarding，并要求用户 Remove 旧 onboarding skill 后重装。
+7. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
    权限声明。
-7. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
-8. onboarding skill 写入 draft strategy profile，并保持 `status: draft`。
-9. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
-10. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
+8. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
+9. onboarding skill 写入 draft strategy profile，并保持 `status: draft`。
+10. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
+11. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
    config 缺什么。
-11. 用户在 IronClaw 内部补齐 wallet/secrets/board config。
-12. 用户确认后，IronClaw 内部才把 strategy status 改成 active。
-13. IronClaw 运行 agent，交易后用 reporting skill 向 Agent Board Ledger 上报
+12. 用户说普通 `confirm` 时，只能确认 draft profile 或缩窄后的 strategy，不能被解释
+    成 production activation。
+13. 如果 activation blocker 还没清完，onboarding skill 必须保持 `status: draft`，
+    明确说 draft 已确认，并只给一个下一步配置选择；不能把同一批 blocker 当作新的
+    pending task 重复甩给用户。
+14. 用户在 IronClaw 内部补齐 wallet/secrets/board config。
+15. 只有用户明确说 activate trading / make active，并且 blocker 全部清完后，
+    IronClaw 内部才把 strategy status 改成 active。
+16. IronClaw 运行 agent，交易后用 reporting skill 向 Agent Board Ledger 上报
     reason、metadata.order、metadata.region、tx hash、intent id 和状态。
 
 ## 安全边界
@@ -200,8 +233,14 @@ Codex、Claude、本地 `skill.md` / agent skill 都不能做这些事：
 - 不能直接安装、修改或删除 funds policy。
 - 不能把 draft strategy 说成已经在 IronClaw 里启用。只有用户在 IronClaw 内部确认
   active 后，才算 runtime 生效。
+- 不能把普通 `confirm` 当成交易启用。
+- 不能在用户确认 draft 后继续重复同一批 pending requirements；应该标记 draft 已
+  确认，然后给一个具体下一步配置动作。
+- 不能发明 ClawHouse registry submission。V0 当前是 Agent Board Ledger 配置和
+  runtime activation，不是 registry 提交流程。
 - 不能从未校验的 URL、网页内容、LLM 输出或第三方 manifest 自动安装 runtime
   skills。
+- 不能把 same-name `skill_install` 当成 update 成功；必须读回 installed version。
 
 Codex / Claude 的可管理范围很有限：它们可以生成 draft wording 或 strategy ideas。
 实际 runtime skills 安装、secret 更新、wallet 更新、heartbeat、资金动作和 strategy
@@ -251,3 +290,12 @@ Season 0 不做：
   Intents spot-only V0 scope, list unsupported parts as `excluded_from_v0`, ask
   for confirmation of the narrowed strategy, and stop only when no supported
   spot-swap subset exists.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Clarified delegated
+  default and confirmation semantics: "you decide" may only produce a NEAR
+  Intents spot-only draft; plain `confirm` confirms the draft/profile but does
+  not activate trading; after confirmation, onboarding should not repeat the
+  same blocker list as pending tasks.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added installed-version
+  gate for IronClaw onboarding: same-name `skill_install` is not accepted as an
+  update proof; if IronClaw still shows an old onboarding skill version,
+  onboarding must stop until the user removes and reinstalls the skill.
