@@ -9,6 +9,7 @@ type RuntimeEnv = Record<string, string | undefined>;
 type HandlerOptions = {
   db?: LedgerDb;
   env?: RuntimeEnv;
+  rpcFetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 };
 
 export async function handleVercelLedgerRequest(request: Request, options: HandlerOptions = {}) {
@@ -23,6 +24,8 @@ export async function handleVercelLedgerRequest(request: Request, options: Handl
     const app = createApp({
       db,
       adminToken: env[ADMIN_TOKEN_ENV],
+      env,
+      rpcFetch: options.rpcFetch,
     });
     return await app.fetch(prepared);
   } finally {
