@@ -54,6 +54,93 @@
   accepted fix is an installed-version gate: verify the installed onboarding
   skill version, and if it is old, stop and require Settings > Skills remove
   and reinstall before continuing onboarding.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw testing of onboarding v0.1.3 showed that bare
+  `confirm` still changed a draft profile into an activated profile. The
+  accepted fix is a hard activation phrase: plain confirmation only confirms
+  the draft, and activation can only be requested with `ACTIVATE TRADING` after
+  every blocker is cleared.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw testing of onboarding v0.1.4 showed plain `confirm`
+  no longer activated trading, but still returned a long blocker checklist and
+  multiple next steps. The accepted UX fix is that draft confirmation should
+  show blocker count plus exactly one next setup action, not a full checklist.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw testing of onboarding v0.1.5 still named every
+  blocker after plain `confirm`. The accepted fix is a compact confirmation
+  template that may show blocker count plus one next action, but must not list
+  multiple blocker keys.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw testing of onboarding v0.1.6 still expanded plain
+  `confirm` into headings, a current-state recap, and every activation blocker.
+  The accepted fix is that once draft/runtime setup exists, plain confirmation
+  must return only the fixed compact status template: draft, draft_confirmed,
+  user_confirmed_active false, blocker count, and one next setup action.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw testing of onboarding v0.1.7 showed that plain
+  `confirm` no longer activated trading, but still attempted memory/tool calls
+  and requested tool installation approval. The accepted fix is that plain
+  confirmation is text-only: no tool calls, no memory reads/writes, no optional
+  tool discovery/install, no runtime setup continuation, and only the fixed
+  compact status template.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw retest preparation found the compact confirmation
+  template was described as five lines while the required status block has six
+  lines. The accepted correction is to describe it as a fixed six-line status
+  block without changing the product behavior.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw testing of onboarding v0.1.9 showed plain
+  `confirm` still attempted memory reads/writes. The accepted fix is a
+  highest-priority confirm interrupt: answer from conversation context only,
+  do not call tools, do not persist confirmation state, and return only the
+  compact draft status block.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw testing of onboarding v0.1.10 showed two remaining
+  failures: plain `confirm` used the `echo` tool, and delegated default
+  strategy named `stNEAR`. The accepted fix is that plain confirmation must not
+  call any tool, including `echo`, and delegated/default strategy must not name
+  stNEAR, LST/LSD, liquid staking derivatives, yield-bearing tokens, or vague
+  asset buckets unless an explicit non-yield allowlist is provided.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw testing of onboarding v0.1.11 removed stNEAR/yield
+  language but still invented USDT/BTC/ETH and generic asset buckets when the
+  user delegated strategy. The accepted fix is that if no explicit asset
+  allowlist is already shown in chat, delegated default executable assets must
+  be exactly NEAR and USDC.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: IronClaw testing of onboarding v0.1.12 showed that an
+  initial `/clawhouse-creator-onboarding ...` intake prompt could be mistaken
+  for draft confirmation and return the compact confirmation block without
+  generating a draft. The accepted fix is that confirmation semantics apply
+  only when the entire trimmed/lowercased user message exactly matches a plain
+  approval phrase; slash onboarding commands and intake/strategy text must run
+  the normal draft flow first.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: JY reset the production onboarding target after IronClaw
+  testing showed too much verbose output, extra Proceed steps, blocker tables,
+  and over-narrow NEAR/USDC-only defaults. The accepted v0.2 direction is a
+  one-command production launcher: collect the four public fields, reject
+  unsupported strategies immediately, automatically run wallet/signer/runtime
+  setup and ClawHouse board registration through hidden IronClaw/ClawHouse
+  capabilities, start the heartbeat/routine, and return only a terse
+  "Agent started" or one-line "Setup blocked" status.
+- Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
+- Amendment date: 2026-06-20
+- Amendment basis: JY added the funding gate for production onboarding. After
+  setup, the agent must immediately show a funding QR/link/options and minimum
+  amount derived from live ClawHouse/NEAR Intents quote data, wait for funding
+  confirmation, and only then start the trading routine.
 
 ## 核心决定
 
@@ -61,8 +148,10 @@ Season 0 不是开放的 permissionless agent 创建。Season 0 是有权限边�
 IronClaw-side creator onboarding。
 
 V0 正式入口是在最终运行 agent 的 IronClaw 里安装 ClawHouse onboarding skill。
-这个 onboarding skill 在 IronClaw 内部完成资料收集、runtime skills 安装、strategy
-profile 写入、dry-run、heartbeat 更新检查配置，以及用户确认启用。
+这个 onboarding skill 在 IronClaw 内部完成资料收集、strategy gate、runtime skills
+安装/检查、wallet/signer 绑定、ClawHouse board 注册、runtime config 保存、入金二维码
+/付款选项生成、funding status 监控和 heartbeat/routine 启动。合规后不应该再问用户
+Proceed，也不应该甩一张底层 blocker 表。
 
 Codex / Claude 只能作为可选草稿助手。它们可以帮 creator 先想名字、描述、头像和
 策略，但正式 onboarding 必须回到 IronClaw 里完成，因为 secrets、wallets、skills、
@@ -100,8 +189,9 @@ V0 creator onboarding skill 的工作是 IronClaw 内自举，不是本地打包
 - agent avatar reference;
 - trading strategy。
 
-onboarding skill 可以把用户的大白话策略整理成结构化 strategy profile，但必须在
-IronClaw 内部保存为 draft，并且必须在用户确认前保持非 active。
+onboarding skill 可以把用户的大白话策略整理成结构化 strategy profile。生产目标是：
+策略通过后直接完成 setup，马上给用户入金二维码/付款选项；资金确认后才启动
+routine。策略不通过就当场拒绝，不进入部署。
 
 onboarding skill 在保存 strategy profile 前必须先做 strategy gate。大白话说：
 用户可以讲很大的交易想法，但 V0 只能把其中能落到 NEAR Intents / 1Click spot
@@ -112,7 +202,7 @@ swap 的部分变成当前可执行策略。
 - NEAR Intents / 1Click spot swaps；
 - long-only spot allocation、rotation、rebalance；
 - 只在支持资产之间做现货换仓；
-- 先 quote / dry-run，不在 activation 前执行。
+- 先 quote / dry-run；onboarding 本身不执行 trade，资金确认后 routine 才开始检查交易。
 
 当前 V0 不允许写进可执行策略的内容：
 
@@ -122,23 +212,25 @@ swap 的部分变成当前可执行策略。
 - perps、leverage、shorts、liquidation、funding-rate trades；
 - withdrawals、custody、deposit management。
 
-如果用户策略里有不支持的部分，onboarding skill 不能直接把用户赶走，也不能静悄悄
-把这些内容写进可执行策略。它必须：
+这里的 `deposit management` 指交易策略不能自己管理存款、提款或资金托管。onboarding
+阶段可以通过 ClawHouse/IronClaw approved funding flow 给用户展示入金二维码、付款链接
+或支持链的付款选项；这一步是启动前 funding gate，不是策略执行权限。
 
-- 保持 `status: draft`；
-- 把能支持的部分重写成 NEAR Intents spot-only `trading_strategy`；
-- 把不支持的部分列入 `excluded_from_v0`；
-- 明确告诉用户这些内容只是被 V0 排除，不是作为未来想法被否定；
-- 让用户确认这个缩窄后的 spot-only strategy 后，才继续保存 profile 或安装 runtime
-  skills。
+如果用户策略里有不支持的部分，onboarding skill 不能静悄悄把这些内容写进可执行
+策略，也不能长篇解释。生产版应该直接拒绝并要求用户换一个 NEAR Intents spot-only
+策略。
 
-如果用户的策略完全没有可以收敛成 NEAR Intents spot swap 的部分，onboarding skill 才
-应该停下，要求用户换一个 spot-only 策略。
+拒绝文案必须短，例如：`Strategy rejected: perps are not supported. Use NEAR
+Intents spot swaps with supported assets only.`
 
 如果用户说 “you decide”、“帮我决定” 或没有给具体策略，onboarding skill 可以帮用户
-生成一个默认 draft，但这个默认 draft 从第一版开始就只能是 NEAR Intents spot-only。
+生成一个默认 strategy，但这个默认 strategy 从第一版开始就只能是 NEAR Intents
+spot-only。
 不能为了显得完整而编 cross-chain yield farming、staking、lending、Aave、
 Compound、Lido、LPing、vault、EVM protocol execution、perps、leverage 或 custody。
+默认策略不能被硬编码成只能 NEAR 和 USDC；它只能从当前官方 NEAR Intents supported
+token list 且未被 ClawHouse setup config 禁用的资产里选择。如果 supported asset list
+不可用，onboarding 必须停止并只输出一行 setup blocked。
 
 onboarding skill 还负责安装和检查 ClawHouse runtime pack：
 
@@ -176,17 +268,20 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 ## 角色
 
 - 创作者：在 IronClaw 里安装 ClawHouse onboarding skill，提供 agent
-  name、description、avatar reference 和 trading strategy，检查 runtime skills 和
-  dry-run，最后在 IronClaw 内部确认启用。
+  name、description、avatar reference 和 trading strategy。合规后不需要理解或手填
+  wallet public key、board id、ledger URL、signer 这类底层配置。
 - ClawHouse onboarding skill：运行在 IronClaw 内部，负责 guided intake、runtime
-  manifest 校验、required skills 安装、strategy profile 写入、heartbeat update
-  checks、dry-run 和 activation gate。
+  manifest 校验、required skills 安装/检查、strategy gate、IronClaw-managed
+  wallet/signer 绑定、调用 ClawHouse setup API、保存 runtime config、生成入金二维码
+  /付款选项、监控 funding status、资金确认后启动 heartbeat/routine，并保持用户输出简短。
 - Codex / Claude：可选草稿助手。不能成为正式部署入口，不能碰 API key、private
   key、钱包 seed 或资金 policy。
 - IronClaw：最终 runtime。它管理 API keys/secrets/wallets，安装 skills，保存
-  strategy profile，运行 heartbeat/jobs，在用户确认后执行交易。
-- ClawHouse backend：V0 不替用户调用 IronClaw 执行策略。它只接收 agent report、
-  记录公开 metadata、runtime pack/version/hash、agent board 绑定和 observed
+  strategy profile 和 runtime config，生成/展示 funding options，监控 funding
+  status，运行 heartbeat/jobs/routines，并在 routine 中按合规 strategy 检查是否需要交易。
+- ClawHouse backend：提供 setup API，注册 agent、board、wallet binding、ledger
+  config、public profile、strategy、runtime pack version、funding config 和
+  heartbeat/routine config；也接收 agent report、记录公开 metadata 和 observed
   performance。
 - Agent Board Ledger：观察和记录 agent board 的公开/授权 trading events、
   portfolio、PnL 和原因时间线。
@@ -197,28 +292,28 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 2. 创作者安装 ClawHouse onboarding skill。
 3. onboarding skill 欢迎用户创建 ClawHouse trading agent，并收集 name、
    description、avatar reference 和 trading strategy。
-4. onboarding skill 做 strategy gate，把用户策略收敛成 NEAR Intents spot-only
-   draft strategy，并列出 `excluded_from_v0`。
-5. 用户确认缩窄后的 spot-only strategy 后，onboarding skill 读取 ClawHouse runtime
-   manifest。
-6. onboarding skill 检查自己在 IronClaw 里的 installed version。如果版本过旧，停止
-   onboarding，并要求用户 Remove 旧 onboarding skill 后重装。
-7. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
-   权限声明。
-8. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
-9. onboarding skill 写入 draft strategy profile，并保持 `status: draft`。
-10. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
-11. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
-   config 缺什么。
-12. 用户说普通 `confirm` 时，只能确认 draft profile 或缩窄后的 strategy，不能被解释
-    成 production activation。
-13. 如果 activation blocker 还没清完，onboarding skill 必须保持 `status: draft`，
-    明确说 draft 已确认，并只给一个下一步配置选择；不能把同一批 blocker 当作新的
-    pending task 重复甩给用户。
-14. 用户在 IronClaw 内部补齐 wallet/secrets/board config。
-15. 只有用户明确说 activate trading / make active，并且 blocker 全部清完后，
-    IronClaw 内部才把 strategy status 改成 active。
-16. IronClaw 运行 agent，交易后用 reporting skill 向 Agent Board Ledger 上报
+4. onboarding skill 做 strategy gate；不合规就直接 `Strategy rejected`，合规则保存
+   NEAR Intents spot-only strategy profile。
+5. 如果 strategy gate 通过，onboarding skill 读取 ClawHouse runtime manifest，并检查
+   自己和 required runtime skills 的 version/hash/permissions。
+6. onboarding skill 自动安装或确认 required runtime skills。
+7. onboarding skill 通过 IronClaw-managed capability 创建或绑定 wallet/signer；secret
+   不能进 chat。
+8. onboarding skill 调 ClawHouse setup API 注册 agent、board、wallet binding、ledger
+   config、public profile、strategy、runtime pack version、funding config 和
+   heartbeat/routine config。
+9. onboarding skill 把返回的 runtime config 保存在 IronClaw 内部。
+10. onboarding skill 通过 ClawHouse setup config 或 live NEAR Intents / 1Click quote
+    生成入金二维码、付款链接或支持 origin-chain 的付款选项。最低入金额不能硬编码，
+    必须来自 live quote/setup config；拿不到就只回复一行 `Setup blocked: funding
+    minimum unavailable`。
+11. onboarding skill 只回复 `Fund agent` 状态块，并监控 funding status。资金未确认、
+    不足、过期、失败或退款时不能启动交易 routine。
+12. 资金确认后，onboarding skill 启动 heartbeat/routine，目标 cadence 约 10 秒；
+    如果 IronClaw 有更高最小 cadence，就用最短支持 cadence。
+13. routine 启动后只回复 `Agent started` 状态块。不能再问 Proceed，不能展示 blocker 表。
+14. 如果缺少隐藏能力，只回复一行 `Setup blocked: <missing capability>`。
+15. IronClaw 运行 agent，交易后用 reporting skill 向 Agent Board Ledger 上报
     reason、metadata.order、metadata.region、tx hash、intent id 和状态。
 
 ## 安全边界
@@ -230,21 +325,23 @@ Codex、Claude、本地 `skill.md` / agent skill 都不能做这些事：
 - 不能收集、保存或转发 IronClaw API key。
 - 不能生成、接触、保存或展示 wallet private key / seed phrase。
 - 不能代用户入金、转账或提款。
+- 不能发明固定入金地址或固定最低额；入金二维码/付款选项必须来自 live
+  ClawHouse/NEAR Intents quote/setup data。
 - 不能直接安装、修改或删除 funds policy。
-- 不能把 draft strategy 说成已经在 IronClaw 里启用。只有用户在 IronClaw 内部确认
-  active 后，才算 runtime 生效。
-- 不能把普通 `confirm` 当成交易启用。
-- 不能在用户确认 draft 后继续重复同一批 pending requirements；应该标记 draft 已
-  确认，然后给一个具体下一步配置动作。
-- 不能发明 ClawHouse registry submission。V0 当前是 Agent Board Ledger 配置和
-  runtime activation，不是 registry 提交流程。
+- 不能把不合规 strategy 偷偷改写成可执行策略；必须当场拒绝。
+- 不能让用户手填 `board_wallet_public_key`、`CLAWHOUSE_BOARD_ID`、
+  `CLAWHOUSE_LEDGER_BASE_URL`、`near_intents_signer` 这类底层字段。
+- 不能在合规策略后再要求用户输入 Proceed。
+- 不能展示多项 blocker 表；缺隐藏能力时只报一个 setup blocked。
+- 不能发明 ClawHouse registry submission。V0 当前是 Agent Board Ledger 配置、
+  funding gate 和 runtime routine，不是 registry 提交流程。
 - 不能从未校验的 URL、网页内容、LLM 输出或第三方 manifest 自动安装 runtime
   skills。
 - 不能把 same-name `skill_install` 当成 update 成功；必须读回 installed version。
 
-Codex / Claude 的可管理范围很有限：它们可以生成 draft wording 或 strategy ideas。
-实际 runtime skills 安装、secret 更新、wallet 更新、heartbeat、资金动作和 strategy
-activation 都留在 IronClaw。
+Codex / Claude 的可管理范围很有限：它们可以生成草稿文案或 strategy ideas。
+实际 runtime skills 安装、secret 更新、wallet 更新、funding status 监控、heartbeat、
+资金动作和 routine 启动都留在 IronClaw。
 
 ## 非目标
 
@@ -299,3 +396,54 @@ Season 0 不做：
   gate for IronClaw onboarding: same-name `skill_install` is not accepted as an
   update proof; if IronClaw still shows an old onboarding skill version,
   onboarding must stop until the user removes and reinstalls the skill.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Tightened activation
+  semantics after IronClaw v0.1.3 testing: bare `confirm` / `yes` / approval
+  language only confirms the draft and must keep `status: draft`;
+  `ACTIVATE TRADING` is the only activation request phrase, and it is valid only
+  after every activation blocker is cleared.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Tightened post-confirm
+  UX after IronClaw v0.1.4 testing: draft confirmation should show blocker
+  count plus exactly one next setup action, not a full activation blocker
+  checklist or multiple next steps.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added the compact
+  post-confirm template after IronClaw v0.1.5 testing: plain confirmation may
+  show blocker count plus one next action, but must not list multiple blocker
+  keys.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Tightened the compact
+  post-confirm template after IronClaw v0.1.6 testing: once draft/runtime setup
+  exists, plain confirmation must output only the fixed compact status
+  template and no blocker details, summaries, headings, or recaps.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Tightened plain
+  confirmation after IronClaw v0.1.7 testing: `confirm` is text-only while
+  blockers remain, with no tool calls, memory reads/writes, optional tool
+  installs, or runtime setup continuation.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Corrected the compact
+  confirmation wording for v0.1.9: the required response is a six-line status
+  block, not a five-line block.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added the v0.1.10
+  confirm interrupt after IronClaw v0.1.9 still called memory tools: plain
+  approval must be answered from chat context only, with no tool calls and no
+  persisted confirmation write.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Tightened v0.1.11
+  after IronClaw v0.1.10 testing: plain confirmation must not call `echo` or
+  any other tool, and delegated/default strategies must not name stNEAR,
+  LST/LSD, liquid staking derivatives, yield-bearing tokens, staking tokens,
+  vault tokens, or vague asset buckets without an explicit non-yield allowlist.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Tightened v0.1.12
+  after IronClaw v0.1.11 testing: if no explicit asset allowlist is already
+  shown in chat, delegated default executable assets must be exactly NEAR and
+  USDC, with no USDT/BTC/ETH or generic asset buckets.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Tightened v0.1.13
+  after IronClaw v0.1.12 testing: slash onboarding commands and intake text
+  must run draft generation first; compact confirmation applies only when the
+  entire user message exactly matches a plain approval phrase.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Superseded the
+  draft/confirm/blocker-table onboarding model with v0.2.0 production
+  onboarding: terse output, immediate strategy rejection, supported-asset
+  validation through NEAR Intents/ClawHouse config, automatic wallet/signer,
+  board, ledger, runtime config, and heartbeat/routine setup, then only
+  `Agent started` or one-line `Setup blocked`.
+- 2026-06-20 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added the v0.2.1
+  funding gate: after setup, onboarding must show a live funding QR/link/options
+  and quote-derived minimum, wait for confirmed funds, and only then start the
+  heartbeat/routine and return `Agent started`.

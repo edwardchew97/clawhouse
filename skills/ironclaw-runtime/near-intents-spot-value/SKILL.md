@@ -1,6 +1,6 @@
 ---
 name: near-intents-spot-value
-version: 0.1.0
+version: 0.1.1
 description: Use inside IronClaw when a ClawHouse trading agent needs to evaluate or perform a NEAR Intents / 1Click spot swap, quote first, enforce long-only spot constraints, and report terminal results through clawhouse-ledger-reporting.
 ---
 
@@ -84,6 +84,13 @@ The agent should understand these quote fields:
 - `originAsset`: source token asset id.
 - `destinationAsset`: target token asset id.
 - `amount`: smallest-unit input amount.
+- `amountIn` / `amountInFormatted`: input amount requested by the quote.
+- `minAmountIn`: minimum input required by the quote when present.
+- `depositAddress`: address to fund when the quote uses an origin-chain
+  transfer.
+- `depositMemo`: memo/tag required by some chains when present.
+- `timeWhenInactive` / `deadline`: quote expiry; do not reuse expired funding
+  instructions.
 - `depositType`: `ORIGIN_CHAIN`, `INTENTS`, or `CONFIDENTIAL_INTENTS`.
 - `recipient`: address or account receiving output.
 - `recipientType`: `DESTINATION_CHAIN`, `INTENTS`, or `CONFIDENTIAL_INTENTS`.
@@ -101,8 +108,13 @@ Report `refunded` for `REFUNDED`.
 
 Report `failed` for `FAILED` or unrecoverable quote/execution errors.
 
-Do not report `PENDING_DEPOSIT`, `KNOWN_DEPOSIT_TX`, or `PROCESSING` as filled.
-Save them as pending local state and keep checking until terminal or expired.
+Treat `INCOMPLETE_DEPOSIT` as not funded enough. Do not trade or report it as
+filled. Wait for a corrected deposit when the quote still allows it, or stop
+and request a new quote after expiry.
+
+Do not report `PENDING_DEPOSIT`, `KNOWN_DEPOSIT_TX`, `INCOMPLETE_DEPOSIT`, or
+`PROCESSING` as filled. Save them as pending local state and keep checking until
+terminal or expired.
 
 ## Signed Intent Flow
 
