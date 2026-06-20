@@ -1,0 +1,4 @@
+interface:
+  display_name: "ClawHouse Local Runtime"
+  short_description: "Run latest ClawHouse dev locally"
+  default_prompt: "Use $clawhouse-local-runtime to start the latest ClawHouse dev backend, app, Workbench, database checks, and auto-refresh watcher."
