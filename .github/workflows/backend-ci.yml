@@ -44,5 +44,8 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Vercel runtime import check
+        run: bun run vercel:runtime-check
+
       - name: Test
         run: bun test

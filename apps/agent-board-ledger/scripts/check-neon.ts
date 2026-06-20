@@ -1,4 +1,4 @@
-import { checkNeonSchema, requireNeonDatabaseUrl } from "./lib/neon";
+import { checkNeonSchema, requireNeonDatabaseUrl } from "./lib/neon.js";
 
 try {
   const result = await checkNeonSchema(requireNeonDatabaseUrl());

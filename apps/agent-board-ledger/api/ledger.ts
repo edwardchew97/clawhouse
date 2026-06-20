@@ -1,4 +1,4 @@
-import { handleVercelLedgerRequest } from "../src/vercel";
+import { handleVercelLedgerRequest } from "../src/vercel.js";
 
 export const maxDuration = 60;
 

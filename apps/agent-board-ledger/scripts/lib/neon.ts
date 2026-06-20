@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { neonRequiredTables, neonSchemaStatements } from "../../src/neon-schema";
+import { neonRequiredTables, neonSchemaStatements } from "../../src/neon-schema.js";
 
 export function readNeonDatabaseUrl(env = process.env) {
   return optionalEnv(env.AGENT_BOARD_LEDGER_DATABASE_URL)

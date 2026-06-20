@@ -1,4 +1,4 @@
-import { migrateNeon, requireNeonDatabaseUrl } from "./lib/neon";
+import { migrateNeon, requireNeonDatabaseUrl } from "./lib/neon.js";
 
 try {
   const result = await migrateNeon(requireNeonDatabaseUrl());
