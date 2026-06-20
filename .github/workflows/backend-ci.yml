@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - ".github/workflows/backend-ci.yml"
-      - ".github/workflows/deploy-backend-*.yml"
       - "apps/agent-board-ledger/**"
       - "tools/near-wallet/**"
       - "package.json"
@@ -15,7 +14,6 @@ on:
       - main
     paths:
       - ".github/workflows/backend-ci.yml"
-      - ".github/workflows/deploy-backend-*.yml"
       - "apps/agent-board-ledger/**"
       - "tools/near-wallet/**"
       - "package.json"
