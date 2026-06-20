@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { Database } from "bun:sqlite";
 import { Pool, type PoolClient } from "@neondatabase/serverless";
 import { neonSchemaStatements } from "./neon-schema";
 import type {
@@ -11,6 +11,7 @@ import type {
   ObservationRow,
   PnlSnapshot,
 } from "./types";
+import type { Database } from "bun:sqlite";
 
 export type RunResult = {
   changes?: number;
@@ -28,7 +29,7 @@ export type LedgerDb = {
 export function openSqliteLedgerDb(path: string): SqliteLedgerDb {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
 
-  const db = new Database(path);
+  const db = new (loadSqliteDatabase())(path);
   db.exec("PRAGMA foreign_keys = ON");
   db.exec("PRAGMA journal_mode = WAL");
   migrate(db);
@@ -95,6 +96,17 @@ export class SqliteLedgerDb implements LedgerDb {
 
   close() {
     this.raw.close();
+  }
+}
+
+const requireFromHere = createRequire(import.meta.url);
+type BunSqliteDatabaseConstructor = new (path: string) => Database;
+
+function loadSqliteDatabase(): BunSqliteDatabaseConstructor {
+  try {
+    return (requireFromHere("bun:sqlite") as { Database: BunSqliteDatabaseConstructor }).Database;
+  } catch {
+    throw new Error("SQLite ledger storage requires Bun; hosted runtime storage must use Neon/Postgres");
   }
 }
 

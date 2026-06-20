@@ -1,0 +1,69 @@
+name: Deploy Backend Prod
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy-backend-prod.yml"
+      - "apps/agent-board-ledger/**"
+      - "tools/near-wallet/**"
+      - "package.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy clawhouse-backend-prod
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    environment:
+      name: clawhouse-backend-prod
+      url: ${{ steps.deploy.outputs.url }}
+    defaults:
+      run:
+        working-directory: apps/agent-board-ledger
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_PROD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install wallet tool dependencies
+        working-directory: tools/near-wallet
+        run: bun install --frozen-lockfile
+
+      - name: Install backend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@54.14.2
+
+      - name: Pull Vercel project settings
+        run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Build production artifact
+        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Deploy production artifact
+        id: deploy
+        run: |
+          deployment_url="$(vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")"
+          echo "url=${deployment_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke check health
+        run: curl --fail --show-error --silent "${{ steps.deploy.outputs.url }}/health"

@@ -1294,6 +1294,31 @@
           }
         },
         {
+          "id": "developerSetup.ledger.vercelCronTick",
+          "name": "Check Vercel Cron Adapter",
+          "description": "Calls the Vercel cron GET path that production cron uses, then expects the backend to run real cron reconciliation.",
+          "type": "http",
+          "access": "protected",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/api/cron",
+          "headers": {
+            "Authorization": "Bearer {{ledgerCronSecret}}"
+          },
+          "runningNotes": [
+            "Set ledgerBaseUrl to the deployed ClawHouse backend URL before running this step.",
+            "This calls the real Vercel cron adapter path.",
+            "The adapter verifies CRON_SECRET and then runs the existing service-authorized cron reconciliation."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "",
+            "ledgerCronSecret": ""
+          },
+          "setVars": {
+            "ledgerCronStatus": "response.json.json.status",
+            "ledgerCronDiscoveredEvents": "response.json.json.discoveredEvents"
+          }
+        },
+        {
           "id": "developerSetup.ledger.neonMigrate",
           "name": "Migrate Ledger Schema",
           "description": "Runs the real Neon migration script for Agent Board Ledger schema setup.",
