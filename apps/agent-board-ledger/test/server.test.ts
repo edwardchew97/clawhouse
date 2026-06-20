@@ -1230,23 +1230,25 @@ describe("Agent Board Ledger local backend", () => {
   });
 
   test("normalizes Vercel wildcard rewrites without breaking board registration", async () => {
+    const body = {
+      board_id: "board-1",
+      agent_id: "ironclaw",
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      starting_value_usd: 100,
+      base_currency: "USD",
+      public_status: "active",
+      visibility_mode: "public",
+    };
+    const signed = signRequest("POST", "/boards", body, wallet, { timestamp: Date.now().toString() });
     const response = await handleVercelLedgerRequest(
       new Request("http://ledger.test/api/ledger?ledgerPath=/boards/", {
         method: "POST",
         headers: {
+          ...signed.headers,
           authorization: `Bearer ${adminToken}`,
-          "content-type": "application/json",
         },
-        body: JSON.stringify({
-          board_id: "board-1",
-          agent_id: "ironclaw",
-          wallet_address: wallet.walletAddress,
-          public_key: wallet.publicKey,
-          starting_value_usd: 100,
-          base_currency: "USD",
-          public_status: "active",
-          visibility_mode: "public",
-        }),
+        body: signed.rawBody,
       }),
       { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
     );
