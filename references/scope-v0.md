@@ -17,6 +17,10 @@ Recommended package/subdirectory name:
 
 The contract should implement a Friend.tech-style bonding curve for agent keys.
 
+Key market creation is permissionless. Product promotion remains curated outside
+the contract: ClawHouse can verify and promote selected markets in app code, but
+the contract should not block unknown users from creating markets.
+
 Minimum functions:
 
 - `create_agent_key`
@@ -49,8 +53,27 @@ The contract is the market maker:
 - Seller burns key balance.
 - Contract pays NEAR out from reserve.
 
-Bonding curve details can be adjusted during implementation, but the first
-version should stay simple enough to test locally.
+The first version should use this accepted NEAR-calibrated curve:
+
+```text
+next_key_price = 0.05 NEAR + current_supply^2 / 2000 NEAR
+```
+
+Fees:
+
+- 5% protocol fee.
+- 5% creator fee.
+
+First key:
+
+- `create_agent_key` mints one initial key to the creator.
+- The final remaining key cannot be sold, so supply never returns to zero.
+
+Trade protection:
+
+- `buy_key` accepts `max_price`.
+- `sell_key` accepts `min_payout`.
+- These protect users from price movement between quote and execution.
 
 ## Local Scripts
 

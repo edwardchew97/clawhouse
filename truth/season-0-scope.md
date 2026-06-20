@@ -11,6 +11,12 @@
   any OutLayer gate, and that current agent trading work should be scoped as
   Agent Board Ledger observation/accounting rather than a pre-trade execution
   engine.
+- Merge session: `019ee3d1-3a11-75b3-aad9-75182947a9eb`
+- Date: 2026-06-20
+- Basis: JY requested merging the remaining `codex/scope-5-key-trading`
+  worktree changes into `dev`; this preserves the existing no-OutLayer boundary
+  while adding the key-market creation, pricing, fee, and trade-protection
+  decisions from that worktree.
 
 ## 一句话
 
@@ -33,6 +39,10 @@ Season 0 不是先做一个长期的 B2B agent proof layer，也不是先做完�
 Season 0 是 curated / permissioned，不是 permissionless agent creation。
 
 大白话：一开始不是所有用户都能随便创建 agent。ClawHouse 先挑一批 agent 上线，用户主要是玩家、key holder、follower、copier。
+
+这里的 agent creation 指 agent onboarding、认证、部署和产品推广，不等于链上的 key market 创建权限。
+
+Scope V0 的 key market contract 是 permissionless：任何账号都可以在链上创建一个 agent key market。ClawHouse 产品层仍然 curated：前端、排行、badge 和官方推广只展示或重点推广 verified agents。未认证 market 可以存在于链上，但不默认获得 ClawHouse 分发。
 
 建议的 Season 0 agent 池：
 
@@ -57,10 +67,15 @@ Scope V0 的第一刀是 NEAR 上的 agent key market。
 
 关键决定：
 
+- key market 创建是 permissionless。
 - 不需要 LP 池。
 - key market contract 自己就是 reserve。
 - 用户买 key 时 attach NEAR。
 - 用户卖 key 时 burn key，contract 从 reserve 里退 NEAR。
+- 第一个 key 归 creator，用来初始化 market，并避免 market 被完全清空。
+- 价格曲线使用 NEAR 参数，不照抄 ETH 参数：`next_key_price = 0.05 NEAR + current_supply^2 / 2000 NEAR`。
+- 买卖都收 5% protocol fee 和 5% creator fee。
+- 买 key 必须支持 `max_price`，卖 key 必须支持 `min_payout`，避免用户在价格变化后吃亏成交。
 
 ## Scope V0 OutLayer Boundary
 
@@ -120,7 +135,7 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
 - 以 Hyperliquid perps 作为第一主线。
 - 杠杆、爆仓、资金费率。
 - key profit sharing。
-- permissionless agent creation。
+- permissionless agent onboarding / certification / deployment。
 - 任何 V0 OutLayer / OutLayer policy / OutLayer gate。
 - 本地 Codex / Claude / skill 直接部署 IronClaw 或修改 OutLayer funds policy。
 - 把旧 `docs/prd/v0-scope.md` 方向当作当前 scope。
@@ -145,3 +160,8 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
 - 2026-06-19 - `019ede10-c43f-76f1-ab2d-68b0fabf9802` - Added required
   provenance metadata and made Scope V0's no-OutLayer boundary explicit for the
   key market and Agent Board Ledger work.
+- 2026-06-20 - `019ee3d1-3a11-75b3-aad9-75182947a9eb` - Merged the remaining
+  `codex/scope-5-key-trading` scope details into accepted truth while preserving
+  the no-OutLayer boundary: key market creation is permissionless, product
+  promotion remains curated, the first curve is NEAR-calibrated, fees are 5%
+  protocol plus 5% creator, and buy/sell calls require slippage protection.
