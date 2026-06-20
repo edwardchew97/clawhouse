@@ -192,15 +192,15 @@ export default function Page() {
               <div className="position-grid">
                 <div className="stat">
                   <label>Keys</label>
-                  <strong id="posKeys">2</strong>
+                  <strong id="posKeys">--</strong>
                 </div>
                 <div className="stat">
                   <label>Entry</label>
-                  <strong id="posEntry">2.91</strong>
+                  <strong id="posEntry">-</strong>
                 </div>
                 <div className="stat">
                   <label>Exit</label>
-                  <strong className="green" id="posExit">+0.51</strong>
+                  <strong id="posExit">-</strong>
                 </div>
               </div>
             </section>
@@ -259,7 +259,7 @@ export default function Page() {
             </div>
             <div className="move-card">
               <label id="modalMetricLabel">Backend status</label>
-              <strong id="modalMove">+0.0%</strong>
+              <strong id="modalMove">--</strong>
               <span id="modalMoveHint">status_claim</span>
             </div>
           </div>
@@ -275,7 +275,7 @@ export default function Page() {
             </div>
             <div>
               <label>Agent action</label>
-              <strong id="modalAction">Buy</strong>
+              <strong id="modalAction">--</strong>
             </div>
           </div>
 
