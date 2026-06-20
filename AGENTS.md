@@ -62,6 +62,15 @@ The test: Every changed line should trace directly to the user's request.
 - Do not leave untracked draft files in the main checkout. Temporary artifacts belong under ignored paths such as `work/` or `artifacts/`; source/product artifacts must belong to a branch and PR.
 - Final reports for writing tasks must state the worktree path, branch name, PR link or reason no PR was made, and any remaining dirty/untracked files.
 
+## Worktree Closeout Gate
+
+- Every task worktree must end with an explicit cleanup decision: removed, retained for a named reason, or handed off to another active thread/owner.
+- After a PR is merged, closed, or otherwise absorbed into `origin/dev`, verify the branch before cleanup with `git fetch --prune origin`, `git status --short`, and `git cherry -v origin/dev <branch>`.
+- If the worktree is clean and `git cherry` shows no `+` commits, remove the task worktree and delete the local branch. If the remote feature branch still exists and its PR is merged, delete that remote branch too.
+- If the worktree is dirty or `git cherry` shows `+` commits, do not delete it silently. Report the dirty files or unique commits, the worktree path, and the proposed next action.
+- For Codex app-managed worktrees under `/Users/Edward/.codex/worktrees/*/clawhouse`, do not remove the filesystem checkout directly unless the owning thread has been archived, handed off, or explicitly cleared for deletion.
+- Prefer merge commits for multi-lane, audit-heavy, or provenance-sensitive PRs where the Git graph should show the branch converging back into `dev`. Use squash merge only for small PRs with noisy WIP commits, and only if the source worktree/branch is cleaned up immediately after merge.
+
 ## Acceptance Workbench Coverage
 
 - For every code-backed feature, bug fix, or behavior change, update `apps/acceptance-workbench/flows.json`, the Workbench UI, or the Workbench runner whenever the changed behavior can be verified through a real request, script, or readback flow.
