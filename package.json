@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "clawhouse-app:dev": "cd apps/clawhouse-app && bun run dev",
+    "clawhouse-app:build": "cd apps/clawhouse-app && bun run build",
+    "clawhouse-app:start": "cd apps/clawhouse-app && bun run start",
+    "clawhouse-app:typecheck": "cd apps/clawhouse-app && bun run typecheck",
     "ledger:dev": "cd apps/agent-board-ledger && bun run dev",
     "ledger:db:migrate:neon": "cd apps/agent-board-ledger && bun run db:migrate:neon",
     "ledger:db:check:neon": "cd apps/agent-board-ledger && bun run db:check:neon",
