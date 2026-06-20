@@ -40,6 +40,13 @@ const repoRoot = resolve(import.meta.dir, "../../..");
 let activeMockRpc: ReturnType<typeof startMockNearRpc> | null = null;
 
 async function main() {
+  if (process.argv.includes("--help")) {
+    return {
+      ok: true,
+      usage: "bun scripts/workbench-edge-cases.ts [--base-url <url>] [--key-file <path>] [--admin-token <token>]",
+      env: ["AGENT_BOARD_LEDGER_ADMIN_TOKEN", "ledgerAdminToken"],
+    };
+  }
   const options = parseArgs(process.argv.slice(2));
   const wallet = await loadOrCreateWallet(options.keyFile);
   const runId = `${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`;
@@ -52,7 +59,7 @@ async function main() {
   const ftBoardId = `${boardPrefix}-ft`;
   const checks: CheckResult[] = [];
 
-  const rejectionBoard = await servicePostJson(options, "/boards", boardBody(options, wallet, rejectionBoardId));
+  const rejectionBoard = await signedServicePostJson(options, wallet, "/boards", rejectionBoardId, boardBody(options, wallet, rejectionBoardId));
   expectSuccess(checks, "service-authenticated rejection board registration", rejectionBoard);
 
   if (isSuccess(rejectionBoard)) {
@@ -83,10 +90,10 @@ async function main() {
     );
   }
 
-  const flowBoard = await servicePostJson(options, "/boards", boardBody(options, wallet, flowBoardId));
+  const flowBoard = await signedServicePostJson(options, wallet, "/boards", flowBoardId, boardBody(options, wallet, flowBoardId));
   expectSuccess(checks, "service-authenticated flow board registration", flowBoard);
 
-  const holderBoard = await servicePostJson(options, "/boards", {
+  const holderBoard = await signedServicePostJson(options, wallet, "/boards", holderBoardId, {
     ...boardBody(options, wallet, holderBoardId),
     visibility_mode: "holder_gated",
   });
@@ -128,7 +135,7 @@ async function main() {
     });
   }
 
-  const ftBoard = await servicePostJson(options, "/boards", boardBody(options, wallet, ftBoardId));
+  const ftBoard = await signedServicePostJson(options, wallet, "/boards", ftBoardId, boardBody(options, wallet, ftBoardId));
   expectSuccess(checks, "service-authenticated FT watcher board registration", ftBoard);
 
   if (isSuccess(ftBoard)) {
@@ -229,10 +236,12 @@ async function main() {
     const observationId = stringAt(observation.json, ["observation", "id"]);
     const observationObservedAt = stringAt(observation.json, ["observation", "observed_at"]);
 
+    const nearPriceUsd = 2;
+    const reconciledNearAmount = options.currentValueUsd / nearPriceUsd;
     const price = await servicePostJson(options, `/boards/${flowBoardId}/prices`, {
       asset_id: "native:near",
       asset_symbol: "NEAR",
-      price_usd: 2,
+      price_usd: nearPriceUsd,
       price_source: "acceptance-workbench-edge",
       observed_at: observationObservedAt,
     });
@@ -242,9 +251,9 @@ async function main() {
     const balanceChange = await servicePostJson(options, `/boards/${flowBoardId}/balance-changes`, {
       asset_id: "native:near",
       asset_symbol: "NEAR",
-      normalized_amount: 56,
+      normalized_amount: reconciledNearAmount,
       delta_amount: 6,
-      delta_value_usd: 12,
+      delta_value_usd: 6 * nearPriceUsd,
       change_type: "trade",
       source_observation_id: observationId,
       tx_hash: txHash,
@@ -404,6 +413,36 @@ async function signedPostJson(
     method: "POST",
     headers: {
       "content-type": "application/json",
+      ...signed.headers,
+    },
+    body: rawBody,
+  });
+}
+
+async function signedServicePostJson(
+  options: Options,
+  wallet: NearWalletPublicInfo,
+  path: string,
+  boardId: string,
+  body: JsonRecord,
+) {
+  if (!options.serviceToken) {
+    throw new Error("Missing ledgerAdminToken input or AGENT_BOARD_LEDGER_ADMIN_TOKEN for service-authorized ledger writes");
+  }
+
+  const rawBody = JSON.stringify(body);
+  const signed = await signAgentBoardLedgerRequest({
+    keyFile: wallet.keyFile,
+    method: "POST",
+    path,
+    body: rawBody,
+    boardId,
+    agentId: options.agentId,
+  });
+  return await requestJson(options.baseUrl, path, {
+    method: "POST",
+    headers: {
+      ...serviceHeaders(options.serviceToken),
       ...signed.headers,
     },
     body: rawBody,
