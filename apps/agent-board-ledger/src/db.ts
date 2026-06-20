@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { Pool, type PoolClient } from "@neondatabase/serverless";
-import { neonSchemaStatements } from "./neon-schema";
+import { neonSchemaStatements } from "./neon-schema.js";
 import type {
   AttachmentRow,
   Board,
@@ -10,7 +10,7 @@ import type {
   HoldingSnapshot,
   ObservationRow,
   PnlSnapshot,
-} from "./types";
+} from "./types.js";
 import type { Database } from "bun:sqlite";
 
 export type RunResult = {
