@@ -28,6 +28,7 @@ beforeEach(async () => {
     now: () => currentNow,
     adminToken,
     rpcFetch: (...args) => currentRpcFetch(...args),
+    env: {},
   });
   wallet = createWallet();
 });
@@ -655,6 +656,60 @@ describe("Agent Board Ledger local backend", () => {
     expect(pnlBody.latest.completeness_status).toBe("complete");
   });
 
+  test("cron watches active tracked NEAR accounts when RPC env is configured", async () => {
+    const seenRpcBodies: Array<Record<string, any>> = [];
+    currentRpcFetch = async (_input, init) => {
+      const rpcBody = JSON.parse(String(init?.body));
+      seenRpcBodies.push(rpcBody);
+      return new Response(JSON.stringify({
+        jsonrpc: "2.0",
+        id: "clawhouse-agent-board-ledger",
+        result: {
+          amount: "150000000000000000000000000",
+          locked: "0",
+          block_hash: "near-cron-block",
+          block_height: 456,
+          storage_usage: 789,
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    app = createApp({
+      db: sqliteDb,
+      now: () => currentNow,
+      adminToken,
+      rpcFetch: (...args) => currentRpcFetch(...args),
+      env: { AGENT_BOARD_LEDGER_NEAR_RPC_URL: "https://rpc.testnet.near.org" },
+    });
+    await registerBoard();
+
+    const tickBody = await jsonOf<{
+      status: string;
+      nearAccountWatch: { status: string; attempted: number; checked: number; failed: number };
+      summary: Record<string, number | boolean | string>;
+    }>(await postJson("/cron/tick", {}));
+    const changesBody = await jsonOf<{ balance_changes: Array<Record<string, any>> }>(
+      await app.fetch(new Request("http://ledger.test/boards/board-1/balance-changes")),
+    );
+
+    expect(tickBody.status).toBe("updated");
+    expect(tickBody.nearAccountWatch).toMatchObject({
+      status: "checked",
+      attempted: 1,
+      checked: 1,
+      failed: 0,
+    });
+    expect(tickBody.summary.nearAccountWatchesChecked).toBe(1);
+    expect(seenRpcBodies).toHaveLength(1);
+    expect(seenRpcBodies[0]?.params.request_type).toBe("view_account");
+    expect(seenRpcBodies[0]?.params.account_id).toBe(wallet.walletAddress);
+    expect(changesBody.balance_changes).toHaveLength(1);
+    expect(changesBody.balance_changes[0].asset_id).toBe("native:near");
+    expect(changesBody.balance_changes[0].normalized_amount).toBe(150);
+    expect(changesBody.balance_changes[0].visibility_status).toBe("missing_price");
+    expect(countRows("observations")).toBe(0);
+    expect(countRows("balance_changes")).toBe(1);
+  });
+
   test("watches a NEAR fungible token through RPC and records priced PnL evidence", async () => {
     const seenRpcBodies: Array<Record<string, any>> = [];
     currentRpcFetch = async (_input, init) => {
@@ -1030,6 +1085,54 @@ describe("Agent Board Ledger local backend", () => {
     expect(countRows("events")).toBe(1);
   });
 
+  test("passes Vercel env into the cron NEAR account watcher", async () => {
+    const seenRpcBodies: Array<Record<string, any>> = [];
+    await registerBoard();
+
+    const response = await handleVercelLedgerRequest(
+      new Request("http://ledger.test/api/cron", {
+        headers: { authorization: "Bearer cron-secret" },
+      }),
+      {
+        db: sqliteDb,
+        env: {
+          [ADMIN_TOKEN_ENV]: adminToken,
+          [CRON_SECRET_ENV]: "cron-secret",
+          AGENT_BOARD_LEDGER_NEAR_RPC_URL: "https://rpc.testnet.near.org",
+        },
+        rpcFetch: async (_input, init) => {
+          const rpcBody = JSON.parse(String(init?.body));
+          seenRpcBodies.push(rpcBody);
+          return new Response(JSON.stringify({
+            jsonrpc: "2.0",
+            id: "clawhouse-agent-board-ledger",
+            result: {
+              amount: "175000000000000000000000000",
+              locked: "0",
+              block_hash: "near-vercel-cron-block",
+              block_height: 789,
+              storage_usage: 101,
+            },
+          }), { status: 200, headers: { "content-type": "application/json" } });
+        },
+      },
+    );
+    const body = await jsonOf<{
+      nearAccountWatch: { status: string; attempted: number; checked: number; failed: number };
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.nearAccountWatch).toMatchObject({
+      status: "checked",
+      attempted: 1,
+      checked: 1,
+      failed: 0,
+    });
+    expect(seenRpcBodies).toHaveLength(1);
+    expect(seenRpcBodies[0]?.params.account_id).toBe(wallet.walletAddress);
+    expect(countRows("balance_changes")).toBe(1);
+  });
+
   test("requires an explicit observation wallet address", async () => {
     await registerBoard();
 
@@ -1191,7 +1294,7 @@ function columnNames(db: Database, table: string) {
   return db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().map((row) => row.name);
 }
 
-function countRows(table: "holding_snapshots" | "pnl_snapshots" | "events" | "observations") {
+function countRows(table: "holding_snapshots" | "pnl_snapshots" | "events" | "observations" | "balance_changes") {
   return sqliteDb.raw.query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM ${table}`).get()?.count ?? 0;
 }
 

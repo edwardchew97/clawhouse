@@ -38,7 +38,7 @@ Set these in each Vercel project:
 - `AGENT_BOARD_LEDGER_DATABASE_URL` or `DATABASE_URL`
 - `AGENT_BOARD_LEDGER_ADMIN_TOKEN`
 - `CRON_SECRET`
-- `AGENT_BOARD_LEDGER_NEAR_RPC_URL` if watcher requests should omit `rpc_url`
+- `AGENT_BOARD_LEDGER_NEAR_RPC_URL` for the automatic cron NEAR account watcher
 
 Use separate staging and production values. Do not point staging cron at the
 production database.
@@ -68,6 +68,10 @@ Vercel Cron invokes:
 
 The Vercel adapter verifies `Authorization: Bearer <CRON_SECRET>`, then calls the
 existing service-authorized cron path internally with `AGENT_BOARD_LEDGER_ADMIN_TOKEN`.
+Each cron tick first checks active tracked NEAR account balances when
+`AGENT_BOARD_LEDGER_NEAR_RPC_URL` is configured, then reconciles observations,
+events, holding snapshots, and PnL snapshots. Without the RPC URL, cron skips the
+automatic account watcher and only reconciles data already in the database.
 
 ## CI/CD
 
@@ -75,5 +79,6 @@ existing service-authorized cron path internally with `AGENT_BOARD_LEDGER_ADMIN_
 - Pushes to `main` are deployed by Vercel through `clawhouse-backend-prod`.
 - GitHub Actions only gates code quality; Vercel owns build, deploy, and cron.
 
-The cron schedule is configured in `vercel.json` as hourly. Vercel Hobby projects
-only support daily cron; hourly cron requires a paid plan or a different scheduler.
+The cron schedule is configured in `vercel.json` as every minute. Once-per-minute
+cron requires a Vercel Pro-or-higher project; Hobby projects only support daily
+cron and need a different scheduler for this cadence.

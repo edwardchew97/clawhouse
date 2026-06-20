@@ -7,9 +7,11 @@ type AppOptions = {
   now?: () => Date;
   adminToken?: string;
   rpcFetch?: FetchLike;
+  env?: RuntimeEnv;
 };
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+type RuntimeEnv = Record<string, string | undefined>;
 
 type RouteContext = {
   params: Record<string, string>;
@@ -28,6 +30,7 @@ const attachmentTypes = new Set([
 
 const OBSERVATION_FUTURE_SKEW_MS = 60 * 1000;
 const YOCTO_NEAR_PER_NEAR = 1e24;
+const NEAR_RPC_URL_ENV = "AGENT_BOARD_LEDGER_NEAR_RPC_URL";
 
 export function createApp(options: AppOptions) {
   const db = options.db;
@@ -35,6 +38,7 @@ export function createApp(options: AppOptions) {
   const now = () => currentDate().toISOString();
   const adminToken = options.adminToken ?? process.env[ADMIN_TOKEN_ENV];
   const rpcFetch = options.rpcFetch ?? fetch;
+  const env = options.env ?? process.env;
 
   return {
     db,
@@ -116,19 +120,19 @@ export function createApp(options: AppOptions) {
         }
         if (method === "POST" && nearKeyMarketReadAccessMatch) {
           assertServiceBearer(request.headers, adminToken);
-          return json(await checkNearKeyMarketReadAccess(db, rpcFetch, await readBody(request), nearKeyMarketReadAccessMatch[1], now()), 201);
+          return json(await checkNearKeyMarketReadAccess(db, rpcFetch, env, await readBody(request), nearKeyMarketReadAccessMatch[1], now()), 201);
         }
         if (method === "POST" && nearAccountWatchMatch) {
           assertServiceBearer(request.headers, adminToken);
-          return json(await runNearAccountWatch(db, rpcFetch, await readBody(request), nearAccountWatchMatch[1], now()), 201);
+          return json(await runNearAccountWatch(db, rpcFetch, env, await readBody(request), nearAccountWatchMatch[1], now()), 201);
         }
         if (method === "POST" && nearFtWatchMatch) {
           assertServiceBearer(request.headers, adminToken);
-          return json(await runNearFtWatch(db, rpcFetch, await readBody(request), nearFtWatchMatch[1], now()), 201);
+          return json(await runNearFtWatch(db, rpcFetch, env, await readBody(request), nearFtWatchMatch[1], now()), 201);
         }
         if (method === "POST" && path === "/cron/tick") {
           assertServiceBearer(request.headers, adminToken);
-          return json(await runCronTick(db, now()));
+          return json(await runCronTick(db, rpcFetch, env, now()));
         }
         if (method === "GET" && eventsMatch) {
           const board = await requireBoard(db, eventsMatch[1]);
@@ -490,13 +494,14 @@ async function createReadAccessCheck(db: LedgerDb, body: BodyResult, boardId: st
 async function checkNearKeyMarketReadAccess(
   db: LedgerDb,
   rpcFetch: FetchLike,
+  env: RuntimeEnv,
   body: BodyResult,
   boardId: string,
   createdAt: string,
 ) {
   const board = await requireBoard(db, boardId);
   const data = asObject(body.json);
-  const rpcUrl = requiredString(data.rpcUrl ?? data.rpc_url ?? process.env.AGENT_BOARD_LEDGER_NEAR_RPC_URL, "rpc_url");
+  const rpcUrl = requiredString(data.rpcUrl ?? data.rpc_url ?? env[NEAR_RPC_URL_ENV], "rpc_url");
   const keyContractId = requiredString(data.keyContractId ?? data.key_contract_id, "key_contract_id");
   const holderAccountId = requiredString(data.holderAccountId ?? data.holder_account_id ?? data.requesterWalletAddress ?? data.requester_wallet_address, "holder_account_id");
   const agentId = cleanString(data.agentId ?? data.agent_id) ?? board.agent_id;
@@ -549,13 +554,14 @@ async function checkNearKeyMarketReadAccess(
 async function runNearAccountWatch(
   db: LedgerDb,
   rpcFetch: FetchLike,
+  env: RuntimeEnv,
   body: BodyResult,
   boardId: string,
   createdAt: string,
 ) {
   const board = await requireBoard(db, boardId);
   const data = asObject(body.json);
-  const rpcUrl = requiredString(data.rpcUrl ?? data.rpc_url ?? process.env.AGENT_BOARD_LEDGER_NEAR_RPC_URL, "rpc_url");
+  const rpcUrl = requiredString(data.rpcUrl ?? data.rpc_url ?? env[NEAR_RPC_URL_ENV], "rpc_url");
   const observedAt = normalizedObservedAt(data.observedAt ?? data.observed_at, createdAt);
   const account = await viewNearAccount(rpcFetch, rpcUrl, board.wallet_address);
   const normalizedNear = Number(account.amount) / YOCTO_NEAR_PER_NEAR;
@@ -654,13 +660,14 @@ async function runNearAccountWatch(
 async function runNearFtWatch(
   db: LedgerDb,
   rpcFetch: FetchLike,
+  env: RuntimeEnv,
   body: BodyResult,
   boardId: string,
   createdAt: string,
 ) {
   const board = await requireBoard(db, boardId);
   const data = asObject(body.json);
-  const rpcUrl = requiredString(data.rpcUrl ?? data.rpc_url ?? process.env.AGENT_BOARD_LEDGER_NEAR_RPC_URL, "rpc_url");
+  const rpcUrl = requiredString(data.rpcUrl ?? data.rpc_url ?? env[NEAR_RPC_URL_ENV], "rpc_url");
   const tokenContractId = requiredString(
     data.tokenContractId ?? data.token_contract_id ?? data.contractId ?? data.contract_id,
     "token_contract_id",
@@ -776,7 +783,82 @@ async function runNearFtWatch(
   };
 }
 
-async function runCronTick(db: LedgerDb, createdAt: string) {
+async function runCronTick(db: LedgerDb, rpcFetch: FetchLike, env: RuntimeEnv, createdAt: string) {
+  const nearAccountWatch = await runTrackedNearAccountWatches(db, rpcFetch, env, createdAt);
+  const ledgerTick = await reconcileCronLedgerTick(db, createdAt);
+  const nearAccountDidWork = nearAccountWatch.checked > 0;
+
+  return {
+    ...ledgerTick,
+    status: ledgerTick.status === "updated" || nearAccountDidWork ? "updated" : ledgerTick.status,
+    nearAccountWatch,
+    summary: {
+      ...ledgerTick.summary,
+      nearAccountWatchStatus: nearAccountWatch.status,
+      nearAccountWatchesAttempted: nearAccountWatch.attempted,
+      nearAccountWatchesChecked: nearAccountWatch.checked,
+      nearAccountWatchesFailed: nearAccountWatch.failed,
+      noNewData: ledgerTick.summary.noNewData && !nearAccountDidWork,
+    },
+  };
+}
+
+async function runTrackedNearAccountWatches(db: LedgerDb, rpcFetch: FetchLike, env: RuntimeEnv, createdAt: string) {
+  const rpcUrl = cleanString(env[NEAR_RPC_URL_ENV]);
+  if (!rpcUrl) {
+    return {
+      status: "skipped_missing_rpc_url",
+      attempted: 0,
+      checked: 0,
+      failed: 0,
+      failures: [] as Array<Record<string, string>>,
+    };
+  }
+
+  const trackedBoards = await db.all<{ board_id: string; wallet_address: string }>(
+    `SELECT DISTINCT boards.id AS board_id, boards.wallet_address AS wallet_address
+     FROM boards
+     INNER JOIN tracked_wallets
+       ON tracked_wallets.board_id = boards.id
+      AND tracked_wallets.wallet_address = boards.wallet_address
+     WHERE COALESCE(tracked_wallets.chain, 'near') = 'near'
+       AND COALESCE(tracked_wallets.tracking_status, 'active') = 'active'
+     ORDER BY boards.created_at ASC, boards.id ASC`,
+  );
+
+  let checked = 0;
+  const failures: Array<Record<string, string>> = [];
+
+  for (const tracked of trackedBoards) {
+    try {
+      await runNearAccountWatch(db, rpcFetch, env, {
+        raw: "",
+        json: { rpc_url: rpcUrl },
+      }, tracked.board_id, createdAt);
+      checked += 1;
+    } catch (error) {
+      failures.push({
+        board_id: tracked.board_id,
+        wallet_address: tracked.wallet_address,
+        error: safeErrorMessage(error),
+      });
+    }
+  }
+
+  return {
+    status: trackedBoards.length === 0
+      ? "no_active_tracked_wallets"
+      : failures.length > 0
+        ? "checked_with_failures"
+        : "checked",
+    attempted: trackedBoards.length,
+    checked,
+    failed: failures.length,
+    failures,
+  };
+}
+
+async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
   return await db.transaction(async (tx) => {
     const observations = await tx.all<ObservationRow>(
       "SELECT * FROM observations WHERE event_id IS NULL ORDER BY observed_at ASC, id ASC",
@@ -1690,6 +1772,10 @@ function handleError(error: unknown) {
   }
   console.error(error);
   return json({ ok: false, error: "Internal server error" }, 500);
+}
+
+function safeErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown error";
 }
 
 function isUniqueViolation(error: unknown) {
