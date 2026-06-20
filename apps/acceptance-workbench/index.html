@@ -380,6 +380,21 @@
       box-shadow: 0 0 0 3px rgba(47, 111, 78, 0.08);
     }
 
+    .env-dot.dev {
+      background: var(--blue);
+      box-shadow: 0 0 0 3px rgba(47, 95, 143, 0.08);
+    }
+
+    .env-dot.staging {
+      background: var(--amber);
+      box-shadow: 0 0 0 3px rgba(139, 100, 36, 0.1);
+    }
+
+    .env-dot.production {
+      background: var(--red);
+      box-shadow: 0 0 0 3px rgba(162, 58, 53, 0.08);
+    }
+
     .button,
     .mini-button {
       display: inline-flex;
@@ -438,6 +453,35 @@
 
     .env-drawer.open {
       display: grid;
+    }
+
+    .env-summary {
+      display: grid;
+      gap: 6px;
+      align-content: start;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #fbfbfa;
+    }
+
+    .env-summary-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .env-summary-title strong {
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .env-summary p {
+      margin: 0;
+      color: var(--default);
+      font-size: 12px;
+      line-height: 1.45;
     }
 
     .workbench {
@@ -1033,7 +1077,7 @@
             <strong>ClawHouse</strong>
             <span class="sidebar-label">Acceptance</span>
           </div>
-          <span class="workspace-pill">Local</span>
+          <span id="workspacePill" class="workspace-pill">Local</span>
         </div>
         <input id="filter" class="search" placeholder="Filter requests" />
         <div id="accessFilter" class="access-filter-row" role="group" aria-label="Request access filter"></div>
@@ -1054,9 +1098,12 @@
           <span id="crumbStep" class="crumb-current"></span>
         </div>
         <div class="env-control">
-          <span class="env-dot"></span>
+          <span id="envDot" class="env-dot"></span>
           <select id="envSelect" class="env-select">
-            <option value="local">Local Environment</option>
+            <option value="local">Local</option>
+            <option value="dev">Dev</option>
+            <option value="staging">Staging</option>
+            <option value="production">Production</option>
           </select>
           <button id="toggleEnv" class="mini-button">Environment</button>
         </div>
@@ -1064,6 +1111,14 @@
 
       <section id="envDrawer" class="env-drawer">
         <div class="field">
+          <div class="env-summary">
+            <div class="env-summary-title">
+              <strong id="envProfileName">Local</strong>
+              <span id="envProfileBranch" class="pill">local</span>
+            </div>
+            <p id="envProfileDescription"></p>
+            <p>Secrets stay out of git. Fill tokens, database URLs, and private keys only in this local browser editor.</p>
+          </div>
           <label>Environment JSON</label>
           <textarea id="envEditor" class="textarea"></textarea>
         </div>
@@ -1128,6 +1183,7 @@
     const storageKey = "clawhouse.acceptance.workbench.v2";
     const defaultEnv = {
       repoRoot: "",
+      ledgerBaseUrl: "http://127.0.0.1:4321",
       nearRpcUrl: "https://rpc.testnet.near.org",
       contractId: "clawhouse-key-20260619125948.testnet",
       nearNetworkId: "testnet",
@@ -1145,13 +1201,106 @@
       "ironclawWebhookSecret"
     ];
 
+    const environmentProfiles = {
+      local: {
+        label: "Local",
+        branch: "local",
+        description: "Runs against the local Workbench runner and local ClawHouse backend on your machine.",
+        env: {
+          ledgerBaseUrl: "http://127.0.0.1:4321"
+        }
+      },
+      dev: {
+        label: "Dev",
+        branch: "dev",
+        description: "Integration target for the dev branch. Paste a current dev or preview backend URL before sending backend requests.",
+        env: {
+          ledgerBaseUrl: ""
+        }
+      },
+      staging: {
+        label: "Staging",
+        branch: "staging",
+        description: "Pre-production backend project with its own Vercel environment and database.",
+        env: {
+          ledgerBaseUrl: "https://clawhouse-backend-staging.vercel.app"
+        }
+      },
+      production: {
+        label: "Production",
+        branch: "main",
+        description: "Production backend project. Use with production credentials only when you intend to touch live data.",
+        env: {
+          ledgerBaseUrl: "https://clawhouse-backend-prod.vercel.app"
+        }
+      }
+    };
+
+    const environmentOwnedKeys = new Set([
+      "ledgerBaseUrl",
+      "nearRpcUrl",
+      "contractId",
+      "nearNetworkId"
+    ]);
+
     function pruneObsoleteEnv(env) {
       const next = { ...env };
       for (const key of obsoleteEnvKeys) delete next[key];
       return next;
     }
 
+    function envProfileIds() {
+      return Object.keys(environmentProfiles);
+    }
+
+    function normalizeEnvProfileId(profileId) {
+      return envProfileIds().includes(profileId) ? profileId : "local";
+    }
+
+    function defaultEnvForProfile(profileId) {
+      const profile = environmentProfiles[normalizeEnvProfileId(profileId)];
+      return { ...defaultEnv, ...profile.env };
+    }
+
+    function migrateEnvProfiles(persistedState) {
+      const savedProfiles = persistedState.envProfiles && typeof persistedState.envProfiles === "object"
+        ? persistedState.envProfiles
+        : {};
+      const profiles = {};
+      for (const profileId of envProfileIds()) {
+        profiles[profileId] = {
+          ...defaultEnvForProfile(profileId),
+          ...pruneObsoleteEnv(savedProfiles[profileId] || {}),
+          testUserPrivateKey: ""
+        };
+      }
+      if (!Object.keys(savedProfiles).length && persistedState.env) {
+        profiles.local = {
+          ...defaultEnvForProfile("local"),
+          ...pruneObsoleteEnv(persistedState.env),
+          testUserPrivateKey: ""
+        };
+      }
+      return profiles;
+    }
+
+    function migrateEncryptedEnvProfiles(persistedState) {
+      const savedProfiles = persistedState.encryptedEnvProfiles && typeof persistedState.encryptedEnvProfiles === "object"
+        ? persistedState.encryptedEnvProfiles
+        : {};
+      const profiles = {};
+      for (const profileId of envProfileIds()) {
+        profiles[profileId] = { ...(savedProfiles[profileId] || {}) };
+      }
+      if (!Object.keys(savedProfiles).length && persistedState.encryptedEnv) {
+        profiles.local = { ...persistedState.encryptedEnv };
+      }
+      return profiles;
+    }
+
     const persisted = loadState();
+    const activeEnvProfile = normalizeEnvProfileId(persisted.activeEnvProfile);
+    const envProfiles = migrateEnvProfiles(persisted);
     const state = {
       spec: null,
       activeFlow: 0,
@@ -1160,8 +1309,10 @@
       responseTab: persisted.responseTab || "body",
       envOpen: persisted.envOpen || false,
       filter: "",
-      env: { ...defaultEnv, ...pruneObsoleteEnv(persisted.env || {}), testUserPrivateKey: "" },
-      encryptedEnv: persisted.encryptedEnv || {},
+      activeEnvProfile,
+      envProfiles,
+      env: { ...envProfiles[activeEnvProfile], testUserPrivateKey: "" },
+      encryptedEnvProfiles: migrateEncryptedEnvProfiles(persisted),
       collapsedFlows: persisted.collapsedFlows || {},
       accessFilter: persisted.accessFilter || "all",
       vars: persisted.vars || {},
@@ -1210,12 +1361,14 @@
     }
 
     function writePersistedState() {
+      updateActiveEnvProfile();
       localStorage.setItem(storageKey, JSON.stringify({
         activeTab: state.activeTab,
         responseTab: state.responseTab,
         envOpen: state.envOpen,
-        env: persistableEnv(),
-        encryptedEnv: state.encryptedEnv,
+        activeEnvProfile: state.activeEnvProfile,
+        envProfiles: state.envProfiles,
+        encryptedEnvProfiles: state.encryptedEnvProfiles,
         collapsedFlows: state.collapsedFlows,
         accessFilter: currentAccessFilter(),
         vars: state.vars,
@@ -1224,10 +1377,23 @@
       }));
     }
 
-    function persistableEnv() {
-      const next = { ...state.env };
+    function persistableEnv(env = state.env) {
+      const next = { ...env };
       next.testUserPrivateKey = "";
       return next;
+    }
+
+    function updateActiveEnvProfile() {
+      state.envProfiles[state.activeEnvProfile] = persistableEnv();
+    }
+
+    function activeEnvironmentProfile() {
+      return environmentProfiles[state.activeEnvProfile] || environmentProfiles.local;
+    }
+
+    function activeEncryptedEnv() {
+      state.encryptedEnvProfiles[state.activeEnvProfile] ||= {};
+      return state.encryptedEnvProfiles[state.activeEnvProfile];
     }
 
     function displayEnv() {
@@ -1237,18 +1403,19 @@
     }
 
     let privateKeyEncryptionTimer = null;
-    let lastPrivateKeyForEncryption = "";
+    const lastPrivateKeyForEncryption = {};
 
     function queuePrivateKeyEncryption() {
       const privateKey = state.env.testUserPrivateKey || "";
-      if (!privateKey || privateKey === lastPrivateKeyForEncryption) return;
+      const profileId = state.activeEnvProfile;
+      if (!privateKey || privateKey === lastPrivateKeyForEncryption[profileId]) return;
       if (privateKeyEncryptionTimer) clearTimeout(privateKeyEncryptionTimer);
       privateKeyEncryptionTimer = setTimeout(() => {
-        encryptPrivateKey(privateKey);
+        encryptPrivateKey(privateKey, profileId);
       }, 200);
     }
 
-    async function encryptPrivateKey(privateKey) {
+    async function encryptPrivateKey(privateKey, profileId) {
       try {
         const response = await fetch("/crypto/encrypt", {
           method: "POST",
@@ -1257,9 +1424,10 @@
         });
         const result = await response.json();
         if (!result.ok) throw new Error(result.error || "Private key encryption failed");
-        if (state.env.testUserPrivateKey !== privateKey) return;
-        state.encryptedEnv.testUserPrivateKey = result.ciphertext;
-        lastPrivateKeyForEncryption = privateKey;
+        if (state.activeEnvProfile === profileId && state.env.testUserPrivateKey !== privateKey) return;
+        state.encryptedEnvProfiles[profileId] ||= {};
+        state.encryptedEnvProfiles[profileId].testUserPrivateKey = result.ciphertext;
+        lastPrivateKeyForEncryption[profileId] = privateKey;
         writePersistedState();
       } catch (error) {
         console.warn(error);
@@ -1267,7 +1435,8 @@
     }
 
     async function restoreEncryptedEnv() {
-      const ciphertext = state.encryptedEnv.testUserPrivateKey;
+      const profileId = state.activeEnvProfile;
+      const ciphertext = activeEncryptedEnv().testUserPrivateKey;
       if (!ciphertext) return;
       try {
         const response = await fetch("/crypto/decrypt", {
@@ -1278,10 +1447,21 @@
         const result = await response.json();
         if (!result.ok) throw new Error(result.error || "Private key decrypt failed");
         state.env.testUserPrivateKey = result.value || "";
-        lastPrivateKeyForEncryption = state.env.testUserPrivateKey;
+        lastPrivateKeyForEncryption[profileId] = state.env.testUserPrivateKey;
       } catch (error) {
         console.warn(error);
       }
+    }
+
+    async function switchEnvironmentProfile(profileId) {
+      const nextProfileId = normalizeEnvProfileId(profileId);
+      if (nextProfileId === state.activeEnvProfile) return;
+      updateActiveEnvProfile();
+      state.activeEnvProfile = nextProfileId;
+      state.env = { ...state.envProfiles[nextProfileId], testUserPrivateKey: "" };
+      await restoreEncryptedEnv();
+      render();
+      showToast(`${activeEnvironmentProfile().label} environment selected`);
     }
 
     function activeFlow() {
@@ -1459,10 +1639,16 @@
           vars[key] = value;
         }
       }
+      for (const key of environmentOwnedKeys) {
+        if (key in state.env) vars[key] = state.env[key] ?? "";
+      }
       return vars;
     }
 
     function inputDisplayValue(key, value) {
+      if (environmentOwnedKeys.has(key) && key in state.env) {
+        return String(state.env[key] ?? "");
+      }
       if (value === undefined || value === null || value === "") {
         const fallback = state.vars[key] ?? state.env[key];
         if (fallback !== undefined && fallback !== null) return String(fallback);
@@ -1807,9 +1993,20 @@
     function renderTopbar() {
       const flow = activeFlow();
       const step = activeStep();
+      const profile = activeEnvironmentProfile();
       $("crumbFlow").textContent = flow.name;
       $("crumbStep").textContent = step.name;
+      $("workspacePill").textContent = profile.label;
+      $("envDot").className = `env-dot ${escapeAttr(state.activeEnvProfile)}`;
+      $("envSelect").innerHTML = envProfileIds().map((profileId) => {
+        const optionProfile = environmentProfiles[profileId];
+        return `<option value="${escapeAttr(profileId)}">${escapeHtml(optionProfile.label)}</option>`;
+      }).join("");
+      $("envSelect").value = state.activeEnvProfile;
       $("envDrawer").classList.toggle("open", state.envOpen);
+      $("envProfileName").textContent = `${profile.label} Environment`;
+      $("envProfileBranch").textContent = profile.branch;
+      $("envProfileDescription").textContent = profile.description;
       $("envEditor").value = JSON.stringify(state.env, null, 2);
       $("varsEditor").value = JSON.stringify(state.vars, null, 2);
     }
@@ -1878,7 +2075,11 @@
     function bindInputFields(step, onInput = () => {}) {
       document.querySelectorAll("[data-input]").forEach((input) => {
         input.addEventListener("input", () => {
-          currentInputs(step)[input.dataset.input] = input.value;
+          const key = input.dataset.input;
+          currentInputs(step)[key] = input.value;
+          if (environmentOwnedKeys.has(key)) {
+            state.env[key] = input.value;
+          }
           renderRequest();
           onInput();
           if (state.activeTab === "preview") renderPreview(step);
@@ -1985,7 +2186,7 @@
           method: "POST",
           url: runnerUrl(step),
           payload: step.type === "script"
-            ? { stepId: step.id, env: displayEnv(), inputs: currentInputs(), vars: state.vars }
+            ? { stepId: step.id, environment: state.activeEnvProfile, env: displayEnv(), inputs: currentInputs(), vars: state.vars }
             : payload
         },
         resolvedAction: payload
@@ -2013,8 +2214,8 @@
       try {
         state.env = parseJsonObject($("envEditor").value || "{}", "Environment");
         if (!state.env.testUserPrivateKey) {
-          delete state.encryptedEnv.testUserPrivateKey;
-          lastPrivateKeyForEncryption = "";
+          delete activeEncryptedEnv().testUserPrivateKey;
+          lastPrivateKeyForEncryption[state.activeEnvProfile] = "";
         }
         state.vars = parseJsonObject($("varsEditor").value || "{}", "Runtime variables");
         renderRequest();
@@ -2521,6 +2722,11 @@
       if (!state.env.repoRoot && health.repoRoot) {
         state.env.repoRoot = health.repoRoot;
       }
+      if (health.repoRoot) {
+        for (const profileId of envProfileIds()) {
+          if (!state.envProfiles[profileId].repoRoot) state.envProfiles[profileId].repoRoot = health.repoRoot;
+        }
+      }
       await restoreEncryptedEnv();
       render();
     }
@@ -2534,6 +2740,10 @@
       state.envOpen = !state.envOpen;
       renderTopbar();
       persist();
+    });
+
+    $("envSelect").addEventListener("change", () => {
+      switchEnvironmentProfile($("envSelect").value);
     });
 
     $("saveEnv").addEventListener("click", () => {
