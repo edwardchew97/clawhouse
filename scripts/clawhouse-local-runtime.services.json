@@ -1,0 +1,39 @@
+{
+  "runtimeWorktree": ".worktrees/clawhouse-local-runtime-dev",
+  "stateDir": "work/clawhouse-local-runtime",
+  "devPollIntervalMs": 60000,
+  "healthPollIntervalMs": 5000,
+  "startupTimeoutMs": 120000,
+  "installDirs": [
+    "apps/agent-board-ledger",
+    "apps/clawhouse-app",
+    "agent-key-market",
+    "tools/near-wallet"
+  ],
+  "services": [
+    {
+      "id": "ledger",
+      "name": "Agent Board Ledger",
+      "cwd": "apps/agent-board-ledger",
+      "command": ["bun", "run", "dev"],
+      "healthUrl": "http://127.0.0.1:4321/health",
+      "requiredEnv": ["AGENT_BOARD_LEDGER_DATABASE_URL", "AGENT_BOARD_LEDGER_ADMIN_TOKEN"]
+    },
+    {
+      "id": "clawhouse-app",
+      "name": "ClawHouse App",
+      "cwd": "apps/clawhouse-app",
+      "command": ["bun", "run", "dev", "--hostname", "127.0.0.1", "--port", "3000"],
+      "healthUrl": "http://127.0.0.1:3000/api/key-market/config",
+      "requiredEnv": []
+    },
+    {
+      "id": "workbench",
+      "name": "Acceptance Workbench",
+      "cwd": ".",
+      "command": ["bun", "run", "workbench"],
+      "healthUrl": "http://127.0.0.1:4318/health",
+      "requiredEnv": ["ACCEPTANCE_WORKBENCH_ENCRYPTION_KEY"]
+    }
+  ]
+}
