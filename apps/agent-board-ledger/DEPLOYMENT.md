@@ -1,6 +1,6 @@
 # ClawHouse Backend Deployment
 
-GitHub Actions deploys this app to two Vercel projects:
+Vercel deploys this app from GitHub through two Vercel projects:
 
 - `clawhouse-backend-staging`
 - `clawhouse-backend-prod`
@@ -12,20 +12,28 @@ broader because this backend may later host other ClawHouse backend surfaces.
 
 - `clawhouse-backend-staging`
   - Git repository: `edwardchew97/clawhouse`
-  - CI working directory: `apps/agent-board-ledger`
-  - Deployment branch: `staging`
+  - Root directory: `apps/agent-board-ledger`
+  - Production branch: `staging`
   - Cron runs here against staging data.
 - `clawhouse-backend-prod`
   - Git repository: `edwardchew97/clawhouse`
-  - CI working directory: `apps/agent-board-ledger`
-  - Deployment branch: `main`
+  - Root directory: `apps/agent-board-ledger`
+  - Production branch: `main`
   - Cron runs here against production data.
 
 Keep the repo promotion order as `dev -> staging -> main`.
 
 ## Runtime Environment Variables
 
-Set these in the Vercel project Production environment for each project:
+Local development values live in `apps/agent-board-ledger/.env.local`. That file
+is ignored by git and must not be committed.
+
+Hosted values live in Vercel project settings:
+
+- `clawhouse-backend-staging` -> Production environment for the `staging` branch
+- `clawhouse-backend-prod` -> Production environment for the `main` branch
+
+Set these in each Vercel project:
 
 - `AGENT_BOARD_LEDGER_DATABASE_URL` or `DATABASE_URL`
 - `AGENT_BOARD_LEDGER_ADMIN_TOKEN`
@@ -35,17 +43,15 @@ Set these in the Vercel project Production environment for each project:
 Use separate staging and production values. Do not point staging cron at the
 production database.
 
-## GitHub Secrets
+## GitHub Actions
 
-Set these repository secrets for GitHub Actions:
+GitHub Actions only runs tests:
 
-- `VERCEL_TOKEN`
-- `VERCEL_ORG_ID`
-- `VERCEL_PROJECT_ID_STAGING`
-- `VERCEL_PROJECT_ID_PROD`
+- `.github/workflows/backend-ci.yml`
+  - Runs typecheck and tests for PRs and pushes to `dev`, `staging`, and `main`.
 
-Do not commit `.vercel/project.json`. The workflows provide project IDs through
-GitHub secrets and deploy from `apps/agent-board-ledger`.
+GitHub Actions does not deploy to Vercel. Do not add `VERCEL_TOKEN` unless we
+intentionally switch back to a GitHub Actions deployment model.
 
 ## Routing
 
@@ -65,16 +71,9 @@ existing service-authorized cron path internally with `AGENT_BOARD_LEDGER_ADMIN_
 
 ## CI/CD
 
-- `.github/workflows/backend-ci.yml`
-  - Runs typecheck and tests for PRs and pushes to `dev`, `staging`, and `main`.
-- `.github/workflows/deploy-backend-staging.yml`
-  - Runs on pushes to `staging`.
-  - Builds and deploys `clawhouse-backend-staging` with Vercel production mode.
-  - Smoke checks `GET /health` on the deployment URL.
-- `.github/workflows/deploy-backend-prod.yml`
-  - Runs on pushes to `main`.
-  - Builds and deploys `clawhouse-backend-prod` with Vercel production mode.
-  - Smoke checks `GET /health` on the deployment URL.
+- Pushes to `staging` are deployed by Vercel through `clawhouse-backend-staging`.
+- Pushes to `main` are deployed by Vercel through `clawhouse-backend-prod`.
+- GitHub Actions only gates code quality; Vercel owns build, deploy, and cron.
 
 The cron schedule is configured in `vercel.json` as hourly. Vercel Hobby projects
 only support daily cron; hourly cron requires a paid plan or a different scheduler.
