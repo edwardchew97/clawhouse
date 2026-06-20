@@ -1,6 +1,6 @@
 import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openRuntimeLedgerDb, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAuthPayload, readSignedHeaders, sha256Hex, timestampIsFresh, verifySignature } from "./auth.js";
-import type { BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
+import type { AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
 
 type AppOptions = {
   db: LedgerDb;
@@ -31,6 +31,8 @@ const attachmentTypes = new Set([
 const OBSERVATION_FUTURE_SKEW_MS = 60 * 1000;
 const YOCTO_NEAR_PER_NEAR = 1e24;
 const NEAR_RPC_URL_ENV = "AGENT_BOARD_LEDGER_NEAR_RPC_URL";
+const DEFAULT_READ_GRANT_TTL_MS = 10 * 60 * 1000;
+const MAX_READ_GRANT_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function createApp(options: AppOptions) {
   const db = options.db;
@@ -67,11 +69,11 @@ export function createApp(options: AppOptions) {
 
         if (method === "POST" && path === "/boards") {
           assertServiceBearer(request.headers, adminToken);
-          return json(await createBoard(db, await readBody(request), now()), 201);
+          return json(await createBoard(db, request, await readBody(request), now()), 201);
         }
         if (method === "GET" && boardMatch) {
           const board = await requireBoard(db, boardMatch[1]);
-          await assertBoardRead(db, request, url, board, adminToken, now(), "public_summary");
+          await assertBoardRead(db, request, url, board, adminToken, now(), "public_summary", rpcFetch);
           return json(board);
         }
         if (method === "POST" && eventsMatch) {
@@ -102,7 +104,7 @@ export function createApp(options: AppOptions) {
         }
         if (method === "GET" && balanceChangesMatch) {
           const board = await requireBoard(db, balanceChangesMatch[1]);
-          await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail");
+          await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail", rpcFetch);
           return json({ ok: true, board_id: board.id, balance_changes: await listBalanceChanges(db, board.id) });
         }
         if (method === "POST" && pricesMatch) {
@@ -111,7 +113,7 @@ export function createApp(options: AppOptions) {
         }
         if (method === "GET" && pricesMatch) {
           const board = await requireBoard(db, pricesMatch[1]);
-          await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail");
+          await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail", rpcFetch);
           return json({ ok: true, board_id: board.id, prices: await listPriceSnapshots(db, board.id) });
         }
         if (method === "POST" && readAccessChecksMatch) {
@@ -136,17 +138,17 @@ export function createApp(options: AppOptions) {
         }
         if (method === "GET" && eventsMatch) {
           const board = await requireBoard(db, eventsMatch[1]);
-          await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail");
+          await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail", rpcFetch);
           return json({ events: await listEventTimeline(db, board.id) });
         }
         if (method === "GET" && portfolioMatch) {
           const board = await requireBoard(db, portfolioMatch[1]);
-          await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail");
+          await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail", rpcFetch);
           return json(await readPortfolio(db, board.id));
         }
         if (method === "GET" && pnlMatch) {
           const board = await requireBoard(db, pnlMatch[1]);
-          await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail");
+          await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail", rpcFetch);
           return json(await readPnl(db, board.id));
         }
 
@@ -164,7 +166,7 @@ async function readHealth(db: LedgerDb) {
   return { ok: true, service: "agent-board-ledger", db: "ready" };
 }
 
-async function createBoard(db: LedgerDb, body: BodyResult, createdAt: string) {
+async function createBoard(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
   const data = asObject(body.json);
   const id = cleanString(data.boardId) ?? cleanString(data.board_id) ?? newId("board");
   const board: Board = {
@@ -187,6 +189,7 @@ async function createBoard(db: LedgerDb, body: BodyResult, createdAt: string) {
   };
 
   await db.transaction(async (tx) => {
+    await assertBoardRegistrationSignature(tx, request, body.raw, board, Date.parse(createdAt), createdAt);
     await tx.run(
       `INSERT INTO boards
         (id, agent_id, wallet_address, public_key, chain, venue_namespace, tracking_started_at,
@@ -235,6 +238,59 @@ async function createBoard(db: LedgerDb, body: BodyResult, createdAt: string) {
   });
 
   return { ok: true, board };
+}
+
+async function assertBoardRegistrationSignature(
+  db: LedgerDb,
+  request: Request,
+  rawBody: string,
+  board: Board,
+  nowMs: number,
+  createdAt: string,
+) {
+  const headers = readSignedHeaders(request.headers);
+
+  if (headers.walletAddress !== board.wallet_address) {
+    throw new AuthError("Wallet does not match board registration");
+  }
+  if (headers.publicKey !== board.public_key) {
+    throw new AuthError("Public key does not match board registration");
+  }
+
+  const actualBodyHash = sha256Hex(rawBody);
+  if (headers.bodyHash !== actualBodyHash) {
+    throw new AuthError("Body hash mismatch");
+  }
+  if (!timestampIsFresh(headers.timestamp, nowMs)) {
+    throw new AuthError("Signature timestamp is stale");
+  }
+
+  const payload = canonicalAuthPayload({
+    method: request.method,
+    path: new URL(request.url).pathname,
+    bodyHash: actualBodyHash,
+    timestamp: headers.timestamp,
+    nonce: headers.nonce,
+    boardId: board.id,
+    agentId: board.agent_id,
+    walletAddress: headers.walletAddress,
+  });
+
+  if (!verifySignature(headers.publicKey, payload, headers.signature)) {
+    throw new AuthError("Invalid signature");
+  }
+
+  try {
+    await db.run(
+      "INSERT INTO auth_nonces (id, board_id, wallet_address, nonce, timestamp, body_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [newId("nonce"), board.id, board.wallet_address, headers.nonce, headers.timestamp, actualBodyHash, createdAt],
+    );
+  } catch (error) {
+    if (!isUniqueViolation(error)) {
+      throw error;
+    }
+    throw new AuthError("Nonce replay rejected");
+  }
 }
 
 async function createEvent(
@@ -309,20 +365,7 @@ async function createAttachment(
     created_at: createdAt,
   };
 
-  await db.run(
-    `INSERT INTO attachments
-      (id, event_id, board_id, attachment_type, reason, metadata_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [
-    attachment.id,
-    attachment.event_id,
-    attachment.board_id,
-    attachment.attachment_type,
-    attachment.reason,
-    attachment.metadata_json,
-    attachment.created_at,
-    ],
-  );
+  await insertAttachment(db, attachment);
 
   return { ok: true, attachment };
 }
@@ -461,7 +504,12 @@ async function createReadAccessCheck(db: LedgerDb, body: BodyResult, boardId: st
   const accessLevel = normalizeAccessLevel(data.accessLevel ?? data.access_level);
   const readToken = cleanString(data.readToken ?? data.read_token);
   const metadata = asOptionalObject(data.metadata);
-  const expiresAt = cleanString(data.expiresAt ?? data.expires_at) ?? cleanString(metadata.expires_at);
+  const expiresAt = normalizeReadGrantExpiry(
+    cleanString(data.expiresAt ?? data.expires_at) ?? cleanString(metadata.expires_at),
+    createdAt,
+    accessResult,
+    accessLevel,
+  );
 
   if (accessResult === "granted" && accessLevel !== "public_summary" && !readToken) {
     throw new RequestError("Missing read_token for granted non-public read access", 400);
@@ -512,7 +560,12 @@ async function checkNearKeyMarketReadAccess(
   const holderBalance = rawBalance === null ? "0" : decimalIntegerString(rawBalance, "holder_key_balance");
   const accessResult = BigInt(holderBalance) > 0n ? "granted" : "denied";
   const metadata = asOptionalObject(data.metadata);
-  const expiresAt = cleanString(data.expiresAt ?? data.expires_at) ?? cleanString(metadata.expires_at);
+  const expiresAt = normalizeReadGrantExpiry(
+    cleanString(data.expiresAt ?? data.expires_at) ?? cleanString(metadata.expires_at),
+    createdAt,
+    accessResult,
+    accessLevel,
+  );
 
   if (accessResult === "granted" && accessLevel !== "public_summary" && !readToken) {
     throw new RequestError("Missing read_token for granted key-holder read access", 400);
@@ -534,6 +587,10 @@ async function checkNearKeyMarketReadAccess(
       ...metadata,
       agent_id: agentId,
       holder_key_balance: holderBalance,
+      holder_account_id: holderAccountId,
+      rpc_url: rpcUrl,
+      key_contract_id: keyContractId,
+      key_holder_live_check: accessResult === "granted",
       expires_at: expiresAt,
       read_token_sha256: readToken ? sha256Hex(readToken) : null,
     }),
@@ -549,6 +606,25 @@ async function checkNearKeyMarketReadAccess(
     access_result: accessResult,
     check: presentReadAccessCheck(check),
   };
+}
+
+function normalizeReadGrantExpiry(
+  requestedExpiresAt: string | null,
+  createdAt: string,
+  accessResult: string,
+  accessLevel: AccessLevel,
+) {
+  if (accessResult !== "granted" || accessLevel === "public_summary") return requestedExpiresAt;
+  const createdAtMs = Date.parse(createdAt);
+  if (!Number.isFinite(createdAtMs)) throw new RequestError("Invalid created_at", 500);
+  const expiresAt = requestedExpiresAt
+    ?? new Date(createdAtMs + DEFAULT_READ_GRANT_TTL_MS).toISOString();
+  const expiresAtMs = Date.parse(expiresAt);
+  if (!Number.isFinite(expiresAtMs)) throw new RequestError("Invalid expires_at", 400);
+  if (expiresAtMs > createdAtMs + MAX_READ_GRANT_TTL_MS) {
+    throw new RequestError("expires_at cannot exceed 24 hours for granted non-public read access", 400);
+  }
+  return new Date(expiresAtMs).toISOString();
 }
 
 async function runNearAccountWatch(
@@ -864,6 +940,7 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
       "SELECT * FROM observations WHERE event_id IS NULL ORDER BY observed_at ASC, id ASC",
     );
     const discoveredEvents: EventRow[] = [];
+    const statusConflicts = [];
     let linkedObservations = 0;
     let observationsWithoutActivityId = 0;
     let observationsAlreadyLinked = 0;
@@ -875,6 +952,7 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
       if (!result.linked) continue;
       linkedObservations += 1;
       if (result.created && result.event) discoveredEvents.push(result.event);
+      if (result.statusConflict) statusConflicts.push(result.statusConflict);
     }
 
     const boards = await tx.all<Board>("SELECT * FROM boards ORDER BY created_at ASC");
@@ -910,13 +988,14 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
       );
       const netTopups = totals?.topups ?? 0;
       const netWithdrawals = totals?.withdrawals ?? 0;
-      const pnlUsd = observation.current_value_usd - board.starting_value_usd - netTopups + netWithdrawals;
+      const accountingStatus = await accountingStatusForObservation(tx, board.id, observation.id, observation.observed_at);
+      const currentValueUsd = accountingStatus.currentValueUsd;
+      const pnlUsd = currentValueUsd - board.starting_value_usd - netTopups + netWithdrawals;
       const totalPnlPct = board.starting_value_usd > 0 ? pnlUsd / board.starting_value_usd : null;
       const previousHighWater = await latestHighWaterMark(tx, board.id);
-      const highWaterMarkUsd = Math.max(previousHighWater ?? observation.current_value_usd, observation.current_value_usd);
-      const drawdownPct = highWaterMarkUsd > 0 ? (highWaterMarkUsd - observation.current_value_usd) / highWaterMarkUsd : 0;
+      const highWaterMarkUsd = Math.max(previousHighWater ?? currentValueUsd, currentValueUsd);
+      const drawdownPct = highWaterMarkUsd > 0 ? (highWaterMarkUsd - currentValueUsd) / highWaterMarkUsd : 0;
       const eventCounts = await pnlEventCounts(tx, board.id);
-      const accountingStatus = await accountingStatusForObservation(tx, board.id, observation.id, observation.observed_at);
       const completenessStatus = combineCompletenessStatus(pnlCompletenessStatus(observation), accountingStatus.completenessStatus);
       const holdingId = newId("hold");
       const pnlId = newId("pnl");
@@ -930,7 +1009,7 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
         board.id,
         board.wallet_address,
         observation.observed_at,
-        observation.current_value_usd,
+        currentValueUsd,
         observation.id,
         createdAt,
         ],
@@ -948,7 +1027,7 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
         board.agent_id,
         observation.observed_at,
         board.starting_value_usd,
-        observation.current_value_usd,
+        currentValueUsd,
         netTopups,
         netWithdrawals,
         pnlUsd,
@@ -972,7 +1051,7 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
         observed_at: observation.observed_at,
         holding_snapshot_id: holdingId,
         pnl_snapshot_id: pnlId,
-        current_value_usd: observation.current_value_usd,
+        current_value_usd: currentValueUsd,
         net_topups_usd: netTopups,
         net_withdrawals_usd: netWithdrawals,
         pnl_usd: pnlUsd,
@@ -995,6 +1074,7 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
       status: noNewData ? "no_new_data" : "updated",
       discoveredEvents: discoveredEvents.length,
       linkedObservations,
+      statusConflicts,
       snapshots,
       alreadySnapshotted,
       boardsWithoutObservations,
@@ -1002,6 +1082,7 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
         observationsChecked: observations.length,
         observationsWithoutActivityId,
         observationsAlreadyLinked,
+        statusConflicts: statusConflicts.length,
         snapshotsCreated: snapshots.length,
         snapshotsSkippedAlreadyCurrent: alreadySnapshotted.length,
         boardsWithoutObservations: boardsWithoutObservations.length,
@@ -1012,13 +1093,13 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
 }
 
 async function discoverEventForObservation(db: LedgerDb, observation: ObservationRow, createdAt: string) {
-  if (!hasActivityId(observation)) return { linked: false, created: false, skipped: "no_activity_id" as const };
+  if (!hasActivityId(observation)) return { linked: false, created: false, skipped: "no_activity_id" as const, statusConflict: null };
 
   const currentObservation = await db.get<ObservationRow>(
     "SELECT * FROM observations WHERE id = ? AND event_id IS NULL",
     [observation.id],
   );
-  if (!currentObservation) return { linked: false, created: false, skipped: "already_linked" as const };
+  if (!currentObservation) return { linked: false, created: false, skipped: "already_linked" as const, statusConflict: null };
 
   let event = await findEventByAssociations(db, currentObservation.board_id, currentObservation);
   let created = false;
@@ -1051,8 +1132,86 @@ async function discoverEventForObservation(db: LedgerDb, observation: Observatio
     event.id,
     currentObservation.id,
   ]);
-  if (result.changes !== 1) return { linked: false, created: false, skipped: "already_linked" as const };
-  return { event, created, linked: true, skipped: null };
+  if (result.changes !== 1) return { linked: false, created: false, skipped: "already_linked" as const, statusConflict: null };
+  const statusConflict = await appendObservationConflictIfNeeded(db, event, currentObservation, createdAt);
+  return { event, created, linked: true, skipped: null, statusConflict };
+}
+
+async function appendObservationConflictIfNeeded(
+  db: LedgerDb,
+  event: EventRow,
+  observation: ObservationRow,
+  createdAt: string,
+) {
+  const conflict = await detectObservationConflict(db, event, observation);
+  if (!conflict) return null;
+
+  const attachment: AttachmentRow = {
+    id: newId("att"),
+    event_id: event.id,
+    board_id: event.board_id,
+    attachment_type: "investigation",
+    reason: conflict.reason,
+    metadata_json: JSON.stringify({
+      source: "cron_observation_conflict_detector",
+      conflict_type: conflict.type,
+      observation_id: observation.id,
+      tx_hash: observation.tx_hash,
+      intent_id: observation.intent_id,
+      client_event_id: observation.client_event_id,
+    }),
+    created_at: createdAt,
+  };
+  await insertAttachment(db, attachment);
+  return {
+    event_id: event.id,
+    observation_id: observation.id,
+    conflict_type: conflict.type,
+    attachment_id: attachment.id,
+  };
+}
+
+async function detectObservationConflict(db: LedgerDb, event: EventRow, observation: ObservationRow) {
+  const status = cleanString(event.status_claim ?? observation.status_claim)?.toLowerCase() ?? "";
+  const changes = await db.all<BalanceChangeRow>(
+    "SELECT * FROM balance_changes WHERE board_id = ? AND source_observation_id = ?",
+    [observation.board_id, observation.id],
+  );
+  const hasMaterialBalanceChange = changes.some((change) =>
+    hasMaterialNumber(change.delta_amount) || hasMaterialNumber(change.delta_value_usd)
+  );
+
+  if (isSuccessClaim(status) && changes.length === 0) {
+    return {
+      type: "success_claim_without_balance_evidence",
+      reason: "Agent reported success, but no wallet balance evidence was attached to the observation.",
+    };
+  }
+  if (isSuccessClaim(status) && !hasMaterialBalanceChange) {
+    return {
+      type: "success_claim_without_balance_change",
+      reason: "Agent reported success, but wallet observation did not show a material balance change.",
+    };
+  }
+  if (isFailureClaim(status) && hasMaterialBalanceChange) {
+    return {
+      type: "failure_claim_with_balance_change",
+      reason: "Agent reported failure, but wallet observation showed a material balance change.",
+    };
+  }
+  return null;
+}
+
+function isSuccessClaim(status: string) {
+  return ["filled", "success", "succeeded", "executed", "settled", "complete", "completed"].includes(status);
+}
+
+function isFailureClaim(status: string) {
+  return ["failed", "failure", "rejected", "cancelled", "canceled"].includes(status);
+}
+
+function hasMaterialNumber(value: number | null) {
+  return value !== null && Math.abs(value) > 1e-12;
 }
 
 function pnlCompletenessStatus(observation: ObservationRow) {
@@ -1108,20 +1267,78 @@ async function pnlEventCounts(db: LedgerDb, boardId: string) {
 }
 
 async function accountingStatusForObservation(db: LedgerDb, boardId: string, observationId: string, observedAt: string) {
+  const observation = await db.get<ObservationRow>("SELECT * FROM observations WHERE id = ? AND board_id = ?", [
+    observationId,
+    boardId,
+  ]);
+  if (!observation) throw new RequestError("Observation not found", 404);
   const changes = await db.all<BalanceChangeRow>(
     "SELECT * FROM balance_changes WHERE board_id = ? AND source_observation_id = ?",
     [boardId, observationId],
   );
-  const price = await latestPriceSnapshotForBoard(db, boardId, observedAt);
-  const limitedVisibility = changes.find((change) => change.visibility_status !== "complete");
-  const missingPrice = changes.length > 0 && !price;
-  const completeAccountedSnapshot = changes.length > 0 && !limitedVisibility && !missingPrice;
+  let currentValueUsd = observation.current_value_usd;
+  let priceSnapshotId: string | null = null;
+  let stalenessStatus = changes.length > 0 ? "unknown" : "fresh";
+  let completenessStatus: string | null = null;
+
+  if (changes.length > 0) {
+    let reconciledValueUsd = 0;
+    let completeAccountedSnapshot = true;
+    for (const change of changes) {
+      if (change.visibility_status !== "complete") {
+        completeAccountedSnapshot = false;
+        completenessStatus = completenessStatus ?? change.visibility_status;
+        continue;
+      }
+      if (change.normalized_amount === null) {
+        completeAccountedSnapshot = false;
+        completenessStatus = completenessStatus ?? "missing_balance";
+        continue;
+      }
+      const price = await latestPriceSnapshotForAsset(db, boardId, change.asset_id, observedAt);
+      if (!price || price.price_usd === null) {
+        completeAccountedSnapshot = false;
+        completenessStatus = completenessStatus ?? "missing_price";
+        continue;
+      }
+      reconciledValueUsd += change.normalized_amount * price.price_usd;
+      priceSnapshotId = price.id;
+      stalenessStatus = combineStalenessStatus(stalenessStatus, price.staleness_status);
+    }
+
+    if (completeAccountedSnapshot) {
+      currentValueUsd = reconciledValueUsd;
+      completenessStatus = "complete";
+    }
+  } else {
+    const price = await latestPriceSnapshotForBoard(db, boardId, observedAt);
+    priceSnapshotId = price?.id ?? null;
+    stalenessStatus = price?.staleness_status ?? "unknown";
+    completenessStatus = "missing_balance_changes";
+  }
 
   return {
-    priceSnapshotId: price?.id ?? null,
-    stalenessStatus: price?.staleness_status ?? (changes.length > 0 ? "unknown" : "fresh"),
-    completenessStatus: limitedVisibility?.visibility_status ?? (missingPrice ? "missing_price" : completeAccountedSnapshot ? "complete" : null),
+    currentValueUsd,
+    priceSnapshotId,
+    stalenessStatus,
+    completenessStatus,
   };
+}
+
+async function latestPriceSnapshotForAsset(db: LedgerDb, boardId: string, assetId: string, observedAt: string) {
+  return await db.get<PriceSnapshotRow>(
+    `SELECT * FROM price_snapshots
+     WHERE asset_id = ? AND observed_at <= ? AND (board_id = ? OR board_id IS NULL)
+     ORDER BY observed_at DESC, created_at DESC, id DESC
+     LIMIT 1`,
+    [assetId, observedAt, boardId],
+  );
+}
+
+function combineStalenessStatus(current: string, next: string) {
+  if (current === "stale" || next === "stale") return "stale";
+  if (next === "fresh") return current === "unknown" ? "fresh" : current;
+  return next;
 }
 
 async function latestPriceSnapshotForBoard(db: LedgerDb, boardId: string, observedAt: string) {
@@ -1233,6 +1450,7 @@ async function assertBoardRead(
   adminToken: string | null | undefined,
   createdAt: string,
   requiredLevel: AccessLevel,
+  rpcFetch: FetchLike,
 ) {
   if (board.visibility_mode === "public") return;
   if (hasServiceBearer(request.headers, adminToken)) return;
@@ -1243,7 +1461,7 @@ async function assertBoardRead(
     throw new RequestError("Read access required", 403);
   }
 
-  const grant = await matchingReadGrant(db, board.id, readToken, requiredLevel, createdAt);
+  const grant = await matchingReadGrant(db, board.id, readToken, requiredLevel, createdAt, rpcFetch);
   if (!grant) {
     await recordReadAudit(db, board.id, null, requiredLevel, "denied", "invalid_read_token", createdAt);
     throw new RequestError("Read access denied", 403);
@@ -1274,6 +1492,7 @@ async function matchingReadGrant(
   readToken: string,
   requiredLevel: AccessLevel,
   now: string,
+  rpcFetch: FetchLike,
 ) {
   const tokenHash = sha256Hex(readToken);
   const checks = await db.all<ReadAccessCheckRow>(
@@ -1290,9 +1509,29 @@ async function matchingReadGrant(
     if (metadata?.read_token_sha256 !== tokenHash) continue;
     const expiresAt = typeof metadata.expires_at === "string" ? metadata.expires_at : null;
     if (expiresAt && Date.parse(expiresAt) <= Date.parse(now)) continue;
+    if (metadata?.key_holder_live_check === true) {
+      const stillHoldsKey = await verifyLiveKeyHolderGrant(rpcFetch, check, metadata);
+      if (!stillHoldsKey) continue;
+    }
     return check;
   }
   return null;
+}
+
+async function verifyLiveKeyHolderGrant(
+  rpcFetch: FetchLike,
+  check: ReadAccessCheckRow,
+  metadata: JsonObject,
+) {
+  const rpcUrl = cleanString(metadata.rpc_url);
+  const keyContractId = cleanString(metadata.key_contract_id) ?? check.key_contract_id;
+  const agentId = cleanString(metadata.agent_id);
+  const holderAccountId = cleanString(metadata.holder_account_id) ?? check.requester_wallet_address;
+  if (!rpcUrl || !keyContractId || !agentId || !holderAccountId) return false;
+
+  const rawBalance = await viewNearKeyMarketBalance(rpcFetch, rpcUrl, keyContractId, agentId, holderAccountId);
+  const holderBalance = rawBalance === null ? "0" : decimalIntegerString(rawBalance, "holder_key_balance");
+  return BigInt(holderBalance) > 0n;
 }
 
 function accessLevelAllows(actual: string, required: AccessLevel) {
@@ -1493,6 +1732,23 @@ async function insertEvent(db: LedgerDb, event: EventRow) {
     event.metadata_json,
     event.reported_at,
     event.created_at,
+    ],
+  );
+}
+
+async function insertAttachment(db: LedgerDb, attachment: AttachmentRow) {
+  await db.run(
+    `INSERT INTO attachments
+      (id, event_id, board_id, attachment_type, reason, metadata_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+    attachment.id,
+    attachment.event_id,
+    attachment.board_id,
+    attachment.attachment_type,
+    attachment.reason,
+    attachment.metadata_json,
+    attachment.created_at,
     ],
   );
 }

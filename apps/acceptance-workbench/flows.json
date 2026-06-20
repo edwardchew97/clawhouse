@@ -92,54 +92,63 @@
         {
           "id": "agentRegistration.ledger.createBoard",
           "name": "Register Agent Board",
-          "description": "Registers the approved agent in Agent Board Ledger so the agent has a board id, wallet metadata, and a starting value for later trade reporting.",
-          "type": "http",
+          "description": "Registers the approved agent in Agent Board Ledger with a wallet-signed board registration proof.",
+          "type": "script",
           "access": "protected",
-          "method": "POST",
-          "url": "{{ledgerBaseUrl}}/boards",
-          "headers": {
-            "content-type": "application/json",
-            "authorization": "{{ledgerAuthorizationHeader}}"
-          },
-          "body": {
-            "board_id": "{{ledgerBoardId}}",
-            "agent_id": "{{ledgerAgentId}}",
-            "wallet_address": "{{ledgerWalletAddress}}",
-            "public_key": "{{ledgerPublicKey}}",
-            "starting_value_usd": "{{ledgerStartingValueUsd}}",
-            "base_currency": "USD",
-            "public_status": "active",
-            "visibility_mode": "{{ledgerVisibilityMode}}"
-          },
+          "command": "bun",
+          "args": [
+            "scripts/register-board.ts",
+            "--base-url",
+            "{{ledgerBaseUrl}}",
+            "--key-file",
+            "{{ledgerWalletFile}}",
+            "--board-id",
+            "{{ledgerBoardId}}",
+            "--agent-id",
+            "{{ledgerAgentId}}",
+            "--starting-value-usd",
+            "{{ledgerStartingValueUsd}}",
+            "--visibility-mode",
+            "{{ledgerVisibilityMode}}"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
           "runningNotes": [
-            "Calling the real POST /boards backend API.",
-            "ledgerAuthorizationHeader must be formatted as Bearer <AGENT_BOARD_LEDGER_ADMIN_TOKEN>.",
+            "Calling the real POST /boards backend API with both service authorization and wallet signature headers.",
+            "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAdminToken.",
+            "Creating or reusing a local Workbench wallet artifact and sending only public wallet metadata plus the request signature.",
             "Leave ledgerBoardId empty if you want the backend to generate an id.",
             "The returned board id is stored as ledgerBoardId for the later API calls."
           ],
           "inputs": {
             "ledgerBaseUrl": "http://127.0.0.1:4321",
-            "ledgerAuthorizationHeader": "",
+            "ledgerAdminToken": "local-ledger-admin-token",
+            "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
             "ledgerBoardId": "",
             "ledgerAgentId": "ironclaw-api-workbench",
-            "ledgerWalletAddress": "ledger-api-wallet.testnet",
-            "ledgerPublicKey": "ed25519:ledger-api-public-key",
             "ledgerStartingValueUsd": "100",
             "ledgerVisibilityMode": "public"
           },
           "fillDefaultsWhenEmpty": [
             "ledgerBaseUrl",
+            "ledgerAdminToken",
+            "ledgerWalletFile",
             "ledgerAgentId",
-            "ledgerWalletAddress",
-            "ledgerPublicKey",
             "ledgerStartingValueUsd",
             "ledgerVisibilityMode"
           ],
           "setVars": {
-            "ledgerBoardId": "response.json.json.board.id",
-            "ledgerAgentId": "response.json.json.board.agent_id",
-            "ledgerWalletAddress": "response.json.json.board.wallet_address",
-            "ledgerPublicKey": "response.json.json.board.public_key"
+            "ledgerBoardId": "response.json.boardId",
+            "ledgerAgentId": "response.json.agentId",
+            "ledgerWalletAddress": "response.json.wallet.walletAddress",
+            "ledgerPublicKey": "response.json.wallet.publicKey"
           }
         },
         {
@@ -728,9 +737,58 @@
           }
         },
         {
+          "id": "userBuysKey.ledger.nearKeyMarketReadAccess",
+          "name": "Create Live Key-Holder Read Token",
+          "description": "Checks the buyer's live NEAR key-market holder balance and issues a holder read token whose later reads re-check the key balance.",
+          "type": "http",
+          "access": "protected",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/read-access/near-key-market",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "rpc_url": "{{nearRpcUrl}}",
+            "key_contract_id": "{{contractId}}",
+            "agent_id": "{{agentId}}",
+            "holder_account_id": "{{testUserAccountId}}",
+            "access_level": "key_holder_detail",
+            "read_token": "{{ledgerReadToken}}",
+            "expires_at": "{{ledgerReadTokenExpiresAt}}"
+          },
+          "runningNotes": [
+            "Calling the real Ledger /read-access/near-key-market endpoint.",
+            "Ledger checks key.balance_of/get_balance on the key-market contract before issuing the read token.",
+            "Later holder-gated reads use the token but re-check the live key balance, so a sold-out holder should stop reading."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "ledgerBoardId": "",
+            "nearRpcUrl": "https://rpc.testnet.near.org",
+            "contractId": "",
+            "agentId": "",
+            "testUserAccountId": "",
+            "ledgerReadToken": "workbench-live-key-read-token",
+            "ledgerReadTokenExpiresAt": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "nearRpcUrl",
+            "ledgerReadToken",
+            "ledgerReadTokenExpiresAt"
+          ],
+          "setVars": {
+            "ledgerReadAccessCheckId": "response.json.json.check.id",
+            "holderBalanceAfterBuy": "response.json.json.holder_key_balance",
+            "ledgerReadToken": "inputs.ledgerReadToken"
+          }
+        },
+        {
           "id": "userBuysKey.ledger.readAccessCheck",
           "name": "Create Holder Read Token",
-          "description": "Creates a service-authorized read-access check and optional read token that can be used for holder-gated Ledger readback.",
+          "description": "Fallback/manual acceptance path for creating a service-authorized holder read token when live key-market RPC credentials are unavailable.",
           "type": "http",
           "access": "protected",
           "method": "POST",
@@ -749,7 +807,7 @@
           },
           "runningNotes": [
             "Calling the service-authorized read-access check API.",
-            "Use this to issue a read token for holder-gated board readback."
+            "Prefer Create Live Key-Holder Read Token after a real key buy; use this only for local fallback/debug readback."
           ],
           "inputs": {
             "ledgerBaseUrl": "http://127.0.0.1:4321",
@@ -759,7 +817,7 @@
             "ledgerAccessLevel": "key_holder_detail",
             "ledgerAccessResult": "granted",
             "ledgerReadToken": "workbench-read-token",
-            "ledgerReadTokenExpiresAt": "2030-01-01T00:00:00.000Z"
+            "ledgerReadTokenExpiresAt": ""
           },
           "fillDefaultsWhenEmpty": [
             "ledgerBaseUrl",
@@ -938,6 +996,20 @@
             "ledgerAccessResult": "response.json.json.access_result",
             "ledgerReadToken": "inputs.ledgerReadToken"
           }
+        },
+        {
+          "id": "userBuysKey.pending.productionHolderGate",
+          "name": "First-Party Holder Room UI",
+          "description": "The product should show the key-holder strategy/timeline inside a first-party holder room UI. 未完成: Ledger live key-balance gating exists as an API/Workbench path, but the first-party product room UI is not implemented yet.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "protected",
+          "pendingReason": "Ledger live key-balance gating exists as an API/Workbench path, but the first-party product room UI is not implemented yet.",
+          "inputs": {},
+          "setVars": {},
+          "runningNotes": [
+            "未完成: Ledger live key-balance gating exists as an API/Workbench path, but the first-party product room UI is not implemented yet."
+          ]
         }
       ]
     },
@@ -1455,7 +1527,7 @@
     {
       "id": "user-sells-key-story",
       "name": "User Sells Key",
-      "purpose": "Acceptance story for a key holder quoting a sell, selling through a real NEAR transaction, and verifying the post-sale state and unfinished access revocation boundary.",
+      "purpose": "Acceptance story for a key holder quoting a sell, selling through a real NEAR transaction, and verifying post-sale state plus live key-market holder-gate denial.",
       "steps": [
         {
           "id": "userSellsKey.key.quoteSell",
@@ -1564,65 +1636,191 @@
           }
         },
         {
-          "id": "userSellsKey.ledger.readAccessCheck",
-          "name": "Record Access Check After Sell",
-          "description": "Creates a service-authorized read-access check that can be set to denied when validating post-sale access behavior.",
+          "id": "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell",
+          "name": "Verify Live Holder Gate After Sell",
+          "description": "Calls Ledger's live key-market read-access endpoint after sell; the expected result is denied when the seller holder balance is zero.",
           "type": "http",
           "access": "protected",
           "method": "POST",
-          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/read-access/checks",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/read-access/near-key-market",
           "headers": {
             "content-type": "application/json",
             "authorization": "{{ledgerAuthorizationHeader}}"
           },
           "body": {
-            "requester_wallet_address": "{{ledgerRequesterWalletAddress}}",
-            "access_level": "{{ledgerAccessLevel}}",
-            "access_result": "{{ledgerAccessResult}}",
-            "read_token": "{{ledgerReadToken}}",
-            "expires_at": "{{ledgerReadTokenExpiresAt}}",
-            "reason": "acceptance-workbench-api"
+            "rpc_url": "{{nearRpcUrl}}",
+            "key_contract_id": "{{contractId}}",
+            "agent_id": "{{agentId}}",
+            "holder_account_id": "{{testUserAccountId}}",
+            "access_level": "key_holder_detail",
+            "read_token": "{{ledgerReadToken}}"
           },
           "runningNotes": [
-            "Calling the service-authorized read-access check API.",
-            "Use this to issue a read token for holder-gated board readback."
+            "Calling the same live Ledger /read-access/near-key-market endpoint used after buy.",
+            "Ledger checks key.balance_of/get_balance through NEAR RPC.",
+            "Expected after selling below holder threshold: access_result is denied and no new holder read token is granted."
           ],
           "inputs": {
             "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "ledgerBoardId": "",
-            "ledgerRequesterWalletAddress": "holder.testnet",
-            "ledgerAccessLevel": "key_holder_detail",
-            "ledgerAccessResult": "denied",
-            "ledgerReadToken": "",
-            "ledgerReadTokenExpiresAt": "2030-01-01T00:00:00.000Z"
+            "nearRpcUrl": "https://rpc.testnet.near.org",
+            "contractId": "",
+            "agentId": "",
+            "testUserAccountId": "",
+            "ledgerReadToken": ""
           },
           "fillDefaultsWhenEmpty": [
             "ledgerBaseUrl",
-            "ledgerRequesterWalletAddress",
-            "ledgerAccessLevel",
-            "ledgerAccessResult",
-            "ledgerReadToken",
-            "ledgerReadTokenExpiresAt"
+            "nearRpcUrl",
+            "ledgerReadToken"
           ],
           "setVars": {
-            "ledgerReadAccessCheckId": "response.json.json.check.id",
-            "ledgerReadToken": "inputs.ledgerReadToken"
+            "ledgerReadAccessAfterSell": "response.json.json.access_result",
+            "holderBalanceAfterSell": "response.json.json.holder_key_balance",
+            "ledgerReadAccessCheckId": "response.json.json.check.id"
           }
         },
         {
           "id": "userSellsKey.pending.revokeHolderAccessAfterSell",
-          "name": "Automatically Revoke Holder Access",
-          "description": "After a user sells below the holder threshold, holder-gated reads should stop working without manual service intervention. 未完成: Automatic revocation from live key balance and token expiry enforcement after sell are not complete.",
+          "name": "First-Party Sell And Revocation Receipt",
+          "description": "After a user sells below the holder threshold, holder-gated reads should stop working without manual service intervention. 未完成: API-level live key-balance recheck exists, but the first-party sell UI and user-facing revocation receipt are not implemented yet.",
           "type": "pending",
           "status": "未完成",
           "access": "protected",
-          "pendingReason": "Automatic revocation from live key balance and token expiry enforcement after sell are not complete.",
+          "pendingReason": "API-level live key-balance recheck exists, but the first-party sell UI and user-facing revocation receipt are not implemented yet.",
           "inputs": {},
           "setVars": {},
           "runningNotes": [
-            "未完成: Automatic revocation from live key balance and token expiry enforcement after sell are not complete."
+            "未完成: API-level live key-balance recheck exists, but the first-party sell UI and user-facing revocation receipt are not implemented yet."
           ]
+        }
+      ]
+    },
+    {
+      "id": "gob0-end-to-end-story",
+      "name": "goB0 End-to-End",
+      "purpose": "Acceptance story for the goB0 path: register a key-market agent and holder-gated board, buy a key, unlock holder reads, submit a signed trading event with reason and attachment, run watcher/cron ingestion, and read ledger/PnL back.",
+      "steps": [
+        {
+          "id": "goB0.e2e.fullFlow",
+          "name": "Run goB0 Full Acceptance Path",
+          "description": "Runs the real local goB0 acceptance path: NEAR key-market create and buy, holder-gated Ledger board readback, signed Trading Agent event and attachment, watcher observation, cron reconciliation, and holder readback for timeline, portfolio, and PnL.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "scripts/workbench-flow.ts",
+            "--mode",
+            "gob0",
+            "--base-url",
+            "{{ledgerBaseUrl}}",
+            "--key-file",
+            "{{ledgerWalletFile}}",
+            "--board-id",
+            "{{ledgerBoardId}}",
+            "--agent-id",
+            "{{agentId}}",
+            "--agent-name",
+            "{{agentName}}",
+            "--metadata-uri",
+            "{{metadataUri}}",
+            "--key-amount",
+            "{{keyAmount}}",
+            "--key-contract-id",
+            "{{keyContractId}}",
+            "--key-rpc-url",
+            "{{keyRpcUrl}}",
+            "--holder-account-id",
+            "{{holderAccountId}}",
+            "--read-token",
+            "{{ledgerReadToken}}",
+            "--read-token-expires-at",
+            "{{ledgerReadTokenExpiresAt}}",
+            "--key-storage-deposit-near",
+            "{{keyStorageDepositNear}}",
+            "--key-buy-storage-deposit-near",
+            "{{keyBuyStorageDepositNear}}",
+            "--starting-value-usd",
+            "{{ledgerStartingValueUsd}}",
+            "--current-value-usd",
+            "{{ledgerCurrentValueUsd}}",
+            "--client-event-id",
+            "{{ledgerClientEventId}}",
+            "--tx-hash",
+            "{{ledgerTxHash}}",
+            "--intent-id",
+            "{{ledgerIntentId}}"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Calling the real agent-key-market create, quote, buy, and state scripts; this step fails if the NEAR contract, account, or private key is missing.",
+            "Registering a holder-gated board through the real Agent Board Ledger POST /boards API.",
+            "Confirming the holder-gated board rejects a read without a token before granting access.",
+            "Creating the read token through POST /boards/:id/read-access/near-key-market, which checks the live key-market holder balance through NEAR RPC.",
+            "Signing the Trading Agent event and attachment with the local Ledger wallet artifact before sending them to the real Ledger HTTP API.",
+            "Writing watcher observation, price, and balance-change evidence through service-authorized Ledger APIs, then running POST /cron/tick.",
+            "Reading board, events, portfolio, prices, balance changes, and PnL back with the holder read token."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAdminToken": "local-ledger-admin-token",
+            "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/gob0-wallet.json",
+            "ledgerBoardId": "",
+            "agentId": "",
+            "agentName": "goB0 Workbench Agent",
+            "metadataUri": "",
+            "keyAmount": "1",
+            "keyContractId": "",
+            "keyRpcUrl": "",
+            "holderAccountId": "",
+            "ledgerReadToken": "",
+            "ledgerReadTokenExpiresAt": "",
+            "keyStorageDepositNear": "1",
+            "keyBuyStorageDepositNear": "0.2",
+            "ledgerStartingValueUsd": "100",
+            "ledgerCurrentValueUsd": "112",
+            "ledgerClientEventId": "",
+            "ledgerTxHash": "",
+            "ledgerIntentId": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerAdminToken",
+            "ledgerWalletFile",
+            "agentName",
+            "keyAmount",
+            "keyStorageDepositNear",
+            "keyBuyStorageDepositNear",
+            "ledgerStartingValueUsd",
+            "ledgerCurrentValueUsd"
+          ],
+          "setVars": {
+            "agentId": "response.json.agentId",
+            "ledgerAgentId": "response.json.agentId",
+            "ledgerBoardId": "response.json.boardId",
+            "ledgerWalletAddress": "response.json.wallet.walletAddress",
+            "ledgerPublicKey": "response.json.wallet.publicKey",
+            "ledgerReadToken": "response.json.readToken",
+            "buyTxHash": "response.json.summary.buyTxHash",
+            "holderBalance": "response.json.summary.holderBalance",
+            "ledgerClientEventId": "response.json.clientEventId",
+            "ledgerTxHash": "response.json.txHash",
+            "ledgerIntentId": "response.json.intentId",
+            "ledgerEventId": "response.json.event.id",
+            "ledgerAttachmentId": "response.json.attachment.id",
+            "ledgerEventCount": "response.json.summary.eventCount",
+            "ledgerAttachmentCount": "response.json.summary.attachmentCount",
+            "ledgerPnlUsd": "response.json.summary.pnlUsd"
+          }
         }
       ]
     },

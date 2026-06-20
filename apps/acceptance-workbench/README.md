@@ -117,3 +117,34 @@ Expected output shape:
 
 If the contract, account, private key, or script is missing, the Key Market flow
 fails honestly through the local runner instead of returning simulated data.
+
+## goB0 End-To-End Flow
+
+`goB0 End-to-End` exposes one script-backed PM acceptance step:
+
+```txt
+goB0.e2e.fullFlow
+```
+
+The step runs `apps/agent-board-ledger/scripts/workbench-flow.ts --mode gob0`.
+It uses real local paths for:
+
+- `agent-key-market` create, quote, buy, and state scripts.
+- Agent Board Ledger `POST /boards` with service authorization plus wallet
+  signature proof.
+- Holder read token creation through `POST /boards/:id/read-access/near-key-market`.
+  Leave `ledgerReadTokenExpiresAt` empty for the backend's short default TTL;
+  explicit non-public holder grants cannot exceed 24 hours.
+- Signed event and signed attachment upload.
+- Watcher observation, price, balance-change, `POST /cron/tick`, and holder
+  readback for board, timeline, portfolio, prices, balance changes, and PnL.
+The `User Sells Key` story uses the same live key-market read-access endpoint
+after sell to confirm holder access is denied when the key balance drops below
+the holder threshold.
+
+Before running it, start the local Ledger service with
+`AGENT_BOARD_LEDGER_ADMIN_TOKEN` matching the Workbench `ledgerAdminToken`
+input, and fill the NEAR Environment JSON shown above. Leave `agentId`,
+`ledgerBoardId`, `ledgerReadToken`, `ledgerClientEventId`, `ledgerTxHash`, and
+`ledgerIntentId` empty when you want the script to generate unique values for a
+fresh run.
