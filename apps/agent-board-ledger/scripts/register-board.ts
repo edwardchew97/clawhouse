@@ -48,7 +48,7 @@ async function main() {
     visibility_mode: options.visibilityMode,
     metadata: {
       source: "acceptance-workbench",
-      strategy_summary: "Workbench-registered goB0 strategy metadata.",
+      strategy_summary: "Workbench-registered agent board metadata.",
     },
   };
   const rawBody = JSON.stringify(body);

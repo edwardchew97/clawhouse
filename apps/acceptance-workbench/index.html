@@ -983,6 +983,10 @@
       gap: 8px;
     }
 
+    .response-vars-grid {
+      padding: 10px;
+    }
+
     .var-card {
       display: grid;
       gap: 4px;
@@ -1168,10 +1172,6 @@
             <div id="resultBox" class="result-view">
               <div class="result-empty">No response yet.</div>
             </div>
-            <div class="pill-row">
-              <span class="pill" id="varCount">0 runtime vars</span>
-            </div>
-            <div id="vars" class="vars-grid"></div>
           </div>
         </div>
       </section>
@@ -1332,6 +1332,7 @@
 
     const responseTabDefs = [
       { id: "body", label: "Body" },
+      { id: "vars", label: "Vars" },
       { id: "runner", label: "Runner" },
       { id: "streams", label: "Streams" },
       { id: "full", label: "Full" }
@@ -2196,18 +2197,41 @@
 
     function renderVars() {
       const entries = Object.entries(state.vars);
-      $("varCount").textContent = `${entries.length} runtime vars`;
-      $("vars").innerHTML = entries.length ? entries.map(([key, value]) => `
-        <div class="var-card">
-          <div class="var-key">${escapeHtml(key)}</div>
-          <div class="var-value">${escapeHtml(String(value))}</div>
-        </div>
-      `).join("") : `<div class="empty">No runtime variables extracted yet.</div>`;
+      const varCount = $("varCount");
+      if (varCount) varCount.textContent = runtimeVarCountLabel(entries.length);
+      const varsPanel = $("vars");
+      if (varsPanel) varsPanel.innerHTML = renderRuntimeVarCards(entries);
       if ($("varsEditor")) $("varsEditor").value = JSON.stringify(state.vars, null, 2);
       const varsTabEditor = $("varsTabEditor");
       if (varsTabEditor && document.activeElement !== varsTabEditor) {
         varsTabEditor.value = JSON.stringify(state.vars, null, 2);
       }
+    }
+
+    function runtimeVarCountLabel(count) {
+      return `${count} runtime vars`;
+    }
+
+    function renderRuntimeVarCards(entries = Object.entries(state.vars)) {
+      return entries.length ? entries.map(([key, value]) => `
+        <div class="var-card">
+          <div class="var-key">${escapeHtml(key)}</div>
+          <div class="var-value">${escapeHtml(String(value))}</div>
+        </div>
+      `).join("") : `<div class="empty">No runtime variables extracted yet.</div>`;
+    }
+
+    function renderRuntimeVarsPanel() {
+      const entries = Object.entries(state.vars);
+      return `
+        <div class="response-panel-block">
+          <div class="result-panel-head">
+            <span>Runtime variables</span>
+            <span id="varCount" class="result-panel-meta">${escapeHtml(runtimeVarCountLabel(entries.length))}</span>
+          </div>
+          <div id="vars" class="vars-grid response-vars-grid">${renderRuntimeVarCards(entries)}</div>
+        </div>
+      `;
     }
 
     function syncEditors() {
@@ -2334,6 +2358,7 @@
         ? streamBlocks.join("")
         : `<div class="stream-empty">No stdout, stderr, or raw response stream returned.</div>`;
       const fullPanel = resultPanelBlock("Full runner response", JSON.stringify(result, null, 2), "Runner JSON");
+      const varsPanel = renderRuntimeVarsPanel();
 
       return `
         <div class="response-console ${ok ? "ok" : "fail"}">
@@ -2345,6 +2370,7 @@
             </div>
           </div>
           ${responsePanel("body", activeTab, bodyPanel)}
+          ${responsePanel("vars", activeTab, varsPanel)}
           ${responsePanel("runner", activeTab, runnerPanel)}
           ${responsePanel("streams", activeTab, streamsPanel)}
           ${responsePanel("full", activeTab, fullPanel)}
@@ -2455,6 +2481,7 @@
             </div>
           </div>
           ${responsePanel("body", activeTab, bodyPanel)}
+          ${responsePanel("vars", activeTab, renderRuntimeVarsPanel())}
           ${responsePanel("runner", activeTab, resultPanelBlock("Runner metadata", JSON.stringify(runnerInfo, null, 2), "JSON"))}
           ${responsePanel("streams", activeTab, resultPlaceholderBlock("Streams", "Waiting for stdout, stderr, or raw text from the runner.", "waiting"))}
           ${responsePanel("full", activeTab, resultPlaceholderBlock("Full runner response", "Full runner response will appear here after completion.", "waiting"))}
