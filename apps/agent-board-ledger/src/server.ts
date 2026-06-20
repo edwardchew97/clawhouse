@@ -816,7 +816,7 @@ async function runTrackedNearAccountWatches(db: LedgerDb, rpcFetch: FetchLike, e
   }
 
   const trackedBoards = await db.all<{ board_id: string; wallet_address: string }>(
-    `SELECT DISTINCT boards.id AS board_id, boards.wallet_address AS wallet_address
+    `SELECT boards.id AS board_id, boards.wallet_address AS wallet_address
      FROM boards
      INNER JOIN tracked_wallets
        ON tracked_wallets.board_id = boards.id
