@@ -15,13 +15,14 @@ export async function GET(request: Request) {
     const boardId = requireBoardId(searchParams.get("boardId") ?? getBackendConfig().defaultBoardId);
     const path = `/boards/${encodeURIComponent(boardId)}`;
 
-    const [board, events, portfolio, pnl, balanceChanges, prices] = await Promise.allSettled([
+    const [board, events, portfolio, pnl, balanceChanges, prices, paperLeaderboard] = await Promise.allSettled([
       fetchBackendJson(path),
       fetchBackendJson(`${path}/events`),
       fetchBackendJson(`${path}/portfolio`),
       fetchBackendJson(`${path}/pnl`),
       fetchBackendJson(`${path}/balance-changes`),
       fetchBackendJson(`${path}/prices`),
+      fetchBackendJson("/paper/leaderboard"),
     ]);
 
     return NextResponse.json({
@@ -34,6 +35,7 @@ export async function GET(request: Request) {
       pnl: settledValue(pnl),
       balanceChanges: settledValue(balanceChanges),
       prices: settledValue(prices),
+      paperLeaderboard: settledValue(paperLeaderboard),
       errors: {
         board: settledError(board),
         events: settledError(events),
@@ -41,6 +43,7 @@ export async function GET(request: Request) {
         pnl: settledError(pnl),
         balanceChanges: settledError(balanceChanges),
         prices: settledError(prices),
+        paperLeaderboard: settledError(paperLeaderboard),
       },
     });
   } catch (error) {

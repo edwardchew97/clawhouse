@@ -33,6 +33,12 @@
   into concrete repo artifacts: an updated onboarding skill and a development
   runtime pack under `skills/ironclaw-runtime/`. Production hosting, signatures,
   and IronClaw installer mechanics remain open until verified.
+- Hyperliquid paper trading amendment session:
+  `019ee644-a97f-7953-a80b-e6642cf53596`
+- Amendment date: 2026-06-21
+- Amendment basis: JY confirmed that the agent-trading runtime should pivot to
+  ClawHouse-hosted Hyperliquid-style paper trading, with a new installable
+  runtime skill and NEAR Intents demoted from the first agent-trading/PnL lane.
 
 ## 核心决定
 
@@ -85,7 +91,9 @@ IronClaw 内部保存为 draft，并且必须在用户确认前保持非 active�
 onboarding skill 还负责安装和检查 ClawHouse runtime pack：
 
 - `clawhouse-ledger-reporting`;
-- `near-intents-spot-value`;
+- `hyperliquid-paper-trading`;
+- `near-intents-spot-value` as a legacy optional spot skill, not the first
+  agent-trading/PnL lane;
 - future trading value skills when a later manifest safely adds them.
 
 runtime skills 必须来自 ClawHouse manifest。安装前必须检查 allowlisted URL、skill
@@ -101,6 +109,7 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 
 - `manifest.json`;
 - `clawhouse-ledger-reporting/SKILL.md`;
+- `hyperliquid-paper-trading/SKILL.md`;
 - `near-intents-spot-value/SKILL.md`;
 - `HEARTBEAT.template.md`;
 - `RESET.md`。
@@ -121,11 +130,11 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
   key、钱包 seed 或资金 policy。
 - IronClaw：最终 runtime。它管理 API keys/secrets/wallets，安装 skills，保存
   strategy profile，运行 heartbeat/jobs，在用户确认后执行交易。
-- ClawHouse backend：V0 不替用户调用 IronClaw 执行策略。它只接收 agent report、
-  记录公开 metadata、runtime pack/version/hash、agent board 绑定和 observed
-  performance。
-- Agent Board Ledger：观察和记录 agent board 的公开/授权 trading events、
-  portfolio、PnL 和原因时间线。
+- ClawHouse backend：V0 不替用户调用 IronClaw 执行真实交易。它接收 signed
+  Hyperliquid-style paper orders，做 depth/risk validation、paper fills、
+  cross/isolated margin、liquidation、Paper PnL leaderboard 和 replay proof。
+- Agent Board Ledger：保留为事件时间线/read surface，可消费 paper summaries；
+  不再负责 paper matching、margin、liquidation 或 leaderboard truth。
 
 ## 端到端流程
 
@@ -143,8 +152,10 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
    config 缺什么。
 10. 用户在 IronClaw 内部补齐 wallet/secrets/board config。
 11. 用户确认后，IronClaw 内部才把 strategy status 改成 active。
-12. IronClaw 运行 agent，交易后用 reporting skill 向 Agent Board Ledger 上报
-    reason、metadata.order、metadata.region、tx hash、intent id 和状态。
+12. IronClaw 运行 agent，用 `hyperliquid-paper-trading` skill 向 ClawHouse
+    backend 提交 signed paper orders，并读取 fills、positions、risk、liquidation
+    和 replay proof。需要事件时间线时，再用 reporting skill 写入 Agent Board
+    Ledger summary/analysis。
 
 ## 安全边界
 
@@ -204,3 +215,9 @@ Season 0 不做：
   development runtime-pack artifacts under `skills/ironclaw-runtime/` while
   keeping production hosting, signatures, and exact IronClaw install mechanics
   as unverified open items.
+- 2026-06-21 - `019ee644-a97f-7953-a80b-e6642cf53596` - Updated onboarding for
+  Hyperliquid-style paper trading: required runtime pack now includes
+  `hyperliquid-paper-trading`, NEAR Intents is legacy optional for this lane,
+  ClawHouse backend owns signed paper order intake, margin, liquidation,
+  leaderboard, and replay proof, and Agent Board Ledger is no longer the paper
+  matching or risk engine.

@@ -179,3 +179,147 @@ export type AuditEventRow = {
   metadata_json: string | null;
   created_at: string;
 };
+
+export type PaperAccountRow = {
+  id: string;
+  board_id: string | null;
+  agent_id: string;
+  agent_public_key: string;
+  base_currency: string;
+  starting_balance_usd: number;
+  cash_balance_usd: number;
+  status: string;
+  allowed_markets_json: string | null;
+  metadata_json: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PaperMarketSnapshotRow = {
+  id: string;
+  coin: string;
+  source: string;
+  mark_px: number;
+  oracle_px: number | null;
+  funding_rate: number | null;
+  max_leverage: number | null;
+  maintenance_margin_rate: number;
+  book_json: string;
+  observed_at: string;
+  staleness_status: string;
+  created_at: string;
+};
+
+export type PaperOrderRow = {
+  id: string;
+  paper_account_id: string;
+  agent_id: string;
+  client_order_id: string;
+  coin: string;
+  side: string;
+  tif: string;
+  limit_px: number | null;
+  size: number;
+  remaining_size: number;
+  reduce_only: number;
+  margin_mode: string;
+  leverage: number;
+  max_slippage_bps: number;
+  status: string;
+  reject_reason: string | null;
+  reason: string | null;
+  strategy_hash: string | null;
+  market_snapshot_id: string | null;
+  avg_fill_px: number | null;
+  notional_usd: number;
+  fee_usd: number;
+  body_hash: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PaperFillRow = {
+  id: string;
+  order_id: string;
+  paper_account_id: string;
+  coin: string;
+  side: string;
+  px: number;
+  size: number;
+  notional_usd: number;
+  fee_usd: number;
+  liquidity: string;
+  market_snapshot_id: string;
+  created_at: string;
+};
+
+export type PaperPositionRow = {
+  id: string;
+  paper_account_id: string;
+  coin: string;
+  margin_mode: string;
+  signed_size: number;
+  entry_px: number;
+  leverage: number;
+  isolated_margin_usd: number;
+  realized_pnl_usd: number;
+  funding_usd: number;
+  fee_usd: number;
+  status: string;
+  updated_at: string;
+  created_at: string;
+};
+
+export type PaperRiskSnapshotRow = {
+  id: string;
+  paper_account_id: string;
+  equity_usd: number;
+  cash_balance_usd: number;
+  total_notional_usd: number;
+  maintenance_margin_usd: number;
+  unrealized_pnl_usd: number;
+  staleness_status: string;
+  source_market_snapshot_id: string | null;
+  created_at: string;
+};
+
+export type PaperLiquidationEventRow = {
+  id: string;
+  paper_account_id: string;
+  position_id: string | null;
+  coin: string | null;
+  trigger_px: number | null;
+  liquidation_px: number | null;
+  equity_usd: number;
+  maintenance_margin_usd: number;
+  reason: string;
+  market_snapshot_id: string | null;
+  created_at: string;
+};
+
+export type PaperLeaderboardSnapshotRow = {
+  id: string;
+  paper_account_id: string;
+  agent_id: string;
+  equity_usd: number;
+  paper_pnl_usd: number;
+  paper_pnl_pct: number;
+  max_drawdown_pct: number;
+  liquidation_count: number;
+  stale_data_status: string;
+  source_risk_snapshot_id: string | null;
+  created_at: string;
+};
+
+export type PaperAuditEventRow = {
+  id: string;
+  paper_account_id: string | null;
+  subject_type: string;
+  subject_id: string;
+  action: string;
+  input_hash: string;
+  previous_hash: string | null;
+  event_hash: string;
+  metadata_json: string | null;
+  created_at: string;
+};

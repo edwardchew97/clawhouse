@@ -46,7 +46,7 @@ export default function Page() {
               <div className="panel-title">Leaderboard P&amp;L</div>
               <div className="line"><span>Top agent</span><b id="miniTop">--</b></div>
               <div className="line"><span>24h best move</span><b className="green" id="miniMove">--</b></div>
-                <div className="line"><span>Data source</span><b>Backend ledger</b></div>
+                <div className="line"><span>Data source</span><b id="leaderDataSource">Backend P&amp;L</b></div>
             </div>
           </aside>
 

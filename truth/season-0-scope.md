@@ -23,6 +23,14 @@
   be deleted or merged. The still-valid split-network preview constraints from
   Codex thread `019ede1f-65e9-73f0-8632-923a11145d39` were extracted onto
   current `dev` without raw-merging the stale branch.
+- Hyperliquid paper trading amendment session:
+  `019ee644-a97f-7953-a80b-e6642cf53596`
+- Amendment date: 2026-06-21
+- Amendment basis: JY reopened the agent-trading direction and confirmed that
+  ClawHouse should first build Hyperliquid-style paper trading in the existing
+  ClawHouse backend, not OutLayer, with agent orders sent to ClawHouse for
+  depth/risk validation, cross and isolated margin support, timely liquidation,
+  Paper PnL in the leaderboard, and a runtime skill agents can use to trade.
 
 ## 一句话
 
@@ -105,19 +113,22 @@ updates、leaderboard/PnL 和 receipt/share card 要连成一条真实可读的�
 Scope V0 preview 使用 split-network 架构：
 
 - key trading / key market / holder gate：NEAR testnet。
-- agent trading / NEAR Intents funding path / agent PnL：NEAR mainnet。
+- agent trading / Paper PnL / leaderboard：ClawHouse backend 上的
+  Hyperliquid-style paper trading。
 
 这个拆分是强约束。key trading 可以先在 testnet 展示真实合约状态和 holder gate；
-NEAR Intents 没有 testnet，所以 funding / spot / agent trading 走 mainnet production
-path，并用小额 internal/dev accounts 控制风险。
+agent trading 不再用 NEAR Intents spot 作为第一条交易主线。ClawHouse backend 接收
+agent paper orders，用 Hyperliquid market data 做 depth、margin、risk 和 liquidation
+计算，并把 Paper PnL 作为 leaderboard 的 agent-trading 输入。
 
 产品里出现的 agent、room update、leaderboard、PnL、key price、holder count、
 supply、reserve、holder balance、receipt/share card 数据都必须来自真实配置、真实
-agent 运行结果、真实链上状态或真实产品事件。做不到真实数据时，不要用假数据补位。
+agent 运行结果、真实链上状态、真实 Hyperliquid market data、或 ClawHouse paper
+engine 写入的可 replay 事件。做不到真实数据时，不要用假数据补位。
 
 所有 UI、receipt、share card 和 backend response 都必须清楚标出 key market 是
-testnet，agent trading / PnL 是 mainnet，不能让用户误以为 testnet key price 是
-mainnet 金钱收益。
+testnet，agent trading / PnL 是 paper，不能让用户误以为 testnet key price 或
+paper PnL 是 mainnet 金钱收益。
 
 ## Scope V0 Holder Room
 
@@ -145,35 +156,31 @@ Room 不包含：
 
 ## Scope V0 OutLayer Boundary
 
-Scope V0 不做任何 OutLayer、OutLayer policy 或 OutLayer gate。
+Scope V0 第一版 Hyperliquid paper trading 不依赖 OutLayer、OutLayer policy 或
+OutLayer gate。
 
 这条边界同时适用于：
 
 - V0 agent key market；
 - V0 Agent Board Ledger；
-- 当前 agent board 交易记录、钱包观察、portfolio 和 PnL 记录。
+- 当前 Hyperliquid paper trading order intake、risk、liquidation 和 leaderboard
+  Paper PnL。
 
-大白话：这一版不要等 OutLayer，也不要把 OutLayer 写成 V0 的依赖。
-Agent 如果自己发交易，成了就记录，失败就记录失败；ClawHouse 这一层不在
-交易前拦截、审批、quote 或 execute。
+大白话：这一版不要等 OutLayer，也不要把 OutLayer 写成 V0 的依赖。Agent 把
+paper order 发给 ClawHouse backend；ClawHouse backend 做 depth/risk 校验、
+paper fill、position accounting、timely liquidation 和可 replay 的 proof。
 
 如果其他旧 truth 或 reference 提到 OutLayer 作为 creator/runtime/policy 的
 可能目标，不要把它读成当前 Scope V0 key market 或 Agent Board Ledger 的依赖。
 
 ## NEAR Intents Boundary
 
-NEAR Intents 在当前 scope 里主要用于：
-
-- spot / cross-chain swap。
-- 出入金 / funding layer，把用户资金换成或带到可用于 NEAR mainnet agent trading
-  的资金路径。
-- copy-with-constraints 的未来 intent 表达。
-- funding / portfolio allocation / rebalancing。
+NEAR Intents 不再是当前 agent-trading / leaderboard PnL 的第一条交易主线。
 
 Scope V0 preview 明确不使用 NEAR Intents 直接买卖 key。用户 buy key / sell key
 发生在 NEAR testnet 的 key market contract 上。
 
-不要假设 NEAR Intents 原生提供：
+NEAR Intents 也不负责当前 Hyperliquid paper trading 的：
 
 - perps。
 - order book trading。
@@ -182,7 +189,37 @@ Scope V0 preview 明确不使用 NEAR Intents 直接买卖 key。用户 buy key 
 - leverage。
 - agent key market execution。
 
-如果未来要接 Hyperliquid，NEAR Intents 最多先作为 funding / cross-chain payment rails；真实 perps trading 需要单独使用 Hyperliquid 侧能力。
+如果未来重新使用 NEAR Intents，它最多是 funding / cross-chain payment rails；当前
+agent trading、Paper PnL 和 leaderboard 输入由 ClawHouse Hyperliquid paper engine
+负责。
+
+## Hyperliquid Paper Trading Boundary
+
+Current agent trading uses a ClawHouse-owned Hyperliquid-style paper engine.
+It is not real-money execution and it must be labeled as paper in product and
+API surfaces.
+
+The first backend slice must support:
+
+- agent-submitted paper orders over HTTPS;
+- Hyperliquid market-data-backed depth checks;
+- deterministic paper fills for IOC and market-like orders;
+- resting paper limit orders with GTC and ALO time-in-force;
+- cross margin and isolated margin position accounting;
+- funding and fee accounting when the source data is available;
+- timely liquidation from fresh mark/risk data;
+- hash-linked audit/replay proof for orders, fills, risk checks, liquidations,
+  and leaderboard snapshots;
+- Paper PnL, drawdown, liquidation count, and staleness status in the
+  leaderboard.
+
+The first backend slice does not:
+
+- submit real orders to Hyperliquid;
+- collect Hyperliquid API keys;
+- hold user or agent private keys;
+- treat paper PnL as real realized trading PnL;
+- depend on OutLayer before the later OutLayer migration.
 
 ## Private Inference Boundary
 
@@ -203,12 +240,12 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
 
 - 完整 PVE arena。
 - 三个 venue 的 proof league。
-- 以 Hyperliquid perps 作为第一主线。
-- 杠杆、爆仓、资金费率。
+- 真实 Hyperliquid perps execution。
+- 真实资金的杠杆、爆仓、资金费率。
 - key profit sharing。
 - permissionless agent onboarding / certification / deployment。
 - public-facing agent onboarding。
-- seed content / seed feed / fake leaderboard / fake PnL。
+- seed content / seed feed / fake leaderboard / unlabeled paper PnL。
 - Telegram as the Scope V0 holder room or primary product surface。
 - holder chat。
 - copy trading。
@@ -249,3 +286,9 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
   content, uses first-party holder rooms, splits key trading on NEAR testnet from
   agent trading / NEAR Intents funding on NEAR mainnet, and keeps NEAR Intents
   out of direct key buy/sell execution.
+- 2026-06-21 - `019ee644-a97f-7953-a80b-e6642cf53596` - Reopened agent trading
+  around ClawHouse-hosted Hyperliquid-style paper trading: OutLayer is deferred,
+  NEAR Intents is no longer the first agent-trading/PnL lane, Paper PnL may feed
+  the leaderboard when labeled as paper, and the backend must support agent
+  order intake, Hyperliquid market-data-backed depth checks, cross and isolated
+  margin, timely liquidation, replay proof, and an installable runtime skill.

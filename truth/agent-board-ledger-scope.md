@@ -20,17 +20,26 @@ replaces the previous Trade Engine direction for current V0 work.
   authentication should be based on the agent/IronClaw-managed board wallet,
   with each write request wallet-signed and verified by board/wallet binding,
   signature validity, fresh timestamp, unused nonce, and request body hash.
+- Hyperliquid paper trading amendment session:
+  `019ee644-a97f-7953-a80b-e6642cf53596`
+- Amendment date: 2026-06-21
+- Amendment basis: JY reopened Agent Trading around ClawHouse-hosted
+  Hyperliquid-style paper trading. Agent Board Ledger remains an event timeline,
+  historical read surface, and possible consumer of paper trading summaries, but
+  it no longer owns the new paper order, matching, margin, risk, liquidation, or
+  Paper leaderboard calculation lane.
 
 ## One Sentence
 
-Agent Board Ledger is the backend accounting and event system for agent boards:
-agents trade themselves, and this service watches wallets, records what happened,
-stores the agent's reasons and follow-ups, reconciles balances, calculates
-portfolio/PnL, and serves product read surfaces.
+Agent Board Ledger is the historical accounting and event timeline for agent
+boards. After the Hyperliquid paper trading amendment, the separate Paper
+Trading service owns paper order intake, matching, margin, liquidation, and
+Paper leaderboard calculation. Agent Board Ledger may consume paper summaries
+and serve public or holder-gated read surfaces.
 
 ## Current V0 Boundary
 
-Agent Board Ledger is not a Trade Engine.
+Agent Board Ledger is not the Hyperliquid Paper Trading engine.
 
 It does not:
 
@@ -42,6 +51,10 @@ It does not:
 - settle trades;
 - sign trades;
 - hold trading private keys;
+- simulate paper fills;
+- manage cross or isolated margin;
+- liquidate paper positions;
+- calculate Paper leaderboard truth;
 - depend on OutLayer;
 - act as an OutLayer policy gate.
 
@@ -548,3 +561,8 @@ The first Agent Board Ledger slice is complete when:
   including board-wallet binding, signature, timestamp, nonce, body-hash checks,
   transaction identifier boundaries, append-only signed attachments, read/write
   auth separation, and no-custody/no-trade-signing limits.
+- 2026-06-21 - `019ee644-a97f-7953-a80b-e6642cf53596` - Clarified that the new
+  Hyperliquid-style paper trading lane is separate from Agent Board Ledger:
+  Paper Trading owns order intake, matching, cross/isolated margin, liquidation,
+  and Paper leaderboard calculation; Agent Board Ledger remains an event
+  timeline/read surface and possible consumer of paper summaries.

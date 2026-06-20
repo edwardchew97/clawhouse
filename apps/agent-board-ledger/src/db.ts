@@ -382,6 +382,182 @@ export function migrate(db: Database) {
     CREATE INDEX IF NOT EXISTS audit_events_board_created_idx
       ON audit_events(board_id, created_at);
 
+    CREATE TABLE IF NOT EXISTS paper_accounts (
+      id TEXT PRIMARY KEY,
+      board_id TEXT REFERENCES boards(id),
+      agent_id TEXT NOT NULL,
+      agent_public_key TEXT NOT NULL,
+      base_currency TEXT NOT NULL DEFAULT 'USD',
+      starting_balance_usd REAL NOT NULL,
+      cash_balance_usd REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      allowed_markets_json TEXT,
+      metadata_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_auth_nonces (
+      id TEXT PRIMARY KEY,
+      paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
+      nonce TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      body_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(paper_account_id, nonce)
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_market_snapshots (
+      id TEXT PRIMARY KEY,
+      coin TEXT NOT NULL,
+      source TEXT NOT NULL,
+      mark_px REAL NOT NULL,
+      oracle_px REAL,
+      funding_rate REAL,
+      max_leverage REAL,
+      maintenance_margin_rate REAL NOT NULL,
+      book_json TEXT NOT NULL,
+      observed_at TEXT NOT NULL,
+      staleness_status TEXT NOT NULL DEFAULT 'fresh',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS paper_market_snapshots_coin_observed_idx
+      ON paper_market_snapshots(coin, observed_at);
+
+    CREATE TABLE IF NOT EXISTS paper_orders (
+      id TEXT PRIMARY KEY,
+      paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
+      agent_id TEXT NOT NULL,
+      client_order_id TEXT NOT NULL,
+      coin TEXT NOT NULL,
+      side TEXT NOT NULL,
+      tif TEXT NOT NULL,
+      limit_px REAL,
+      size REAL NOT NULL,
+      remaining_size REAL NOT NULL,
+      reduce_only INTEGER NOT NULL DEFAULT 0,
+      margin_mode TEXT NOT NULL,
+      leverage REAL NOT NULL,
+      max_slippage_bps REAL NOT NULL,
+      status TEXT NOT NULL,
+      reject_reason TEXT,
+      reason TEXT,
+      strategy_hash TEXT,
+      market_snapshot_id TEXT REFERENCES paper_market_snapshots(id),
+      avg_fill_px REAL,
+      notional_usd REAL NOT NULL DEFAULT 0,
+      fee_usd REAL NOT NULL DEFAULT 0,
+      body_hash TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(paper_account_id, client_order_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS paper_orders_account_created_idx
+      ON paper_orders(paper_account_id, created_at);
+    CREATE INDEX IF NOT EXISTS paper_orders_status_idx
+      ON paper_orders(status, coin);
+
+    CREATE TABLE IF NOT EXISTS paper_fills (
+      id TEXT PRIMARY KEY,
+      order_id TEXT NOT NULL REFERENCES paper_orders(id),
+      paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
+      coin TEXT NOT NULL,
+      side TEXT NOT NULL,
+      px REAL NOT NULL,
+      size REAL NOT NULL,
+      notional_usd REAL NOT NULL,
+      fee_usd REAL NOT NULL,
+      liquidity TEXT NOT NULL,
+      market_snapshot_id TEXT NOT NULL REFERENCES paper_market_snapshots(id),
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS paper_fills_account_created_idx
+      ON paper_fills(paper_account_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS paper_positions (
+      id TEXT PRIMARY KEY,
+      paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
+      coin TEXT NOT NULL,
+      margin_mode TEXT NOT NULL,
+      signed_size REAL NOT NULL,
+      entry_px REAL NOT NULL,
+      leverage REAL NOT NULL,
+      isolated_margin_usd REAL NOT NULL DEFAULT 0,
+      realized_pnl_usd REAL NOT NULL DEFAULT 0,
+      funding_usd REAL NOT NULL DEFAULT 0,
+      fee_usd REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'open',
+      updated_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(paper_account_id, coin, margin_mode)
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_risk_snapshots (
+      id TEXT PRIMARY KEY,
+      paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
+      equity_usd REAL NOT NULL,
+      cash_balance_usd REAL NOT NULL,
+      total_notional_usd REAL NOT NULL,
+      maintenance_margin_usd REAL NOT NULL,
+      unrealized_pnl_usd REAL NOT NULL,
+      staleness_status TEXT NOT NULL,
+      source_market_snapshot_id TEXT REFERENCES paper_market_snapshots(id),
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS paper_risk_snapshots_account_created_idx
+      ON paper_risk_snapshots(paper_account_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS paper_liquidation_events (
+      id TEXT PRIMARY KEY,
+      paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
+      position_id TEXT REFERENCES paper_positions(id),
+      coin TEXT,
+      trigger_px REAL,
+      liquidation_px REAL,
+      equity_usd REAL NOT NULL,
+      maintenance_margin_usd REAL NOT NULL,
+      reason TEXT NOT NULL,
+      market_snapshot_id TEXT REFERENCES paper_market_snapshots(id),
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_leaderboard_snapshots (
+      id TEXT PRIMARY KEY,
+      paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
+      agent_id TEXT NOT NULL,
+      equity_usd REAL NOT NULL,
+      paper_pnl_usd REAL NOT NULL,
+      paper_pnl_pct REAL NOT NULL,
+      max_drawdown_pct REAL NOT NULL,
+      liquidation_count INTEGER NOT NULL,
+      stale_data_status TEXT NOT NULL,
+      source_risk_snapshot_id TEXT REFERENCES paper_risk_snapshots(id),
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS paper_leaderboard_snapshots_rank_idx
+      ON paper_leaderboard_snapshots(created_at, paper_pnl_pct);
+
+    CREATE TABLE IF NOT EXISTS paper_audit_events (
+      id TEXT PRIMARY KEY,
+      paper_account_id TEXT REFERENCES paper_accounts(id),
+      subject_type TEXT NOT NULL,
+      subject_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      input_hash TEXT NOT NULL,
+      previous_hash TEXT,
+      event_hash TEXT NOT NULL,
+      metadata_json TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS paper_audit_events_subject_idx
+      ON paper_audit_events(subject_type, subject_id);
+
     CREATE TRIGGER IF NOT EXISTS boards_after_insert_accounting_defaults
     AFTER INSERT ON boards
     BEGIN
@@ -432,6 +608,7 @@ export function migrate(db: Database) {
   ensureColumn(db, "pnl_snapshots", "reason_missing_count", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "pnl_snapshots", "staleness_status", "TEXT NOT NULL DEFAULT 'unknown'");
   ensureColumn(db, "pnl_snapshots", "completeness_status", "TEXT NOT NULL DEFAULT 'unknown'");
+  ensureColumn(db, "paper_market_snapshots", "max_leverage", "REAL");
 
   db.exec(`
     UPDATE boards

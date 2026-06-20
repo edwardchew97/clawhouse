@@ -595,14 +595,14 @@
         {
           "id": "clawhouseApp.backend.board",
           "name": "Read App Staging Backend Board",
-          "description": "Reads the selected Agent Board through the ClawHouse App server proxy, including events, portfolio, PnL, balance changes, and price snapshots used by the app chart.",
+          "description": "Reads the selected Agent Board through the ClawHouse App server proxy, including events, portfolio, PnL, balance changes, price snapshots, and labeled Paper leaderboard data used by the app chart.",
           "type": "http",
           "access": "public",
           "method": "GET",
           "url": "{{clawhouseAppBaseUrl}}/api/backend/board?boardId={{ledgerBoardId}}",
           "runningNotes": [
             "Calling the local ClawHouse App server proxy.",
-            "The proxy calls the staging Agent Board Ledger /boards/:id, /events, /portfolio, /pnl, /balance-changes, and /prices read paths.",
+            "The proxy calls the staging Agent Board Ledger /boards/:id, /events, /portfolio, /pnl, /balance-changes, /prices, and /paper/leaderboard read paths.",
             "If the Vercel staging project has no live deployment yet, the response should expose ok:false instead of hiding the backend state."
           ],
           "inputs": {
@@ -618,7 +618,32 @@
             "ledgerBoardId": "response.json.json.boardId",
             "backendEventsError": "response.json.json.errors.events",
             "backendBalanceChangeError": "response.json.json.errors.balanceChanges",
-            "backendPriceError": "response.json.json.errors.prices"
+            "backendPriceError": "response.json.json.errors.prices",
+            "backendPaperLeaderboardError": "response.json.json.errors.paperLeaderboard"
+          }
+        },
+        {
+          "id": "clawhouseApp.backend.paperLeaderboard",
+          "name": "Read App Paper Leaderboard",
+          "description": "Reads labeled Paper P&L leaderboard data through the ClawHouse App server proxy.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{clawhouseAppBaseUrl}}/api/backend/paper-leaderboard",
+          "runningNotes": [
+            "Calling the local ClawHouse App paper leaderboard proxy.",
+            "The proxy calls the staging Agent Board Ledger /paper/leaderboard path.",
+            "The app treats this as Paper P&L, not real trading P&L."
+          ],
+          "inputs": {
+            "clawhouseAppBaseUrl": "http://localhost:4320"
+          },
+          "fillDefaultsWhenEmpty": [
+            "clawhouseAppBaseUrl"
+          ],
+          "setVars": {
+            "paperLeaderboardLabel": "response.json.json.paperLeaderboard.label",
+            "paperLeaderboardFirstAccount": "response.json.json.paperLeaderboard.leaderboard.0.paper_account_id"
           }
         }
       ]
@@ -2433,6 +2458,104 @@
             "ledgerEdgeFlowBoardId": "response.json.boards.flowBoardId",
             "ledgerEdgePassedChecks": "response.json.summary.passed",
             "ledgerEdgeFailedChecks": "response.json.summary.failed"
+          }
+        },
+        {
+          "id": "developerSetup.paperTrading.liveHyperliquidSnapshot",
+          "name": "Refresh Live Hyperliquid Paper Snapshot",
+          "description": "Calls the backend to fetch a live Hyperliquid l2Book and metaAndAssetCtxs snapshot, then stores it as paper market data for order-depth validation and liquidation monitoring.",
+          "type": "http",
+          "access": "protected",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/paper/market-snapshots/hyperliquid",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "coin": "{{paperTradingCoin}}"
+          },
+          "runningNotes": [
+            "Calling the real backend /paper/market-snapshots/hyperliquid endpoint.",
+            "The backend calls Hyperliquid's public info endpoint, not a Workbench fixture.",
+            "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAuthorizationHeader.",
+            "The response stores mark, oracle, funding, max leverage, and book levels as a paper market snapshot."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "paperTradingCoin": "BTC"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "paperTradingCoin"
+          ],
+          "setVars": {
+            "paperTradingLiveSnapshotId": "response.json.json.snapshots.0.id",
+            "paperTradingLiveSnapshotCoin": "response.json.json.snapshots.0.coin",
+            "paperTradingLiveSnapshotSource": "response.json.json.snapshots.0.source"
+          }
+        },
+        {
+          "id": "developerSetup.paperTrading.fullFlow",
+          "name": "Run Hyperliquid Paper Trading Flow",
+          "description": "Runs the script-backed Hyperliquid-style paper trading flow against the real local Ledger backend: paper account, market snapshots, signed agent orders, margin, liquidation, leaderboard, and replay proof.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "scripts/workbench-paper-trading.ts",
+            "--base-url",
+            "{{ledgerBaseUrl}}",
+            "--key-file",
+            "{{paperTradingWalletFile}}",
+            "--paper-account-id",
+            "{{paperTradingAccountId}}",
+            "--agent-id",
+            "{{ledgerAgentId}}",
+            "--starting-balance-usd",
+            "{{paperTradingStartingBalanceUsd}}"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Calling the real local Agent Board Ledger service; the step fails if the service is not running.",
+            "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAdminToken.",
+            "Passing ledgerAdminToken through the Workbench script environment, not through command-line arguments.",
+            "Creating or reusing a local Workbench signing wallet and sending only public key metadata plus paper-order signatures.",
+            "Creating a service-authorized paper account and service-authorized Hyperliquid-style market snapshots.",
+            "Submitting agent-signed IOC, GTC, ALO, reduce-only, and isolated-margin paper orders.",
+            "Running a service-authorized risk check after an adverse mark and verifying isolated liquidation.",
+            "Reading the paper-labeled leaderboard and replay proof through the public HTTP APIs."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAdminToken": "local-ledger-admin-token",
+            "paperTradingWalletFile": "work/acceptance-workbench/agent-board-ledger/paper-wallet.json",
+            "paperTradingAccountId": "",
+            "ledgerAgentId": "ironclaw-paper-workbench",
+            "paperTradingStartingBalanceUsd": "1000"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerAdminToken",
+            "paperTradingWalletFile",
+            "ledgerAgentId",
+            "paperTradingStartingBalanceUsd"
+          ],
+          "setVars": {
+            "paperTradingAccountId": "response.json.paperAccountId",
+            "paperTradingIocOrderId": "response.json.ids.iocOrderId",
+            "paperTradingIsolatedOrderId": "response.json.ids.isolatedOrderId",
+            "paperTradingPassedChecks": "response.json.summary.passed",
+            "paperTradingFailedChecks": "response.json.summary.failed"
           }
         },
         {

@@ -15,6 +15,10 @@
       "destination": "/api/ledger?ledgerPath=/boards/:path*"
     },
     {
+      "source": "/paper/:path*",
+      "destination": "/api/ledger?ledgerPath=/paper/:path*"
+    },
+    {
       "source": "/cron/:path*",
       "destination": "/api/ledger?ledgerPath=/cron/:path*"
     }

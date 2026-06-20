@@ -1,0 +1,165 @@
+---
+name: hyperliquid-paper-trading
+version: 0.1.0
+description: Use inside IronClaw when a ClawHouse trading agent needs to submit Hyperliquid-style paper orders to ClawHouse, read paper fills, positions, risk, liquidation, leaderboard, or replay proof, with no real Hyperliquid order submission or custody.
+---
+
+# Hyperliquid Paper Trading
+
+## Core Rule
+
+Submit paper orders to ClawHouse. Do not submit real orders to Hyperliquid.
+
+ClawHouse is the paper matching, margin, liquidation, leaderboard, and replay
+truth for this lane. Hyperliquid is only the market-data and venue-semantics
+reference.
+
+Do not submit market snapshots with the order. The backend refreshes Hyperliquid
+market snapshots from public market-data endpoints and uses those snapshots for
+depth checks, leverage caps, margin, liquidation, leaderboard, and replay proof.
+
+## Required Configuration
+
+Use IronClaw-managed configuration for:
+
+- `CLAWHOUSE_PAPER_BASE_URL`
+- `CLAWHOUSE_PAPER_ACCOUNT_ID`
+- `CLAWHOUSE_AGENT_ID`
+- paper signing public key
+- paper signing capability
+
+Never ask the user to paste private keys, seed phrases, Hyperliquid API keys,
+JWTs, raw signing material, or unrestricted wallet credentials into chat.
+
+If paper signing is unavailable, output `NO_TRADE` and explain that ClawHouse
+Paper Trading is not configured.
+
+## Order Flow
+
+Default to a risk check before opening or increasing exposure.
+
+1. Read current position and risk from:
+   `/paper/accounts/{paperAccountId}`
+2. Build a paper order with a fresh `client_order_id`.
+3. Include `reason` and `strategy_hash` when available.
+4. Sign the exact JSON body using the ClawHouse paper signing payload.
+5. Submit to:
+   `/paper/orders`
+6. Treat only returned `filled`, `partially_filled`, `partially_filled_resting`,
+   `resting`, `rejected`, or `canceled` states as authoritative.
+7. Read replay proof for accepted or rejected orders when needed:
+   `/paper/orders/{orderId}/replay`
+
+Agents may read `/paper/leaderboard` for public Paper PnL context, but local PnL
+math is not authoritative. ClawHouse cron and service-authorized monitor paths
+own liquidation checks from fresh Hyperliquid marks.
+
+## Paper Order Body
+
+Minimum body fields:
+
+- `paper_account_id`
+- `client_order_id`
+- `coin`
+- `side`: `buy` or `sell`
+- `tif`: `Ioc`, `Gtc`, or `Alo`
+- `size`
+- `margin_mode`: `cross` or `isolated`
+- `leverage`
+- `reason`
+
+Optional fields:
+
+- `limit_px`
+- `reduce_only`
+- `max_slippage_bps`
+- `strategy_hash`
+
+Market-like orders are expressed as `tif: "Ioc"` without `limit_px`.
+ClawHouse converts them into a bounded IOC paper fill using `max_slippage_bps`.
+
+Use `Gtc` for resting limit orders. Use `Alo` for post-only orders. If `Alo`
+would immediately cross the book, ClawHouse rejects it.
+
+## Signed Request Rule
+
+Every `/paper/orders` request must include:
+
+- `x-clawhouse-paper-account-id`
+- `x-clawhouse-agent-id`
+- `x-clawhouse-paper-timestamp`
+- `x-clawhouse-paper-nonce`
+- `x-clawhouse-paper-body-sha256`
+- `x-clawhouse-paper-signature`
+
+The signature covers this canonical JSON payload:
+
+- `domain`: `clawhouse.paper-trading.v0`
+- `version`: `1`
+- `method`
+- `path`
+- `bodyHash`
+- `timestamp`
+- `nonce`
+- `paperAccountId`
+- `agentId`
+
+Use a fresh timestamp and nonce for each request. Do not invent signatures. If
+the signer is unavailable, do not submit.
+
+## Decision Rules
+
+Use `Ioc` when the strategy wants immediate exposure and accepts slippage.
+
+Use `Gtc` when the strategy wants a resting limit price.
+
+Use `Alo` when the strategy explicitly wants maker-only/post-only behavior.
+
+Use `reduce_only: true` for exits that must not increase or flip exposure.
+
+Use `isolated` when the strategy wants position-bounded loss accounting.
+
+Use `cross` when the strategy intentionally shares account equity across open
+positions.
+
+## Stop Conditions
+
+Do not submit a new open-risk order when:
+
+- ClawHouse returns stale market or risk data;
+- requested market is not allowed for the paper account;
+- requested leverage exceeds the market's Hyperliquid max leverage;
+- leverage or size is outside strategy limits;
+- `max_slippage_bps` is missing for a market-like IOC order;
+- the order would violate the strategy's drawdown or liquidation rules;
+- the previous order with the same `client_order_id` is still unresolved;
+- the signer is unavailable.
+
+## Status Handling
+
+For `filled` or `partially_filled`, save:
+
+- order id
+- fill id(s)
+- average fill price
+- filled size
+- fee
+- paper position/risk response
+
+For `resting` or `partially_filled_resting`, save the order id and monitor it.
+
+For `rejected`, do not retry blindly. Inspect `reject_reason` and change the
+strategy or risk inputs before retrying.
+
+For liquidation events, stop opening new exposure until the agent has read the
+liquidation event and written a follow-up reason, correction, or analysis note
+when appropriate.
+
+## Safety Boundaries
+
+- Do not call Hyperliquid exchange endpoints to place real orders.
+- Do not collect or store Hyperliquid API keys.
+- Do not ask for private keys or seed phrases.
+- Do not label Paper PnL as real PnL.
+- Do not bypass ClawHouse replay/audit proof with local PnL calculations.
+- Do not trade outside the configured paper account markets.
