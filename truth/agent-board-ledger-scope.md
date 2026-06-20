@@ -20,17 +20,27 @@ replaces the previous Trade Engine direction for current V0 work.
   authentication should be based on the agent/IronClaw-managed board wallet,
   with each write request wallet-signed and verified by board/wallet binding,
   signature validity, fresh timestamp, unused nonce, and request body hash.
+- PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
+- Amendment date: 2026-06-21
+- Amendment basis: JY decided that current Agent Trading should become
+  PaperTrade rather than real trading. Agent Board Ledger remains accepted truth
+  for the previous real-wallet observation/accounting lane, but it is not the
+  current PaperTrade execution engine or the current PaperTrade acceptance gate.
 
 ## One Sentence
 
-Agent Board Ledger is the backend accounting and event system for agent boards:
-agents trade themselves, and this service watches wallets, records what happened,
-stores the agent's reasons and follow-ups, reconciles balances, calculates
-portfolio/PnL, and serves product read surfaces.
+Agent Board Ledger is the backend accounting and event system for real or
+observed agent boards: agents trade themselves, and this service watches
+wallets, records what happened, stores the agent's reasons and follow-ups,
+reconciles balances, calculates portfolio/PnL, and serves product read surfaces.
+
+For the current PaperTrade direction, this file is not the PaperTrade engine
+spec.
 
 ## Current V0 Boundary
 
-Agent Board Ledger is not a Trade Engine.
+Agent Board Ledger is not a Trade Engine and is not the current PaperTrade
+engine.
 
 It does not:
 
@@ -43,12 +53,20 @@ It does not:
 - sign trades;
 - hold trading private keys;
 - depend on OutLayer;
-- act as an OutLayer policy gate.
+- act as an OutLayer policy gate;
+- own paper-order validation;
+- simulate paper fills;
+- own paper cash, paper holdings, or paper PnL unless a later implementation
+  issue explicitly integrates PaperTrade storage into this service.
 
 In V0, if an agent sends a trade and it succeeds, Agent Board Ledger records the
 success. If the trade fails, it records the failure. If the agent provides a
 reason, the reason is stored. If no reason is provided, the event is still
 recorded and marked as missing reason.
+
+This is historical accepted scope for the real-wallet observation lane. Current
+Agent Trading acceptance comes from `truth/agent-trading-scope.md`, which now
+defines PaperTrade.
 
 ## Primary Responsibilities
 
@@ -66,6 +84,9 @@ Agent Board Ledger owns:
 - periodic and post-event PnL snapshots;
 - append-only DB/event ledger records;
 - public and holder/key-gated read APIs.
+
+It does not own current PaperTrade service requirements unless a later issue
+explicitly reuses these tables or APIs for PaperTrade.
 
 ## Board Registration
 
@@ -440,6 +461,12 @@ Agent Board Ledger does not own:
 - signing trades for agents;
 - key trading;
 - key PnL;
+- paper-order validation;
+- paper market-depth checks;
+- simulated paper fills;
+- paper cash or paper holdings as the primary PaperTrade account source unless
+  separately integrated;
+- the public paper leaderboard acceptance gate;
 - private rooms;
 - user-funded copy trading;
 - Hyperliquid perps;
@@ -523,6 +550,9 @@ The first Agent Board Ledger slice is complete when:
   trading private keys, agent trade signing, Hyperliquid, leverage, shorts,
   liquidation, or copy trading is required.
 
+These criteria prove the Agent Board Ledger lane only. They do not prove the
+current PaperTrade Agent Trading slice.
+
 ## Open Decisions
 
 - What cron cadence should V0 use for live boards?
@@ -536,6 +566,8 @@ The first Agent Board Ledger slice is complete when:
   explain them?
 - What is the minimum starting bankroll rule for a board that is visible but not
   ranked?
+- Whether any PaperTrade implementation should reuse Agent Board Ledger tables
+  for history/readback, or should keep a separate PaperTrade service schema.
 
 ## Change Log
 
@@ -548,3 +580,7 @@ The first Agent Board Ledger slice is complete when:
   including board-wallet binding, signature, timestamp, nonce, body-hash checks,
   transaction identifier boundaries, append-only signed attachments, read/write
   auth separation, and no-custody/no-trade-signing limits.
+- 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f` - Marked Agent Board
+  Ledger as the previous real-wallet observation/accounting lane rather than the
+  current PaperTrade execution engine or acceptance gate; current Agent Trading
+  truth now lives in `truth/agent-trading-scope.md`.

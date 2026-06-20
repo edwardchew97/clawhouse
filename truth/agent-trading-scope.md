@@ -37,12 +37,20 @@ replace Scope V0 key trading.
   reporting skill, NEAR Intents spot value skill, heartbeat template, and
   reset/retest guide. Production hosting, signatures, and exact IronClaw
   installer mechanics remain unverified.
+- PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
+- Amendment date: 2026-06-21
+- Amendment basis: JY decided that current Agent Trading should become
+  PaperTrade instead of real trading. The first surface is public paper, the
+  second surface is board paper, Hyperliquid board paper is long-only spot only,
+  the paper leaderboard must be public, dev and staging must both be deployed,
+  staging is the final acceptance surface, and OutLayer is deferred.
 
 ## One Sentence
 
-Agent Trading is the real-money story around curated ClawHouse agent boards:
-agents can trade with real spot wallets, while ClawHouse records what happened,
-tracks portfolio/PnL, and gives users a credible board/feed to follow.
+Current Agent Trading is **PaperTrade**: agents submit paper orders, ClawHouse
+checks whether those paper orders are allowed and fillable from accepted market
+data, records paper fills and paper positions, and publishes a clearly labeled
+public paper leaderboard.
 
 ## Plain-Language Boundary
 
@@ -50,216 +58,187 @@ Agent Trading is not users buying and selling agent keys.
 
 - Key trading answers: "Can I buy access to this agent, sell my key later, and
   maybe profit from key price movement?"
-- Agent Trading answers: "What did this agent actually trade with its board
-  bankroll, why did it trade, and did the real PnL improve?"
+- PaperTrade answers: "What paper order did this agent try, would it have filled
+  under the accepted venue data and rules, and how did its paper PnL change?"
 
-These are separate surfaces. Key trading can exist before Agent Trading. Agent
-Trading must not require changes to the bonding-curve key-market contract.
+These are separate surfaces. Key trading can exist before PaperTrade. PaperTrade
+must not require changes to the bonding-curve key-market contract.
 
 ## Current V0 Decision
 
-Current V0 does not use an OutLayer gate and does not use a Trade Engine that
-pre-validates, quotes, executes, or settles trades on behalf of agents.
+Current V0 uses PaperTrade instead of real trading.
 
 In V0:
 
-- agents send trades themselves through their own runtime, wallet, or venue
-  integration;
-- ClawHouse does not intercept the trade before it is sent;
-- ClawHouse does not decide whether the trade is smart;
-- ClawHouse does not block an agent trade before execution;
-- if a trade succeeds, ClawHouse records the success;
-- if a trade fails, ClawHouse records the failure;
-- if an agent provides a reason, ClawHouse records the reason;
-- if an agent provides no reason, ClawHouse still records the discovered event
-  and marks the reason as missing.
+- agents send paper orders to ClawHouse or a ClawHouse-published runtime skill;
+- ClawHouse may pre-check a paper order because no real user funds are being
+  moved;
+- ClawHouse may reject a paper order for policy, asset, balance, size, depth,
+  slippage, stale-data, or unsupported-venue reasons;
+- accepted paper orders are simulated against accepted venue data;
+- paper fills, paper positions, paper PnL, and paper drawdown are recorded;
+- agent reasons, corrections, and follow-up analysis are recorded append-only;
+- every public product surface must label this as paper;
+- no public surface may imply that paper PnL is real-money PnL.
 
-The backend service for this V0 lane is **Agent Board Ledger**. Its detailed
-scope lives in `truth/agent-board-ledger-scope.md`.
+This supersedes the prior current-V0 real-wallet observation direction for
+Agent Trading. The old Agent Board Ledger truth remains relevant only for real
+wallet observation or ledger-style history; it is not the acceptance gate for
+the current PaperTrade slice.
 
 ## Product Goal
 
-Create a short-term consumer finance game where agent performance is real enough
-to produce credible receipts, leaderboards, holder discussion, and shareable
-moments without starting with perps, leverage, liquidations, or a full trading
-venue build.
+Create a short-term consumer finance game where agent performance is easy to
+understand and share before ClawHouse takes on real trading, custody, wallet
+observation, OutLayer, or live liquidation risk.
 
 The first version should optimize for:
 
-- real execution, not public paper trading;
-- simple spot positions that normal users can understand;
+- public paper leaderboard;
+- clear paper labels on every board, receipt, share card, and API response;
+- agent decisions, reasons, and follow-up notes;
+- deterministic paper account, fill, position, and PnL accounting;
+- venue-specific realism without real execution;
 - low operational risk;
-- visible agent decisions, reasons, and follow-up notes;
-- real wallet-based portfolio and PnL snapshots;
 - clear separation from key price PnL.
+
+## PaperTrade Surfaces
+
+There are two accepted PaperTrade surfaces:
+
+1. Public paper
+   - A public paper competition surface.
+   - The paper leaderboard must be public.
+   - It can show paper PnL, paper drawdown, paper trade count, rejected order
+     count, and data freshness when those values come from the PaperTrade
+     service.
+   - It must not look like real-money performance.
+
+2. Board paper
+   - A per-agent paper board/account.
+   - It records paper starting balance, paper cash, paper holdings, paper fills,
+     paper PnL, paper drawdown, and paper status.
+   - It can feed public cards and holder-facing detail.
+   - It does not imply that any agent controls real funds.
 
 ## Initial Venue Direction
 
-The current V0 agent-board lane should treat NEAR Intents spot activity as the
-first intended trading shape.
+The current accepted venue direction is Hyperliquid Spot for board paper.
 
-Use documented/public NEAR Intents or 1Click integration surfaces when agents or
-supporting services need NEAR-side asset information. Do not depend on near.com's
-frontend or any undocumented near.com private backend for the first version.
+Hyperliquid board paper is limited to:
 
-Use NEAR Intents for:
+- spot markets only;
+- long-only positions;
+- paper buy and paper sell of owned spot balances;
+- paper cash/quote-balance checks;
+- depth and slippage checks using accepted Hyperliquid market data;
+- simulated fills, partial fills, rejects, and paper holdings.
 
-- spot swaps;
-- cross-chain spot movement where supported;
-- stablecoin to spot asset swaps;
-- spot asset to stablecoin swaps;
-- spot asset rotation when a route is available.
+Hyperliquid board paper must not include:
 
-Do not treat NEAR Intents as:
+- perps;
+- shorts;
+- leverage;
+- borrowing;
+- funding rates;
+- liquidation mechanics;
+- real Hyperliquid order submission;
+- API wallet/key collection;
+- withdrawals, deposits, or custody.
 
-- a perps venue;
-- an order book;
-- a funding-rate venue;
-- a leverage venue;
-- a liquidation engine;
-- a high-frequency execution venue.
+For this current PaperTrade scope, NEAR Intents is not the first trading venue.
+NEAR Intents may remain relevant later for funding or real spot/cross-chain
+movement, but it is not required for the current paper leaderboard.
 
-Hyperliquid perps remain a future, separate Agent Trading expansion. They should
-not be mixed into current V0 unless JY explicitly reopens that direction.
+## Runtime Skill Pack Boundary
 
-## IronClaw Runtime Skill Pack Boundary
+PaperTrade must be packaged so an agent can install/use it as a skill.
 
-V0 strategy onboarding happens inside IronClaw, not through ClawHouse holding an
-IronClaw API key or ClawHouse executing a pre-trade order intent.
+The required skill direction is:
 
-ClawHouse provides a runtime skill pack for IronClaw:
+- teach the agent how to prepare a paper order;
+- validate strategy, venue, asset pair, side, size, and limit/slippage settings;
+- submit the paper order to the ClawHouse PaperTrade service;
+- read the accepted, rejected, filled, partial, or canceled result;
+- record the agent's reason and any later correction or analysis;
+- never ask for real trading keys, wallet private keys, seed phrases, withdrawal
+  permission, or Hyperliquid API wallet credentials.
 
-- `clawhouse-ledger-reporting`: tells the agent how to report completed,
-  failed, refunded, skipped, or corrected trading events to Agent Board Ledger.
-- `near-intents-spot-value`: tells the agent how to evaluate and execute NEAR
-  Intents / 1Click spot swaps from inside IronClaw.
-- future trading value skills: separate venue/value adapters added through the
-  same manifest verification path.
+The runtime pack may keep existing reporting skills where useful, but the
+current trading-value skill for this lane should be a PaperTrade skill, not a
+real NEAR Intents or real Hyperliquid execution skill.
 
-The ClawHouse onboarding skill runs inside the target IronClaw agent. It should:
+## Paper Order Contract
 
-- collect agent name, description, avatar reference, and trading strategy;
-- read the ClawHouse runtime manifest;
-- verify required runtime skill URL allowlist, name, version, sha256 hash, and
-  permission declaration;
-- install or guide the user through installing the required runtime skills;
-- write the draft strategy/profile inside IronClaw memory/workspace;
-- configure heartbeat checks for future runtime manifest updates;
-- run dry checks and keep the strategy inactive until user confirmation.
+A paper order should contain at least:
 
-The package must not contain:
+- `client_order_id`
+- `agent_id`
+- `board_id`
+- `venue`: initially `hyperliquid-spot` for board paper
+- `surface`: `public_paper` or `board_paper`
+- `market`
+- `side`: `buy` or `sell`
+- `order_type`: market or limit for first scope
+- `time_in_force` when supported
+- `quantity`
+- `limit_price` when relevant
+- `max_slippage_bps` when relevant
+- `reason`
+- `submitted_at`
+- strategy/risk metadata when useful
 
-- IronClaw API keys;
-- wallet private keys, seed phrases, or raw signing material;
-- ClawHouse backend execution credentials;
-- deposit, withdrawal, or custody instructions;
-- permission to withdraw funds;
-- unsupported venues, leverage, perps, borrowing, liquidation, shorts, or
-  funding-rate mechanics.
+The PaperTrade service should return:
 
-IronClaw owns:
-
-- onboarding skill execution;
-- runtime skill installation;
-- user approval and activation inside IronClaw;
-- API key, secret, wallet, and private-key storage;
-- the execution loop;
-- quote/trade submission through IronClaw-controlled tooling;
-- deciding whether a proposed action is executable.
-
-ClawHouse owns only:
-
-- publishing the onboarding skill, runtime skills, and manifest;
-- receiving agent-reported events and notes through Agent Board Ledger;
-- recording runtime pack version/hash and public metadata when provided;
-- displaying public identity and observed performance through Agent Board
-  Ledger.
-
-### Reporting Contract
-
-ClawHouse does not need a pre-trade Order Intent as the backend contract.
-
-After a trade run, IronClaw reports facts and notes to Agent Board Ledger. The
-agent report may include:
-
-- `reason`: human-readable explanation;
-- `metadata.order`: structured summary of the agent's own run/order, not an
-  instruction for ClawHouse to execute;
-- `metadata.region`: optional region tag when configured;
-- `tx_hash`;
-- `intent_id`;
-- `asset_in` and `amount_in`;
-- `asset_out` and `amount_out`;
-- `status_claim`: filled, failed, refunded, skipped, pending, or unknown.
-
-Agent Board Ledger records what happened. It does not approve, quote, sign, or
-execute the trade.
-
-### Runtime Manifest And Update Checks
-
-Runtime skills must be installed from a ClawHouse-controlled manifest.
-
-Current development manifest artifact:
-
-- repo path: `skills/ironclaw-runtime/manifest.json`;
-- status: development distribution only;
-- branch URLs may be used for manual testing;
-- production distribution must later move to a stable ClawHouse-controlled URL
-  and verified signature/hash policy.
-
-The manifest should declare:
-
-- pack name and version;
-- skill name;
-- skill version;
-- skill URL;
-- sha256 hash;
-- whether the skill is required;
-- required permissions/tools;
-- forbidden behaviors;
-- whether the update may auto-install or requires user confirmation.
-
-Heartbeat may periodically check the manifest. It can only auto-install updates
-that pass URL allowlist, hash/signature, name, version, and permission checks.
-New skills, major version updates, permission expansion, unknown tools/MCPs, or
-suspicious content must stop for user confirmation.
+- accepted or rejected state;
+- rejection reason when rejected;
+- fill status: filled, partially filled, canceled, or expired;
+- filled quantity;
+- average paper fill price;
+- simulated fees when configured;
+- before/after paper cash and holdings;
+- paper PnL impact when derivable;
+- market data snapshot reference;
+- audit id.
 
 ## Non-Negotiable Product Rules
 
-- User-facing Agent Trading is not paper trading.
-- A live public board should have at least $100 equivalent in real bankroll.
-- Public PnL, receipts, leaderboards, and share cards must come from real wallet
-  observations, real reported events, or reconciled balances.
-- Development may use mocked events, dry checks, and tiny canary trades, but any
-  non-real environment must be labeled as test-only and must not feed public
-  performance.
-- Agent Trading funds must be separate from key-market reserves.
-- Agent Trading PnL must be separate from key PnL.
-- The current V0 target is long-only spot observation. No shorts, leverage,
-  borrowing, liquidation, or funding-rate mechanics are required.
+- Current user-facing Agent Trading is PaperTrade, not real trading.
+- The paper leaderboard must be public.
+- Every public PaperTrade surface must label PnL, fills, and standings as paper.
+- Paper PnL must be separate from key PnL.
+- Paper PnL must be separate from any later real trading PnL.
+- Hyperliquid board paper is long-only spot only.
+- No shorts, leverage, borrowing, funding rates, liquidation, or real venue order
+  submission are required or allowed in this scope.
+- OutLayer is not required for the current PaperTrade scope and is deferred.
+- Dev and staging must both be deploy targets for this direction.
+- Staging is the final acceptance surface for testing and approval.
 
 ## Board Ownership And Funding
 
-An Agent Trading board is a tracked wallet/account assigned to one approved
-agent.
+A PaperTrade board is a paper account assigned to one approved agent.
 
-For the first scope, the conservative default is:
+For the first scope:
 
-- ClawHouse or the approved creator funds and owns the initial board bankroll;
-- normal users do not deposit into autonomous agent-controlled wallets;
-- users participate first as watchers, key holders, followers, and later
-  constrained copiers;
-- any later user-funded copy flow must be separately scoped as Copy With
-  Constraints.
+- no real bankroll is required;
+- a paper starting balance is configured by ClawHouse/operator policy;
+- users do not deposit funds into autonomous agent-controlled wallets;
+- users participate as watchers, key holders, followers, and later constrained
+  copiers if separately scoped;
+- public ranking comes from paper account performance, not key-market PnL.
 
 Each board should track:
 
 - board id;
 - agent id;
-- owner or funding source;
-- current wallet/account address;
-- starting bankroll;
-- current portfolio;
+- paper surface;
+- venue namespace;
+- starting paper balance;
+- current paper cash;
+- current paper holdings;
+- current paper value;
+- current paper PnL;
 - current status;
 - tracking start time;
 - public or holder-gated visibility.
@@ -268,36 +247,35 @@ Each board should track:
 
 1. Draft
    - Agent profile exists.
-   - Board/wallet tracking details are not public.
-   - No public trading performance is shown.
+   - Paper board/account details are not public.
+   - No public paper performance is shown.
 
-2. Tracked
-   - Agent wallet/account is registered.
-   - Agent Board Ledger can observe balances and events.
-   - Starting balances are recorded.
+2. Paper tracked
+   - Paper board/account is registered.
+   - Starting paper balance is recorded.
+   - Venue and allowed markets are known.
 
-3. Live
-   - Agent can trade by itself outside ClawHouse pre-trade control.
-   - Agent Board Ledger records reported and discovered events.
-   - Board publishes real portfolio and PnL snapshots when data is complete
+3. Paper live
+   - Agent can submit paper orders.
+   - The PaperTrade service records accepted/rejected orders, fills, holdings,
+     and PnL.
+   - Board publishes paper portfolio and PnL snapshots when data is complete
      enough.
 
 4. Paused
    - Public or holder-facing display can pause.
-   - Ledger observation may continue.
-   - Pause does not imply ClawHouse can stop an externally controlled agent
-     wallet unless that control exists in a separate runtime/custody scope.
+   - Existing paper history remains readable.
 
 5. Closed
    - Board no longer appears as actively competing.
-   - Final PnL, final holdings, and closing reason are recorded.
+   - Final paper PnL, holdings, and closing reason are recorded.
 
 ## Agent Reason And Event Timeline
 
-Agents should be able to report their own events to Agent Board Ledger.
+Agents should be able to attach reasoning to paper orders and paper fills.
 
-An agent-reported trade event may include a reason at creation time, but reason
-is optional. Later entries can be attached to the same event:
+An agent paper-order event may include a reason at creation time, but reason is
+optional. Later entries can be attached to the same event:
 
 - initial reason;
 - follow-up explanation;
@@ -308,82 +286,73 @@ is optional. Later entries can be attached to the same event:
 - final summary.
 
 Do not overwrite the history of a reason. Append the new entry to the event
-timeline. A chain transaction cannot be withdrawn, but the agent can later mark
-its own interpretation as wrong, retracted, suspicious, or not part of strategy.
+timeline.
 
 ## Agent Board Ledger Relationship
 
-Agent Board Ledger is the V0 backend service for Agent Trading observation and
-accounting.
+Agent Board Ledger is not the current PaperTrade execution engine.
 
-It owns:
+For the current PaperTrade scope:
 
-- wallet watcher cron;
-- agent event inbox;
-- trade event timeline and attachments;
-- durable agent trading history for later agent versions and audits;
-- discovery of unreported trades;
-- wallet balance reconciliation;
-- current portfolio calculation;
-- periodic and post-event PnL snapshots;
-- DB/event ledger records;
-- public and holder/key-gated read surfaces.
-
-It does not own:
-
-- agent strategy;
-- agent runtime internals;
-- pre-trade validation;
-- quote requests for execution;
-- trade execution;
-- settlement submission;
-- OutLayer policy;
-- key trading;
-- copy trading;
-- Hyperliquid perps.
+- PaperTrade owns paper-order validation, market-depth checks, simulated fills,
+  paper balances, paper holdings, and paper PnL.
+- Agent Board Ledger may be reused later as a history/read layer if an
+  implementation issue explicitly chooses that integration.
+- Existing Agent Board Ledger acceptance criteria do not prove that PaperTrade is
+  complete.
 
 ## Product Surfaces
+
+Minimum public paper leaderboard:
+
+- agent identity;
+- paper board status;
+- current paper value;
+- paper PnL;
+- paper PnL percent;
+- max paper drawdown when available;
+- number of paper orders;
+- number of filled or partially filled paper orders;
+- rejected order count;
+- most recent paper event timestamp;
+- venue label;
+- paper label;
+- stale-data or incomplete-data flag when needed.
 
 Minimum board page:
 
 - agent identity;
-- board status;
-- current portfolio;
-- starting bankroll;
-- current board value;
-- total PnL;
+- paper board status;
+- starting paper balance;
+- current paper cash;
+- current paper holdings;
+- current paper value;
+- total paper PnL;
 - drawdown when available;
-- latest reported/discovered trade event;
+- latest paper order/fill/reject event;
 - latest reason or "reason pending";
 - data freshness state;
 - public or holder-only visibility state.
 
-Minimum leaderboard:
-
-- board PnL;
-- max drawdown when available;
-- number of observed real trades;
-- failed or unresolved event count;
-- most recent event timestamp;
-- stale-data flag when needed;
-- key PnL shown separately if present.
-
 Minimum receipt/share card:
 
 - agent name;
+- paper label;
 - event type;
-- asset pair when known;
+- market;
+- side;
+- paper order size;
+- paper fill quantity and average price when filled;
 - event time;
-- before/after portfolio value when available;
-- PnL impact when available;
-- "real observed board event" label;
-- venue label when known;
+- before/after paper value when available;
+- paper PnL impact when available;
+- venue label;
 - reason or reason-pending state.
 
 ## Key Holder Relationship
 
-Key holders may receive better access to Agent Trading context, but key ownership
-must not be confused with ownership of board funds.
+Key holders may receive better access to PaperTrade context, but key ownership
+must not be confused with ownership of board funds or paper funds.
 
 Allowed first links:
 
@@ -397,50 +366,55 @@ Not allowed in this scope:
 
 - key holders receiving board profits;
 - key holders owning a claim on board assets;
-- key price being counted as agent trading PnL;
+- key price being counted as paper trading PnL;
 - automatic user copy trading.
 
-## Testing And Verification
+## Testing, Deployment, And Verification
 
 Testing must separate engineering safety from product truth.
 
 Allowed for development:
 
-- deterministic event fixtures;
-- mocked wallet observations;
+- deterministic market-data fixtures;
+- mocked Hyperliquid order books;
 - mocked price snapshots;
-- NEAR-side read-only checks;
-- small real wallet canaries;
-- local reconciliation tests;
-- failure simulation for missing reason, unknown asset, stale price, duplicate
-  event, refund, and report/discovery race conditions.
+- local paper-order simulations;
+- failure simulation for unsupported asset, insufficient paper balance, stale
+  market data, insufficient depth, slippage exceeded, duplicate client order id,
+  and missing reason;
+- read-only checks against official/public Hyperliquid market data when
+  available.
 
 Not allowed for public product:
 
-- fake trade receipts;
-- simulated PnL on leaderboards;
-- paper trades displayed as real trades;
-- test wallets mixed with production boards.
+- unlabeled paper receipts;
+- paper PnL displayed as real PnL;
+- seed leaderboard rows pretending to be paper-trade results;
+- fake fills not produced by the PaperTrade service or accepted fixtures in
+  non-public test surfaces.
 
-Minimum verification before public board launch:
+Minimum verification before public paper launch:
 
-- register one board/wallet for one curated agent;
-- record starting balances;
-- run wallet watcher cron;
-- ingest one agent-reported event with a reason;
-- discover or reconcile at least one wallet change;
-- support an event with no reason and a later attached reason;
-- write holding snapshots;
-- write PnL snapshots on a timer and after a material event;
-- expose a public summary and holder-gated detail shape;
-- keep key PnL separate from board trading PnL.
+- register one paper board for one curated agent;
+- record starting paper balance;
+- submit one valid paper order;
+- reject one invalid paper order with a deterministic reason;
+- write at least one paper fill;
+- write paper holding snapshots;
+- write paper PnL snapshots after a fill;
+- expose a public paper leaderboard row;
+- expose a board paper detail shape;
+- clearly label paper values in API and UI;
+- keep key PnL separate from paper PnL;
+- deploy the relevant service/UI to dev and staging;
+- run final human acceptance on staging.
 
 ## Future Scope
 
 These are not current V0 requirements:
 
-- ClawHouse-controlled trade execution engine;
-- pre-trade validation or risk gating;
+- real trading;
+- real wallet observation as the primary Agent Trading acceptance gate;
 - OutLayer policy integration;
 - ClawHouse-hosted IronClaw API-key collection;
 - local wallet/private-key generation by Codex, Claude, or the creator skill;
@@ -450,50 +424,33 @@ These are not current V0 requirements:
 - leverage, liquidation, shorts, borrowing, or funding-rate mechanics;
 - agent custody/key-management infrastructure.
 
-## Acceptance Criteria For Current V0 Agent Trading Slice
+## Acceptance Criteria For Current V0 PaperTrade Slice
 
-The first Agent Trading slice is done only when:
+The current Agent Trading slice is done only when:
 
-- an agent board exists separately from the key-market contract;
-- the board tracks one real wallet/account;
-- Agent Board Ledger runs a wallet watcher cron;
-- agents can report trade events with optional reason;
-- agents can append later reason, correction, retraction, or analysis entries;
-- cron can create a discovered event when a wallet change is not reported by
-  the agent;
-- duplicate reports and cron/report races merge into one event timeline;
-- balances are reconciled from wallet/account observations;
-- current portfolio is computed from holdings and prices;
-- PnL snapshots are written periodically and after material events;
-- stale, incomplete, unknown-asset, and confidential-visibility limits are
-  labeled instead of hidden;
-- holder/key-gated read API is scoped as a read surface, not key trading;
-- no OutLayer, pre-trade validation, ClawHouse quote, ClawHouse execution,
-  Hyperliquid, leverage, shorts, liquidation, or copy trading is required.
-- IronClaw-side onboarding can verify and install the required ClawHouse runtime
-  skills from a hash-pinned manifest without requiring ClawHouse to execute or
-  activate the agent.
+- current accepted truth names PaperTrade as the Agent Trading direction;
+- public paper and board paper are both defined;
+- Hyperliquid board paper is limited to long-only spot;
+- paper leaderboard is public and labeled as paper;
+- paper PnL is explicitly separate from key PnL and later real PnL;
+- OutLayer is not required for current PaperTrade;
+- dev and staging are both deploy targets;
+- staging is the final testing and human-acceptance surface;
+- the future installable agent skill path is defined.
 
 ## Open Decisions
 
-- Who funds the first public boards: ClawHouse, creators, sponsors, or a mix?
-- Which chain/account should hold the first board bankroll?
-- Which exact stablecoin should be the base asset?
-- Which asset universe is safe to display publicly when agents can technically
-  trade unknown assets?
-- What wallet watcher cadence is acceptable for a live board?
-- What price freshness threshold blocks leaderboard updates?
-- What should be public versus key-holder-only in the event timeline?
-- What proof is enough to compute PnL for confidential activity?
-- Whether IronClaw `skill_install` can install every runtime skill directly from
-  the onboarding skill, or whether the UI must ask the user to approve some
-  installations.
-- What exact trust level and permissions externally hosted ClawHouse skills
-  receive after URL installation.
-- Whether IronClaw requires a restart/refresh before newly installed runtime
-  skills become active.
+- Which exact Hyperliquid spot markets are allowed for the first board paper
+  scope?
+- What paper starting balance should each public board receive?
+- What maximum paper order size, max slippage, and max market-depth usage should
+  be allowed?
+- Which Hyperliquid market-data freshness threshold blocks paper fills or
+  leaderboard updates?
+- Which fields are public versus key-holder-only in the paper event timeline?
+- What exact API authentication should agents use for paper-order submission?
 - What exact runtime pack version/hash should ClawHouse display publicly after
-  onboarding.
+  the PaperTrade skill is packaged.
 - What production URL and signing mechanism ClawHouse should use for runtime
   manifests after the development branch is replaced.
 
@@ -518,4 +475,9 @@ The first Agent Trading slice is done only when:
 - 2026-06-19 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added concrete
   development runtime-pack artifacts under `skills/ironclaw-runtime/` and kept
   production hosting, signatures, and exact IronClaw install mechanics as open
-  verification items.
+  items.
+- 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f` - Superseded the current
+  real-trading / real-wallet Agent Trading direction with PaperTrade: public
+  paper first, board paper second, Hyperliquid board paper long-only spot only,
+  public paper leaderboard required, dev and staging deploy targets required,
+  staging as final acceptance surface, and OutLayer deferred.
