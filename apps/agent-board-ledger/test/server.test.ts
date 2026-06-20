@@ -5,8 +5,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrate, openRuntimeLedgerDb, openSqliteLedgerDb, type SqliteLedgerDb } from "../src/db";
-import { canonicalAuthPayload, sha256Hex } from "../src/auth";
+import { ADMIN_TOKEN_ENV, canonicalAuthPayload, sha256Hex } from "../src/auth";
 import { createApp } from "../src/server";
+import { CRON_SECRET_ENV, handleVercelLedgerRequest } from "../src/vercel";
 
 const adminToken = "ledger-admin-token";
 const tempRoots: string[] = [];
@@ -946,6 +947,87 @@ describe("Agent Board Ledger local backend", () => {
     expect((await jsonOf<{ error: string }>(observation)).error).toBe("Missing service authorization");
     expect(cron.status).toBe(401);
     expect((await jsonOf<{ error: string }>(cron)).error).toBe("Missing service authorization");
+  });
+
+  test("normalizes Vercel /api routes before calling the ledger app", async () => {
+    const response = await handleVercelLedgerRequest(
+      new Request("http://ledger.test/api/ledger?ledgerPath=/health"),
+      { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await jsonOf<{ ok: true; service: string; db: string }>(response)).toEqual({ ok: true, service: "agent-board-ledger", db: "ready" });
+  });
+
+  test("normalizes Vercel wildcard rewrites without breaking board registration", async () => {
+    const response = await handleVercelLedgerRequest(
+      new Request("http://ledger.test/api/ledger?ledgerPath=/boards/", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          board_id: "board-1",
+          agent_id: "ironclaw",
+          wallet_address: wallet.walletAddress,
+          public_key: wallet.publicKey,
+          starting_value_usd: 100,
+          base_currency: "USD",
+          public_status: "active",
+          visibility_mode: "public",
+        }),
+      }),
+      { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
+    );
+
+    expect(response.status).toBe(201);
+  });
+
+  test("rejects Vercel cron requests without the cron secret", async () => {
+    const response = await handleVercelLedgerRequest(
+      new Request("http://ledger.test/api/cron", {
+        headers: { authorization: "Bearer wrong" },
+      }),
+      {
+        db: sqliteDb,
+        env: {
+          [ADMIN_TOKEN_ENV]: adminToken,
+          [CRON_SECRET_ENV]: "cron-secret",
+        },
+      },
+    );
+
+    expect(response.status).toBe(401);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("Unauthorized cron request");
+  });
+
+  test("lets Vercel cron GET trigger the existing service-authorized cron tick", async () => {
+    await registerBoard();
+    await postJson("/boards/board-1/observations", {
+      wallet_address: wallet.walletAddress,
+      current_value_usd: 110,
+      tx_hash: "tx-vercel-cron",
+      status_claim: "observed_on_wallet",
+    });
+
+    const response = await handleVercelLedgerRequest(
+      new Request("http://ledger.test/api/cron", {
+        headers: { authorization: "Bearer cron-secret" },
+      }),
+      {
+        db: sqliteDb,
+        env: {
+          [ADMIN_TOKEN_ENV]: adminToken,
+          [CRON_SECRET_ENV]: "cron-secret",
+        },
+      },
+    );
+    const body = await jsonOf<{ discoveredEvents: number }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.discoveredEvents).toBe(1);
+    expect(countRows("events")).toBe(1);
   });
 
   test("requires an explicit observation wallet address", async () => {
