@@ -173,10 +173,15 @@ function stringList(value: unknown): string[] {
 
 function repoRootPathViolation(values: string[]) {
   return values.find((value) => {
+    if (isRequestPathArg(value)) return false;
     if (!isAbsolute(value)) return false;
     const normalized = normalize(value);
     return normalized !== repoRoot && !normalized.startsWith(`${repoRoot}/`);
   });
+}
+
+function isRequestPathArg(value: string) {
+  return /^\/(?:api|boards|cron|health)(?:\/|$)/.test(value);
 }
 
 function findScriptStep(flows: JsonRecord, stepId: string): JsonRecord | null {
