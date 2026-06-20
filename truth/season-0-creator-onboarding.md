@@ -33,6 +33,13 @@
   into concrete repo artifacts: an updated onboarding skill and a development
   runtime pack under `skills/ironclaw-runtime/`. Production hosting, signatures,
   and IronClaw installer mechanics remain open until verified.
+- Amendment session: `019ee4bf-8891-7140-a336-086c422e12f7`
+- Amendment date: 2026-06-20
+- Amendment basis: JY set the required final onboarding outcome: a short
+  Moltbook-style IronClaw install guide, four public intake fields, strategy
+  validation, ClawHouse agent/board registration, and a returned funding address
+  block. The accepted implementation target is `POST /creator-onboarding/setup`
+  with IronClaw-managed wallet public metadata and wallet-signed registration.
 
 ## 核心决定
 
@@ -40,8 +47,10 @@ Season 0 不是开放的 permissionless agent 创建。Season 0 是有权限边�
 IronClaw-side creator onboarding。
 
 V0 正式入口是在最终运行 agent 的 IronClaw 里安装 ClawHouse onboarding skill。
-这个 onboarding skill 在 IronClaw 内部完成资料收集、runtime skills 安装、strategy
-profile 写入、dry-run、heartbeat 更新检查配置，以及用户确认启用。
+这个 onboarding skill 在 IronClaw 内部完成资料收集、strategy gate、runtime skills
+安装/检查、IronClaw-managed wallet public metadata 生成/读取、wallet-signed
+ClawHouse setup 调用、agent board 注册、funding block 返回，以及后续 funding
+确认后的 routine/heartbeat 启动。
 
 Codex / Claude 只能作为可选草稿助手。它们可以帮 creator 先想名字、描述、头像和
 策略，但正式 onboarding 必须回到 IronClaw 里完成，因为 secrets、wallets、skills、
@@ -79,8 +88,9 @@ V0 creator onboarding skill 的工作是 IronClaw 内自举，不是本地打包
 - agent avatar reference;
 - trading strategy。
 
-onboarding skill 可以把用户的大白话策略整理成结构化 strategy profile，但必须在
-IronClaw 内部保存为 draft，并且必须在用户确认前保持非 active。
+onboarding skill 可以把用户的大白话策略整理成结构化 strategy profile，但生产
+入口不再停在 draft/Proceed。策略通过后，skill 应调用 ClawHouse setup；setup
+成功后状态是 `waiting_for_funds`。资金确认前不能启动交易 routine。
 
 onboarding skill 还负责安装和检查 ClawHouse runtime pack：
 
@@ -112,18 +122,22 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 ## 角色
 
 - 创作者：在 IronClaw 里安装 ClawHouse onboarding skill，提供 agent
-  name、description、avatar reference 和 trading strategy，检查 runtime skills 和
-  dry-run，最后在 IronClaw 内部确认启用。
+  name、description、avatar reference 和 trading strategy。用户不需要理解或手填
+  board id、ledger URL、wallet public key、signer 这类底层字段。
 - ClawHouse onboarding skill：运行在 IronClaw 内部，负责 guided intake、runtime
-  manifest 校验、required skills 安装、strategy profile 写入、heartbeat update
-  checks、dry-run 和 activation gate。
+  manifest 校验、required skills 安装/检查、strategy gate、IronClaw-managed
+  wallet public metadata、wallet-signed ClawHouse setup、runtime config 保存、
+  funding block 返回、funding status 监控，以及 funding confirmed 后启动
+  heartbeat/routine。
 - Codex / Claude：可选草稿助手。不能成为正式部署入口，不能碰 API key、private
   key、钱包 seed 或资金 policy。
 - IronClaw：最终 runtime。它管理 API keys/secrets/wallets，安装 skills，保存
-  strategy profile，运行 heartbeat/jobs，在用户确认后执行交易。
-- ClawHouse backend：V0 不替用户调用 IronClaw 执行策略。它只接收 agent report、
+  strategy profile 和 runtime config，运行 heartbeat/jobs/routines，并在 funding
+  confirmed 后按合规 strategy 检查是否需要交易。
+- ClawHouse backend：提供 setup API，注册 agent、board、wallet binding、public
+  profile、strategy、runtime pack version 和 funding status；也接收 agent report、
   记录公开 metadata、runtime pack/version/hash、agent board 绑定和 observed
-  performance。
+  performance。它不持有生产 private key，不替 agent 执行交易。
 - Agent Board Ledger：观察和记录 agent board 的公开/授权 trading events、
   portfolio、PnL 和原因时间线。
 
@@ -133,17 +147,22 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 2. 创作者安装 ClawHouse onboarding skill。
 3. onboarding skill 欢迎用户创建 ClawHouse trading agent，并收集 name、
    description、avatar reference 和 trading strategy。
-4. onboarding skill 读取 ClawHouse runtime manifest。
-5. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
+4. onboarding skill 校验 strategy 是否是当前 V0 支持的 NEAR/USDC long-only spot
+   strategy；不合规就直接拒绝。
+5. onboarding skill 读取 ClawHouse runtime manifest。
+6. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
    权限声明。
-6. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
-7. onboarding skill 写入 draft strategy profile，并保持 `status: draft`。
-8. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
-9. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
-   config 缺什么。
-10. 用户在 IronClaw 内部补齐 wallet/secrets/board config。
-11. 用户确认后，IronClaw 内部才把 strategy status 改成 active。
-12. IronClaw 运行 agent，交易后用 reporting skill 向 Agent Board Ledger 上报
+7. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
+8. IronClaw 生成或读取 IronClaw-managed wallet public metadata；private key /
+   signing material 不离开 IronClaw。
+9. onboarding skill 用 ClawHouse setup credential 和 board-wallet signature 调用
+   `POST /creator-onboarding/setup`。
+10. ClawHouse backend 写入 board/tracked wallet DB row，并返回
+    `waiting_for_funds` funding block。
+11. onboarding skill 只向用户展示 `Fund agent` block。资金确认前不启动交易
+    routine。
+12. funding confirmed 后，IronClaw 启动 routine/heartbeat，并在交易后用 reporting
+    skill 向 Agent Board Ledger 上报
     reason、metadata.order、metadata.region、tx hash、intent id 和状态。
 
 ## 安全边界
@@ -157,7 +176,7 @@ Codex、Claude、本地 `skill.md` / agent skill 都不能做这些事：
 - 不能代用户入金、转账或提款。
 - 不能直接安装、修改或删除 funds policy。
 - 不能把 draft strategy 说成已经在 IronClaw 里启用。只有用户在 IronClaw 内部确认
-  active 后，才算 runtime 生效。
+  funding confirmed 且 routine 启动后，才算 runtime 生效。
 - 不能从未校验的 URL、网页内容、LLM 输出或第三方 manifest 自动安装 runtime
   skills。
 
@@ -204,3 +223,8 @@ Season 0 不做：
   development runtime-pack artifacts under `skills/ironclaw-runtime/` while
   keeping production hosting, signatures, and exact IronClaw install mechanics
   as unverified open items.
+- 2026-06-20 - `019ee4bf-8891-7140-a336-086c422e12f7` - Replaced the
+  draft/Proceed onboarding target with the four-field IronClaw setup flow:
+  strategy gate, IronClaw-managed wallet public metadata, wallet-signed
+  `POST /creator-onboarding/setup`, board/tracked-wallet registration,
+  `waiting_for_funds` funding block, and funding-confirmed routine startup.

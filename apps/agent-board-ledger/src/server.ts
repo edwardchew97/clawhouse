@@ -1,5 +1,6 @@
 import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openRuntimeLedgerDb, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAuthPayload, readSignedHeaders, sha256Hex, timestampIsFresh, verifySignature } from "./auth.js";
+import { buildCreatorOnboardingSetup, presentCreatorOnboardingSetup } from "./creator-onboarding.js";
 import type { AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
 
 type AppOptions = {
@@ -70,6 +71,10 @@ export function createApp(options: AppOptions) {
         if (method === "POST" && path === "/boards") {
           assertServiceBearer(request.headers, adminToken);
           return json(await createBoard(db, request, await readBody(request), now()), 201);
+        }
+        if (method === "POST" && path === "/creator-onboarding/setup") {
+          assertServiceBearer(request.headers, adminToken);
+          return json(await createCreatorOnboardingSetup(db, request, await readBody(request), now()), 201);
         }
         if (method === "GET" && boardMatch) {
           const board = await requireBoard(db, boardMatch[1]);
@@ -190,54 +195,69 @@ async function createBoard(db: LedgerDb, request: Request, body: BodyResult, cre
 
   await db.transaction(async (tx) => {
     await assertBoardRegistrationSignature(tx, request, body.raw, board, Date.parse(createdAt), createdAt);
-    await tx.run(
-      `INSERT INTO boards
-        (id, agent_id, wallet_address, public_key, chain, venue_namespace, tracking_started_at,
-         starting_value_usd, base_currency, public_status, visibility_mode, owner_wallet_address,
-         funding_source, funding_tx_hash, metadata_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        board.id,
-        board.agent_id,
-        board.wallet_address,
-        board.public_key,
-        board.chain,
-        board.venue_namespace,
-        board.tracking_started_at,
-        board.starting_value_usd,
-        board.base_currency,
-        board.public_status,
-        board.visibility_mode,
-        board.owner_wallet_address,
-        board.funding_source,
-        board.funding_tx_hash,
-        board.metadata_json,
-        board.created_at,
-      ],
-    );
-    await tx.run(
-      `INSERT INTO tracked_wallets
-        (id, board_id, agent_id, wallet_address, public_key, chain, venue_namespace,
-         tracking_started_at, tracking_status, source, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT (board_id, wallet_address) DO NOTHING`,
-      [
-        `tw_${board.id}`,
-        board.id,
-        board.agent_id,
-        board.wallet_address,
-        board.public_key,
-        board.chain,
-        board.venue_namespace,
-        board.tracking_started_at,
-        "active",
-        "board_registration",
-        board.created_at,
-      ],
-    );
+    await insertBoardRegistration(tx, board);
   });
 
   return { ok: true, board };
+}
+
+async function createCreatorOnboardingSetup(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
+  const setup = buildCreatorOnboardingSetup(asObject(body.json), createdAt);
+
+  await db.transaction(async (tx) => {
+    await assertBoardRegistrationSignature(tx, request, body.raw, setup.board, Date.parse(createdAt), createdAt);
+    await insertBoardRegistration(tx, setup.board);
+  });
+
+  return presentCreatorOnboardingSetup(setup);
+}
+
+async function insertBoardRegistration(db: LedgerDb, board: Board) {
+  await db.run(
+    `INSERT INTO boards
+      (id, agent_id, wallet_address, public_key, chain, venue_namespace, tracking_started_at,
+       starting_value_usd, base_currency, public_status, visibility_mode, owner_wallet_address,
+       funding_source, funding_tx_hash, metadata_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      board.id,
+      board.agent_id,
+      board.wallet_address,
+      board.public_key,
+      board.chain,
+      board.venue_namespace,
+      board.tracking_started_at,
+      board.starting_value_usd,
+      board.base_currency,
+      board.public_status,
+      board.visibility_mode,
+      board.owner_wallet_address,
+      board.funding_source,
+      board.funding_tx_hash,
+      board.metadata_json,
+      board.created_at,
+    ],
+  );
+  await db.run(
+    `INSERT INTO tracked_wallets
+      (id, board_id, agent_id, wallet_address, public_key, chain, venue_namespace,
+       tracking_started_at, tracking_status, source, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (board_id, wallet_address) DO NOTHING`,
+    [
+      `tw_${board.id}`,
+      board.id,
+      board.agent_id,
+      board.wallet_address,
+      board.public_key,
+      board.chain,
+      board.venue_namespace,
+      board.tracking_started_at,
+      "active",
+      "board_registration",
+      board.created_at,
+    ],
+  );
 }
 
 async function assertBoardRegistrationSignature(

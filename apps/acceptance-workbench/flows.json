@@ -3,6 +3,83 @@
   "version": "0.1.0",
   "flows": [
     {
+      "id": "ironclaw-creator-onboarding-e2e",
+      "name": "IronClaw Creator Onboarding E2E",
+      "purpose": "Runs the reset-to-funding-address path for the IronClaw creator onboarding contract: four-field intake, strategy gate, wallet-signed board registration, DB readback, and funding address output.",
+      "steps": [
+        {
+          "id": "ironclawCreatorOnboarding.localSmoke",
+          "name": "Reset And Run Creator Onboarding",
+          "description": "Deletes the local smoke work state, creates an IronClaw-managed dev wallet stand-in, posts the four-field setup payload through the real creator onboarding setup API, verifies board/tracked-wallet DB rows, and returns the funding address block.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "scripts/creator-onboarding-smoke.ts",
+            "--work-dir",
+            "{{ironclawSmokeWorkDir}}",
+            "--board-id",
+            "{{ironclawBoardId}}",
+            "--agent-id",
+            "{{ironclawAgentId}}",
+            "--agent-name",
+            "{{ironclawAgentName}}",
+            "--agent-description",
+            "{{ironclawAgentDescription}}",
+            "--avatar-reference",
+            "{{ironclawAvatarReference}}",
+            "--trading-strategy",
+            "{{ironclawTradingStrategy}}",
+            "--funding-minimum-usd",
+            "{{ironclawFundingMinimumUsd}}"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Removing only the local smoke work directory before the run.",
+            "Generating a local dev wallet as the IronClaw-managed wallet stand-in without printing private key material.",
+            "Submitting a wallet-signed POST /creator-onboarding/setup request to the real Agent Board Ledger app code.",
+            "Reading the board and tracked wallet back from the local DB.",
+            "Returning the exact user-facing funding block."
+          ],
+          "inputs": {
+            "ironclawSmokeWorkDir": "work/ironclaw-onboarding-smoke",
+            "ironclawBoardId": "ironclaw-smoke-board",
+            "ironclawAgentId": "ironclaw-smoke-agent",
+            "ironclawAgentName": "IronClaw Smoke Agent",
+            "ironclawAgentDescription": "Smoke-test agent for ClawHouse creator onboarding.",
+            "ironclawAvatarReference": "none",
+            "ironclawTradingStrategy": "NEAR/USDC long-only spot rotation through NEAR Intents. Do not trade when route or slippage checks fail.",
+            "ironclawFundingMinimumUsd": "100"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ironclawSmokeWorkDir",
+            "ironclawBoardId",
+            "ironclawAgentId",
+            "ironclawAgentName",
+            "ironclawAgentDescription",
+            "ironclawAvatarReference",
+            "ironclawTradingStrategy",
+            "ironclawFundingMinimumUsd"
+          ],
+          "setVars": {
+            "ironclawBoardId": "response.json.board.id",
+            "ironclawAgentId": "response.json.board.agent_id",
+            "ironclawFundingPay": "response.json.userStatus.pay",
+            "ironclawFundingMin": "response.json.userStatus.min",
+            "ironclawWalletAddress": "response.json.wallet.walletAddress"
+          }
+        }
+      ]
+    },
+    {
       "id": "agent-registration-story",
       "name": "Agent Registration",
       "purpose": "Acceptance story for registering a curated ClawHouse agent: official onboarding boundary, key market creation, ledger board setup, and the unfinished public profile handoff.",
@@ -10,29 +87,29 @@
         {
           "id": "agentRegistration.pending.ironclawCreatorOnboarding",
           "name": "IronClaw Creator Onboarding",
-          "description": "The creator should start from the official IronClaw onboarding and produce a ClawHouse-approved agent package. 未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
+          "description": "Covered by the separate IronClaw Creator Onboarding E2E flow. This broader Agent Registration story keeps the legacy key-market and board-registration checks separate to avoid duplicate setup writes.",
           "type": "pending",
-          "status": "未完成",
+          "status": "covered",
           "access": "protected",
-          "pendingReason": "The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
+          "pendingReason": "Run flow ironclaw-creator-onboarding-e2e for the current four-field IronClaw setup proof.",
           "inputs": {},
           "setVars": {},
           "runningNotes": [
-            "未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet."
+            "Covered by flow ironclaw-creator-onboarding-e2e."
           ]
         },
         {
           "id": "agentRegistration.pending.ironclawWalletBinding",
           "name": "Bind Agent Wallet Metadata",
-          "description": "The approved agent should expose public wallet metadata that ClawHouse can store without private key material. 未完成: Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet.",
+          "description": "Covered by the separate IronClaw Creator Onboarding E2E flow, which creates an IronClaw-managed dev wallet stand-in, signs setup, writes the board, and reads back the tracked wallet.",
           "type": "pending",
-          "status": "未完成",
+          "status": "covered",
           "access": "protected",
-          "pendingReason": "Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet.",
+          "pendingReason": "Run flow ironclaw-creator-onboarding-e2e for the current wallet-signed setup proof.",
           "inputs": {},
           "setVars": {},
           "runningNotes": [
-            "未完成: Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet."
+            "Covered by flow ironclaw-creator-onboarding-e2e."
           ]
         },
         {

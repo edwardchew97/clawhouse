@@ -83,6 +83,83 @@ describe("Agent Board Ledger local backend", () => {
     expect(trackedWallet?.tracking_started_at).toBe("2026-06-19T00:00:00.000Z");
   });
 
+  test("runs creator onboarding setup through signed board registration and returns funding address", async () => {
+    const response = await postJson("/creator-onboarding/setup", {
+      board_id: "creator-board-1",
+      agent_id: "creator-agent-1",
+      agent_name: "Creator Agent",
+      agent_description: "NEAR/USDC spot agent.",
+      avatar_reference: "avatar://creator-agent",
+      trading_strategy: "NEAR and USDC long-only spot rotation through NEAR Intents.",
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      funding_minimum_usd: 100,
+    }, { signed: true });
+    const body = await jsonOf<{
+      status: string;
+      board: Record<string, any>;
+      funding: { options: Array<Record<string, any>> };
+      user_status: Record<string, string>;
+    }>(response);
+    const persisted = sqliteDb.raw.query<Record<string, any>, []>("SELECT * FROM boards WHERE id = 'creator-board-1'").get();
+    const trackedWallet = sqliteDb.raw
+      .query<Record<string, any>, []>("SELECT * FROM tracked_wallets WHERE board_id = 'creator-board-1'")
+      .get();
+    const metadata = JSON.parse(String(persisted?.metadata_json));
+
+    expect(response.status).toBe(201);
+    expect(body.status).toBe("waiting_for_funds");
+    expect(body.board.public_status).toBe("waiting_for_funds");
+    expect(body.funding.options[0].address).toBe(wallet.walletAddress);
+    expect(body.user_status).toMatchObject({
+      title: "Fund agent.",
+      min: "100 USD equivalent",
+      pay: `near:${wallet.walletAddress}`,
+      status: "waiting_for_funds",
+    });
+    expect(persisted?.agent_id).toBe("creator-agent-1");
+    expect(persisted?.funding_source).toBe("near-direct-wallet");
+    expect(trackedWallet?.wallet_address).toBe(wallet.walletAddress);
+    expect(metadata.strategy.allowed_venue).toBe("near-intents-spot");
+    expect(metadata.runtime.routine_starts_after).toBe("funding_confirmed");
+  });
+
+  test("requires wallet signature for creator onboarding setup registration", async () => {
+    const response = await postJson("/creator-onboarding/setup", {
+      board_id: "creator-board-unsigned",
+      agent_id: "creator-agent-unsigned",
+      agent_name: "Unsigned Agent",
+      agent_description: "NEAR/USDC spot agent.",
+      avatar_reference: "none",
+      trading_strategy: "NEAR and USDC long-only spot rotation.",
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      funding_minimum_usd: 100,
+    });
+
+    expect(response.status).toBe(401);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("Missing x-clawhouse-wallet-address");
+  });
+
+  test("rejects unsupported creator strategies before board registration", async () => {
+    const response = await postJson("/creator-onboarding/setup", {
+      board_id: "creator-board-perps",
+      agent_id: "creator-agent-perps",
+      agent_name: "Perps Agent",
+      agent_description: "Unsupported strategy.",
+      avatar_reference: "none",
+      trading_strategy: "Trade Hyperliquid perps with leverage.",
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      funding_minimum_usd: 100,
+    });
+    const persisted = sqliteDb.raw.query<Record<string, any>, []>("SELECT * FROM boards WHERE id = 'creator-board-perps'").get();
+
+    expect(response.status).toBe(400);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("Strategy rejected: perps are not supported");
+    expect(persisted).toBeNull();
+  });
+
   test("migrates production accounting schema without dropping legacy rows", () => {
     const legacy = new Database(":memory:");
     legacy.exec("PRAGMA foreign_keys = ON");

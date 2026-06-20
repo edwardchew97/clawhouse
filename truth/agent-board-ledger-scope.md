@@ -20,6 +20,11 @@ replaces the previous Trade Engine direction for current V0 work.
   authentication should be based on the agent/IronClaw-managed board wallet,
   with each write request wallet-signed and verified by board/wallet binding,
   signature validity, fresh timestamp, unused nonce, and request body hash.
+- Amendment session: `019ee4bf-8891-7140-a336-086c422e12f7`
+- Amendment date: 2026-06-20
+- Amendment basis: JY required the IronClaw creator onboarding flow to hand four
+  public fields plus IronClaw-managed wallet public metadata to ClawHouse, have
+  ClawHouse register the agent board, and return the funding address block.
 
 ## One Sentence
 
@@ -54,6 +59,7 @@ recorded and marked as missing reason.
 
 Agent Board Ledger owns:
 
+- creator onboarding setup for board registration;
 - board and wallet registration;
 - wallet watcher cron;
 - agent event inbox;
@@ -88,6 +94,11 @@ Minimum fields:
 Board registration does not imply ClawHouse controls the wallet. It only means
 Agent Board Ledger is responsible for observing and accounting for it.
 
+The creator onboarding setup endpoint is a convenience wrapper around board
+registration. It may receive agent name, description, avatar reference, and
+strategy as metadata, but it must still require service authorization and a
+wallet signature from the IronClaw-managed board wallet before writing the board.
+
 ## Wallet-Signed Write Authentication
 
 V0 Agent Board Ledger write authentication uses only the agent/IronClaw-managed
@@ -98,6 +109,7 @@ registered to that board.
 
 This applies to:
 
+- creator onboarding setup that registers a board;
 - creating or reporting an agent event;
 - attaching a later reason;
 - attaching a correction;
@@ -501,6 +513,8 @@ Product/read surface:
 The first Agent Board Ledger slice is complete when:
 
 - one agent board can be registered with a tracked wallet/account;
+- the IronClaw creator setup path can register the board from four public fields
+  plus wallet-signed public wallet metadata and return a funding address block;
 - starting balances are recorded;
 - wallet watcher cron can run and write observations;
 - an agent can report a wallet-signed trade event with or without reason;
@@ -548,3 +562,8 @@ The first Agent Board Ledger slice is complete when:
   including board-wallet binding, signature, timestamp, nonce, body-hash checks,
   transaction identifier boundaries, append-only signed attachments, read/write
   auth separation, and no-custody/no-trade-signing limits.
+- 2026-06-20 - `019ee4bf-8891-7140-a336-086c422e12f7` - Added creator
+  onboarding setup as a board-registration wrapper: four public fields plus
+  IronClaw-managed wallet public metadata, service authorization, wallet
+  signature verification, board/tracked-wallet DB write, and funding address
+  block return.

@@ -37,6 +37,12 @@ replace Scope V0 key trading.
   reporting skill, NEAR Intents spot value skill, heartbeat template, and
   reset/retest guide. Production hosting, signatures, and exact IronClaw
   installer mechanics remain unverified.
+- Amendment session: `019ee4bf-8891-7140-a336-086c422e12f7`
+- Amendment date: 2026-06-20
+- Amendment basis: JY required the creator-facing IronClaw onboarding to run as
+  a short four-field flow that validates the strategy, registers the agent board
+  through ClawHouse setup, and returns a funding address before any trading
+  routine can start.
 
 ## One Sentence
 
@@ -139,13 +145,19 @@ ClawHouse provides a runtime skill pack for IronClaw:
 The ClawHouse onboarding skill runs inside the target IronClaw agent. It should:
 
 - collect agent name, description, avatar reference, and trading strategy;
+- reject unsupported strategies before setup;
 - read the ClawHouse runtime manifest;
 - verify required runtime skill URL allowlist, name, version, sha256 hash, and
   permission declaration;
 - install or guide the user through installing the required runtime skills;
-- write the draft strategy/profile inside IronClaw memory/workspace;
-- configure heartbeat checks for future runtime manifest updates;
-- run dry checks and keep the strategy inactive until user confirmation.
+- create or read IronClaw-managed wallet public metadata without exposing
+  private keys or raw signing material;
+- call ClawHouse `POST /creator-onboarding/setup` with service authorization
+  and a board-wallet signature;
+- save the returned setup/runtime config inside IronClaw;
+- show the returned funding block and keep the routine inactive until funding
+  is confirmed;
+- configure heartbeat checks for future runtime manifest updates after setup.
 
 The package must not contain:
 
@@ -170,6 +182,8 @@ IronClaw owns:
 ClawHouse owns only:
 
 - publishing the onboarding skill, runtime skills, and manifest;
+- registering the board/tracked wallet from wallet-signed setup metadata;
+- returning the funding block for the registered agent wallet;
 - receiving agent-reported events and notes through Agent Board Ledger;
 - recording runtime pack version/hash and public metadata when provided;
 - displaying public identity and observed performance through Agent Board
@@ -473,6 +487,9 @@ The first Agent Trading slice is done only when:
 - IronClaw-side onboarding can verify and install the required ClawHouse runtime
   skills from a hash-pinned manifest without requiring ClawHouse to execute or
   activate the agent.
+- IronClaw-side onboarding can run the four-field setup path to
+  `waiting_for_funds`, with strategy validation, wallet-signed board
+  registration, DB readback, and funding address proof.
 
 ## Open Decisions
 
@@ -519,3 +536,7 @@ The first Agent Trading slice is done only when:
   development runtime-pack artifacts under `skills/ironclaw-runtime/` and kept
   production hosting, signatures, and exact IronClaw install mechanics as open
   verification items.
+- 2026-06-20 - `019ee4bf-8891-7140-a336-086c422e12f7` - Added the four-field
+  IronClaw creator setup target: strategy gate, IronClaw-managed wallet public
+  metadata, wallet-signed ClawHouse setup, board/tracked-wallet registration,
+  funding block, and no trading routine before funding confirmation.

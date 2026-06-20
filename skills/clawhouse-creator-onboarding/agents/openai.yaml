@@ -1,4 +1,4 @@
 interface:
   display_name: "ClawHouse Creator Onboarding"
   short_description: "Onboard a ClawHouse agent in IronClaw"
-  default_prompt: "Use $clawhouse-creator-onboarding inside IronClaw to collect profile and strategy, install the runtime skills, configure heartbeat, and keep the agent in draft until I confirm activation."
+  default_prompt: "Use $clawhouse-creator-onboarding inside IronClaw. Ask only for agent name, description, avatar reference, and trading strategy. Validate NEAR/USDC spot-only strategy, call ClawHouse setup with an IronClaw-managed wallet-signed request, then return only the Fund agent block. Do not show setup tables, Proceed steps, private keys, tokens, or raw backend config."
