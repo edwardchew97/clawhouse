@@ -1,0 +1,29 @@
+meta {
+  name: 01 Health
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/health
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const baseUrl = String(bru.getEnvVar("base_url") || "");
+  if (String(bru.getEnvVar("local_runtime_only")) !== "true") {
+    throw new Error("local_runtime_only must be true for this collection.");
+  }
+  if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+    throw new Error("This collection is locked to local runtime URLs.");
+  }
+}
+
+tests {
+  test("local ledger health is ready", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().ok).to.equal(true);
+    expect(res.getBody().db).to.equal("ready");
+  });
+}

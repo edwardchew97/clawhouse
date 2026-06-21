@@ -1,0 +1,26 @@
+meta {
+  name: 01 Read Paper Account
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/paper/accounts/{{paper_account_id}}
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const accountId = bru.getVar("paper_account_id") || bru.getEnvVar("paper_account_id");
+  if (!accountId) throw new Error("Missing paper_account_id. Run Create Paper Account first.");
+  req.setUrl(`${bru.getEnvVar("base_url")}/paper/accounts/${accountId}`);
+}
+
+tests {
+  test("paper account readback is real backend state", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(body.ok).to.equal(true);
+    expect(body.account.id).to.equal(bru.getVar("paper_account_id"));
+  });
+}

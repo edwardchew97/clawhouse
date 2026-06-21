@@ -1,0 +1,34 @@
+meta {
+  name: 05 Run Liquidation Monitor Tick
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/paper/liquidation-monitor/tick
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {}
+}
+
+script:pre-request {
+  const adminToken = bru.getEnvVar("admin_token") || bru.getProcessEnv("AGENT_BOARD_LEDGER_ADMIN_TOKEN");
+  if (!adminToken) throw new Error("Missing admin_token. Set AGENT_BOARD_LEDGER_ADMIN_TOKEN.");
+  req.setHeader("authorization", `Bearer ${adminToken}`);
+}
+
+tests {
+  test("liquidation monitor runs against real open-position state", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(body.ok).to.equal(true);
+    expect(["checked", "liquidations_executed", "skipped_no_open_positions"]).to.include(body.status);
+  });
+}
