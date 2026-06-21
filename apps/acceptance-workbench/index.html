@@ -1269,6 +1269,8 @@
       nearNetworkId: "testnet",
       testUserAccountId: "",
       testUserPrivateKey: "",
+      ledgerWalletFile: "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
+      ledgerWalletPrivateKey: "",
       accountId: ""
     };
 
@@ -1318,9 +1320,16 @@
 
     const environmentOwnedKeys = new Set([
       "ledgerBaseUrl",
+      "ledgerWalletFile",
+      "ledgerWalletPrivateKey",
       "nearRpcUrl",
       "contractId",
       "nearNetworkId"
+    ]);
+
+    const encryptedEnvKeys = new Set([
+      "testUserPrivateKey",
+      "ledgerWalletPrivateKey"
     ]);
 
     function pruneObsoleteEnv(env) {
@@ -1342,6 +1351,10 @@
       return { ...defaultEnv, ...profile.env };
     }
 
+    function emptyEncryptedEnvValues() {
+      return Object.fromEntries([...encryptedEnvKeys].map((key) => [key, ""]));
+    }
+
     function migrateEnvProfiles(persistedState) {
       const savedProfiles = persistedState.envProfiles && typeof persistedState.envProfiles === "object"
         ? persistedState.envProfiles
@@ -1351,14 +1364,14 @@
         profiles[profileId] = {
           ...defaultEnvForProfile(profileId),
           ...pruneObsoleteEnv(savedProfiles[profileId] || {}),
-          testUserPrivateKey: ""
+          ...emptyEncryptedEnvValues()
         };
       }
       if (!Object.keys(savedProfiles).length && persistedState.env) {
         profiles.local = {
           ...defaultEnvForProfile("local"),
           ...pruneObsoleteEnv(persistedState.env),
-          testUserPrivateKey: ""
+          ...emptyEncryptedEnvValues()
         };
       }
       return profiles;
@@ -1391,7 +1404,7 @@
       filter: "",
       activeEnvProfile,
       envProfiles,
-      env: { ...envProfiles[activeEnvProfile], testUserPrivateKey: "" },
+      env: { ...envProfiles[activeEnvProfile], ...emptyEncryptedEnvValues() },
       encryptedEnvProfiles: migrateEncryptedEnvProfiles(persisted),
       collapsedFlows: persisted.collapsedFlows || {},
       accessFilter: persisted.accessFilter || "all",
@@ -1439,7 +1452,7 @@
 
     function persist() {
       writePersistedState();
-      queuePrivateKeyEncryption();
+      queueEncryptedEnvSync();
     }
 
     function writePersistedState() {
@@ -1461,7 +1474,9 @@
 
     function persistableEnv(env = state.env) {
       const next = { ...env };
-      next.testUserPrivateKey = "";
+      for (const key of encryptedEnvKeys) {
+        next[key] = "";
+      }
       return next;
     }
 
@@ -1480,58 +1495,78 @@
 
     function displayEnv() {
       const next = { ...state.env };
-      if (next.testUserPrivateKey) next.testUserPrivateKey = "[not shown]";
+      for (const key of encryptedEnvKeys) {
+        if (next[key]) next[key] = "[not shown]";
+      }
       return next;
     }
 
-    let privateKeyEncryptionTimer = null;
-    const lastPrivateKeyForEncryption = {};
+    let encryptedEnvSyncTimer = null;
+    const lastEncryptedEnvValues = {};
 
-    function queuePrivateKeyEncryption() {
-      const privateKey = state.env.testUserPrivateKey || "";
+    function encryptedEnvCache(profileId) {
+      lastEncryptedEnvValues[profileId] ||= {};
+      return lastEncryptedEnvValues[profileId];
+    }
+
+    function queueEncryptedEnvSync() {
       const profileId = state.activeEnvProfile;
-      if (!privateKey || privateKey === lastPrivateKeyForEncryption[profileId]) return;
-      if (privateKeyEncryptionTimer) clearTimeout(privateKeyEncryptionTimer);
-      privateKeyEncryptionTimer = setTimeout(() => {
-        encryptPrivateKey(privateKey, profileId);
+      const cache = encryptedEnvCache(profileId);
+      const hasPendingValue = [...encryptedEnvKeys].some((key) => {
+        const value = state.env[key] || "";
+        return value && value !== cache[key];
+      });
+      if (!hasPendingValue) return;
+      if (encryptedEnvSyncTimer) clearTimeout(encryptedEnvSyncTimer);
+      encryptedEnvSyncTimer = setTimeout(() => {
+        encryptEnvValues(profileId);
       }, 200);
     }
 
-    async function encryptPrivateKey(privateKey, profileId) {
-      try {
-        const response = await fetch("/crypto/encrypt", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ value: privateKey })
-        });
-        const result = await response.json();
-        if (!result.ok) throw new Error(result.error || "Private key encryption failed");
-        if (state.activeEnvProfile === profileId && state.env.testUserPrivateKey !== privateKey) return;
-        state.encryptedEnvProfiles[profileId] ||= {};
-        state.encryptedEnvProfiles[profileId].testUserPrivateKey = result.ciphertext;
-        lastPrivateKeyForEncryption[profileId] = privateKey;
-        writePersistedState();
-      } catch (error) {
-        console.warn(error);
+    async function encryptEnvValues(profileId) {
+      const cache = encryptedEnvCache(profileId);
+      for (const key of encryptedEnvKeys) {
+        const value = state.env[key] || "";
+        if (!value || value === cache[key]) continue;
+        try {
+          const response = await fetch("/crypto/encrypt", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ value })
+          });
+          const result = await response.json();
+          if (!result.ok) throw new Error(result.error || "Private env encryption failed");
+          if (state.activeEnvProfile === profileId && state.env[key] !== value) continue;
+          state.encryptedEnvProfiles[profileId] ||= {};
+          state.encryptedEnvProfiles[profileId][key] = result.ciphertext;
+          cache[key] = value;
+          writePersistedState();
+        } catch (error) {
+          console.warn(error);
+        }
       }
     }
 
     async function restoreEncryptedEnv() {
       const profileId = state.activeEnvProfile;
-      const ciphertext = activeEncryptedEnv().testUserPrivateKey;
-      if (!ciphertext) return;
-      try {
-        const response = await fetch("/crypto/decrypt", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ciphertext })
-        });
-        const result = await response.json();
-        if (!result.ok) throw new Error(result.error || "Private key decrypt failed");
-        state.env.testUserPrivateKey = result.value || "";
-        lastPrivateKeyForEncryption[profileId] = state.env.testUserPrivateKey;
-      } catch (error) {
-        console.warn(error);
+      const encryptedEnv = activeEncryptedEnv();
+      const cache = encryptedEnvCache(profileId);
+      for (const key of encryptedEnvKeys) {
+        const ciphertext = encryptedEnv[key];
+        if (!ciphertext) continue;
+        try {
+          const response = await fetch("/crypto/decrypt", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ciphertext })
+          });
+          const result = await response.json();
+          if (!result.ok) throw new Error(result.error || "Private env decrypt failed");
+          state.env[key] = result.value || "";
+          cache[key] = state.env[key];
+        } catch (error) {
+          console.warn(error);
+        }
       }
     }
 
@@ -1540,7 +1575,7 @@
       if (nextProfileId === state.activeEnvProfile) return;
       updateActiveEnvProfile();
       state.activeEnvProfile = nextProfileId;
-      state.env = { ...state.envProfiles[nextProfileId], testUserPrivateKey: "" };
+      state.env = { ...state.envProfiles[nextProfileId], ...emptyEncryptedEnvValues() };
       await restoreEncryptedEnv();
       render();
       showToast(`${activeEnvironmentProfile().label} environment selected`);
@@ -2275,6 +2310,7 @@
       const step = activeStep();
       const method = methodLabel(step);
       const pending = isPendingStep(step);
+      const envUpdateCount = Object.keys(step.setEnv || {}).length;
       $("stepName").textContent = step.name;
       $("stepDescription").textContent = step.description || "No description has been added for this request yet.";
       $("stepType").textContent = `${flow.name} / ${step.id}`;
@@ -2291,6 +2327,7 @@
         : `
           <span class="pill">${step.type}</span>
           <span class="pill">${Object.keys(step.setVars || {}).length} extracts</span>
+          ${envUpdateCount ? `<span class="pill">${envUpdateCount} env updates</span>` : ""}
         `;
       $("responseTarget").textContent = pending
         ? resolvedTarget(step)
@@ -2425,6 +2462,10 @@
             <label>Variables Extracted By This Step</label>
             <pre class="light-code">${escapeHtml(JSON.stringify(step.setVars || {}, null, 2))}</pre>
           </div>
+          <div class="field">
+            <label>Environment Updated By This Step</label>
+            <pre class="light-code">${escapeHtml(JSON.stringify(step.setEnv || {}, null, 2))}</pre>
+          </div>
         </div>
       `;
       $("varsTabEditor").addEventListener("input", () => {
@@ -2496,9 +2537,13 @@
     function syncEditors() {
       try {
         state.env = parseJsonObject($("envEditor").value || "{}", "Environment");
-        if (!state.env.testUserPrivateKey) {
-          delete activeEncryptedEnv().testUserPrivateKey;
-          lastPrivateKeyForEncryption[state.activeEnvProfile] = "";
+        const encryptedEnv = activeEncryptedEnv();
+        const cache = encryptedEnvCache(state.activeEnvProfile);
+        for (const key of encryptedEnvKeys) {
+          if (!state.env[key]) {
+            delete encryptedEnv[key];
+            cache[key] = "";
+          }
         }
         state.vars = parseJsonObject($("varsEditor").value || "{}", "Runtime variables");
         renderRequest();
@@ -2534,20 +2579,42 @@
       }, 1600);
     }
 
+    function applyMappings(mappings, source, target) {
+      for (const [name, path] of Object.entries(mappings)) {
+        const value = getPath(source, path);
+        if (value !== undefined && value !== null && value !== "") {
+          target[name] = typeof value === "object" ? JSON.stringify(value) : String(value);
+        }
+      }
+    }
+
     function applySetVars(step, result) {
-      const mappings = step.setVars || {};
       const source = {
         response: result,
         inputs: currentInputs(),
         env: state.env,
         vars: state.vars
       };
-      for (const [name, path] of Object.entries(mappings)) {
-        const value = getPath(source, path);
-        if (value !== undefined && value !== null && value !== "") {
-          state.vars[name] = typeof value === "object" ? JSON.stringify(value) : String(value);
-        }
-      }
+      applyMappings(step.setVars || {}, source, state.vars);
+    }
+
+    function applySetEnv(step, result) {
+      const source = {
+        response: result,
+        inputs: currentInputs(),
+        env: state.env,
+        vars: state.vars
+      };
+      applyMappings(step.setEnv || {}, source, state.env);
+    }
+
+    function resultForDisplay(result) {
+      if (!result || typeof result !== "object" || Array.isArray(result)) return result;
+      if (!result.envUpdates) return result;
+      return {
+        ...result,
+        envUpdates: sanitizeSecrets(result.envUpdates)
+      };
     }
 
     function renderResult(result, startedAt, targetLabel) {
@@ -2841,16 +2908,19 @@
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload)
         });
-        const result = await response.json();
-        if (result.durationMs === undefined) {
-          result.durationMs = Math.round(performance.now() - startedMs);
+        const rawResult = await response.json();
+        if (rawResult.durationMs === undefined) {
+          rawResult.durationMs = Math.round(performance.now() - startedMs);
         }
+        applySetEnv(step, rawResult);
+        applySetVars(step, rawResult);
+        const result = resultForDisplay(rawResult);
         state.lastResult = result;
         state.lastDebugPacket = buildDebugPacket(flow, step, startedAt, targetLabel, payload, result);
-        applySetVars(step, result);
+        renderTopbar();
         renderResult(result, startedAt, targetLabel);
         renderVars();
-        if (state.activeTab === "preview") renderPreview(step);
+        renderTabs();
       } catch (error) {
         const result = { ok: false, error: error.message, durationMs: Math.round(performance.now() - startedMs) };
         state.lastResult = result;

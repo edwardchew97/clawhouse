@@ -21,6 +21,10 @@ export type NearWalletPublicInfo = {
   keyFile: string;
 };
 
+export type NearWalletPrivateInfo = NearWalletPublicInfo & {
+  privateKey: KeyPairString;
+};
+
 type LocalDevKeyStore = {
   schema: typeof LOCAL_DEV_KEYSTORE_SCHEMA;
   account_id: string;
@@ -127,6 +131,31 @@ export async function inspectNearWallet(
   }
 
   return publicInfo;
+}
+
+export async function inspectNearWalletPrivateInfo(
+  options: InspectWalletOptions,
+): Promise<NearWalletPrivateInfo> {
+  const keyFile = resolveLocalKeyFilePath(options.keyFile, options.cwd);
+  const raw = await readFile(keyFile, "utf8");
+  const keyStore = parseKeyStore(raw, keyFile);
+  const publicInfo = publicInfoFromPublicKey(keyStore.public_key, keyFile);
+
+  if (keyStore.account_id !== publicInfo.walletAddress) {
+    throw new Error("Key file account_id does not match public_key");
+  }
+  if (keyStore.key_id !== publicInfo.keyId) {
+    throw new Error("Key file key_id does not match public_key");
+  }
+  const keyPair = KeyPair.fromString(keyStore.private_key);
+  if (keyPair.getPublicKey().toString() !== publicInfo.publicKey) {
+    throw new Error("Key file private_key does not match public_key");
+  }
+
+  return {
+    ...publicInfo,
+    privateKey: keyStore.private_key,
+  };
 }
 
 export async function signAgentBoardLedgerRequest(

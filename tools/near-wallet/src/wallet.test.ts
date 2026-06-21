@@ -8,6 +8,7 @@ import {
   generateNearWallet,
   hashRequestBody,
   inspectNearWallet,
+  inspectNearWalletPrivateInfo,
   publicInfoFromPublicKey,
   signAgentBoardLedgerRequest,
   serializeAgentBoardLedgerRequestPayload,
@@ -72,6 +73,22 @@ describe("NEAR wallet local dev keystore", () => {
     expect(inspected).toEqual(generated);
     expect(inspected).toEqual(derived);
     expect(JSON.stringify(inspected)).not.toContain(keyStore.private_key);
+  });
+
+  test("private inspection is explicit and still validates the key pair", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+
+    const generated = await generateNearWallet({ keyFile });
+    const rawKeyFile = await readFile(keyFile, "utf8");
+    const keyStore = JSON.parse(rawKeyFile);
+    const privateInfo = await inspectNearWalletPrivateInfo({ keyFile });
+
+    expect(privateInfo).toEqual({
+      ...generated,
+      privateKey: keyStore.private_key,
+    });
+    expect(privateInfo.privateKey).toMatch(/^ed25519:[1-9A-HJ-NP-Za-km-z]+$/);
   });
 
   test("inspect and read-public commands never print private material", async () => {

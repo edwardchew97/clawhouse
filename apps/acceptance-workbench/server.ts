@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
+import { inspectNearWalletPrivateInfo } from "../../tools/near-wallet/src/wallet";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -184,6 +185,14 @@ function isRequestPathArg(value: string) {
   return /^\/(?:api|boards|cron|health)(?:\/|$)/.test(value);
 }
 
+function repoLocalPath(value: string) {
+  const normalized = normalize(isAbsolute(value) ? value : join(repoRoot, value));
+  if (normalized !== repoRoot && !normalized.startsWith(`${repoRoot}/`)) {
+    throw new Error(`Refusing local path outside repo root: ${normalized}`);
+  }
+  return normalized;
+}
+
 function findScriptStep(flows: JsonRecord, stepId: string): JsonRecord | null {
   const flowList = Array.isArray(flows.flows) ? flows.flows : [];
   for (const flow of flowList) {
@@ -194,6 +203,22 @@ function findScriptStep(flows: JsonRecord, stepId: string): JsonRecord | null {
     }
   }
   return null;
+}
+
+async function scriptEnvUpdatesFromStep(step: JsonRecord, variables: JsonRecord) {
+  const walletRule = asObject(step.setSecretEnvFromNearWallet);
+  const rawKeyFile = typeof walletRule.keyFile === "string" ? walletRule.keyFile : "";
+  const privateKeyEnv = typeof walletRule.privateKey === "string" ? walletRule.privateKey : "";
+  if (!rawKeyFile || !privateKeyEnv) return {};
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(privateKeyEnv)) {
+    throw new Error(`Invalid private key env name: ${privateKeyEnv}`);
+  }
+
+  const keyFile = repoLocalPath(String(interpolate(rawKeyFile, variables)));
+  const wallet = await inspectNearWalletPrivateInfo({ keyFile });
+  return {
+    [privateKeyEnv]: wallet.privateKey
+  };
 }
 
 async function runHttp(payload: JsonRecord) {
@@ -383,9 +408,19 @@ async function runScript(payload: JsonRecord) {
   const forbiddenOutputMatch = stringList(step.forbiddenOutputIncludes).find((text) => (
     combinedOutput.toLowerCase().includes(text.toLowerCase())
   ));
+  const scriptOk = !timedOut && exitMatched && outputMatched && !forbiddenOutputMatch;
+  let envUpdates: JsonRecord = {};
+  let envUpdateError = "";
+  if (scriptOk) {
+    try {
+      envUpdates = await scriptEnvUpdatesFromStep(step, variables);
+    } catch (error) {
+      envUpdateError = error instanceof Error ? error.message : String(error);
+    }
+  }
   const redactOutput = step.redactPrivateKeyOutput === true;
   return {
-    ok: !timedOut && exitMatched && outputMatched && !forbiddenOutputMatch,
+    ok: scriptOk && !envUpdateError,
     exitCode,
     ...(step.expectedExitCode !== undefined ? { expectedExitCode } : {}),
     ...(expectedOutputIncludes ? { expectedOutputIncludes } : {}),
@@ -394,6 +429,7 @@ async function runScript(payload: JsonRecord) {
     durationMs: Date.now() - started,
     command: [command, ...args],
     cwd,
+    ...(Object.keys(envUpdates).length ? { envUpdates } : {}),
     stdout: redactOutput ? redactPrivateKeyText(stdout) : stdout,
     stderr: redactOutput ? redactPrivateKeyText(stderr) : stderr,
     error: timedOut
@@ -402,7 +438,9 @@ async function runScript(payload: JsonRecord) {
         ? `Script exited ${exitCode}; expected ${expectedExitCode}`
         : !outputMatched
           ? `Script output did not include expected text: ${expectedOutputIncludes}`
-          : forbiddenOutputMatch ? `Script output included forbidden text: ${forbiddenOutputMatch}` : undefined,
+          : forbiddenOutputMatch
+            ? `Script output included forbidden text: ${forbiddenOutputMatch}`
+            : envUpdateError || undefined,
     json: redactOutput ? redactPrivateKeyOutput(parsed) : parsed
   };
 }

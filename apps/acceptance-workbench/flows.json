@@ -131,6 +131,56 @@
           }
         },
         {
+          "id": "agentRegistration.ledger.generateWallet",
+          "name": "Generate Agent Ledger Key Pair",
+          "description": "Generates a random local NEAR key pair for Agent Board Ledger registration and stores its private key in the active Workbench environment.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "run",
+            "generate",
+            "--",
+            "--out",
+            "{{repoRoot}}/{{ledgerWalletFile}}",
+            "--overwrite"
+          ],
+          "cwd": "{{repoRoot}}/tools/near-wallet",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "setSecretEnvFromNearWallet": {
+            "keyFile": "{{ledgerWalletFile}}",
+            "privateKey": "ledgerWalletPrivateKey"
+          },
+          "runningNotes": [
+            "Running the allowlisted local NEAR wallet generator.",
+            "Overwriting the local Workbench ledger wallet artifact with a fresh random key pair.",
+            "Returning only public wallet metadata in the visible response.",
+            "Storing ledgerWalletPrivateKey in the active Workbench environment for later local scripts."
+          ],
+          "inputs": {
+            "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerWalletFile"
+          ],
+          "setVars": {
+            "ledgerWalletAddress": "response.json.walletAddress",
+            "ledgerPublicKey": "response.json.publicKey",
+            "ledgerKeyId": "response.json.keyId"
+          },
+          "setEnv": {
+            "ledgerWalletFile": "inputs.ledgerWalletFile",
+            "ledgerWalletPrivateKey": "response.envUpdates.ledgerWalletPrivateKey"
+          }
+        },
+        {
           "id": "agentRegistration.ledger.createBoard",
           "name": "Register Agent Board",
           "description": "Registers the approved agent in Agent Board Ledger with a wallet-signed board registration proof.",
@@ -164,7 +214,7 @@
           "runningNotes": [
             "Calling the real POST /boards backend API with both service authorization and wallet signature headers.",
             "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAdminToken.",
-            "Creating or reusing a local Workbench wallet artifact and sending only public wallet metadata plus the request signature.",
+            "Reusing the local Workbench wallet artifact from Generate Agent Ledger Key Pair; if that step was skipped, this script creates one locally.",
             "Leave ledgerBoardId empty if you want the backend to generate an id.",
             "The returned board id is stored as ledgerBoardId for the later API calls."
           ],
