@@ -8,6 +8,56 @@
       "purpose": "Acceptance story for registering a curated ClawHouse agent: official onboarding boundary, key market creation, ledger board setup, and the unfinished public profile handoff.",
       "steps": [
         {
+          "id": "agentRegistration.ledger.generateWallet",
+          "name": "Generate Agent Ledger Key Pair",
+          "description": "Generates a random local NEAR key pair for Agent Board Ledger registration and stores its private key in the active Workbench environment.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "run",
+            "generate",
+            "--",
+            "--out",
+            "{{repoRoot}}/{{ledgerWalletFile}}",
+            "--overwrite"
+          ],
+          "cwd": "{{repoRoot}}/tools/near-wallet",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "setSecretEnvFromNearWallet": {
+            "keyFile": "{{ledgerWalletFile}}",
+            "privateKey": "ledgerWalletPrivateKey"
+          },
+          "runningNotes": [
+            "Running the allowlisted local NEAR wallet generator.",
+            "Overwriting the local Workbench ledger wallet artifact with a fresh random key pair.",
+            "Returning only public wallet metadata in the visible response.",
+            "Storing ledgerWalletPrivateKey in the active Workbench environment for later local scripts."
+          ],
+          "inputs": {
+            "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerWalletFile"
+          ],
+          "setVars": {
+            "ledgerWalletAddress": "response.json.walletAddress",
+            "ledgerPublicKey": "response.json.publicKey",
+            "ledgerKeyId": "response.json.keyId"
+          },
+          "setEnv": {
+            "ledgerWalletFile": "inputs.ledgerWalletFile",
+            "ledgerWalletPrivateKey": "response.envUpdates.ledgerWalletPrivateKey"
+          }
+        },
+        {
           "id": "agentRegistration.pending.ironclawCreatorOnboarding",
           "name": "IronClaw Creator Onboarding",
           "description": "The creator should start from the official IronClaw onboarding and produce a ClawHouse-approved agent package. 未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
@@ -133,56 +183,6 @@
           ],
           "setVars": {
             "ledgerHealthDb": "response.json.json.db"
-          }
-        },
-        {
-          "id": "agentRegistration.ledger.generateWallet",
-          "name": "Generate Agent Ledger Key Pair",
-          "description": "Generates a random local NEAR key pair for Agent Board Ledger registration and stores its private key in the active Workbench environment.",
-          "type": "script",
-          "access": "protected",
-          "command": "bun",
-          "args": [
-            "run",
-            "generate",
-            "--",
-            "--out",
-            "{{repoRoot}}/{{ledgerWalletFile}}",
-            "--overwrite"
-          ],
-          "cwd": "{{repoRoot}}/tools/near-wallet",
-          "redactPrivateKeyOutput": true,
-          "forbiddenOutputIncludes": [
-            "privateKey",
-            "private_key",
-            "secretKey",
-            "secret_key",
-            "mnemonic"
-          ],
-          "setSecretEnvFromNearWallet": {
-            "keyFile": "{{ledgerWalletFile}}",
-            "privateKey": "ledgerWalletPrivateKey"
-          },
-          "runningNotes": [
-            "Running the allowlisted local NEAR wallet generator.",
-            "Overwriting the local Workbench ledger wallet artifact with a fresh random key pair.",
-            "Returning only public wallet metadata in the visible response.",
-            "Storing ledgerWalletPrivateKey in the active Workbench environment for later local scripts."
-          ],
-          "inputs": {
-            "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json"
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerWalletFile"
-          ],
-          "setVars": {
-            "ledgerWalletAddress": "response.json.walletAddress",
-            "ledgerPublicKey": "response.json.publicKey",
-            "ledgerKeyId": "response.json.keyId"
-          },
-          "setEnv": {
-            "ledgerWalletFile": "inputs.ledgerWalletFile",
-            "ledgerWalletPrivateKey": "response.envUpdates.ledgerWalletPrivateKey"
           }
         },
         {
