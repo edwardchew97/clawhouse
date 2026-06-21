@@ -40,9 +40,18 @@
   spot-only limit for the current backend implementation.
 - Runtime cleanup amendment session: `019ee858-16a0-7603-b385-1d7a379e3a94`
 - Amendment date: 2026-06-21
-- Amendment basis: JY requested removing the legacy NEAR Intents spot-value
-  runtime skill from current onboarding surfaces so PaperTrade users are not
-  shown deposit-oriented NEAR Intents instructions.
+- Amendment basis: Prior JY request removed the legacy NEAR Intents spot-value
+  runtime skill from current onboarding surfaces so PaperTrade users were not
+  shown spot instructions inside the perps path. This skill-removal part is
+  superseded by the trading skill split below.
+- Trading skill split amendment sessions:
+  `019ee646-2993-7b50-b6e3-bb7f9445131f`,
+  `019ee644-a97f-7953-a80b-e6642cf53596`
+- Amendment date: 2026-06-21
+- Amendment basis: JY clarified that spot trading and perps trading should be
+  separate runtime skills. Hyperliquid paper remains the perps/margin/liquidation
+  lane; NEAR Intents returns as the spot-only value movement lane. Future venues
+  must be added as separate skills.
 
 ## 一句话
 
@@ -201,15 +210,14 @@ NEAR Intents 也不负责当前 Hyperliquid paper trading 的：
 - leverage。
 - agent key market execution。
 
-如果未来重新使用 NEAR Intents，它最多是 funding / cross-chain payment rails；当前
-agent trading、Paper PnL 和 leaderboard 输入由 ClawHouse Hyperliquid paper engine
-负责。
+NEAR Intents 可以作为独立 spot-only runtime skill 暴露给 agent，但它不是当前
+Hyperliquid paper trading / Paper PnL / leaderboard 的 perps 主线。
 
-Current PaperTrade onboarding/runtime surfaces must not expose NEAR Intents as a
-default or optional skill. Do not show NEAR Intents deposit instructions in the
-current Agent Trading onboarding flow.
+Current onboarding/runtime surfaces may expose `near-intents-spot-value` only as
+a separate spot skill. Do not present it as Hyperliquid paper trading, perps,
+margin, liquidation, or leaderboard Paper PnL infrastructure.
 
-## Hyperliquid Paper Trading Boundary
+## Hyperliquid Paper Perps Boundary
 
 Current agent trading uses a ClawHouse-owned Hyperliquid-style paper engine.
 It is not real-money execution and it must be labeled as paper in product and
@@ -312,6 +320,11 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
   PaperTrade provenance while resolving the merge conflict in favor of the
   later Hyperliquid-style paper trading scope from
   `019ee644-a97f-7953-a80b-e6642cf53596`.
-- 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Clarified that current
-  PaperTrade onboarding/runtime surfaces must not expose NEAR Intents as a
-  default or optional skill and must not show NEAR Intents deposit instructions.
+- 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Temporarily removed
+  NEAR Intents from PaperTrade onboarding/runtime surfaces to avoid showing
+  deposit instructions in the perps path. Superseded by the later two-skill
+  split below.
+- 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f`,
+  `019ee644-a97f-7953-a80b-e6642cf53596` - Restored NEAR Intents as a separate
+  spot-only runtime skill while keeping Hyperliquid paper as the perps/margin/
+  liquidation lane; future venues must be added as separate skills.

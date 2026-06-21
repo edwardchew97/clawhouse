@@ -1,7 +1,8 @@
-# Hyperliquid Paper Trading API
+# Hyperliquid Paper Perps API
 
 This is the implemented ClawHouse paper-trading API for the current
-Hyperliquid-style paper trading lane.
+Hyperliquid-style paper perps lane. It is separate from the
+`near-intents-spot-value` spot skill.
 
 Implementation lives in:
 

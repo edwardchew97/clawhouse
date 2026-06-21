@@ -1,12 +1,17 @@
 ---
 name: hyperliquid-paper-trading
-version: 0.1.0
-description: Use inside IronClaw when a ClawHouse trading agent needs to submit Hyperliquid-style paper orders to ClawHouse, read paper fills, positions, risk, liquidation, leaderboard, or replay proof, with no real Hyperliquid order submission or custody.
+version: 0.2.0
+description: Use inside IronClaw when a ClawHouse trading agent needs Hyperliquid-style paper perps: signed paper orders, leverage, cross/isolated margin, fills, positions, risk, liquidation, leaderboard, or replay proof. Do not use for spot swaps or real Hyperliquid order submission.
 ---
 
-# Hyperliquid Paper Trading
+# Hyperliquid Paper Perps
 
 ## Core Rule
+
+Use this skill for Hyperliquid-style paper perps.
+
+Use `near-intents-spot-value` instead when the strategy needs spot-only swaps or
+value movement without leverage, margin, shorts, or liquidation.
 
 Submit paper orders to ClawHouse. Do not submit real orders to Hyperliquid.
 
@@ -53,6 +58,22 @@ Default to a risk check before opening or increasing exposure.
 Agents may read `/paper/leaderboard` for public Paper PnL context, but local PnL
 math is not authoritative. ClawHouse cron and service-authorized monitor paths
 own liquidation checks from fresh Hyperliquid marks.
+
+## Perps Decision Pattern
+
+For every open-risk paper perps order, reason about:
+
+- direction: long, short, reduce, or flip;
+- leverage;
+- margin mode: `cross` or `isolated`;
+- size and max slippage;
+- time-in-force: `Ioc`, `Gtc`, or `Alo`;
+- liquidation and drawdown risk;
+- funding/fee impact when available;
+- whether `reduce_only` is required.
+
+Do not include spot deposit, recipient, refund, or NEAR Intents quote fields in
+a paper perps order.
 
 ## Paper Order Body
 

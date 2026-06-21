@@ -13,6 +13,17 @@ try {
   const skills = Array.isArray(manifest.skills) ? manifest.skills as JsonRecord[] : [];
   const checkedSkills = [];
   const errors: string[] = [];
+  const expectedSkills = [
+    "clawhouse-ledger-reporting",
+    "hyperliquid-paper-trading",
+    "near-intents-spot-value",
+  ];
+
+  for (const expectedSkill of expectedSkills) {
+    if (!skills.some((skill) => stringField(skill, "name") === expectedSkill)) {
+      errors.push(`manifest missing ${expectedSkill}`);
+    }
+  }
 
   for (const skill of skills) {
     const name = stringField(skill, "name");
@@ -42,6 +53,7 @@ try {
       hashMatches,
       forbiddenBehaviors: Array.isArray(skill.forbidden_behaviors) ? skill.forbidden_behaviors : [],
       permissions: skill.permissions ?? null,
+      routing: skill.routing ?? null,
     });
   }
 
