@@ -54,6 +54,7 @@ function dispatchUiEvent(name) {
 
 function normalizeDiscoveryAgent(agent = {}, index = 0) {
   const keyStateAgent = agent.keyMarket?.data?.agent || {};
+  const pnlLatest = agent.pnl?.data?.latest || {};
   const id = String(agent.id || keyStateAgent.agent_id || "terminal_chad6");
   const name = String(agent.name || keyStateAgent.name || id);
   return {
@@ -70,6 +71,7 @@ function normalizeDiscoveryAgent(agent = {}, index = 0) {
     entry: null,
     keys: null,
     boardId: agent.boardId || agent.board_id || id,
+    pnl: normalizePct(pnlLatest.total_pnl_pct),
     discoveryIndex: index,
   };
 }
@@ -215,6 +217,7 @@ function asNumber(value) {
 }
 
 function normalizePct(value) {
+  if (value === null || value === undefined || value === "") return null;
   const numeric = asNumber(value);
   if (numeric === null) return null;
   return Math.abs(numeric) <= 1 ? numeric * 100 : numeric;
@@ -280,11 +283,26 @@ function paperLeaderboardRow(agent) {
   ) ?? null;
 }
 
+function discoveryPnl(agent) {
+  if (agent.pnl === null || agent.pnl === undefined || agent.pnl === "") return null;
+  return asNumber(agent.pnl);
+}
+
+function selectedBackendPnl(agent) {
+  if (!backendApplies(agent) || !chainState.backend?.ok) return null;
+  return normalizePct(chainState.backend?.pnl?.latest?.total_pnl_pct);
+}
+
+function agentRowPnl(agent) {
+  const paper = paperLeaderboardRow(agent);
+  if (paper) return normalizePct(paper.paper_pnl_pct);
+  return discoveryPnl(agent);
+}
+
 function backendPnl(agent) {
   const paper = paperLeaderboardRow(agent);
   if (paper) return normalizePct(paper.paper_pnl_pct);
-  if (!backendApplies(agent) || !chainState.backend?.ok) return null;
-  return normalizePct(chainState.backend?.pnl?.latest?.total_pnl_pct);
+  return selectedBackendPnl(agent) ?? discoveryPnl(agent);
 }
 
 function backendPnlSource(agent) {
@@ -294,8 +312,8 @@ function backendPnlSource(agent) {
 function sortedAgents() {
   const sorted = [...agents];
   sorted.sort((a, b) => {
-    const aValue = agentSort === "holders" ? holderCount(a) : backendPnl(a);
-    const bValue = agentSort === "holders" ? holderCount(b) : backendPnl(b);
+    const aValue = agentSort === "holders" ? holderCount(a) : agentRowPnl(a);
+    const bValue = agentSort === "holders" ? holderCount(b) : agentRowPnl(b);
     if (aValue === null && bValue !== null) return 1;
     if (aValue !== null && bValue === null) return -1;
     if (aValue !== null && bValue !== null && aValue !== bValue) return bValue - aValue;
@@ -619,7 +637,7 @@ function renderAgentList() {
 
   list.removeAttribute("aria-busy");
   list.innerHTML = sortedAgents().map((agent) => {
-    const pnl = backendPnl(agent);
+    const pnl = agentRowPnl(agent);
     return `
     <button class="agent-row ${agent.id === selectedId ? "active" : ""}" data-agent="${agent.id}">
       <div class="avatar">${agentIcon(agent)}</div>

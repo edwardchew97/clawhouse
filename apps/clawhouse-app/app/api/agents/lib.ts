@@ -21,6 +21,7 @@ export type DiscoveryAgent = CuratedAgentConfig & {
   status: "available" | "configured";
   keyMarket: DiscoveryReadback;
   board: DiscoveryReadback;
+  pnl: DiscoveryReadback;
 };
 
 type DiscoveryReadback = {
@@ -61,7 +62,7 @@ function getCuratedAgents(): CuratedAgentConfig[] {
 
 async function readDiscoveryAgent(agent: CuratedAgentConfig): Promise<DiscoveryAgent> {
   const timeoutMs = discoveryReadbackTimeoutMs();
-  const [keyMarket, board] = await Promise.allSettled([
+  const [keyMarket, board, pnl] = await Promise.allSettled([
     withTimeout(
       viewFunction<MarketState>("get_state", {
         agent_id: agent.id,
@@ -75,18 +76,27 @@ async function readDiscoveryAgent(agent: CuratedAgentConfig): Promise<DiscoveryA
       timeoutMs,
       "Backend board readback timed out",
     ),
+    withTimeout(
+      fetchBackendJson(`/boards/${encodeURIComponent(agent.boardId)}/pnl`),
+      timeoutMs,
+      "Backend P&L readback timed out",
+    ),
   ]);
 
   const keyMarketReadback = settledReadback(keyMarket, (state) => formatState(state));
   const boardReadback = settledReadback(board, (data) => data);
+  const pnlReadback = settledReadback(pnl, (data) => data);
 
   return {
     ...agent,
-    status: keyMarketReadback.status === "available" || boardReadback.status === "available"
+    status: keyMarketReadback.status === "available"
+      || boardReadback.status === "available"
+      || pnlReadback.status === "available"
       ? "available"
       : "configured",
     keyMarket: keyMarketReadback,
     board: boardReadback,
+    pnl: pnlReadback,
   };
 }
 
