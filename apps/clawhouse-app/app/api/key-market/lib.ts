@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 const defaultNetworkId = "testnet";
 const defaultContractId = "clawhouse-key-20260619125948.testnet";
 const defaultGas = "100000000000000";
-const defaultStorageDepositNear = "0.2";
+const defaultStorageDepositNear = "0.1";
 const slippageBps = BigInt(100);
 const bpsDenominator = BigInt(10_000);
 

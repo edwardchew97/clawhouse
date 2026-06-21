@@ -139,6 +139,221 @@
           }
         },
         {
+          "id": "agentRegistration.pending.ironclawCreatorOnboarding",
+          "name": "IronClaw Creator Onboarding",
+          "description": "The creator should start from the official IronClaw onboarding and produce a ClawHouse-approved agent package. 未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "protected",
+          "publicFacingMessage": "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.\nAlso read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/Q.md.",
+          "pendingReason": "The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
+          "inputs": {},
+          "setVars": {},
+          "responseLines": [
+            "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.",
+            "Also read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/Q.md."
+          ],
+          "runningNotes": [
+            "未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet."
+          ]
+        },
+        {
+          "id": "agentRegistration.creatorOnboarding.setupReadback",
+          "name": "POST /creator-onboarding/setup",
+          "description": "Calls the ClawHouse App compatibility readback for IronClaw-side onboarding. It returns the manifest and required skill_install parameters; it does not deploy, activate, store secrets, or create wallets.",
+          "type": "http",
+          "access": "public",
+          "method": "POST",
+          "url": "{{clawhouseAppBaseUrl}}/creator-onboarding/setup",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": {
+            "agent_name": "{{agentName}}",
+            "agent_description": "{{agentDescription}}",
+            "avatar_reference": "{{avatarReference}}",
+            "trading_strategy": "{{tradingStrategy}}"
+          },
+          "runningNotes": [
+            "Calling the real ClawHouse App /creator-onboarding/setup route.",
+            "This step should return draft status plus manifest, skill_install parameters, and the exact key-market handoff to run after IronClaw activation."
+          ],
+          "inputs": {
+            "clawhouseAppBaseUrl": "http://127.0.0.1:4320",
+            "agentName": "NEAR Dip Scout",
+            "agentDescription": "Season 0 paper trading agent",
+            "avatarReference": "near-dip-scout",
+            "tradingStrategy": "Hyperliquid-style paper trading with no real exchange execution."
+          },
+          "fillDefaultsWhenEmpty": [
+            "clawhouseAppBaseUrl",
+            "agentName",
+            "agentDescription",
+            "avatarReference",
+            "tradingStrategy"
+          ],
+          "setVars": {
+            "creatorOnboardingMode": "response.json.mode",
+            "creatorOnboardingStatus": "response.json.status",
+            "creatorOnboardingManifestUrl": "response.json.manifest.url",
+            "creatorOnboardingCompletionTemplate": "response.json.completion.template",
+            "keyMarketFundingAmountNear": "response.json.keyMarketSetup.fundingAmountNear",
+            "keyMarketCreateCommand": "response.json.keyMarketSetup.command"
+          }
+        },
+        {
+          "id": "agentRegistration.pending.ironclawWalletBinding",
+          "name": "Bind Agent Wallet Metadata",
+          "description": "The approved agent should expose public wallet metadata that ClawHouse can store without private key material. 未完成: Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet.",
+          "type": "pending",
+          "status": "未完成",
+          "access": "protected",
+          "pendingReason": "Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet.",
+          "inputs": {},
+          "setVars": {},
+          "runningNotes": [
+            "未完成: Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet."
+          ]
+        },
+        {
+          "id": "agentRegistration.key.fundCreator",
+          "name": "Fund Creator Account",
+          "description": "Manual funding gate before key-market creation. Send 0.1 testnet NEAR to the IronClaw-managed creator public account; never paste private keys into Workbench or chat.",
+          "type": "pending",
+          "status": "manual",
+          "access": "protected",
+          "pendingReason": "Funding must happen in the user's NEAR testnet wallet or IronClaw-managed signing environment. Workbench records the instruction; it does not custody funds.",
+          "inputs": {
+            "keyMarketFundingAmountNear": "0.1",
+            "creatorPublicAccount": "{{testUserAccountId}}"
+          },
+          "fillDefaultsWhenEmpty": [
+            "keyMarketFundingAmountNear"
+          ],
+          "responseLines": [
+            "Send 0.1 testnet NEAR to the creator public account.",
+            "Use the account that will sign Create Agent Key Market.",
+            "Do not paste a NEAR private key or seed phrase into chat."
+          ],
+          "runningNotes": [
+            "This is a manual funding gate before the real NEAR create transaction.",
+            "The following Create Agent Key Market step signs with the configured test user account or local NEAR credentials."
+          ]
+        },
+        {
+          "id": "agentRegistration.key.create",
+          "name": "Create Agent Key Market",
+          "description": "Creates a real NEAR testnet key market for the approved agent. Change agentId before sending if the market already exists.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "run",
+            "create",
+            "{{agentId}}",
+            "{{agentName}}",
+            "{{metadataUri}}"
+          ],
+          "cwd": "{{repoRoot}}/agent-key-market",
+          "runningNotes": [
+            "Checking NEAR testnet to see whether this agent key market already exists.",
+            "Use the same agentId for the later Agent Board registration; App discovery expects the key market agent id and board agent id to match.",
+            "If it is new, signing a create transaction with the test user account.",
+            "Broadcasting the transaction to NEAR testnet and waiting for the raw outcome.",
+            "Extracting txHash and the created market state from the transaction result."
+          ],
+          "inputs": {
+            "agentId": "",
+            "agentName": "NEAR Dip Scout",
+            "metadataUri": "ipfs://near-dip-scout",
+            "STORAGE_DEPOSIT": "0.1"
+          },
+          "setVars": {
+            "agentId": "response.json.agentId",
+            "createTxHash": "response.json.txHash"
+          },
+          "clearVars": [
+            "buyMaxPriceNear",
+            "buyQuoteYocto",
+            "minPayoutNear",
+            "sellQuoteYocto",
+            "keySupply",
+            "holderBalance",
+            "holderBalanceAfterBuy",
+            "holderBalanceAfterSell",
+            "ledgerReadAccessCheckId",
+            "ledgerReadToken"
+          ],
+          "clearInputs": {
+            "agentRegistration.key.quoteBuy": [
+              "agentId"
+            ],
+            "userBrowsesAgent.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.state": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteSell": [
+              "agentId"
+            ],
+            "userBuysKey.key.quoteBuy": [
+              "agentId"
+            ],
+            "userBuysKey.key.buy": [
+              "agentId",
+              "buyMaxPriceNear"
+            ],
+            "userBuysKey.key.stateAfterBuy": [
+              "agentId"
+            ],
+            "userBuysKey.ledger.nearKeyMarketReadAccess": [
+              "agentId"
+            ],
+            "userSellsKey.key.quoteSell": [
+              "agentId"
+            ],
+            "userSellsKey.key.sell": [
+              "agentId",
+              "minPayoutNear"
+            ],
+            "userSellsKey.key.stateAfterSell": [
+              "agentId"
+            ],
+            "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
+              "agentId"
+            ],
+            "developerSetup.key.stateScript": [
+              "agentId"
+            ]
+          }
+        },
+        {
+          "id": "agentRegistration.ledger.health",
+          "name": "GET /health",
+          "description": "Checks that the local Agent Board Ledger backend is reachable before registering the agent board.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/health",
+          "runningNotes": [
+            "Calling the real Agent Board Ledger /health endpoint.",
+            "Use this first to confirm the local backend is running and connected to Neon/Postgres."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerHealthDb": "response.json.json.db"
+          }
+        },
+        {
           "id": "agentRegistration.ledger.createBoard",
           "name": "Register Agent Board",
           "description": "Registers the approved agent in Agent Board Ledger with a wallet-signed board registration proof.",
@@ -175,6 +390,7 @@
             "Reusing the local Workbench wallet artifact from Generate Agent Ledger Key Pair; if that step was skipped, this script creates one locally.",
             "Leave ledgerBoardId empty if you want the backend to generate an id.",
             "Run Generate Agent Ledger Key Pair first to auto-fill a fresh test ledgerAgentId, or edit ledgerAgentId to intentionally reuse an agent id.",
+            "ledgerAgentId must match the key market agentId created earlier, otherwise App discovery and key-market readback point at different agents.",
             "The returned board id is stored as ledgerBoardId for the later API calls."
           ],
           "inputs": {
@@ -420,194 +636,6 @@
           }
         },
         {
-          "id": "agentRegistration.pending.ironclawCreatorOnboarding",
-          "name": "IronClaw Creator Onboarding",
-          "description": "The creator should start from the official IronClaw onboarding and produce a ClawHouse-approved agent package. 未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
-          "type": "pending",
-          "status": "未完成",
-          "access": "protected",
-          "publicFacingMessage": "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.\nAlso read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/Q.md.",
-          "pendingReason": "The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
-          "inputs": {},
-          "setVars": {},
-          "responseLines": [
-            "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.",
-            "Also read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/Q.md."
-          ],
-          "runningNotes": [
-            "未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet."
-          ]
-        },
-        {
-          "id": "agentRegistration.creatorOnboarding.setupReadback",
-          "name": "POST /creator-onboarding/setup",
-          "description": "Calls the ClawHouse App compatibility readback for IronClaw-side onboarding. It returns the manifest and required skill_install parameters; it does not deploy, activate, store secrets, or create wallets.",
-          "type": "http",
-          "access": "public",
-          "method": "POST",
-          "url": "{{clawhouseAppBaseUrl}}/creator-onboarding/setup",
-          "headers": {
-            "content-type": "application/json"
-          },
-          "body": {
-            "agent_name": "{{agentName}}",
-            "agent_description": "{{agentDescription}}",
-            "avatar_reference": "{{avatarReference}}",
-            "trading_strategy": "{{tradingStrategy}}"
-          },
-          "runningNotes": [
-            "Calling the real ClawHouse App /creator-onboarding/setup route.",
-            "This step should return draft status plus manifest, skill_install parameters, and the fixed active-agent completion template with paper trading status, paper portfolio, and latest paper activity surfaces."
-          ],
-          "inputs": {
-            "clawhouseAppBaseUrl": "http://127.0.0.1:4320",
-            "agentName": "Terminal Chad",
-            "agentDescription": "Season 0 paper trading agent",
-            "avatarReference": "terminal-chad",
-            "tradingStrategy": "Hyperliquid-style paper trading with no real exchange execution."
-          },
-          "fillDefaultsWhenEmpty": [
-            "clawhouseAppBaseUrl",
-            "agentName",
-            "agentDescription",
-            "avatarReference",
-            "tradingStrategy"
-          ],
-          "setVars": {
-            "creatorOnboardingMode": "response.json.mode",
-            "creatorOnboardingStatus": "response.json.status",
-            "creatorOnboardingManifestUrl": "response.json.manifest.url",
-            "creatorOnboardingCompletionTemplate": "response.json.completion.template",
-            "creatorOnboardingStatusSurfaces": "response.json.completion.statusSurfaces"
-          }
-        },
-        {
-          "id": "agentRegistration.pending.ironclawWalletBinding",
-          "name": "Bind Agent Wallet Metadata",
-          "description": "The approved agent should expose public wallet metadata that ClawHouse can store without private key material. 未完成: Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet.",
-          "type": "pending",
-          "status": "未完成",
-          "access": "protected",
-          "pendingReason": "Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet.",
-          "inputs": {},
-          "setVars": {},
-          "runningNotes": [
-            "未完成: Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet."
-          ]
-        },
-        {
-          "id": "agentRegistration.key.create",
-          "name": "Create Agent Key Market",
-          "description": "Creates a real NEAR testnet key market for the approved agent. Change agentId before sending if the market already exists.",
-          "type": "script",
-          "access": "protected",
-          "command": "bun",
-          "args": [
-            "run",
-            "create",
-            "{{agentId}}",
-            "{{agentName}}",
-            "{{metadataUri}}"
-          ],
-          "cwd": "{{repoRoot}}/agent-key-market",
-          "runningNotes": [
-            "Checking NEAR testnet to see whether this agent key market already exists.",
-            "If it is new, signing a create transaction with the test user account.",
-            "Broadcasting the transaction to NEAR testnet and waiting for the raw outcome.",
-            "Extracting txHash and the created market state from the transaction result."
-          ],
-          "inputs": {
-            "agentId": "",
-            "agentName": "Terminal Chad",
-            "metadataUri": "ipfs://terminal-chad",
-            "STORAGE_DEPOSIT": "1"
-          },
-          "setVars": {
-            "agentId": "response.json.agentId",
-            "createTxHash": "response.json.txHash"
-          },
-          "clearVars": [
-            "buyMaxPriceNear",
-            "buyQuoteYocto",
-            "minPayoutNear",
-            "sellQuoteYocto",
-            "keySupply",
-            "holderBalance",
-            "holderBalanceAfterBuy",
-            "holderBalanceAfterSell",
-            "ledgerReadAccessCheckId",
-            "ledgerReadToken"
-          ],
-          "clearInputs": {
-            "agentRegistration.key.quoteBuy": [
-              "agentId"
-            ],
-            "userBrowsesAgent.key.quoteBuy": [
-              "agentId"
-            ],
-            "clawhouseApp.key.state": [
-              "agentId"
-            ],
-            "clawhouseApp.key.quoteBuy": [
-              "agentId"
-            ],
-            "clawhouseApp.key.quoteSell": [
-              "agentId"
-            ],
-            "userBuysKey.key.quoteBuy": [
-              "agentId"
-            ],
-            "userBuysKey.key.buy": [
-              "agentId",
-              "buyMaxPriceNear"
-            ],
-            "userBuysKey.key.stateAfterBuy": [
-              "agentId"
-            ],
-            "userBuysKey.ledger.nearKeyMarketReadAccess": [
-              "agentId"
-            ],
-            "userSellsKey.key.quoteSell": [
-              "agentId"
-            ],
-            "userSellsKey.key.sell": [
-              "agentId",
-              "minPayoutNear"
-            ],
-            "userSellsKey.key.stateAfterSell": [
-              "agentId"
-            ],
-            "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
-              "agentId"
-            ],
-            "developerSetup.key.stateScript": [
-              "agentId"
-            ]
-          }
-        },
-        {
-          "id": "agentRegistration.ledger.health",
-          "name": "GET /health",
-          "description": "Checks that the local Agent Board Ledger backend is reachable before registering the agent board.",
-          "type": "http",
-          "access": "public",
-          "method": "GET",
-          "url": "{{ledgerBaseUrl}}/health",
-          "runningNotes": [
-            "Calling the real Agent Board Ledger /health endpoint.",
-            "Use this first to confirm the local backend is running and connected to Neon/Postgres."
-          ],
-          "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321"
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
-          "setVars": {
-            "ledgerHealthDb": "response.json.json.db"
-          }
-        },
-        {
           "id": "agentRegistration.key.quoteBuy",
           "name": "Verify Initial Key Price",
           "description": "Reads the first buy quote after market creation so a PM can see the market is priceable before users buy.",
@@ -625,6 +653,7 @@
           "runningNotes": [
             "Calling a NEAR view method through the local quote script.",
             "No private key, gas, or transaction is used for this quote.",
+            "Confirm agentId matches the key market created in Create Agent Key Market.",
             "Calculating the bonding-curve price, fees, and max buy cost."
           ],
           "inputs": {
@@ -1388,7 +1417,7 @@
             "agentId": "",
             "keyAmount": "1",
             "buyMaxPriceNear": "",
-            "STORAGE_DEPOSIT": "0.2"
+            "STORAGE_DEPOSIT": "0.1"
           },
           "fillDefaultsWhenEmpty": [
             "keyAmount"

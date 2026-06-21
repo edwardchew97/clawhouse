@@ -527,6 +527,10 @@ mod tests {
         );
     }
 
+    fn tenth_near() -> NearToken {
+        NearToken::from_yoctonear(YOCTO_PER_NEAR / 10)
+    }
+
     #[test]
     fn create_market_mints_initial_creator_key() {
         let mut contract = create_contract();
@@ -539,6 +543,39 @@ mod tests {
                 .0,
             1
         );
+    }
+
+    #[test]
+    fn create_market_accepts_tenth_near_storage_deposit() {
+        let mut contract = create_contract();
+        set_context("creator.testnet", tenth_near());
+        let storage_before = env::storage_usage();
+
+        contract.create_agent_key(
+            "near_dip_scout".to_string(),
+            "NEAR Dip Scout".to_string(),
+            "ipfs://near-dip-scout".to_string(),
+        );
+
+        let storage_used = env::storage_usage() - storage_before;
+        let required_deposit =
+            u128::from(storage_used) * env::storage_byte_cost().as_yoctonear();
+
+        assert!(required_deposit < tenth_near().as_yoctonear());
+        assert_eq!(contract.get_supply("near_dip_scout".to_string()).0, 1);
+    }
+
+    #[test]
+    fn first_buy_accepts_tenth_near_attached_deposit() {
+        let mut contract = create_contract();
+        create_market(&mut contract);
+        let quote = contract.get_buy_price("terminal_chad".to_string(), U64(1));
+
+        set_context("buyer.testnet", tenth_near());
+        let result = contract.buy_key("terminal_chad".to_string(), U64(1), quote.total_cost);
+
+        assert_eq!(result.supply_after.0, 2);
+        assert_eq!(result.trader_balance_after.0, 1);
     }
 
     #[test]

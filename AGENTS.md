@@ -43,6 +43,26 @@ When your changes create orphans:
 
 The test: Every changed line should trace directly to the user's request.
 
+## Direct Product Flow Reports
+
+When reporting a product or onboarding flow, write the exact action chain first.
+
+- Say what the user must do next: click, paste a public value, fund which public
+  account, run which command, open which URL, or read which endpoint.
+- Say the amount, network, account type, command, and endpoint in the same
+  section when they decide whether the flow works.
+- Do not lead with abstract labels like role, boundary, handoff, tightened,
+  orchestration, or surface unless the next sentence names the concrete action.
+- If a flow is not complete, say the missing action directly. Example:
+  "Missing: create key market, create public board, create paper account."
+- For IronClaw onboarding, never treat `Agent is active` as App discovery.
+  Discovery requires a readable key market plus an active public board from the
+  backend. If paper activity is claimed, also verify the paper account or paper
+  leaderboard readback.
+- For funding steps, state the public address/account and amount. Never ask for
+  private keys, seed phrases, or raw signing material in chat, Workbench output,
+  or logs.
+
 ## Main Checkout and Worktree Discipline
 
 - Branch model: keep long-lived branches `dev`, `staging`, and `main`. `dev` is the current integration/progress branch, `staging` is the pre-production branch, and `main` is the production/default GitHub branch.
