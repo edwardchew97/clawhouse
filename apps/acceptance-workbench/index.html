@@ -1264,7 +1264,7 @@
 </head>
 <body>
   <div class="app">
-    <aside class="sidebar">
+    <aside id="sidebar" class="sidebar">
       <div class="sidebar-top">
         <div class="brand-row">
           <div class="brand">
@@ -1837,17 +1837,44 @@
       render();
     }
 
-    function handleSidebarStepKeydown(event) {
-      if (event.key !== "Tab") return;
-      const flowIndex = Number(event.currentTarget.dataset.flow);
-      const stepIndex = Number(event.currentTarget.dataset.step);
+    function sidebarStepRefFromEvent(event) {
+      const button = event.target.closest?.("[data-step]");
+      if (button && $("sidebar")?.contains(button)) {
+        return {
+          flowIndex: Number(button.dataset.flow),
+          stepIndex: Number(button.dataset.step)
+        };
+      }
+      return { flowIndex: state.activeFlow, stepIndex: state.activeStep };
+    }
+
+    function moveSidebarStep(ref, delta) {
       const refs = visibleStepRefs();
-      const currentIndex = visibleStepRefIndex(refs, flowIndex, stepIndex);
-      const nextIndex = currentIndex + (event.shiftKey ? -1 : 1);
-      const next = refs[nextIndex];
-      if (!next) return;
-      event.preventDefault();
+      if (!refs.length) return false;
+      const currentIndex = visibleStepRefIndex(refs, ref.flowIndex, ref.stepIndex);
+      const activeIndex = visibleStepRefIndex(refs, state.activeFlow, state.activeStep);
+      const baseIndex = currentIndex >= 0
+        ? currentIndex
+        : activeIndex >= 0
+          ? activeIndex
+          : delta > 0
+            ? -1
+            : refs.length;
+      const next = refs[baseIndex + delta];
+      if (!next) return false;
       selectStep(next.flowIndex, next.stepIndex, { historyMode: "push", focusSidebar: true });
+      return true;
+    }
+
+    function handleSidebarStepKeydown(event) {
+      if (event.defaultPrevented) return;
+      if (event.key !== "Tab") return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (!$("sidebar")?.contains(event.target)) return;
+      event.preventDefault();
+      if (!moveSidebarStep(sidebarStepRefFromEvent(event), event.shiftKey ? -1 : 1)) {
+        focusActiveSidebarStep();
+      }
     }
 
     function isPendingStep(step = activeStep()) {
@@ -3529,6 +3556,7 @@
       persist();
     });
     document.addEventListener("keydown", handleSendShortcut);
+    $("sidebar").addEventListener("keydown", handleSidebarStepKeydown);
     window.addEventListener("popstate", handleRequestPopState);
 
     boot().catch((error) => {
