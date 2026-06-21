@@ -69,6 +69,18 @@ Do not commit filled values for `ledgerAuthorizationHeader`, `ledgerAdminToken`,
 other tokens. Fill them only through the local Workbench Environment drawer or
 through your local `.env`.
 
+## PaperTrade Flow
+
+The `PaperTrade` flow is the Workbench acceptance route for current Agent
+Trading: public paper plus board paper, Hyperliquid Spot long-only paper orders,
+board readback, and the public paper leaderboard. It uses real
+`/paper-trade/...` HTTP endpoints. Until the PaperTrade backend and runtime
+skill are implemented, those HTTP steps should fail honestly and the runtime
+skill step stays marked as `未完成`.
+
+Use `paperTradeBaseUrl` to target local, dev, or staging. Do not commit filled
+values for `paperTradeAuthorizationHeader` or `paperTradeReadToken`.
+
 ## NEAR Test User
 
 Open the workbench, click `Environment` in the top-right, then fill these fields
