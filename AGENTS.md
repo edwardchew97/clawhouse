@@ -63,6 +63,18 @@ When reporting a product or onboarding flow, write the exact action chain first.
   private keys, seed phrases, or raw signing material in chat, Workbench output,
   or logs.
 
+## Public Onboarding Kit Sync
+
+- Any change to `skills/clawhouse-creator-onboarding/SKILL.md` must be synced to
+  `edwardchew97/clawhouse-onboarding-kit` in the same task before reporting
+  completion.
+- Also sync related public onboarding files when changed: `Q.md`,
+  `agents/openai.yaml`, and reset/runtime docs that the public prompt links to.
+- Verification must include reading the public raw URL:
+  `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md`.
+- Final reports for onboarding skill changes must state the public kit commit or
+  explain why the sync could not be completed.
+
 ## Main Checkout and Worktree Discipline
 
 - Branch model: keep long-lived branches `dev`, `staging`, and `main`. `dev` is the current integration/progress branch, `staging` is the pre-production branch, and `main` is the production/default GitHub branch.
