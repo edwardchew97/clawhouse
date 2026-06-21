@@ -23,8 +23,8 @@
       "id": "clawhouse-app",
       "name": "ClawHouse App",
       "cwd": "apps/clawhouse-app",
-      "command": ["bun", "run", "dev", "--hostname", "127.0.0.1", "--port", "3000"],
-      "healthUrl": "http://127.0.0.1:3000/api/key-market/config",
+      "command": ["bun", "run", "dev", "--hostname", "127.0.0.1", "--port", "4320"],
+      "healthUrl": "http://127.0.0.1:4320/api/key-market/config",
       "requiredEnv": []
     },
     {

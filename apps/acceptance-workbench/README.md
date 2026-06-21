@@ -54,7 +54,8 @@ http://127.0.0.1:4318
 Use the top-right environment selector to choose the target before sending a
 step:
 
-- `Local`: uses `http://127.0.0.1:4321` for the local ClawHouse backend.
+- `Local`: uses `http://127.0.0.1:4321` for the local Agent Board Ledger backend
+  and `http://127.0.0.1:4320` for local ClawHouse App API routes.
 - `Dev`: integration/dev profile. Put the current dev or preview backend URL in
   the Environment drawer's `ledgerBaseUrl` value before sending backend requests.
 - `Staging`: uses the deployed staging backend

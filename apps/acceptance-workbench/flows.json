@@ -43,7 +43,7 @@
             "This step should return draft status plus manifest and skill_install parameters, not a deployment success claim."
           ],
           "inputs": {
-            "clawhouseAppBaseUrl": "http://127.0.0.1:3000",
+            "clawhouseAppBaseUrl": "http://127.0.0.1:4320",
             "agentName": "Terminal Chad",
             "agentDescription": "Season 0 paper trading agent",
             "avatarReference": "terminal-chad",
