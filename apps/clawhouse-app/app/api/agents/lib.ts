@@ -30,14 +30,22 @@ type DiscoveryReadback = {
 };
 
 export async function readAgentDiscovery() {
-  const agents = await Promise.all(getCuratedAgents().map(readDiscoveryAgent));
+  const backendDiscovery = await readBackendDiscoveryAgents();
+  const discoveredAgents = backendDiscovery.status === "available" && backendDiscovery.agents.length > 0;
+  const agentConfigs = discoveredAgents ? backendDiscovery.agents : getCuratedAgents();
+  const agents = await Promise.all(agentConfigs.map(readDiscoveryAgent));
   return {
     ok: true,
-    mode: "curated",
+    mode: discoveredAgents ? "agent-board-ledger" : "curated",
     count: agents.length,
     config: {
       keyMarket: publicKeyMarketConfig(),
       backend: publicBackendConfig(),
+    },
+    discovery: {
+      status: backendDiscovery.status,
+      count: backendDiscovery.agents.length,
+      error: backendDiscovery.error,
     },
     agents,
   };
@@ -82,6 +90,57 @@ async function readDiscoveryAgent(agent: CuratedAgentConfig): Promise<DiscoveryA
   };
 }
 
+async function readBackendDiscoveryAgents(): Promise<{
+  status: "available" | "unavailable";
+  agents: CuratedAgentConfig[];
+  error?: string;
+}> {
+  try {
+    const data = await withTimeout(
+      fetchBackendJson<{ boards?: unknown[] }>("/boards"),
+      discoveryReadbackTimeoutMs(),
+      "Backend agent discovery timed out",
+    );
+    const agents = Array.isArray(data.boards)
+      ? data.boards.map(agentConfigFromBoard).filter((agent): agent is CuratedAgentConfig => agent !== null)
+      : [];
+    return { status: "available", agents };
+  } catch (error) {
+    return {
+      status: "unavailable",
+      agents: [],
+      error: error instanceof Error ? error.message : "Backend agent discovery failed",
+    };
+  }
+}
+
+function agentConfigFromBoard(value: unknown): CuratedAgentConfig | null {
+  if (!value || typeof value !== "object") return null;
+
+  const board = value as Record<string, unknown>;
+  const id = stringField(board, "agent_id") ?? stringField(board, "agentId");
+  const boardId = stringField(board, "id") ?? stringField(board, "board_id") ?? stringField(board, "boardId");
+  if (!id || !boardId) return null;
+
+  const metadata = metadataRecord(board);
+  const chain = stringField(board, "chain");
+  const venue = stringField(board, "venue_namespace");
+  const name = metadataString(metadata, ["name", "agent_name", "display_name"]) ?? id;
+
+  return {
+    id,
+    boardId,
+    name,
+    initials: metadataString(metadata, ["initials"]) ?? initialsFor(name),
+    strategy: metadataString(metadata, ["strategy", "strategy_summary", "trading_strategy"])
+      ?? `${id} / ${venue ?? chain ?? "public agent board"}`,
+    description: metadataString(metadata, ["description", "agent_description", "bio"])
+      ?? "Discovered from public Agent Board Ledger data.",
+    gate: metadataString(metadata, ["gate"]) ?? "1 key",
+    source: "AGENT_BOARD_LEDGER_DISCOVERY",
+  };
+}
+
 function parseCuratedAgentIds(value: string | undefined) {
   if (!value) return [];
   return value
@@ -105,6 +164,38 @@ function agentConfig(id: string, boardId: string, source: string): CuratedAgentC
     gate: "1 key",
     source,
   };
+}
+
+function metadataRecord(board: Record<string, unknown>) {
+  const metadata = board.metadata;
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+    return metadata as Record<string, unknown>;
+  }
+
+  const metadataJson = stringField(board, "metadata_json");
+  if (!metadataJson) return null;
+  try {
+    const parsed = JSON.parse(metadataJson) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function metadataString(metadata: Record<string, unknown> | null, keys: string[]) {
+  if (!metadata) return null;
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
+  }
+  return null;
+}
+
+function stringField(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
 function settledReadback<T>(

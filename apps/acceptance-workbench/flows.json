@@ -5,7 +5,7 @@
     {
       "id": "agent-registration-story",
       "name": "Agent Registration",
-      "purpose": "Acceptance story for registering a curated ClawHouse agent: official onboarding boundary, key market creation, ledger board setup, and the unfinished public profile handoff.",
+      "purpose": "Acceptance story for registering a curated ClawHouse agent: official onboarding boundary, key market creation, ledger board setup, and public agent discovery handoff.",
       "steps": [
         {
           "id": "agentRegistration.ledger.generateWallet",
@@ -308,17 +308,28 @@
           }
         },
         {
-          "id": "agentRegistration.pending.agentProfilePublish",
-          "name": "Publish Public Agent Profile",
-          "description": "The registered agent should appear as a user-facing profile with market price, board summary, and metadata. 未完成: The public ClawHouse agent profile/listing surface is not implemented in this repo yet.",
-          "type": "pending",
-          "status": "未完成",
+          "id": "agentRegistration.ledger.discovery",
+          "name": "Verify Agent Discovery",
+          "description": "Reads the Agent Board Ledger discovery list and confirms active public boards are available for the ClawHouse App agent list.",
+          "type": "http",
           "access": "public",
-          "pendingReason": "The public ClawHouse agent profile/listing surface is not implemented in this repo yet.",
-          "inputs": {},
-          "setVars": {},
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards",
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "discoveryAgentCount": "response.json.json.count",
+            "ledgerBoardId": "response.json.json.boards.0.id",
+            "ledgerAgentId": "response.json.json.boards.0.agent_id"
+          },
           "runningNotes": [
-            "未完成: The public ClawHouse agent profile/listing surface is not implemented in this repo yet."
+            "Calling the real Agent Board Ledger discovery endpoint.",
+            "Only active public boards are returned; holder-gated and draft boards stay out of the public discovery list.",
+            "The ClawHouse App /api/agents route reads this endpoint before falling back to configured curated agents."
           ]
         }
       ]
@@ -334,7 +345,7 @@
         {
           "id": "userBrowsesAgent.discovery.listAgents",
           "name": "Open Agent Discovery List",
-          "description": "A user should be able to open a ClawHouse discovery list and pick a configured curated agent.",
+          "description": "A user should be able to open a ClawHouse discovery list and pick an active public agent board.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -349,13 +360,15 @@
             "agentId": "response.json.json.agents.0.id",
             "ledgerBoardId": "response.json.json.agents.0.boardId",
             "discoveryAgentCount": "response.json.json.count",
+            "discoveryMode": "response.json.json.mode",
             "discoveryFirstStatus": "response.json.json.agents.0.status",
             "discoveryFirstKeyMarketStatus": "response.json.json.agents.0.keyMarket.status",
             "discoveryFirstBoardStatus": "response.json.json.agents.0.board.status"
           },
           "runningNotes": [
             "Calling the ClawHouse App discovery API.",
-            "The response comes from configured curated agents and includes live key-market/backend readback status.",
+            "The response prefers Agent Board Ledger public board discovery and includes live key-market/backend readback status.",
+            "If the configured backend has no public active boards yet, the app falls back to configured curated agents and reports that mode.",
             "This step picks the first configured agent and stores its app agentId and Agent Board Ledger boardId for downstream reads."
           ]
         },

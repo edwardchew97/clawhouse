@@ -31,8 +31,8 @@ export default function Page() {
           <aside className="panel left">
             <div className="panel-head">
               <div>
-                <div className="panel-title">Curated Agents</div>
-                <div className="panel-sub">Configured agent / live reads only</div>
+                <div className="panel-title">Agent Discovery</div>
+                <div className="panel-sub">Public boards / live reads only</div>
               </div>
               <button className="mini-button">Live</button>
             </div>

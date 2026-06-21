@@ -56,6 +56,10 @@ export function createApp(options: AppOptions) {
           return json(await readHealth(db));
         }
 
+        if (method === "GET" && path === "/boards") {
+          return json(await listDiscoverableBoards(db));
+        }
+
         const boardMatch = path.match(/^\/boards\/([^/]+)$/);
         const eventsMatch = path.match(/^\/boards\/([^/]+)\/events$/);
         const attachmentMatch = path.match(/^\/boards\/([^/]+)\/events\/([^/]+)\/attachments$/);
@@ -201,6 +205,23 @@ async function readHealth(db: LedgerDb) {
   const ready = await db.get<{ ready: number }>("SELECT 1 AS ready");
   if (!ready) throw new RequestError("Database readiness check failed", 503);
   return { ok: true, service: "agent-board-ledger", db: "ready" };
+}
+
+async function listDiscoverableBoards(db: LedgerDb) {
+  const boards = await db.all<Board>(
+    `SELECT * FROM boards
+      WHERE public_status = 'active'
+        AND visibility_mode = 'public'
+      ORDER BY created_at DESC, id ASC
+      LIMIT 100`,
+  );
+
+  return {
+    ok: true,
+    mode: "public_active_boards",
+    count: boards.length,
+    boards: boards.map(presentBoardDiscovery),
+  };
 }
 
 async function createBoard(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
@@ -1503,6 +1524,14 @@ function presentReadAccessCheck(check: ReadAccessCheckRow) {
   return {
     ...check,
     metadata,
+  };
+}
+
+function presentBoardDiscovery(board: Board) {
+  return {
+    ...board,
+    metadata: parseJson(board.metadata_json),
+    metadata_json: undefined,
   };
 }
 
