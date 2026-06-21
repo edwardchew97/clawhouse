@@ -159,38 +159,15 @@
         },
         {
           "id": "agentRegistration.creatorOnboarding.setupReadback",
-          "name": "POST /creator-onboarding/setup",
+          "name": "GET /creator-onboarding/setup",
           "description": "Calls the ClawHouse App compatibility readback for IronClaw-side onboarding. It returns the manifest and required skill_install parameters; it does not deploy, activate, store secrets, or create wallets.",
           "type": "http",
           "access": "public",
-          "method": "POST",
+          "method": "GET",
           "url": "{{clawhouseAppBaseUrl}}/creator-onboarding/setup",
-          "headers": {
-            "content-type": "application/json"
-          },
-          "body": {
-            "agent_name": "{{agentName}}",
-            "agent_description": "{{agentDescription}}",
-            "avatar_reference": "{{avatarReference}}",
-            "trading_strategy": "{{tradingStrategy}}"
-          },
           "runningNotes": [
             "Calling the real ClawHouse App /creator-onboarding/setup route.",
             "This step should return draft status plus manifest, skill_install parameters, and the exact key-market handoff to run after IronClaw activation."
-          ],
-          "inputs": {
-            "clawhouseAppBaseUrl": "http://127.0.0.1:4320",
-            "agentName": "NEAR Dip Scout",
-            "agentDescription": "Season 0 paper trading agent",
-            "avatarReference": "near-dip-scout",
-            "tradingStrategy": "Hyperliquid-style paper trading with no real exchange execution."
-          },
-          "fillDefaultsWhenEmpty": [
-            "clawhouseAppBaseUrl",
-            "agentName",
-            "agentDescription",
-            "avatarReference",
-            "tradingStrategy"
           ],
           "setVars": {
             "creatorOnboardingMode": "response.json.mode",
@@ -329,12 +306,6 @@
             "Calling the real Agent Board Ledger /health endpoint.",
             "Use this first to confirm the local backend is running and connected to Neon/Postgres."
           ],
-          "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321"
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerHealthDb": "response.json.json.db"
           }
@@ -380,7 +351,6 @@
             "The returned board id is stored as ledgerBoardId for the later API calls."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
             "ledgerBoardId": "",
             "ledgerAgentId": "",
@@ -388,7 +358,6 @@
             "ledgerVisibilityMode": "public"
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerWalletFile",
             "paperTradingStartingBalanceUsd",
             "ledgerVisibilityMode"
@@ -609,13 +578,9 @@
             "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerBoardId": "response.json.json.id",
             "ledgerWalletAddress": "response.json.json.wallet_address"
@@ -668,12 +633,6 @@
           "access": "public",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/boards",
-          "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321"
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "discoveryAgentCount": "response.json.json.count",
             "ledgerBoardId": "response.json.json.boards.0.id",
@@ -703,12 +662,6 @@
           "access": "public",
           "method": "GET",
           "url": "{{clawhouseAppBaseUrl}}/api/agents",
-          "inputs": {
-            "clawhouseAppBaseUrl": "http://localhost:4320"
-          },
-          "fillDefaultsWhenEmpty": [
-            "clawhouseAppBaseUrl"
-          ],
           "setVars": {
             "agentId": "response.json.json.agents.0.id",
             "ledgerBoardId": "response.json.json.agents.0.boardId",
@@ -821,13 +774,9 @@
             "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerBoardId": "response.json.json.id",
             "ledgerWalletAddress": "response.json.json.wallet_address"
@@ -849,13 +798,9 @@
             "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerEventId": "response.json.json.events.0.id",
             "ledgerEventCount": "response.json.json.events.length"
@@ -876,13 +821,9 @@
             "Reading the latest portfolio snapshot through the real GET /boards/:id/portfolio API."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerHoldingSnapshotId": "response.json.json.latest.id",
             "ledgerCurrentValueUsd": "response.json.json.latest.current_value_usd"
@@ -903,13 +844,9 @@
             "Reading the latest PnL snapshot through the real GET /boards/:id/pnl API."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerPnlSnapshotId": "response.json.json.latest.id",
             "ledgerPnlUsd": "response.json.json.latest.pnl_usd",
@@ -931,13 +868,9 @@
             "Reading price snapshots through the real GET /boards/:id/prices API."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerPriceSnapshotId": "response.json.json.prices.0.id"
           }
@@ -958,13 +891,9 @@
             "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerBalanceChangeId": "response.json.json.balance_changes.0.id"
           }
@@ -1040,12 +969,6 @@
             "Calling the local ClawHouse App Next API.",
             "Reading the network id, contract id, gas, storage deposit, and default testnet agent."
           ],
-          "inputs": {
-            "clawhouseAppBaseUrl": "http://localhost:4320"
-          },
-          "fillDefaultsWhenEmpty": [
-            "clawhouseAppBaseUrl"
-          ],
           "setVars": {
             "contractId": "response.json.json.config.contractId",
             "agentId": "response.json.json.config.defaultAgentId"
@@ -1104,12 +1027,10 @@
             "The backend calls the real NEAR get_state view method and formats NEAR values for the UI."
           ],
           "inputs": {
-            "clawhouseAppBaseUrl": "http://localhost:4320",
             "agentId": "terminal_chad6",
             "holderId": ""
           },
           "fillDefaultsWhenEmpty": [
-            "clawhouseAppBaseUrl",
             "agentId"
           ],
           "setVars": {
@@ -1130,12 +1051,10 @@
             "The response includes UI-ready NEAR amounts plus max_price and attached_deposit protection values."
           ],
           "inputs": {
-            "clawhouseAppBaseUrl": "http://localhost:4320",
             "agentId": "terminal_chad6",
             "keyAmount": "1"
           },
           "fillDefaultsWhenEmpty": [
-            "clawhouseAppBaseUrl",
             "agentId",
             "keyAmount"
           ],
@@ -1158,12 +1077,10 @@
             "The response includes UI-ready NEAR payout plus min_payout protection values."
           ],
           "inputs": {
-            "clawhouseAppBaseUrl": "http://localhost:4320",
             "agentId": "terminal_chad6",
             "keyAmount": "1"
           },
           "fillDefaultsWhenEmpty": [
-            "clawhouseAppBaseUrl",
             "agentId",
             "keyAmount"
           ],
@@ -1183,12 +1100,6 @@
           "runningNotes": [
             "Calling the local ClawHouse App backend config route.",
             "The browser does not call staging Ledger directly; the Next API proxies the read path."
-          ],
-          "inputs": {
-            "clawhouseAppBaseUrl": "http://localhost:4320"
-          },
-          "fillDefaultsWhenEmpty": [
-            "clawhouseAppBaseUrl"
           ],
           "setVars": {
             "clawhouseBackendBaseUrl": "response.json.json.config.baseUrl",
@@ -1253,11 +1164,9 @@
             "If the Vercel staging project has no live deployment yet, the response should expose ok:false instead of hiding the backend state."
           ],
           "inputs": {
-            "clawhouseAppBaseUrl": "http://localhost:4320",
             "ledgerBoardId": "terminal_chad6"
           },
           "fillDefaultsWhenEmpty": [
-            "clawhouseAppBaseUrl",
             "ledgerBoardId"
           ],
           "setVars": {
@@ -1322,12 +1231,6 @@
             "Calling the local ClawHouse App paper leaderboard proxy.",
             "The proxy calls the staging Agent Board Ledger /paper/leaderboard path.",
             "The app treats this as Paper P&L, not real trading P&L."
-          ],
-          "inputs": {
-            "clawhouseAppBaseUrl": "http://localhost:4320"
-          },
-          "fillDefaultsWhenEmpty": [
-            "clawhouseAppBaseUrl"
           ],
           "setVars": {
             "paperLeaderboardLabel": "response.json.json.paperLeaderboard.label",
@@ -1481,7 +1384,6 @@
             "Later holder-gated reads use the token but re-check the live key balance, so a sold-out holder should stop reading."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "ledgerBoardId": "",
             "nearRpcUrl": "https://rpc.testnet.fastnear.com",
@@ -1492,7 +1394,6 @@
             "ledgerReadTokenExpiresAt": ""
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "nearRpcUrl",
             "ledgerReadToken",
             "ledgerReadTokenExpiresAt"
@@ -1545,7 +1446,6 @@
             "Prefer Create Live Key-Holder Read Token after a real key buy; use this only for local fallback/debug readback."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "ledgerBoardId": "",
             "ledgerRequesterWalletAddress": "holder.testnet",
@@ -1555,7 +1455,6 @@
             "ledgerReadTokenExpiresAt": ""
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerRequesterWalletAddress",
             "ledgerAccessLevel",
             "ledgerAccessResult",
@@ -1597,13 +1496,9 @@
             "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerBoardId": "response.json.json.id",
             "ledgerWalletAddress": "response.json.json.wallet_address"
@@ -1625,13 +1520,9 @@
             "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerEventId": "response.json.json.events.0.id",
             "ledgerEventCount": "response.json.json.events.length"
@@ -1652,13 +1543,9 @@
             "Reading the latest portfolio snapshot through the real GET /boards/:id/portfolio API."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerHoldingSnapshotId": "response.json.json.latest.id",
             "ledgerCurrentValueUsd": "response.json.json.latest.current_value_usd"
@@ -1679,13 +1566,9 @@
             "Reading the latest PnL snapshot through the real GET /boards/:id/pnl API."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerPnlSnapshotId": "response.json.json.latest.id",
             "ledgerPnlUsd": "response.json.json.latest.pnl_usd",
@@ -1722,7 +1605,6 @@
             "If access is granted, ledgerReadToken is required so later holder-gated read steps can use it."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "ledgerBoardId": "",
             "nearRpcUrl": "",
@@ -1734,7 +1616,6 @@
             "ledgerReadTokenExpiresAt": "2030-01-01T00:00:00.000Z"
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerAccessLevel",
             "ledgerReadToken",
             "ledgerReadTokenExpiresAt"
@@ -1841,7 +1722,6 @@
             "Writing a service-authorized wallet observation, running service-authorized cron reconciliation, then reading events, portfolio, and PnL back from the Ledger."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAdminToken": "local-ledger-admin-token",
             "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
             "ledgerBoardId": "",
@@ -1853,7 +1733,6 @@
             "ledgerIntentId": ""
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerAdminToken",
             "ledgerWalletFile",
             "ledgerAgentId",
@@ -1982,7 +1861,6 @@
             "ledgerAuthorizationHeader must be formatted as Bearer <AGENT_BOARD_LEDGER_ADMIN_TOKEN>."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "ledgerBoardId": "",
             "ledgerWalletAddress": "",
@@ -1998,7 +1876,6 @@
             "ledgerAmountOut": "10"
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerCurrentValueUsd",
             "ledgerTopupUsd",
             "ledgerWithdrawalUsd",
@@ -2062,7 +1939,6 @@
             "Use this before cron when you want a PnL snapshot to link to explicit pricing evidence."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "ledgerBoardId": "",
             "ledgerPriceAssetId": "native:near",
@@ -2072,7 +1948,6 @@
             "ledgerObservedAt": ""
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerPriceAssetId",
             "ledgerPriceAssetSymbol",
             "ledgerPriceUsd",
@@ -2113,7 +1988,6 @@
             "This records accounting evidence for the wallet and can link back to an observation, tx hash, or intent id."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "ledgerBoardId": "",
             "ledgerBalanceAssetId": "native:near",
@@ -2127,7 +2001,6 @@
             "ledgerIntentId": ""
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerBalanceAssetId",
             "ledgerBalanceAssetSymbol",
             "ledgerNormalizedAmount",
@@ -2170,7 +2043,6 @@
             "If price_usd is supplied, it also writes price evidence and a value observation."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "ledgerBoardId": "",
             "nearRpcUrl": "",
@@ -2181,7 +2053,6 @@
             "ledgerChangeType": ""
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerNearPriceUsd",
             "ledgerPriceSource"
           ],
@@ -2221,7 +2092,6 @@
             "If decimals and asset symbol are left empty, the backend reads ft_metadata from the token contract."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "ledgerBoardId": "",
             "nearRpcUrl": "",
@@ -2236,7 +2106,6 @@
             "ledgerIntentId": ""
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerFtTokenContractId",
             "ledgerFtPriceUsd",
             "ledgerPriceSource"
@@ -2265,12 +2134,8 @@
             "This links observed activity to events, creates holding snapshots, and calculates PnL."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerCronStatus": "response.json.json.status",
             "ledgerSnapshotsCreated": "response.json.json.summary.snapshotsCreated"
@@ -2292,13 +2157,9 @@
             "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerEventId": "response.json.json.events.0.id",
             "ledgerEventCount": "response.json.json.events.length"
@@ -2319,13 +2180,9 @@
             "Reading the latest portfolio snapshot through the real GET /boards/:id/portfolio API."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerHoldingSnapshotId": "response.json.json.latest.id",
             "ledgerCurrentValueUsd": "response.json.json.latest.current_value_usd"
@@ -2347,13 +2204,9 @@
             "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerBalanceChangeId": "response.json.json.balance_changes.0.id"
           }
@@ -2373,13 +2226,9 @@
             "Reading the latest PnL snapshot through the real GET /boards/:id/pnl API."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerReadToken": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerPnlSnapshotId": "response.json.json.latest.id",
             "ledgerPnlUsd": "response.json.json.latest.pnl_usd",
@@ -2427,12 +2276,6 @@
             "Calling the real backend /health endpoint.",
             "Hyperliquid paper perps and spot currently live in the Agent Board Ledger backend under /paper/..."
           ],
-          "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321"
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "paperTradingService": "response.json.json.service",
             "paperTradingHealthDb": "response.json.json.db"
@@ -2459,12 +2302,10 @@
             "ledgerAuthorizationHeader must be formatted as Bearer <AGENT_BOARD_LEDGER_ADMIN_TOKEN>."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "paperTradingCoin": "BTC"
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "paperTradingCoin"
           ],
           "setVars": {
@@ -2513,7 +2354,6 @@
             "Verifying liquidation, paper leaderboard, and replay proof from backend state."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAdminToken": "local-ledger-admin-token",
             "paperTradingWalletFile": "work/acceptance-workbench/agent-board-ledger/paper-wallet.json",
             "ledgerBoardId": "",
@@ -2522,7 +2362,6 @@
             "paperTradingStartingBalanceUsd": "10000"
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerAdminToken",
             "paperTradingWalletFile",
             "ledgerAgentId",
@@ -2560,12 +2399,8 @@
             "The response includes the paper account, open positions, and latest risk snapshot."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "paperTradingAccountId": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "paperTradingAccountStatus": "response.json.json.account.status",
             "paperTradingPositionCoin": "response.json.json.positions.0.coin",
@@ -2590,13 +2425,9 @@
             "The backend computes margin/risk and liquidates breached positions from stored paper market snapshots."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "paperTradingAccountId": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "paperTradingRiskEquityUsd": "response.json.json.risk.risk.equity_usd",
             "paperTradingLiquidationCount": "response.json.json.liquidations.length"
@@ -2613,12 +2444,6 @@
           "runningNotes": [
             "Reading the real GET /paper/leaderboard endpoint.",
             "The response label must be paper and rows come from backend leaderboard snapshots."
-          ],
-          "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321"
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
           ],
           "setVars": {
             "paperTradingLeaderboardLabel": "response.json.json.label",
@@ -2639,12 +2464,8 @@
             "The response includes order, market snapshot, fills, and audit events."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "paperTradingIocOrderId": ""
           },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "paperTradingReplayOrderId": "response.json.json.replay.order.id",
             "paperTradingReplayCoin": "response.json.json.replay.market_snapshot.coin"
@@ -2794,7 +2615,6 @@
             "Expected after selling below holder threshold: access_result is denied and no new holder read token is granted."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "ledgerBoardId": "",
             "nearRpcUrl": "https://rpc.testnet.fastnear.com",
@@ -2804,7 +2624,6 @@
             "ledgerReadToken": ""
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "nearRpcUrl",
             "ledgerReadToken"
           ],
@@ -2847,12 +2666,6 @@
             "Calling the real Agent Board Ledger /health endpoint.",
             "Use this first to confirm the local backend is running and connected to Neon/Postgres."
           ],
-          "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321"
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
           "setVars": {
             "ledgerHealthDb": "response.json.json.db"
           }
@@ -2874,7 +2687,6 @@
             "The adapter verifies CRON_SECRET and then runs the existing service-authorized cron reconciliation."
           ],
           "inputs": {
-            "ledgerBaseUrl": "",
             "ledgerCronSecret": ""
           },
           "setVars": {
@@ -3381,7 +3193,6 @@
             "Use the signed script flow when you want Workbench to generate the wallet signature automatically."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerWalletAddress": "",
             "ledgerPublicKey": "",
@@ -3400,7 +3211,6 @@
             "ledgerReason": "Raw API event submitted from Workbench."
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerStatusClaim",
             "ledgerAssetIn",
             "ledgerAmountIn",
@@ -3442,7 +3252,6 @@
             "Use the signed script flow when you want Workbench to generate the wallet signature automatically."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerBoardId": "",
             "ledgerEventId": "",
             "ledgerWalletAddress": "",
@@ -3455,7 +3264,6 @@
             "ledgerAttachmentReason": "Raw API attachment submitted from Workbench."
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerAttachmentType",
             "ledgerAttachmentReason"
           ],
@@ -3509,7 +3317,6 @@
             "Writing a service-authorized wallet observation, running service-authorized cron reconciliation, then reading events, portfolio, and PnL back from the Ledger."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAdminToken": "local-ledger-admin-token",
             "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
             "ledgerBoardId": "",
@@ -3521,7 +3328,6 @@
             "ledgerIntentId": ""
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerAdminToken",
             "ledgerWalletFile",
             "ledgerAgentId",
@@ -3633,7 +3439,6 @@
             "Running cron twice and failing if the second tick creates duplicate snapshots or advances freshness without new observations."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAdminToken": "local-ledger-admin-token",
             "ledgerEdgeWalletFile": "work/acceptance-workbench/agent-board-ledger/edge-wallet.json",
             "ledgerEdgeBoardId": "",
@@ -3642,7 +3447,6 @@
             "ledgerCurrentValueUsd": "10012"
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerAdminToken",
             "ledgerEdgeWalletFile",
             "ledgerAgentId",
@@ -3678,12 +3482,10 @@
             "The response stores mark, oracle, funding, max leverage, and book levels as a paper market snapshot."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAuthorizationHeader": "",
             "paperTradingCoin": "BTC"
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "paperTradingCoin"
           ],
           "setVars": {
@@ -3734,7 +3536,6 @@
             "Reading the paper-labeled leaderboard and replay proof through the public HTTP APIs."
           ],
           "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAdminToken": "local-ledger-admin-token",
             "paperTradingWalletFile": "work/acceptance-workbench/agent-board-ledger/paper-wallet.json",
             "ledgerBoardId": "",
@@ -3743,7 +3544,6 @@
             "paperTradingStartingBalanceUsd": "10000"
           },
           "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
             "ledgerAdminToken",
             "paperTradingWalletFile",
             "ledgerAgentId",
