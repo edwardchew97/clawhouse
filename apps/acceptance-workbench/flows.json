@@ -571,13 +571,12 @@
           "type": "pending",
           "status": "未完成",
           "access": "protected",
-          "publicFacingMessage": "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/6ce2e112ec7d9aa9a2301775bffcf6e218e549f9/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.\nAlso read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/6ce2e112ec7d9aa9a2301775bffcf6e218e549f9/skills/clawhouse-creator-onboarding/Q.md.",
+          "publicFacingMessage": "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.",
           "pendingReason": "The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
           "inputs": {},
           "setVars": {},
           "responseLines": [
-            "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/6ce2e112ec7d9aa9a2301775bffcf6e218e549f9/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.",
-            "Also read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/6ce2e112ec7d9aa9a2301775bffcf6e218e549f9/skills/clawhouse-creator-onboarding/Q.md."
+            "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent."
           ],
           "runningNotes": [
             "未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet."
