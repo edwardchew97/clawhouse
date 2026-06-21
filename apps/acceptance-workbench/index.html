@@ -1509,6 +1509,7 @@
     const persisted = loadState();
     const activeEnvProfile = normalizeEnvProfileId(persisted.activeEnvProfile);
     const envProfiles = migrateEnvProfiles(persisted);
+    const requestQueryParam = "request";
     const state = {
       spec: null,
       activeFlow: 0,
@@ -1746,6 +1747,107 @@
         }
       }
       return null;
+    }
+
+    function findStepRefById(stepId) {
+      if (!stepId) return null;
+      const flows = Array.isArray(state.spec?.flows) ? state.spec.flows : [];
+      for (let flowIndex = 0; flowIndex < flows.length; flowIndex += 1) {
+        const steps = Array.isArray(flows[flowIndex].steps) ? flows[flowIndex].steps : [];
+        for (let stepIndex = 0; stepIndex < steps.length; stepIndex += 1) {
+          if (steps[stepIndex].id === stepId) return { flowIndex, stepIndex };
+        }
+      }
+      return null;
+    }
+
+    function activeStepId() {
+      const step = state.spec?.flows?.[state.activeFlow]?.steps?.[state.activeStep];
+      return step?.id || "";
+    }
+
+    function requestStepIdFromUrl() {
+      return new URLSearchParams(window.location.search).get(requestQueryParam) || "";
+    }
+
+    function updateRequestUrl(historyMode = "replace") {
+      const stepId = activeStepId();
+      if (!stepId) return;
+      const url = new URL(window.location.href);
+      url.searchParams.set(requestQueryParam, stepId);
+      const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+      const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (nextUrl === currentUrl) return;
+      if (historyMode === "push") {
+        window.history.pushState({ [requestQueryParam]: stepId }, "", nextUrl);
+      } else {
+        window.history.replaceState({ [requestQueryParam]: stepId }, "", nextUrl);
+      }
+    }
+
+    function expandFlow(flowIndex) {
+      const flow = state.spec?.flows?.[flowIndex];
+      if (!flow) return;
+      state.collapsedFlows[flowCollapseKey(flow, flowIndex)] = false;
+    }
+
+    function applyRequestSelectionFromUrl() {
+      const ref = findStepRefById(requestStepIdFromUrl());
+      if (!ref) return false;
+      state.activeFlow = ref.flowIndex;
+      state.activeStep = ref.stepIndex;
+      expandFlow(ref.flowIndex);
+      return true;
+    }
+
+    function visibleStepRefs() {
+      const needle = state.filter.trim().toLowerCase();
+      const refs = [];
+      for (let flowIndex = 0; flowIndex < state.spec.flows.length; flowIndex += 1) {
+        for (const { stepIndex } of sidebarSteps(state.spec.flows[flowIndex], flowIndex, needle)) {
+          refs.push({ flowIndex, stepIndex });
+        }
+      }
+      return refs;
+    }
+
+    function visibleStepRefIndex(refs, flowIndex, stepIndex) {
+      return refs.findIndex((ref) => ref.flowIndex === flowIndex && ref.stepIndex === stepIndex);
+    }
+
+    function focusActiveSidebarStep() {
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-flow="${state.activeFlow}"][data-step="${state.activeStep}"]`)?.focus();
+      });
+    }
+
+    function selectStep(flowIndex, stepIndex, options = {}) {
+      state.activeFlow = flowIndex;
+      state.activeStep = stepIndex;
+      expandFlow(flowIndex);
+      normalizeSelection();
+      updateRequestUrl(options.historyMode || "push");
+      render();
+      if (options.focusSidebar) focusActiveSidebarStep();
+    }
+
+    function handleRequestPopState() {
+      if (!state.spec || !applyRequestSelectionFromUrl()) return;
+      normalizeSelection();
+      render();
+    }
+
+    function handleSidebarStepKeydown(event) {
+      if (event.key !== "Tab") return;
+      const flowIndex = Number(event.currentTarget.dataset.flow);
+      const stepIndex = Number(event.currentTarget.dataset.step);
+      const refs = visibleStepRefs();
+      const currentIndex = visibleStepRefIndex(refs, flowIndex, stepIndex);
+      const nextIndex = currentIndex + (event.shiftKey ? -1 : 1);
+      const next = refs[nextIndex];
+      if (!next) return;
+      event.preventDefault();
+      selectStep(next.flowIndex, next.stepIndex, { historyMode: "push", focusSidebar: true });
     }
 
     function isPendingStep(step = activeStep()) {
@@ -2368,6 +2470,7 @@
         renderPendingStepResponse(activeFlow(), activeStep());
       }
       persist();
+      updateRequestUrl("replace");
       queueAutoFill();
     }
 
@@ -2399,7 +2502,14 @@
             </button>
             <div id="${stepsId}" class="step-list" ${isCollapsed ? "hidden" : ""}>
               ${steps.map(({ step, stepIndex }) => `
-                <button type="button" class="step-button ${flowIndex === state.activeFlow && stepIndex === state.activeStep ? "active" : ""}" data-flow="${flowIndex}" data-step="${stepIndex}">
+                <button
+                  type="button"
+                  class="step-button ${flowIndex === state.activeFlow && stepIndex === state.activeStep ? "active" : ""}"
+                  data-flow="${flowIndex}"
+                  data-step="${stepIndex}"
+                  data-step-id="${escapeAttr(step.id)}"
+                  ${flowIndex === state.activeFlow && stepIndex === state.activeStep ? "aria-current=\"true\"" : ""}
+                >
                   <span class="step-index">${flowIndex + 1}.${stepIndex + 1}</span>
                   <span class="verb ${escapeAttr(methodClass(step))}">${escapeHtml(methodLabel(step))}</span>
                   <strong>${escapeHtml(step.name)}</strong>
@@ -2424,10 +2534,9 @@
 
       document.querySelectorAll("[data-step]").forEach((button) => {
         button.addEventListener("click", () => {
-          state.activeFlow = Number(button.dataset.flow);
-          state.activeStep = Number(button.dataset.step);
-          render();
+          selectStep(Number(button.dataset.flow), Number(button.dataset.step), { historyMode: "push" });
         });
+        button.addEventListener("keydown", handleSidebarStepKeydown);
       });
     }
 
@@ -3338,6 +3447,8 @@
       ]);
       state.spec = spec;
       normalizeSelection();
+      applyRequestSelectionFromUrl();
+      normalizeSelection();
       if (!state.env.repoRoot && health.repoRoot) {
         state.env.repoRoot = health.repoRoot;
       }
@@ -3405,6 +3516,7 @@
       persist();
     });
     document.addEventListener("keydown", handleSendShortcut);
+    window.addEventListener("popstate", handleRequestPopState);
 
     boot().catch((error) => {
       $("resultBox").textContent = error.message;
