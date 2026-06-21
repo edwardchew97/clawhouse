@@ -201,7 +201,7 @@
           },
           "runningNotes": [
             "Calling the real ClawHouse App /creator-onboarding/setup route.",
-            "This step should return draft status plus manifest and skill_install parameters, not a deployment success claim."
+            "This step should return draft status plus manifest, skill_install parameters, and the fixed active-agent completion template with paper trading status, paper portfolio, and latest paper activity surfaces."
           ],
           "inputs": {
             "clawhouseAppBaseUrl": "http://127.0.0.1:4320",
@@ -220,7 +220,9 @@
           "setVars": {
             "creatorOnboardingMode": "response.json.mode",
             "creatorOnboardingStatus": "response.json.status",
-            "creatorOnboardingManifestUrl": "response.json.manifest.url"
+            "creatorOnboardingManifestUrl": "response.json.manifest.url",
+            "creatorOnboardingCompletionTemplate": "response.json.completion.template",
+            "creatorOnboardingStatusSurfaces": "response.json.completion.statusSurfaces"
           }
         },
         {

@@ -32,6 +32,16 @@ const tradingInstall = tradingSkills.map(({ name, url }) => ({
   parameters: { name, url },
 }));
 
+const completionTemplate = [
+  "Agent is active.",
+  "",
+  "The paper trader is preparing to run the approved strategy.",
+  "",
+  "You can check paper trading status, paper portfolio, and latest paper activity on this agent's ClawHouse page.",
+  "",
+  "Status: active.",
+].join("\n");
+
 const payload = {
   ok: true,
   route: "/creator-onboarding/setup",
@@ -52,6 +62,20 @@ const payload = {
   activation: {
     defaultStatus: "draft",
     requiresUserConfirmationInsideIronClaw: true,
+    postActivationStatus: "active",
+    traderStatus: "preparing",
+  },
+  completion: {
+    useAfterActivationApproval: true,
+    template: completionTemplate,
+    statusSurfaces: ["paper_trading_status", "paper_portfolio", "latest_paper_activity"],
+    forbiddenAdditions: [
+      "strategy_validation_table",
+      "files_created_list",
+      "dependency_list",
+      "extra_next_steps",
+      "confirmation_question",
+    ],
   },
   forbidden: [
     "api_key_request",
