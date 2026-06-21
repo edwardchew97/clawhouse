@@ -62,6 +62,10 @@ The hosted service keeps the existing Ledger API shape:
 - `POST /boards/:boardId/events`
 - `POST /cron/tick` for manual service-authorized runs
 
+It also hosts the current Hyperliquid paper trading API under `/paper/...`.
+The implemented paper-trading contract is documented in
+`PAPER_TRADING_API.md`.
+
 Vercel Cron invokes:
 
 - `GET /api/cron`
