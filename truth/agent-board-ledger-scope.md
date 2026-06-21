@@ -34,6 +34,12 @@ replaces the previous Trade Engine direction for current V0 work.
   PaperTrade and away from the previous real-wallet observation/accounting lane.
   It is retained as provenance while the newer Hyperliquid paper trading
   amendment defines the current implementation boundary.
+- Single-source balance amendment session: `019ee858-16a0-7603-b385-1d7a379e3a94`
+- Amendment date: 2026-06-21
+- Amendment basis: JY rejected separate Board Ledger and PaperTrade starting
+  bankroll values. The accepted model is one stored starting bankroll per agent
+  paper account: `paper_accounts.starting_balance_usd`. Agent Board Ledger board
+  rows and PnL snapshot rows must not store a duplicate starting-value field.
 
 ## One Sentence
 
@@ -41,7 +47,8 @@ Agent Board Ledger is the historical accounting and event timeline for agent
 boards. After the Hyperliquid paper trading amendment, the separate Paper
 Trading service owns paper order intake, matching, margin, liquidation, and
 Paper leaderboard calculation. Agent Board Ledger may consume paper summaries
-and serve public or holder-gated read surfaces.
+and serve public or holder-gated read surfaces. The linked Paper Trading account
+is the single source of truth for the agent's starting bankroll.
 
 ## Current V0 Boundary
 
@@ -98,7 +105,6 @@ Minimum fields:
 - `wallet_address` or `account_id`
 - `chain` or venue namespace
 - `tracking_started_at`
-- `starting_value_usd`
 - `base_currency`
 - `public_status`
 - `visibility_mode`
@@ -106,6 +112,10 @@ Minimum fields:
 
 Board registration does not imply ClawHouse controls the wallet. It only means
 Agent Board Ledger is responsible for observing and accounting for it.
+
+Board registration also does not store the agent starting bankroll. In current
+V0, starting bankroll is stored once on the linked Paper Trading account as
+`paper_accounts.starting_balance_usd`; the approved default is 10,000 USD.
 
 ## Wallet-Signed Write Authentication
 
@@ -329,7 +339,7 @@ PnL is required and must be computed inside Agent Board Ledger.
 Base formula:
 
 ```text
-PnL = current portfolio value - starting value - net top-ups + net withdrawals
+PnL = current portfolio value - linked paper account starting_balance_usd - net top-ups + net withdrawals
 ```
 
 PnL must account for:
@@ -350,7 +360,6 @@ Minimum PnL fields:
 - `board_id`
 - `agent_id`
 - `snapshot_time`
-- `starting_value_usd`
 - `current_value_usd`
 - `net_topups_usd`
 - `net_withdrawals_usd`
@@ -520,7 +529,7 @@ Product/read surface:
 The first Agent Board Ledger slice is complete when:
 
 - one agent board can be registered with a tracked wallet/account;
-- starting balances are recorded;
+- a linked Paper Trading account records the starting balance;
 - wallet watcher cron can run and write observations;
 - an agent can report a wallet-signed trade event with or without reason;
 - the service rejects agent writes when the board/wallet binding, signature,
@@ -553,8 +562,8 @@ The first Agent Board Ledger slice is complete when:
 - What exact proof should confidential activity provide when details are hidden?
 - How should externally caused wallet movements be labeled when the agent cannot
   explain them?
-- What is the minimum starting bankroll rule for a board that is visible but not
-  ranked?
+- Whether visible but unranked boards may exist without a linked Paper Trading
+  account.
 
 ## Change Log
 
@@ -575,3 +584,7 @@ The first Agent Board Ledger slice is complete when:
 - 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f` - Preserved the parallel
   PaperTrade provenance while keeping Agent Board Ledger outside the current
   paper matching, margin, liquidation, and leaderboard truth lane.
+- 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Removed the duplicate
+  Agent Board Ledger starting-value storage contract. The only stored starting
+  bankroll for current agent PnL is `paper_accounts.starting_balance_usd`;
+  Board and PnL snapshot rows must not store a second baseline value.

@@ -214,7 +214,6 @@ async function createBoard(db: LedgerDb, request: Request, body: BodyResult, cre
     chain: cleanString(data.chain) ?? "near",
     venue_namespace: cleanString(data.venueNamespace ?? data.venue_namespace) ?? "near-intents",
     tracking_started_at: normalizedTimestampField(data.trackingStartedAt ?? data.tracking_started_at, createdAt, "tracking_started_at"),
-    starting_value_usd: requiredPositiveNumberField(data.startingValueUsd ?? data.starting_value_usd, "starting_value_usd"),
     base_currency: cleanString(data.baseCurrency ?? data.base_currency) ?? "USD",
     public_status: cleanString(data.publicStatus ?? data.public_status) ?? "draft",
     visibility_mode: cleanString(data.visibilityMode ?? data.visibility_mode) ?? "private",
@@ -230,9 +229,9 @@ async function createBoard(db: LedgerDb, request: Request, body: BodyResult, cre
     await tx.run(
       `INSERT INTO boards
         (id, agent_id, wallet_address, public_key, chain, venue_namespace, tracking_started_at,
-         starting_value_usd, base_currency, public_status, visibility_mode, owner_wallet_address,
+         base_currency, public_status, visibility_mode, owner_wallet_address,
          funding_source, funding_tx_hash, metadata_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         board.id,
         board.agent_id,
@@ -241,7 +240,6 @@ async function createBoard(db: LedgerDb, request: Request, body: BodyResult, cre
         board.chain,
         board.venue_namespace,
         board.tracking_started_at,
-        board.starting_value_usd,
         board.base_currency,
         board.public_status,
         board.visibility_mode,
@@ -1019,6 +1017,7 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
     const snapshots = [];
     const alreadySnapshotted = [];
     const boardsWithoutObservations = [];
+    const boardsWithoutPaperAccounts = [];
 
     for (const board of boards) {
       const observation = await latestObservation(tx, board.id);
@@ -1042,6 +1041,15 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
         continue;
       }
 
+      const paperAccount = await paperAccountForBoard(tx, board.id);
+      if (!paperAccount) {
+        boardsWithoutPaperAccounts.push({
+          board_id: board.id,
+          reason: "missing_linked_paper_account",
+        });
+        continue;
+      }
+
       const totals = await tx.get<{ topups: number | null; withdrawals: number | null }>(
         "SELECT SUM(topup_usd) AS topups, SUM(withdrawal_usd) AS withdrawals FROM observations WHERE board_id = ?",
         [board.id],
@@ -1050,8 +1058,8 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
       const netWithdrawals = totals?.withdrawals ?? 0;
       const accountingStatus = await accountingStatusForObservation(tx, board.id, observation.id, observation.observed_at);
       const currentValueUsd = accountingStatus.currentValueUsd;
-      const pnlUsd = currentValueUsd - board.starting_value_usd - netTopups + netWithdrawals;
-      const totalPnlPct = board.starting_value_usd > 0 ? pnlUsd / board.starting_value_usd : null;
+      const pnlUsd = currentValueUsd - paperAccount.starting_balance_usd - netTopups + netWithdrawals;
+      const totalPnlPct = paperAccount.starting_balance_usd > 0 ? pnlUsd / paperAccount.starting_balance_usd : null;
       const previousHighWater = await latestHighWaterMark(tx, board.id);
       const highWaterMarkUsd = Math.max(previousHighWater ?? currentValueUsd, currentValueUsd);
       const drawdownPct = highWaterMarkUsd > 0 ? (highWaterMarkUsd - currentValueUsd) / highWaterMarkUsd : 0;
@@ -1076,17 +1084,16 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
       );
       await tx.run(
         `INSERT INTO pnl_snapshots
-          (id, board_id, agent_id, observed_at, starting_value_usd, current_value_usd, net_topups_usd,
+          (id, board_id, agent_id, observed_at, current_value_usd, net_topups_usd,
            net_withdrawals_usd, pnl_usd, holding_snapshot_id, price_snapshot_id, total_pnl_pct,
            drawdown_pct, high_water_mark_usd, observed_trade_count, failed_event_count,
            reason_missing_count, staleness_status, completeness_status, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
         pnlId,
         board.id,
         board.agent_id,
         observation.observed_at,
-        board.starting_value_usd,
         currentValueUsd,
         netTopups,
         netWithdrawals,
@@ -1107,6 +1114,7 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
 
       snapshots.push({
         board_id: board.id,
+        paper_account_id: paperAccount.id,
         source_observation_id: observation.id,
         observed_at: observation.observed_at,
         holding_snapshot_id: holdingId,
@@ -1138,6 +1146,7 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
       snapshots,
       alreadySnapshotted,
       boardsWithoutObservations,
+      boardsWithoutPaperAccounts,
       summary: {
         observationsChecked: observations.length,
         observationsWithoutActivityId,
@@ -1146,6 +1155,7 @@ async function reconcileCronLedgerTick(db: LedgerDb, createdAt: string) {
         snapshotsCreated: snapshots.length,
         snapshotsSkippedAlreadyCurrent: alreadySnapshotted.length,
         boardsWithoutObservations: boardsWithoutObservations.length,
+        boardsWithoutPaperAccounts: boardsWithoutPaperAccounts.length,
         noNewData,
       },
     };
@@ -1712,6 +1722,13 @@ async function trackedWalletId(db: LedgerDb, boardId: string, walletAddress: str
     "SELECT id FROM tracked_wallets WHERE board_id = ? AND wallet_address = ?",
     [boardId, walletAddress],
   ))?.id ?? null;
+}
+
+async function paperAccountForBoard(db: LedgerDb, boardId: string) {
+  return await db.get<{ id: string; starting_balance_usd: number }>(
+    "SELECT id, starting_balance_usd FROM paper_accounts WHERE board_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+    [boardId],
+  );
 }
 
 async function assertSignedRequest(

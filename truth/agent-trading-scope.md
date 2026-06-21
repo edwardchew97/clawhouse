@@ -72,6 +72,13 @@ replace Scope V0 key trading.
   cross/isolated margin, and liquidation, and `near-intents-spot-value` for
   spot-only swaps/value movement. Future venues must be added as separate
   manifest skills instead of overloading either skill.
+- Single-source balance amendment session:
+  `019ee858-16a0-7603-b385-1d7a379e3a94`
+- Amendment date: 2026-06-21
+- Amendment basis: JY required one database source of truth for agent starting
+  bankroll. Current V0 stores it only on the approved paper account as
+  `paper_accounts.starting_balance_usd`; Agent Board Ledger board/PnL rows must
+  not duplicate that value.
 
 ## One Sentence
 
@@ -327,7 +334,8 @@ Each board should track:
 - agent id;
 - owner or funding source;
 - paper account id;
-- starting paper balance;
+- paper account starting balance, stored once as
+  `paper_accounts.starting_balance_usd`;
 - current paper equity;
 - current status;
 - tracking start time;
@@ -342,7 +350,8 @@ Each board should track:
 
 2. Tracked
    - Paper account is registered.
-   - Starting paper balance and allowed markets are recorded.
+   - Starting paper balance and allowed markets are recorded on the paper
+     account.
    - Runtime skill can authenticate against ClawHouse Paper Trading.
 
 3. Live
@@ -503,7 +512,7 @@ Not allowed for public product:
 Minimum verification before public board launch:
 
 - register one paper account for one curated agent;
-- record starting paper balance and allowed markets;
+- record starting paper balance and allowed markets on that paper account;
 - submit one signed IOC paper order with a reason through the runtime skill;
 - fill or reject that order from a recorded Hyperliquid book snapshot;
 - submit or rest one GTC/ALO paper order and cancel or fill it deterministically;
@@ -625,3 +634,7 @@ The first Agent Trading slice is done only when:
   cross/isolated margin, and liquidation, while `near-intents-spot-value` owns
   spot-only swaps/value movement; future venues must be separate manifest
   skills.
+- 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Confirmed
+  `paper_accounts.starting_balance_usd` as the only stored starting bankroll for
+  current agent paper PnL; Agent Board Ledger board rows and PnL snapshot rows
+  must not store duplicate baseline values.

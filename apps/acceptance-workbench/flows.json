@@ -202,8 +202,8 @@
             "{{ledgerBoardId}}",
             "--agent-id",
             "{{ledgerAgentId}}",
-            "--starting-value-usd",
-            "{{ledgerStartingValueUsd}}",
+            "--starting-balance-usd",
+            "{{paperTradingStartingBalanceUsd}}",
             "--visibility-mode",
             "{{ledgerVisibilityMode}}"
           ],
@@ -229,7 +229,7 @@
             "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
             "ledgerBoardId": "",
             "ledgerAgentId": "ironclaw-api-workbench",
-            "ledgerStartingValueUsd": "100",
+            "paperTradingStartingBalanceUsd": "10000",
             "ledgerVisibilityMode": "public"
           },
           "fillDefaultsWhenEmpty": [
@@ -237,14 +237,15 @@
             "ledgerAdminToken",
             "ledgerWalletFile",
             "ledgerAgentId",
-            "ledgerStartingValueUsd",
+            "paperTradingStartingBalanceUsd",
             "ledgerVisibilityMode"
           ],
           "setVars": {
             "ledgerBoardId": "response.json.boardId",
             "ledgerAgentId": "response.json.agentId",
             "ledgerWalletAddress": "response.json.wallet.walletAddress",
-            "ledgerPublicKey": "response.json.wallet.publicKey"
+            "ledgerPublicKey": "response.json.wallet.publicKey",
+            "paperTradingAccountId": "response.json.paperAccountId"
           }
         },
         {
@@ -1187,8 +1188,8 @@
             "{{ledgerBoardId}}",
             "--agent-id",
             "{{ledgerAgentId}}",
-            "--starting-value-usd",
-            "{{ledgerStartingValueUsd}}",
+            "--starting-balance-usd",
+            "{{paperTradingStartingBalanceUsd}}",
             "--current-value-usd",
             "{{ledgerCurrentValueUsd}}",
             "--client-event-id",
@@ -1221,8 +1222,8 @@
             "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
             "ledgerBoardId": "",
             "ledgerAgentId": "ironclaw-workbench",
-            "ledgerStartingValueUsd": "100",
-            "ledgerCurrentValueUsd": "112",
+            "paperTradingStartingBalanceUsd": "10000",
+            "ledgerCurrentValueUsd": "10012",
             "ledgerClientEventId": "",
             "ledgerTxHash": "",
             "ledgerIntentId": ""
@@ -1232,13 +1233,14 @@
             "ledgerAdminToken",
             "ledgerWalletFile",
             "ledgerAgentId",
-            "ledgerStartingValueUsd",
+            "paperTradingStartingBalanceUsd",
             "ledgerCurrentValueUsd"
           ],
           "setVars": {
             "ledgerBoardId": "response.json.boardId",
             "ledgerWalletAddress": "response.json.wallet.walletAddress",
             "ledgerPublicKey": "response.json.wallet.publicKey",
+            "paperTradingAccountId": "response.json.paperAccount.id",
             "ledgerClientEventId": "response.json.clientEventId",
             "ledgerTxHash": "response.json.txHash",
             "ledgerIntentId": "response.json.intentId",
@@ -1760,6 +1762,8 @@
             "{{ledgerBaseUrl}}",
             "--key-file",
             "{{paperTradingWalletFile}}",
+            "--board-id",
+            "{{ledgerBoardId}}",
             "--paper-account-id",
             "{{paperTradingAccountId}}",
             "--agent-id",
@@ -1788,6 +1792,7 @@
             "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAdminToken": "local-ledger-admin-token",
             "paperTradingWalletFile": "work/acceptance-workbench/agent-board-ledger/paper-wallet.json",
+            "ledgerBoardId": "",
             "paperTradingAccountId": "",
             "ledgerAgentId": "ironclaw-paper-workbench",
             "paperTradingStartingBalanceUsd": "10000"
@@ -2693,8 +2698,8 @@
             "{{ledgerBoardId}}",
             "--agent-id",
             "{{ledgerAgentId}}",
-            "--starting-value-usd",
-            "{{ledgerStartingValueUsd}}",
+            "--starting-balance-usd",
+            "{{paperTradingStartingBalanceUsd}}",
             "--current-value-usd",
             "{{ledgerCurrentValueUsd}}",
             "--client-event-id",
@@ -2727,8 +2732,8 @@
             "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
             "ledgerBoardId": "",
             "ledgerAgentId": "ironclaw-workbench",
-            "ledgerStartingValueUsd": "100",
-            "ledgerCurrentValueUsd": "112",
+            "paperTradingStartingBalanceUsd": "10000",
+            "ledgerCurrentValueUsd": "10012",
             "ledgerClientEventId": "",
             "ledgerTxHash": "",
             "ledgerIntentId": ""
@@ -2738,13 +2743,14 @@
             "ledgerAdminToken",
             "ledgerWalletFile",
             "ledgerAgentId",
-            "ledgerStartingValueUsd",
+            "paperTradingStartingBalanceUsd",
             "ledgerCurrentValueUsd"
           ],
           "setVars": {
             "ledgerBoardId": "response.json.boardId",
             "ledgerWalletAddress": "response.json.wallet.walletAddress",
             "ledgerPublicKey": "response.json.wallet.publicKey",
+            "paperTradingAccountId": "response.json.paperAccount.id",
             "ledgerClientEventId": "response.json.clientEventId",
             "ledgerTxHash": "response.json.txHash",
             "ledgerIntentId": "response.json.intentId",
@@ -2772,8 +2778,8 @@
             "{{ledgerEdgeBoardId}}",
             "--agent-id",
             "{{ledgerAgentId}}",
-            "--starting-value-usd",
-            "{{ledgerStartingValueUsd}}",
+            "--starting-balance-usd",
+            "{{paperTradingStartingBalanceUsd}}",
             "--current-value-usd",
             "{{ledgerCurrentValueUsd}}"
           ],
@@ -2805,15 +2811,15 @@
             "ledgerEdgeWalletFile": "work/acceptance-workbench/agent-board-ledger/edge-wallet.json",
             "ledgerEdgeBoardId": "",
             "ledgerAgentId": "ironclaw-workbench",
-            "ledgerStartingValueUsd": "100",
-            "ledgerCurrentValueUsd": "112"
+            "paperTradingStartingBalanceUsd": "10000",
+            "ledgerCurrentValueUsd": "10012"
           },
           "fillDefaultsWhenEmpty": [
             "ledgerBaseUrl",
             "ledgerAdminToken",
             "ledgerEdgeWalletFile",
             "ledgerAgentId",
-            "ledgerStartingValueUsd",
+            "paperTradingStartingBalanceUsd",
             "ledgerCurrentValueUsd"
           ],
           "setVars": {
@@ -2872,6 +2878,8 @@
             "{{ledgerBaseUrl}}",
             "--key-file",
             "{{paperTradingWalletFile}}",
+            "--board-id",
+            "{{ledgerBoardId}}",
             "--paper-account-id",
             "{{paperTradingAccountId}}",
             "--agent-id",
@@ -2902,6 +2910,7 @@
             "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerAdminToken": "local-ledger-admin-token",
             "paperTradingWalletFile": "work/acceptance-workbench/agent-board-ledger/paper-wallet.json",
+            "ledgerBoardId": "",
             "paperTradingAccountId": "",
             "ledgerAgentId": "ironclaw-paper-workbench",
             "paperTradingStartingBalanceUsd": "10000"

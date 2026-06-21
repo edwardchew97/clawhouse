@@ -76,7 +76,7 @@ describe("Agent Board Ledger local backend", () => {
     expect(board.chain).toBe("near");
     expect(board.venue_namespace).toBe("near-intents");
     expect(board.tracking_started_at).toBe("2026-06-19T00:00:00.000Z");
-    expect(board.starting_value_usd).toBe(100);
+    expect("starting_value_usd" in board).toBe(false);
     expect(persisted?.chain).toBe("near");
     expect(persisted?.venue_namespace).toBe("near-intents");
     expect(persisted?.tracking_started_at).toBe("2026-06-19T00:00:00.000Z");
@@ -170,9 +170,11 @@ describe("Agent Board Ledger local backend", () => {
     for (const column of ["chain", "venue_namespace", "tracking_started_at", "owner_wallet_address", "funding_source"]) {
       expect(columnNames(legacy, "boards")).toContain(column);
     }
+    expect(columnNames(legacy, "boards")).not.toContain("starting_value_usd");
     for (const column of ["agent_id", "holding_snapshot_id", "price_snapshot_id", "total_pnl_pct", "drawdown_pct", "staleness_status"]) {
       expect(columnNames(legacy, "pnl_snapshots")).toContain(column);
     }
+    expect(columnNames(legacy, "pnl_snapshots")).not.toContain("starting_value_usd");
     expect(columnNames(legacy, "events")).toContain("reported_at");
 
     const board = legacy.query<Record<string, any>, []>("SELECT * FROM boards WHERE id = 'board-legacy'").get();
@@ -224,7 +226,6 @@ describe("Agent Board Ledger local backend", () => {
       agent_id: "ironclaw",
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
-      starting_value_usd: 100,
     }, { admin: false, signed: true });
 
     expect(response.status).toBe(401);
@@ -237,7 +238,6 @@ describe("Agent Board Ledger local backend", () => {
       agent_id: "ironclaw",
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
-      starting_value_usd: 100,
     });
 
     expect(response.status).toBe(401);
@@ -251,7 +251,6 @@ describe("Agent Board Ledger local backend", () => {
       agent_id: "ironclaw",
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
-      starting_value_usd: 100,
     }, { signed: true, signer: otherWallet });
 
     expect(response.status).toBe(401);
@@ -612,7 +611,7 @@ describe("Agent Board Ledger local backend", () => {
   });
 
   test("pnl excludes topups and adds withdrawals back", async () => {
-    await registerBoard({ starting_value_usd: 100 });
+    await registerBoard();
     await postJson("/boards/board-1/observations", {
       wallet_address: wallet.walletAddress,
       observed_at: "2026-06-19T00:00:00.000Z",
@@ -686,7 +685,7 @@ describe("Agent Board Ledger local backend", () => {
   });
 
   test("uses reconciled balance changes instead of caller supplied observation value for PnL", async () => {
-    await registerBoard({ starting_value_usd: 100 });
+    await registerBoard();
     await postJson("/boards/board-1/prices", {
       asset_id: "native:near",
       asset_symbol: "NEAR",
@@ -741,7 +740,7 @@ describe("Agent Board Ledger local backend", () => {
         },
       }), { status: 200, headers: { "content-type": "application/json" } });
     };
-    await registerBoard({ starting_value_usd: 100 });
+    await registerBoard();
 
     const watchBody = await jsonOf<{ observation: Record<string, any>; balance_change: Record<string, any>; price: Record<string, any> }>(
       await postJson("/boards/board-1/watch/near-account", {
@@ -840,7 +839,7 @@ describe("Agent Board Ledger local backend", () => {
       }
       return nearRpcError("Method not mocked");
     };
-    await registerBoard({ starting_value_usd: 100 });
+    await registerBoard();
 
     const watchBody = await jsonOf<{ observation: Record<string, any>; balance_change: Record<string, any>; price: Record<string, any> }>(
       await postJson("/boards/board-1/watch/near-ft", {
@@ -984,7 +983,7 @@ describe("Agent Board Ledger local backend", () => {
   });
 
   test("marks fully priced periodic balance snapshots complete without a transaction id", async () => {
-    await registerBoard({ starting_value_usd: 100 });
+    await registerBoard();
     const observationBody = await jsonOf<{ observation: Record<string, any> }>(
       await postJson("/boards/board-1/observations", {
         wallet_address: wallet.walletAddress,
@@ -1250,7 +1249,6 @@ describe("Agent Board Ledger local backend", () => {
       agent_id: "ironclaw",
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
-      starting_value_usd: 100,
       base_currency: "USD",
       public_status: "active",
       visibility_mode: "public",
@@ -1419,15 +1417,14 @@ describe("Agent Board Ledger local backend", () => {
   });
 
   test("rejects invalid production accounting numbers", async () => {
-    const zeroStart = await postJson("/boards", {
-      board_id: "board-zero",
+    const zeroStart = await postJson("/paper/accounts", {
+      paper_account_id: "paper-zero",
       agent_id: "ironclaw",
-      wallet_address: wallet.walletAddress,
-      public_key: wallet.publicKey,
-      starting_value_usd: 0,
+      agent_public_key: wallet.publicKey,
+      starting_balance_usd: 0,
     });
     expect(zeroStart.status).toBe(400);
-    expect((await jsonOf<{ error: string }>(zeroStart)).error).toBe("starting_value_usd must be greater than 0");
+    expect((await jsonOf<{ error: string }>(zeroStart)).error).toBe("starting_balance_usd must be greater than 0");
 
     await registerBoard();
     const negativeCurrentValue = await postJson("/boards/board-1/observations", {
@@ -1776,21 +1773,32 @@ describe("Agent Board Ledger local backend", () => {
 });
 
 async function registerBoard(overrides: Record<string, unknown> = {}) {
+  const paperStartingBalanceUsd = Number(overrides.paper_starting_balance_usd ?? 100);
+  const { paper_starting_balance_usd: _paperStartingBalanceUsd, ...boardOverrides } = overrides;
   const body = {
     board_id: "board-1",
     agent_id: "ironclaw",
     wallet_address: wallet.walletAddress,
     public_key: wallet.publicKey,
-    starting_value_usd: 100,
     base_currency: "USD",
     public_status: "active",
     visibility_mode: "public",
-    ...overrides,
+    ...boardOverrides,
   };
   const response = await postJson("/boards", body, { signed: true });
 
   expect(response.status).toBe(201);
-  return (await jsonOf<{ board: Record<string, any> }>(response)).board;
+  const board = (await jsonOf<{ board: Record<string, any> }>(response)).board;
+  const paperResponse = await postJson("/paper/accounts", {
+    paper_account_id: `paper-${body.board_id}`,
+    board_id: body.board_id,
+    agent_id: body.agent_id,
+    agent_public_key: wallet.publicKey,
+    starting_balance_usd: paperStartingBalanceUsd,
+    allowed_markets: ["BTC", "ETH"],
+  });
+  expect(paperResponse.status).toBe(201);
+  return board;
 }
 
 async function registerPaperAccount(overrides: Record<string, unknown> = {}) {

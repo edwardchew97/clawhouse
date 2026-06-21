@@ -8,7 +8,6 @@ export const neonSchemaStatements = [
       chain TEXT DEFAULT 'near',
       venue_namespace TEXT DEFAULT 'near-intents',
       tracking_started_at TEXT,
-      starting_value_usd DOUBLE PRECISION NOT NULL,
       base_currency TEXT NOT NULL,
       public_status TEXT NOT NULL,
       visibility_mode TEXT NOT NULL,
@@ -165,7 +164,6 @@ export const neonSchemaStatements = [
       board_id TEXT NOT NULL REFERENCES boards(id),
       agent_id TEXT,
       observed_at TEXT NOT NULL,
-      starting_value_usd DOUBLE PRECISION NOT NULL,
       current_value_usd DOUBLE PRECISION NOT NULL,
       net_topups_usd DOUBLE PRECISION NOT NULL,
       net_withdrawals_usd DOUBLE PRECISION NOT NULL,
@@ -229,6 +227,7 @@ export const neonSchemaStatements = [
       updated_at TEXT NOT NULL
     )
   `,
+  "CREATE UNIQUE INDEX IF NOT EXISTS paper_accounts_board_unique_idx ON paper_accounts(board_id) WHERE board_id IS NOT NULL",
   `
     CREATE TABLE IF NOT EXISTS paper_auth_nonces (
       id TEXT PRIMARY KEY,
@@ -407,6 +406,26 @@ export const neonSchemaStatements = [
   "ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS staleness_status TEXT NOT NULL DEFAULT 'unknown'",
   "ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS completeness_status TEXT NOT NULL DEFAULT 'unknown'",
   "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS max_leverage DOUBLE PRECISION",
+  `
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'pnl_snapshots'
+          AND column_name = 'starting_value_usd'
+      ) THEN
+        EXECUTE 'UPDATE pnl_snapshots
+          SET total_pnl_pct = CASE
+            WHEN starting_value_usd = 0 THEN NULL
+            ELSE pnl_usd / starting_value_usd
+          END
+          WHERE total_pnl_pct IS NULL';
+      END IF;
+    END $$;
+  `,
+  "ALTER TABLE pnl_snapshots DROP COLUMN IF EXISTS starting_value_usd",
+  "ALTER TABLE boards DROP COLUMN IF EXISTS starting_value_usd",
   "UPDATE boards SET chain = 'near' WHERE chain IS NULL OR chain = ''",
   "UPDATE boards SET venue_namespace = 'near-intents' WHERE venue_namespace IS NULL OR venue_namespace = ''",
   "UPDATE boards SET tracking_started_at = created_at WHERE tracking_started_at IS NULL OR tracking_started_at = ''",
@@ -437,14 +456,6 @@ export const neonSchemaStatements = [
       FROM boards
       WHERE boards.id = pnl_snapshots.board_id
         AND pnl_snapshots.agent_id IS NULL
-  `,
-  `
-    UPDATE pnl_snapshots
-      SET total_pnl_pct = CASE
-        WHEN starting_value_usd = 0 THEN NULL
-        ELSE pnl_usd / starting_value_usd
-      END
-      WHERE total_pnl_pct IS NULL
   `,
   `
     UPDATE pnl_snapshots
