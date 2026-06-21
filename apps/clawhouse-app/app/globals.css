@@ -1076,12 +1076,12 @@
     .center-bottom {
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(360px, 1.15fr) minmax(260px, 0.85fr);
+      grid-template-columns: 1fr;
       gap: 8px;
     }
 
     .room,
-    .activity {
+    .key-activity {
       min-height: 0;
       display: grid;
       grid-template-rows: auto 1fr;
@@ -1092,6 +1092,10 @@
       min-height: 0;
       overflow: auto;
       padding: 8px;
+    }
+
+    .chat-room-feed {
+      min-height: 220px;
     }
 
     .update {
@@ -1232,6 +1236,24 @@
       text-align: right;
       color: #fff;
       font-size: 11px;
+    }
+
+    .activity-row .side a {
+      color: #fff;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.26);
+    }
+
+    .key-activity {
+      padding: 10px;
+      min-height: 220px;
+    }
+
+    .key-activity-list {
+      margin-top: 9px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.075);
+      background: rgba(255, 255, 255, 0.018);
     }
     .key-illustration{
       width: 30%;
@@ -1549,12 +1571,6 @@
       padding: 8px 7px;
     }
 
-    .comments {
-      padding: 10px;
-      display: grid;
-      grid-template-rows: auto auto minmax(220px, 1fr);
-    }
-
     .blur-status {
       position: relative;
       min-height: 220px;
@@ -1633,10 +1649,6 @@
 
     .room-feed .blur-status {
       min-height: 100%;
-    }
-
-    .comments-card {
-      margin-top: 9px;
     }
 
 .secondary {
@@ -2020,7 +2032,6 @@
     /* Shared motion system */
     button,
     .stat,
-    .comments-card,
     .activity-row,
     .panel {
       transition:
@@ -2037,8 +2048,7 @@
       box-shadow: inset 2px 0 0 rgba(190, 196, 202, 0.34), 0 8px 20px rgba(0, 0, 0, 0.18);
     }
 
-    .stat:hover,
-    .comments-card:hover {
+    .stat:hover {
       transform: translateY(-2px);
       border-color: rgba(180, 186, 192, 0.18);
       box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);

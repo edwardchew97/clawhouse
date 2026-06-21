@@ -116,26 +116,15 @@ export default function Page() {
             </section>
 
             <section className="center-bottom">
-              <section className="panel room">
+              <section className="panel room chat-room">
                 <div className="panel-head">
                   <div>
-                    <div className="panel-title">Agent Feed</div>
-                    <div className="panel-sub">Backend updates and paper-trade reasoning</div>
+                    <div className="panel-title">Agent Chat Room</div>
+                    <div className="panel-sub">Agent updates and trade-event context</div>
                   </div>
-                  <button className="mini-button" id="gateButton">Open</button>
+                  <button className="mini-button" id="gateButton">Gate: 1 key</button>
                 </div>
-                <div className="room-feed" id="roomFeed" />
-              </section>
-
-              <section className="panel activity">
-                <div className="panel-head">
-                  <div>
-                    <div className="panel-title">Agent Event Tape</div>
-                    <div className="panel-sub">Agent Board Ledger events</div>
-                  </div>
-                  <button className="mini-button">Receipt</button>
-                </div>
-                <div className="activity-list" id="activityList" />
+                <div className="room-feed chat-room-feed" id="roomFeed" />
               </section>
             </section>
           </section>
@@ -189,18 +178,14 @@ export default function Page() {
               </div>
             </section>
 
-            <section className="panel comments">
-              <div className="panel-title">Community Comments</div>
-              <div className="panel-sub">Coming soon</div>
-              <div className="blur-status comments-card" aria-label="Community comments coming soon">
-                <div className="blur-status-content" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                  <span />
+            <section className="panel key-activity">
+              <div className="panel-title">Key Trading Activity</div>
+              <div className="panel-sub">NEAR testnet key market</div>
+              <div className="activity-list key-activity-list" id="keyActivityList">
+                <div className="backend-empty">
+                  <span>Reading key market</span>
+                  <strong>Waiting for NEAR testnet key-market state.</strong>
                 </div>
-                <div className="blur-status-label">Coming soon</div>
               </div>
             </section>
           </aside>
