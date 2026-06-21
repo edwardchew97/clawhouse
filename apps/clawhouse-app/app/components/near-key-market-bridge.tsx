@@ -224,7 +224,7 @@ export function NearKeyMarketBridge() {
           lastTxHash: null,
           explorerUrl: null,
           statusTitle: "Wallet disconnected",
-          statusBody: "Connect NEAR to buy or sell keys.",
+          statusBody: "Connect Wallet",
           statusTone: "idle",
         });
         busyRef.current = false;
