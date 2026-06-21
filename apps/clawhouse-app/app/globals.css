@@ -1584,56 +1584,94 @@
 
     .comments {
       padding: 10px;
+      display: grid;
+      grid-template-rows: auto auto minmax(220px, 1fr);
     }
-.comments-card {
-    margin-top: 9px;
-    padding: 11px;
-    border-radius: 4px;
 
-    border: 1px solid rgba(180, 186, 192, 0.12);
+    .blur-status {
+      position: relative;
+      min-height: 220px;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      border-radius: 4px;
+      border: 1px solid rgba(180, 186, 192, 0.12);
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(18, 20, 22, 0.34)),
+        #0b0c0e;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.04),
+        0 0 12px rgba(0, 0, 0, 0.14);
+    }
 
-    background:
-      linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.05) 0%,
-        rgba(120, 127, 136, 0.05) 35%,
-        rgba(28, 30, 33, 0.22) 100%
-      ),
-      #0b0c0e;
+    .blur-status::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: rgba(4, 5, 6, 0.34);
+      backdrop-filter: blur(8px);
+    }
 
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.04),
-      0 0 12px rgba(0, 0, 0, 0.14);
-}
-    .comments-kicker {
+    .blur-status-content {
+      position: absolute;
+      inset: 16px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      filter: blur(7px);
+      opacity: 0.52;
+    }
+
+    .blur-status-content span {
+      height: 28px;
+      border-radius: 4px;
+      background: rgba(190, 196, 202, 0.12);
+    }
+
+    .blur-status-content span:nth-child(2) {
+      width: 72%;
+    }
+
+    .blur-status-content span:nth-child(3) {
+      width: 88%;
+    }
+
+    .blur-status-content span:nth-child(4) {
+      width: 64%;
+    }
+
+    .blur-status-content span:nth-child(5) {
+      width: 78%;
+    }
+
+    .blur-status-label {
+      position: relative;
+      z-index: 2;
+      min-width: 112px;
+      height: 28px;
       display: inline-flex;
       align-items: center;
-      height: 18px;
-      padding: 0 7px;
+      justify-content: center;
+      padding: 0 13px;
       border-radius: 999px;
-      border: 1px solid rgba(180, 186, 192, 0.14);
-      background: rgba(255, 255, 255, 0.04);
-      color: var(--muted);
-      font-size: 10px;
-      font-weight: 760;
-      line-height: 18px;
-    }
-
-    .comments-card strong {
-      display: block;
-      margin-top: 8px;
-      font-size: 16px;
-      line-height: 20px;
-    }
-
-    .comments-card > span:last-child {
-      display: block;
-      margin-top: 6px;
-      color: #c6c6c6;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(9, 10, 11, 0.78);
+      color: #fff;
       font-size: 12px;
-      line-height: 17px;
-      overflow-wrap: anywhere;
+      font-weight: 800;
+      line-height: 28px;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
     }
+
+    .room-feed .blur-status {
+      min-height: 100%;
+    }
+
+    .comments-card {
+      margin-top: 9px;
+    }
+
 .secondary {
     width: 100%;
     height: 32px;
