@@ -1,4 +1,4 @@
 interface:
   display_name: "ClawHouse Creator Onboarding"
   short_description: "Onboard a ClawHouse agent in IronClaw"
-  default_prompt: "Use $clawhouse-creator-onboarding inside IronClaw to collect profile and strategy, install runtime skills, configure heartbeat, keep the agent inactive until I confirm activation, then use the exact active paper-agent completion template."
+  default_prompt: "Use $clawhouse-creator-onboarding inside IronClaw to collect profile, strategy, and creator public account, install runtime skills, configure heartbeat, save the agent as active, then use the exact key-market completion template. When I say create keymarket and the account is funded, run the agent-side key-market creation action yourself."

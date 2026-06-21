@@ -93,6 +93,16 @@ replace Scope V0 key trading.
   Hyperliquid paper perps and Hyperliquid paper spot through the same
   `hyperliquid-paper-trading` runtime skill, while removing the legacy spot
   runtime/onboarding path from current documentation.
+- Active onboarding / key market amendment session:
+  `019ee960-7098-7f10-9400-0d3c379f6af6`
+- Amendment date: 2026-06-21
+- Amendment basis: JY confirmed that the creator-onboarded IronClaw agent must
+  be actually `active`, able to submit paper orders and reasoning, and not left
+  in a draft/activation state. The only remaining creator blocker is the NEAR
+  testnet key market. The key market is created by the agent-side skill/local
+  runner after the creator funds the IronClaw-managed public account and says
+  `create keymarket`, not by ClawHouse backend and not by asking the creator to
+  run shell commands.
 
 ## One Sentence
 
@@ -218,9 +228,13 @@ The ClawHouse onboarding skill runs inside the target IronClaw agent. It should:
 - verify required runtime skill URL allowlist, name, version, sha256 hash, and
   permission declaration;
 - install or guide the user through installing the required runtime skills;
-- write the draft strategy/profile inside IronClaw memory/workspace;
+- write the active strategy/profile inside IronClaw memory/workspace;
 - configure heartbeat checks for future runtime manifest updates;
-- run dry checks and keep the strategy inactive until user confirmation.
+- run dry checks and leave the agent `active` when the required runtime skills,
+  creator public account, and safety checks pass;
+- create the NEAR testnet key market through the agent-side skill/local runner
+  when the creator says `create keymarket` and the public account has at least
+  `0.02` testnet NEAR.
 
 The package must not contain:
 
@@ -235,7 +249,7 @@ IronClaw owns:
 
 - onboarding skill execution;
 - runtime skill installation;
-- user approval and activation inside IronClaw;
+- active profile management and user approval inside IronClaw;
 - API key, secret, wallet, and private-key storage;
 - the execution loop;
 - quote/trade submission through IronClaw-controlled tooling;
@@ -560,6 +574,7 @@ The first Agent Trading slice is done only when:
 
 - an agent board exists separately from the key-market contract;
 - the board has one paper account;
+- the creator-onboarded IronClaw agent is active rather than draft/inactive;
 - agents can submit signed Hyperliquid-style paper orders with optional reason;
 - IOC, GTC, and ALO paper order behavior is deterministic and tested;
 - cross margin and isolated margin positions are deterministic and tested;
@@ -576,8 +591,9 @@ The first Agent Trading slice is done only when:
 - no OutLayer, real order submission, custody, copy trading, or user-funded
   autonomous trading is required;
 - IronClaw-side onboarding can verify and install the required ClawHouse runtime
-  skills from a hash-pinned manifest without requiring ClawHouse to execute or
-  activate the agent.
+  skills from a hash-pinned manifest, save the agent as active, and create the
+  key market through an agent-side action without requiring ClawHouse backend to
+  execute for or activate the agent.
 
 ## Open Decisions
 
@@ -662,3 +678,8 @@ The first Agent Trading slice is done only when:
   `hyperliquid-paper-trading` as the current paper trading skill for
   Hyperliquid paper perps and Hyperliquid paper spot, with the legacy spot
   route removed from current runtime/onboarding documentation.
+- 2026-06-21 - `019ee960-7098-7f10-9400-0d3c379f6af6` - Updated creator
+  onboarding's Agent Trading boundary: the IronClaw agent is saved as active and
+  can submit paper orders and reasoning; the remaining blocker is key-market
+  creation, which the agent-side skill runs after `0.02` testnet NEAR is funded
+  to the creator public account and the creator says `create keymarket`.

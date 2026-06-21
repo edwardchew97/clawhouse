@@ -593,14 +593,14 @@
         {
           "id": "agentRegistration.creatorOnboarding.setupReadback",
           "name": "GET /creator-onboarding/setup",
-          "description": "Calls the ClawHouse App compatibility readback for IronClaw-side onboarding. It returns the manifest and required skill_install parameters; it does not deploy, activate, store secrets, or create wallets.",
+          "description": "Calls the ClawHouse App compatibility readback for IronClaw-side onboarding. It returns active agent status, the manifest, required skill_install parameters, and the agent-side key-market action; it does not store secrets or create wallets.",
           "type": "http",
           "access": "public",
           "method": "GET",
-          "url": "{{clawhouseAppBaseUrl}}/creator-onboarding/setup",
+          "url": "{{clawhouseAppBaseUrl}}/creator-onboarding/setup?creatorPublicAccount={{testUserAccountId}}",
           "runningNotes": [
             "Calling the real ClawHouse App /creator-onboarding/setup route.",
-            "This step should return draft status plus manifest, skill_install parameters, and the exact key-market handoff to run after IronClaw activation."
+            "This step should return active status plus manifest, skill_install parameters, the funding address field, and the create keymarket action."
           ],
           "setVars": {
             "creatorOnboardingMode": "response.json.mode",
@@ -608,7 +608,9 @@
             "creatorOnboardingManifestUrl": "response.json.manifest.url",
             "creatorOnboardingCompletionTemplate": "response.json.completion.template",
             "keyMarketFundingAmountNear": "response.json.keyMarketSetup.fundingAmountNear",
-            "keyMarketCreateCommand": "response.json.keyMarketSetup.command"
+            "keyMarketFundingAddress": "response.json.keyMarketSetup.fundTo",
+            "keyMarketContractId": "response.json.keyMarketSetup.contractId",
+            "keyMarketCreateTrigger": "response.json.keyMarketSetup.createTrigger"
           }
         },
         {
