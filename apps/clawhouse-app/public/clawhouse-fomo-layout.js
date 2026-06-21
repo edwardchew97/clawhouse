@@ -13,8 +13,8 @@ let agents = [
 let discoveryLoading = true;
 document.body.classList.add("motion-prep");
 
-let selectedId = requestedAgentId || agents[0].id;
-if (!agents.some((agent) => agent.id === selectedId)) selectedId = agents[0].id;
+let selectedId = requestedAgentId || agentSelectionKey(agents[0]);
+if (!agents.some((agent) => agentMatchesSelection(agent, selectedId))) selectedId = agentSelectionKey(agents[0]);
 let tradeSide = "buy";
 let agentSort = "pnl";
 let activeEventId = null;
@@ -37,7 +37,20 @@ let chainState = {
 const TICKER_PX_PER_SECOND = 18;
 
 const byId = (id) => document.getElementById(id);
-const selectedAgent = () => agents.find((agent) => agent.id === selectedId) || agents[0];
+function agentSelectionKey(agent) {
+  return agent.boardId || agent.id;
+}
+
+function agentMatchesSelection(agent, value) {
+  return agentSelectionKey(agent) === value || agent.id === value;
+}
+
+function resolveSelectedId(value) {
+  const match = agents.find((agent) => agentSelectionKey(agent) === value) || agents.find((agent) => agent.id === value);
+  return match ? agentSelectionKey(match) : agentSelectionKey(agents[0]);
+}
+
+const selectedAgent = () => agents.find((agent) => agentSelectionKey(agent) === selectedId) || agents.find((agent) => agent.id === selectedId) || agents[0];
 const chainApplies = (agent) => chainState.state?.agent?.agent_id === agent.id;
 const chainBalance = (agent) => {
   const value = chainState.state?.holder_balance;
@@ -57,10 +70,12 @@ function normalizeDiscoveryAgent(agent = {}, index = 0) {
   const pnlLatest = agent.pnl?.data?.latest || {};
   const id = String(agent.id || keyStateAgent.agent_id || "terminal_chad6");
   const name = String(agent.name || keyStateAgent.name || id);
+  const displayName = displayNameForAgent(name, id);
   return {
     id,
     name,
-    initials: agent.initials || initialsFor(name),
+    displayName,
+    initials: agent.initials || initialsFor(displayName),
     color: "#3c4044",
     strategy: agent.strategy || `${id} / configured key-market agent`,
     desc: agent.description || "Reads key-market and backend ledger data from live APIs only.",
@@ -80,6 +95,65 @@ function initialsFor(value) {
   const parts = String(value || "").split(/[_\-.]+/).filter(Boolean);
   const initials = parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
   return initials || String(value || "AG").slice(0, 2).toUpperCase();
+}
+
+function displayNameForAgent(name, id) {
+  const value = String(name || id || "Agent").trim();
+  if (!value) return "Agent";
+  if (!isIdentifierLike(value) && value !== id) return value;
+
+  const words = value
+    .split(/[\s_\-./]+/g)
+    .flatMap(splitLettersAndNumbers)
+    .filter((word) => word && !isMachineToken(word))
+    .map(titleWord);
+
+  return words.length ? words.join(" ") : shortHash(value);
+}
+
+function isIdentifierLike(value) {
+  const text = String(value || "");
+  return /[_\-.]/.test(text)
+    || /\d/.test(text)
+    || text === text.toLowerCase()
+    || /^[a-z0-9]+$/i.test(text);
+}
+
+function splitLettersAndNumbers(value) {
+  return String(value || "").match(/[a-z]*\d+[a-z]*|[a-z]+|\d+/gi) ?? [];
+}
+
+function isMachineToken(value) {
+  const token = String(value || "").toLowerCase();
+  if (/^\d+$/.test(token)) return true;
+  if (/^20\d{6,}/.test(token)) return true;
+  if (/^\d{6,}t?\d*z?$/.test(token)) return true;
+  if (/^[a-f0-9]{4,}$/.test(token) && /[a-f]/.test(token) && /\d/.test(token)) return true;
+  return false;
+}
+
+function titleWord(value) {
+  const token = String(value || "").toLowerCase();
+  const acronyms = {
+    ai: "AI",
+    api: "API",
+    cm: "CM",
+    e2e: "E2E",
+    ft: "FT",
+    id: "ID",
+    ll: "LL",
+    near: "NEAR",
+    pnl: "P&L",
+    tc: "TC",
+  };
+  if (acronyms[token]) return acronyms[token];
+  if (token === "clawhouse") return "ClawHouse";
+  if (token === "ironclaw") return "IronClaw";
+  return `${token.charAt(0).toUpperCase()}${token.slice(1)}`;
+}
+
+function agentTitle(agent) {
+  return agent.displayName || agent.name;
 }
 
 function setChainState(nextState) {
@@ -131,14 +205,14 @@ function hashName(name) {
 }
 
 function agentIcon(agent) {
-  const hash = hashName(agent.name);
+  const hash = hashName(agentTitle(agent));
   const accents = ["#63d8bd", "#69a7f5", "#e2b35e", "#76c989", "#e48169", "#aab6c5"];
   const accent = accents[hash % accents.length];
   const accentTwo = accents[(hash >>> 5) % accents.length];
   const rotation = hash % 360;
   const cut = 19 + (hash % 7);
   const id = `agent-${hash.toString(36)}`;
-  const label = agent.name.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+  const label = agentTitle(agent).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 
   return `
     <svg class="agent-icon" viewBox="0 0 64 64" role="img" aria-label="${label} generated icon">
@@ -276,11 +350,11 @@ function paperLeaderboardRow(agent) {
   const rows = chainState.backend?.paperLeaderboard?.leaderboard;
   if (!Array.isArray(rows)) return null;
   const boardId = agent.boardId ?? agent.id;
-  return rows.find((row) =>
-    row?.agent_id === agent.id
-    || row?.paper_account_id === boardId
-    || row?.paper_account_id === agent.id
-  ) ?? null;
+  const direct = rows.find((row) => row?.paper_account_id === boardId || row?.paper_account_id === agent.id);
+  if (direct) return direct;
+  const uniqueAgentId = agents.filter((candidate) => candidate.id === agent.id).length === 1;
+  if (!uniqueAgentId) return null;
+  return rows.find((row) => row?.agent_id === agent.id) ?? null;
 }
 
 function discoveryPnl(agent) {
@@ -296,7 +370,7 @@ function selectedBackendPnl(agent) {
 function agentRowPnl(agent) {
   const paper = paperLeaderboardRow(agent);
   if (paper) return normalizePct(paper.paper_pnl_pct);
-  return discoveryPnl(agent);
+  return null;
 }
 
 function backendPnl(agent) {
@@ -534,10 +608,10 @@ async function loadDiscoveryAgents() {
     }
 
     agents = nextAgents;
-    const preferredId = requestedAgentId && agents.some((agent) => agent.id === requestedAgentId)
+    const preferredId = requestedAgentId && agents.some((agent) => agentMatchesSelection(agent, requestedAgentId))
       ? requestedAgentId
       : selectedId;
-    selectedId = agents.some((agent) => agent.id === preferredId) ? preferredId : agents[0].id;
+    selectedId = resolveSelectedId(preferredId);
     discoveryLoading = false;
     chainState = {
       ...chainState,
@@ -584,10 +658,11 @@ function renderTicker() {
     const pnl = backendPnl(agent);
     const pnlSource = backendPnlSource(agent);
     const holders = holderCount(agent);
+    const title = agentTitle(agent);
     return [
-      `<span class="ticker-item"><b>${agent.name}</b><span class="${pnlClass(pnl)}">${pnlLabel(pnl)}</span><span>${pnlSource}</span></span>`,
-      `<span class="ticker-item"><b>${agent.name} key</b><span>${keyPriceLabel(agent)}</span><span>Testnet</span></span>`,
-      `<span class="ticker-item"><b>${holders === null ? "--" : holders}</b><span>keys in ${agent.name}</span></span>`
+      `<span class="ticker-item"><b>${escapeHtml(title)}</b><span class="${pnlClass(pnl)}">${pnlLabel(pnl)}</span><span>${pnlSource}</span></span>`,
+      `<span class="ticker-item"><b>${escapeHtml(title)} key</b><span>${keyPriceLabel(agent)}</span><span>Testnet</span></span>`,
+      `<span class="ticker-item"><b>${holders === null ? "--" : holders}</b><span>keys in ${escapeHtml(title)}</span></span>`
     ];
   });
   const track = byId("tickerTrack");
@@ -638,19 +713,23 @@ function renderAgentList() {
   list.removeAttribute("aria-busy");
   list.innerHTML = sortedAgents().map((agent) => {
     const pnl = agentRowPnl(agent);
+    const selectionKey = agentSelectionKey(agent);
+    const selected = selectionKey === selectedId;
+    const title = agentTitle(agent);
+    const pnlTone = pnl === null ? "empty" : pnl < 0 ? "down" : "up";
     return `
-    <button class="agent-row ${agent.id === selectedId ? "active" : ""}" data-agent="${agent.id}">
+    <button class="agent-row" data-agent="${escapeHtml(selectionKey)}" data-agent-id="${escapeHtml(agent.id)}" data-selected="${selected ? "true" : "false"}" aria-label="Open ${escapeHtml(title)}">
       <div class="avatar">${agentIcon(agent)}</div>
       <div class="agent-copy">
         <div class="agent-name">
-          <span>${agent.name}</span>
+          <span class="agent-title" title="${escapeHtml(agent.name)}">${escapeHtml(title)}</span>
           <span class="tag">${isUnlocked(agent) ? "open" : "locked"}</span>
         </div>
-        <div class="agent-meta">${agent.strategy}</div>
+        <div class="agent-meta">${escapeHtml(agent.strategy)}</div>
         <div class="agent-stats">
           <span>${keyPriceLabel(agent)}</span>
           <span>${holderCount(agent) === null ? "--" : holderCount(agent)} keys</span>
-          <b class="agent-change ${pnl === null ? "" : pnl < 0 ? "down" : ""}">${pnlLabel(pnl)}</b>
+          <b class="agent-change ${pnlTone}">${pnlLabel(pnl)}</b>
         </div>
       </div>
     </button>
@@ -674,8 +753,9 @@ function renderHero(agent) {
   const pnl = backendPnl(agent);
   const pnlSource = backendPnlSource(agent);
   const chart = chartModel(agent);
+  const title = agentTitle(agent);
   byId("heroAvatar").innerHTML = agentIcon(agent);
-  byId("heroName").textContent = agent.name;
+  byId("heroName").textContent = title;
   byId("heroDesc").textContent = agent.desc;
   byId("statPnl").textContent = pnl === null ? "--" : signedPct(pnl);
   byId("statPnl").className = pnl === null ? "" : pnl >= 0 ? "green" : "red";
@@ -686,7 +766,7 @@ function renderHero(agent) {
   byId("statGate").textContent = isUnlocked(agent) ? "Unlocked" : "Locked";
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
-  byId("miniTop").textContent = agent.name;
+  byId("miniTop").textContent = title;
   byId("miniMove").textContent = pnl === null ? "--" : signedPct(pnl);
   byId("leaderDataSource").textContent = pnlSource;
   byId("chartSub").textContent = isUnlocked(agent)
