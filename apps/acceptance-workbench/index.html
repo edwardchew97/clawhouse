@@ -195,6 +195,18 @@
       min-width: 0;
     }
 
+    .flow-sequence {
+      flex: 0 0 auto;
+      min-width: 42px;
+      border-radius: 5px;
+      background: var(--selected);
+      color: var(--subtle);
+      padding: 2px 5px;
+      font-size: 11px;
+      line-height: 1.2;
+      text-align: center;
+    }
+
     .flow-name {
       min-width: 0;
       overflow: hidden;
@@ -235,7 +247,7 @@
 
     .step-button {
       display: grid;
-      grid-template-columns: 52px minmax(0, 1fr) auto;
+      grid-template-columns: 34px 52px minmax(0, 1fr) auto;
       align-items: center;
       gap: 8px;
       width: 100%;
@@ -246,6 +258,22 @@
       color: var(--default);
       font-size: 12px;
       line-height: 1.25;
+    }
+
+    .step-index {
+      justify-self: start;
+      min-width: 30px;
+      border-radius: 5px;
+      background: var(--selected);
+      color: var(--subtle);
+      padding: 3px 5px;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .step-button.active .step-index {
+      color: var(--strong);
     }
 
     .step-button strong {
@@ -1249,7 +1277,7 @@
         <div id="accessFilter" class="access-filter-row" role="group" aria-label="Request access filter"></div>
       </div>
       <div class="sidebar-section">
-        <div class="sidebar-label">Collections</div>
+        <div class="sidebar-label">Acceptance steps</div>
         <div id="flowList"></div>
       </div>
     </aside>
@@ -1257,7 +1285,7 @@
     <main class="workspace">
       <header class="topbar">
         <div class="crumbs">
-          <span>Collections</span>
+          <span>Acceptance steps</span>
           <span>/</span>
           <span id="crumbFlow"></span>
           <span>/</span>
@@ -1347,6 +1375,7 @@
 
   <script>
     const storageKey = "clawhouse.acceptance.workbench.v2";
+    const sidebarSequenceVersion = 1;
     const defaultEnv = {
       repoRoot: "",
       ledgerBaseUrl: "http://127.0.0.1:4321",
@@ -1492,7 +1521,7 @@
       envProfiles,
       env: { ...envProfiles[activeEnvProfile], ...emptyEncryptedEnvValues() },
       encryptedEnvProfiles: migrateEncryptedEnvProfiles(persisted),
-      collapsedFlows: persisted.collapsedFlows || {},
+      collapsedFlows: persisted.sidebarSequenceVersion === sidebarSequenceVersion ? persisted.collapsedFlows || {} : {},
       accessFilter: persisted.accessFilter || "all",
       vars: persisted.vars || {},
       inputs: persisted.inputs || {},
@@ -1550,6 +1579,7 @@
         activeEnvProfile: state.activeEnvProfile,
         envProfiles: state.envProfiles,
         encryptedEnvProfiles: state.encryptedEnvProfiles,
+        sidebarSequenceVersion,
         collapsedFlows: state.collapsedFlows,
         accessFilter: currentAccessFilter(),
         vars: state.vars,
@@ -2362,6 +2392,7 @@
             >
               <span class="flow-title">
                 <span class="flow-chevron" aria-hidden="true"></span>
+                <span class="flow-sequence">Step ${flowIndex + 1}</span>
                 <span class="flow-name">${escapeHtml(flow.name)}</span>
               </span>
               <span class="sidebar-label">${escapeHtml(countLabel)}</span>
@@ -2369,6 +2400,7 @@
             <div id="${stepsId}" class="step-list" ${isCollapsed ? "hidden" : ""}>
               ${steps.map(({ step, stepIndex }) => `
                 <button type="button" class="step-button ${flowIndex === state.activeFlow && stepIndex === state.activeStep ? "active" : ""}" data-flow="${flowIndex}" data-step="${stepIndex}">
+                  <span class="step-index">${flowIndex + 1}.${stepIndex + 1}</span>
                   <span class="verb ${escapeAttr(methodClass(step))}">${escapeHtml(methodLabel(step))}</span>
                   <strong>${escapeHtml(step.name)}</strong>
                   ${accessLabel(step) ? `<span class="access-tag ${escapeAttr(stepAccess(step))}">${escapeHtml(accessLabel(step))}</span>` : ""}
