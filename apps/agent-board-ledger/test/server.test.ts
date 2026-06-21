@@ -84,6 +84,42 @@ describe("Agent Board Ledger local backend", () => {
     expect(trackedWallet?.tracking_started_at).toBe("2026-06-19T00:00:00.000Z");
   });
 
+  test("lists active public boards for agent discovery", async () => {
+    await registerBoard({
+      metadata: {
+        name: "IronClaw",
+        description: "Public paper-trading agent.",
+        strategy_summary: "Hyperliquid paper perps.",
+      },
+    });
+    await registerBoard({
+      board_id: "board-holder-gated",
+      agent_id: "holder-gated",
+      visibility_mode: "holder_gated",
+    });
+    await registerBoard({
+      board_id: "board-draft",
+      agent_id: "draft-agent",
+      public_status: "draft",
+    });
+
+    const response = await app.fetch(new Request("http://ledger.test/boards"));
+    const body = await jsonOf<{
+      ok: true;
+      mode: string;
+      count: number;
+      boards: Array<{ id: string; agent_id: string; metadata?: Record<string, unknown>; metadata_json?: unknown }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.mode).toBe("public_active_boards");
+    expect(body.count).toBe(1);
+    expect(body.boards.map((board) => board.id)).toEqual(["board-1"]);
+    expect(body.boards[0]?.agent_id).toBe("ironclaw");
+    expect(body.boards[0]?.metadata?.name).toBe("IronClaw");
+    expect("metadata_json" in (body.boards[0] ?? {})).toBe(false);
+  });
+
   test("migrates production accounting schema without dropping legacy rows", () => {
     const legacy = new Database(":memory:");
     legacy.exec("PRAGMA foreign_keys = ON");
