@@ -17,9 +17,9 @@
 ## Remediation status
 
 Current branch remediation after the audit:
-- Fixed in code: A3/A4 Workbench localhost bind, flow/runner/health auth, outbound allowlist, and disabled redirect following; A5 timing-safe cron/read-token comparisons; A6 generic unexpected Workbench/app-backend 5xx responses; C3 read grants are no longer capped to the latest 50 rows; B2 now has a pre-mutation deposit floor check before buy state writes.
+- Fixed in code: A3/A4 Workbench localhost bind, flow/runner/health auth, outbound allowlist, and disabled redirect following; A5 timing-safe cron/read-token comparisons; A6 generic unexpected Workbench/app-backend 5xx responses; C3 read grants are no longer capped to the latest 50 rows; B2 now has a pre-mutation deposit floor check before buy state writes; the GitHub Dependabot `wee_alloc` critical alert is removed from the key-market contract dependency graph.
 - Not fixed in code: A1 credential rotation, A2 local wallet purging, and B1 full transfer-failure compensation. These require external secret rotation, operator confirmation for deleting local ignored wallet files, or a dedicated contract payout/claim redesign.
-- Dependency advisories remain open: compatible `bun update` did not clear the `postcss` or `elliptic` advisories; `cargo-audit` is still not installed.
+- Dependency advisories remain open: compatible `bun update` did not clear the `postcss` or `elliptic` advisories; `cargo-audit` is still not installed. The GitHub default-branch alert for `wee_alloc` can remain visible until this fix is promoted to `main`.
 
 ---
 
@@ -153,6 +153,7 @@ Reviewed as a third party from the code itself, not the docs. The backend is one
 - `bun audit` in `apps/clawhouse-app`: **1 moderate** advisory, `postcss <8.5.10` via `next` (`GHSA-qx2v-qp2m-jg93`).
 - `bun audit` in `apps/agent-board-ledger`: **1 low** advisory, `elliptic <=6.6.1` via `@near-js/crypto` through `secp256k1` (`GHSA-848j-6mx2-7j84`).
 - `bun audit` in `agent-key-market`: no JavaScript vulnerabilities found.
+- GitHub Dependabot readback reported **1 critical** Rust advisory on the default branch: `wee_alloc` in `agent-key-market/Cargo.lock` (`GHSA-rc23-xxgq-x27g`). Current branch mitigation disables `near-sdk` default features in `agent-key-market/contract/Cargo.toml`; `cargo tree --target all -i wee_alloc` no longer finds the package.
 - `cargo audit` could not be run because the `cargo-audit` subcommand is not installed.
 
 ## Overall priority order
