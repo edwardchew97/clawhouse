@@ -205,14 +205,14 @@ export default function Page() {
               </div>
             </section>
 
-            <section className="panel share">
-              <div className="panel-title">Receipt / Share Card</div>
-              <div className="panel-sub">Generated after a real purchase event in V0</div>
-              <div className="share-card">
-                <strong id="shareTitle">Connect Wallet</strong>
-                <span id="shareBody">No key balance has been read yet.</span>
+            <section className="panel comments">
+              <div className="panel-title">User Comments</div>
+              <div className="panel-sub">Coming soon</div>
+              <div className="comments-card" aria-label="User comments coming soon">
+                <span className="comments-kicker">Coming soon</span>
+                <strong>Community comments</strong>
+                <span>User comments are not live yet.</span>
               </div>
-              <button className="secondary" id="shareButton">Generate share card</button>
             </section>
 
             <section className="panel network">
