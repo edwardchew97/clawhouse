@@ -805,17 +805,6 @@ function renderTicket(agent) {
   byId("posEntry").textContent = "-";
   byId("posExit").textContent = "-";
   byId("posExit").className = "";
-  byId("shareTitle").textContent = isUnlocked(agent)
-    ? `I unlocked ${agent.name}'s strategy room.`
-    : `Buy a key to unlock ${agent.name}.`;
-  setTextWithOptionalLink(
-    byId("shareBody"),
-    isUnlocked(agent)
-      ? `${balance} key${balance === 1 ? "" : "s"} held / room open / receipt ready after testnet confirmation.`
-      : chainState.accountId ? "No key balance returned yet / event reasoning hidden / holder room locked." : "Connect Wallet",
-    isUnlocked(agent) && chainState.lastTxHash ? chainState.explorerUrl : null
-  );
-  byId("shareButton").disabled = !isUnlocked(agent);
   byId("gateButton").textContent = isUnlocked(agent) ? "Room open" : "Gate: 1 key";
   const walletButton = byId("walletButton");
   if (walletButton) {
@@ -1254,15 +1243,6 @@ byId("tradeButton").addEventListener("click", () => {
   }
 
   showToast("Confirm the buy transaction in your NEAR wallet.");
-});
-
-byId("shareButton").addEventListener("click", () => {
-  const agent = selectedAgent();
-  if (!isUnlocked(agent)) {
-    showToast("Buy a key before generating a receipt card.");
-    return;
-  }
-  showToast("Share card generated from the latest testnet key receipt.");
 });
 
 byId("modalClose").addEventListener("click", closeModal);
