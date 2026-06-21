@@ -1,0 +1,22 @@
+meta {
+  name: 02 Read Paper Leaderboard
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/paper/leaderboard
+  body: none
+  auth: none
+}
+
+tests {
+  test("paper leaderboard is labeled paper and contains the run account", function() {
+    const body = res.getBody();
+    const accountId = bru.getVar("paper_account_id");
+    expect(res.getStatus()).to.equal(200);
+    expect(body.ok).to.equal(true);
+    expect(body.label).to.equal("paper");
+    expect(body.leaderboard.some((row) => row.paper_account_id === accountId)).to.equal(true);
+  });
+}

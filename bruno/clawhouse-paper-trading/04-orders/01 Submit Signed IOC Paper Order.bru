@@ -1,0 +1,150 @@
+meta {
+  name: 01 Submit Signed IOC Paper Order
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/paper/orders
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {}
+}
+
+script:pre-request {
+  const crypto = require("crypto");
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+  function requireLocalDev() {
+    const baseUrl = String(bru.getEnvVar("base_url") || "");
+    if (String(bru.getEnvVar("local_runtime_only")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  function secret(name, processName) {
+    const value = bru.getEnvVar(name) || bru.getProcessEnv(processName);
+    if (!value) throw new Error(`Missing ${name}. Set ${processName} in the collection .env file or Bruno secret environment.`);
+    return String(value);
+  }
+
+  function base58Decode(value) {
+    const bytes = [0];
+    for (const char of value) {
+      const index = alphabet.indexOf(char);
+      if (index < 0) throw new Error("Invalid base58 character in signer key.");
+      let carry = index;
+      for (let i = 0; i < bytes.length; i += 1) {
+        carry += bytes[i] * 58;
+        bytes[i] = carry & 0xff;
+        carry >>= 8;
+      }
+      while (carry > 0) {
+        bytes.push(carry & 0xff);
+        carry >>= 8;
+      }
+    }
+    for (const char of value) {
+      if (char === "1") bytes.push(0);
+      else break;
+    }
+    return Uint8Array.from(bytes.reverse());
+  }
+
+  function privateKeyFromNearSecret(secretKey) {
+    const raw = secretKey.replace(/^ed25519:/, "");
+    const decoded = base58Decode(raw);
+    if (decoded.length !== 64) {
+      throw new Error("Expected a NEAR ed25519 private key with 64 decoded bytes.");
+    }
+    const seed = Buffer.from(decoded.slice(0, 32));
+    const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
+    return crypto.createPrivateKey({
+      key: Buffer.concat([pkcs8Prefix, seed]),
+      format: "der",
+      type: "pkcs8"
+    });
+  }
+
+  function sha256Hex(value) {
+    return crypto.createHash("sha256").update(value).digest("hex");
+  }
+
+  requireLocalDev();
+  const paperAccountId = bru.getVar("paper_account_id") || bru.getEnvVar("paper_account_id");
+  const agentId = bru.getVar("agent_id") || bru.getEnvVar("agent_id") || "regdgen.testnet";
+  if (!paperAccountId) throw new Error("Missing paper_account_id. Run Create Paper Account first.");
+
+  const coin = String(bru.getEnvVar("coin") || "BTC").toUpperCase();
+  const clientOrderId = `bruno-ioc-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const body = {
+    paper_account_id: paperAccountId,
+    client_order_id: clientOrderId,
+    coin,
+    side: "buy",
+    tif: "Ioc",
+    size: Number(bru.getEnvVar("order_size") || 0.0001),
+    margin_mode: "cross",
+    leverage: Number(bru.getEnvVar("leverage") || 2),
+    max_slippage_bps: Number(bru.getEnvVar("max_slippage_bps") || 100),
+    reason: String(bru.getEnvVar("paper_order_reason") || "Bruno signed local dev paper order.")
+  };
+  const rawBody = JSON.stringify(body);
+  const timestamp = Date.now().toString();
+  const nonce = crypto.randomUUID();
+  const bodyHash = sha256Hex(rawBody);
+  const payload = JSON.stringify({
+    domain: "clawhouse.paper-trading.v0",
+    version: 1,
+    method: "POST",
+    path: "/paper/orders",
+    bodyHash,
+    timestamp,
+    nonce,
+    paperAccountId,
+    agentId
+  });
+  const privateKey = privateKeyFromNearSecret(secret("paper_signer_private_key", "PAPER_SIGNER_PRIVATE_KEY"));
+  const signature = crypto.sign(null, Buffer.from(payload), privateKey).toString("base64url");
+
+  bru.setVar("last_client_order_id", clientOrderId);
+  req.setBody(body);
+  req.setHeader("content-type", "application/json");
+  req.setHeader("x-clawhouse-paper-account-id", paperAccountId);
+  req.setHeader("x-clawhouse-agent-id", agentId);
+  req.setHeader("x-clawhouse-paper-timestamp", timestamp);
+  req.setHeader("x-clawhouse-paper-nonce", nonce);
+  req.setHeader("x-clawhouse-paper-body-sha256", bodyHash);
+  req.setHeader("x-clawhouse-paper-signature", signature);
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body && body.order && body.order.id) {
+    bru.setVar("last_order_id", body.order.id);
+  }
+}
+
+tests {
+  test("signed IOC order is accepted or deterministically rejected", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(201);
+    expect(body.ok).to.equal(true);
+    expect(body.order.paper_account_id).to.equal(bru.getVar("paper_account_id"));
+    expect(body.order.client_order_id).to.equal(bru.getVar("last_client_order_id"));
+    expect(["filled", "partially_filled", "rejected"]).to.include(body.order.status);
+    if (body.order.status === "rejected") {
+      expect(body.order.reject_reason).to.be.a("string");
+    }
+  });
+}

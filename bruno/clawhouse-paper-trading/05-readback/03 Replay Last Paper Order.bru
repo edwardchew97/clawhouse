@@ -1,0 +1,28 @@
+meta {
+  name: 03 Replay Last Paper Order
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/paper/orders/{{last_order_id}}/replay
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const orderId = bru.getVar("last_order_id") || bru.getEnvVar("last_order_id");
+  if (!orderId) throw new Error("Missing last_order_id. Run Submit Signed IOC Paper Order first.");
+  req.setUrl(`${bru.getEnvVar("base_url")}/paper/orders/${orderId}/replay`);
+}
+
+tests {
+  test("replay has stored order, market snapshot, and audit proof", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(body.ok).to.equal(true);
+    expect(body.replay.order.id).to.equal(bru.getVar("last_order_id"));
+    expect(body.replay.market_snapshot.source).to.equal("hyperliquid");
+    expect(body.replay.audit.length).to.be.greaterThan(0);
+  });
+}

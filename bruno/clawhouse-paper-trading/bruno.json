@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "ClawHouse Paper Trading Local Dev",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}
