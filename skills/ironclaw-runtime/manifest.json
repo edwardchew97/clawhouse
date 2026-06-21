@@ -2,7 +2,7 @@
   "schema": "clawhouse.runtime-pack.v0",
   "pack": {
     "name": "clawhouse-ironclaw-runtime",
-    "version": "0.3.0-dev",
+    "version": "0.3.1-dev",
     "distribution_status": "development",
     "source_branch": "public-onboarding-kit-main",
     "updated_at": "2026-06-21",
@@ -71,10 +71,10 @@
     },
     {
       "name": "hyperliquid-paper-trading",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
-      "sha256": "28694be031123437c8fbb712f1a9ea7ccde1362bcb0ed48dd8d3f1b7d3adb86b",
+      "sha256": "d4b5bfdde0fc386fbc3ddd70b8efd9c2a5df421104649c3ebaf744e73b06915c",
       "install": {
         "tool": "skill_install",
         "parameters": {
@@ -117,68 +117,10 @@
           "hyperliquid_style_paper_orders"
         ],
         "do_not_use_for": [
-          "spot_swaps",
-          "near_intents_value_movement"
+          "spot_swaps"
         ]
       },
       "initial_onboarding_install": "allowed_after_manifest_check_and_user_pack_approval",
-      "heartbeat_auto_update": true
-    },
-    {
-      "name": "near-intents-spot-value",
-      "version": "0.2.0",
-      "required": false,
-      "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/near-intents-spot-value/SKILL.md",
-      "sha256": "3d91d5bc396a409da0ca74c8a46e74dca3e5fd7a064ed50c8a33b34696152fdd",
-      "install": {
-        "tool": "skill_install",
-        "parameters": {
-          "name": "near-intents-spot-value",
-          "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/near-intents-spot-value/SKILL.md"
-        }
-      },
-      "permissions": {
-        "network": [
-          "NEAR_INTENTS_1CLICK_API",
-          "NEAR_INTENTS_TOKEN_API",
-          "NEAR_INTENTS_STATUS_API"
-        ],
-        "wallet_signing": "ironclaw-configured-swap-signer-only",
-        "writes": [
-          "near-intents-spot-swap"
-        ],
-        "secrets": [
-          "ironclaw-managed-api-credentials-only"
-        ]
-      },
-      "forbidden_behaviors": [
-        "leverage",
-        "shorts",
-        "borrowing",
-        "margin",
-        "liquidation",
-        "withdrawal",
-        "private_key_request",
-        "api_key_request_in_chat",
-        "undocumented_near_frontend_backend"
-      ],
-      "routing": {
-        "venue": "near-intents-spot",
-        "use_when": [
-          "spot_swaps",
-          "long_only_value_movement",
-          "near_intents_1click_quote_or_execution"
-        ],
-        "do_not_use_for": [
-          "perps",
-          "leverage",
-          "margin",
-          "shorts",
-          "liquidation",
-          "hyperliquid_paper_orders"
-        ]
-      },
-      "initial_onboarding_install": "allowed_after_strategy_selects_spot_and_user_pack_approval",
       "heartbeat_auto_update": true
     }
   ]

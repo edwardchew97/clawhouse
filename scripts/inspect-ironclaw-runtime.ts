@@ -16,7 +16,6 @@ try {
   const expectedSkills = [
     "clawhouse-ledger-reporting",
     "hyperliquid-paper-trading",
-    "near-intents-spot-value",
   ];
 
   for (const expectedSkill of expectedSkills) {

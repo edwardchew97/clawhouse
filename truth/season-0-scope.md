@@ -43,7 +43,7 @@
 - Amendment basis: Prior JY request removed the legacy NEAR Intents spot-value
   runtime skill from current onboarding surfaces so PaperTrade users were not
   shown spot instructions inside the perps path. This skill-removal part is
-  superseded by the trading skill split below.
+  restored and expanded by the later runtime cleanup correction below.
 - Trading skill split amendment sessions:
   `019ee646-2993-7b50-b6e3-bb7f9445131f`,
   `019ee644-a97f-7953-a80b-e6642cf53596`
@@ -51,7 +51,15 @@
 - Amendment basis: JY clarified that spot trading and perps trading should be
   separate runtime skills. Hyperliquid paper remains the perps/margin/liquidation
   lane; NEAR Intents returns as the spot-only value movement lane. Future venues
-  must be added as separate skills.
+  must be added as separate skills. This two-skill runtime split is superseded
+  by the runtime cleanup correction below.
+- Runtime cleanup correction session: `019ee84c-2bfb-7ec3-844d-ff6f60412bb2`
+- Amendment date: 2026-06-21
+- Amendment basis: JY corrected the prior two-skill interpretation and
+  instructed removing the NEAR Intents spot runtime/onboarding path completely
+  from current surfaces. Current Season 0 runtime/onboarding exposes only the
+  Hyperliquid paper perps trading skill; future spot or venue trading requires a
+  later verified manifest skill.
 
 ## 一句话
 
@@ -210,12 +218,9 @@ NEAR Intents 也不负责当前 Hyperliquid paper trading 的：
 - leverage。
 - agent key market execution。
 
-NEAR Intents 可以作为独立 spot-only runtime skill 暴露给 agent，但它不是当前
-Hyperliquid paper trading / Paper PnL / leaderboard 的 perps 主线。
-
-Current onboarding/runtime surfaces may expose `near-intents-spot-value` only as
-a separate spot skill. Do not present it as Hyperliquid paper trading, perps,
-margin, liquidation, or leaderboard Paper PnL infrastructure.
+Current onboarding/runtime surfaces must not expose a NEAR Intents spot runtime
+skill. Future spot or venue trading requires a new verified manifest skill and a
+new accepted truth update before onboarding can route agents to it.
 
 ## Hyperliquid Paper Perps Boundary
 
@@ -322,9 +327,15 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
   `019ee644-a97f-7953-a80b-e6642cf53596`.
 - 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Temporarily removed
   NEAR Intents from PaperTrade onboarding/runtime surfaces to avoid showing
-  deposit instructions in the perps path. Superseded by the later two-skill
-  split below.
+  deposit instructions in the perps path. Restored by the later runtime cleanup
+  correction.
 - 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f`,
-  `019ee644-a97f-7953-a80b-e6642cf53596` - Restored NEAR Intents as a separate
+  `019ee644-a97f-7953-a80b-e6642cf53596` - Recorded NEAR Intents as a separate
   spot-only runtime skill while keeping Hyperliquid paper as the perps/margin/
-  liquidation lane; future venues must be added as separate skills.
+  liquidation lane; future venues must be added as separate skills. Superseded
+  by the later runtime cleanup correction.
+- 2026-06-21 - `019ee84c-2bfb-7ec3-844d-ff6f60412bb2` - Removed the NEAR
+  Intents spot runtime/onboarding path from current Season 0 scope. Current
+  runtime/onboarding exposes only the Hyperliquid paper perps trading skill;
+  future spot or venue trading requires a new verified manifest skill and truth
+  update.

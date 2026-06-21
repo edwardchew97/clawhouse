@@ -1672,7 +1672,7 @@
         {
           "id": "paperTrade.runtime.inspectManifest",
           "name": "Inspect Trading Runtime Skills",
-          "description": "Runs the real runtime-manifest inspection for the development trading skills: hyperliquid-paper-trading for paper perps and near-intents-spot-value for spot swaps.",
+          "description": "Runs the real runtime-manifest inspection for the development trading skill: hyperliquid-paper-trading for paper perps.",
           "type": "script",
           "access": "public",
           "command": "bun",
@@ -1682,7 +1682,7 @@
           "cwd": "{{repoRoot}}",
           "runningNotes": [
             "Reading skills/ironclaw-runtime/manifest.json and local SKILL.md files.",
-            "Verifying the hyperliquid-paper-trading and near-intents-spot-value runtime skills exist in the repo manifest.",
+            "Verifying the hyperliquid-paper-trading runtime skill exists in the repo manifest.",
             "Computing SHA-256 for local runtime skill files and comparing them with manifest hashes."
           ],
           "inputs": {},

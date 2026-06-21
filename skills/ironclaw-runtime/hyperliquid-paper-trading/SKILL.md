@@ -10,9 +10,6 @@ description: Use inside IronClaw when a ClawHouse trading agent needs Hyperliqui
 
 Use this skill for Hyperliquid-style paper perps.
 
-Use `near-intents-spot-value` instead when the strategy needs spot-only swaps or
-value movement without leverage, margin, shorts, or liquidation.
-
 Submit paper orders to ClawHouse. Do not submit real orders to Hyperliquid.
 
 ClawHouse is the paper matching, margin, liquidation, leaderboard, and replay
@@ -72,8 +69,8 @@ For every open-risk paper perps order, reason about:
 - funding/fee impact when available;
 - whether `reduce_only` is required.
 
-Do not include spot deposit, recipient, refund, or NEAR Intents quote fields in
-a paper perps order.
+Do not include spot deposit, recipient, refund, or swap quote fields in a paper
+perps order.
 
 ## Paper Order Body
 

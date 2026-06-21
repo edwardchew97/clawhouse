@@ -61,7 +61,8 @@ replace Scope V0 key trading.
 - Amendment basis: Prior JY request removed the legacy
   `near-intents-spot-value` optional skill from current runtime/onboarding
   surfaces and set the current PaperTrade starting balance default to 10,000
-  USD. The skill-removal part is superseded by the trading skill split below.
+  USD. The starting balance remains current; the skill-removal part is restored
+  and expanded by the later runtime cleanup correction below.
 - Trading skill split amendment sessions:
   `019ee646-2993-7b50-b6e3-bb7f9445131f`,
   `019ee644-a97f-7953-a80b-e6642cf53596`
@@ -71,7 +72,8 @@ replace Scope V0 key trading.
   `hyperliquid-paper-trading` for perps-style paper orders with leverage,
   cross/isolated margin, and liquidation, and `near-intents-spot-value` for
   spot-only swaps/value movement. Future venues must be added as separate
-  manifest skills instead of overloading either skill.
+  manifest skills instead of overloading either skill. This two-skill runtime
+  split is superseded by the runtime cleanup correction below.
 - Single-source balance amendment session:
   `019ee858-16a0-7603-b385-1d7a379e3a94`
 - Amendment date: 2026-06-21
@@ -79,6 +81,13 @@ replace Scope V0 key trading.
   bankroll. Current V0 stores it only on the approved paper account as
   `paper_accounts.starting_balance_usd`; Agent Board Ledger board/PnL rows must
   not duplicate that value.
+- Runtime cleanup correction session: `019ee84c-2bfb-7ec3-844d-ff6f60412bb2`
+- Amendment date: 2026-06-21
+- Amendment basis: JY corrected the prior two-skill interpretation and
+  instructed removing the NEAR Intents spot runtime/onboarding path completely
+  from current surfaces. Current V0 exposes `hyperliquid-paper-trading` as the
+  only trading runtime skill; future spot or venue skills must be added later as
+  separate manifest entries before onboarding can route to them.
 
 ## One Sentence
 
@@ -104,7 +113,7 @@ Trading must not require changes to the bonding-curve key-market contract.
 
 Current V0 uses a ClawHouse-hosted Hyperliquid-style paper trading engine.
 OutLayer is deferred. NEAR Intents is no longer the first agent-trading/PnL
-lane, but it is available as a separate spot-only runtime skill.
+lane, and no NEAR Intents spot runtime skill is exposed in current onboarding.
 
 In V0:
 
@@ -180,22 +189,17 @@ ClawHouse provides a runtime skill pack for IronClaw:
   Hyperliquid-style paper orders, submit them to ClawHouse, read fills,
   positions, risk, liquidation, and replay proof, and stop when market/risk data
   is stale.
-- `near-intents-spot-value`: tells the agent how to quote, execute when
-  authorized, track, and report NEAR Intents / 1Click spot-only swaps or value
-  movement. It must not use leverage, margin, shorts, liquidation, or
-  Hyperliquid paper order fields.
-- future trading value skills: add one separate venue/value adapter per trading
-  pattern through the same manifest verification path.
+- future trading skills: add one separate venue/value adapter per trading
+  pattern through the same manifest verification path before onboarding can
+  route agents to that pattern.
 
-Agents must route by trading pattern:
+Current agents may route only perps, leverage, cross/isolated margin, shorts,
+liquidation, and Hyperliquid-style paper orders to `hyperliquid-paper-trading`.
+Do not route unsupported spot/value movement strategies to a missing skill.
+Future spot or venue routes require a new verified manifest entry first.
 
-- perps, leverage, cross/isolated margin, shorts, liquidation, Hyperliquid-style
-  paper orders: use `hyperliquid-paper-trading`;
-- spot swaps, long-only value movement, NEAR Intents / 1Click quote or
-  execution: use `near-intents-spot-value`.
-
-Do not mix perps fields into spot decisions, and do not mix spot deposit,
-recipient, or refund fields into paper perps orders.
+Do not mix spot deposit, recipient, refund, or swap quote fields into paper
+perps orders.
 
 The ClawHouse onboarding skill runs inside the target IronClaw agent. It should:
 
@@ -626,15 +630,19 @@ The first Agent Trading slice is done only when:
 - 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Removed
   `near-intents-spot-value` from the current runtime/onboarding contract and
   set the current PaperTrade starting balance default to 10,000 USD per
-  approved agent paper account. The skill-removal part is superseded by the
-  later two-skill split below.
+  approved agent paper account. The skill-removal part is restored by the later
+  runtime cleanup correction.
 - 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f`,
-  `019ee644-a97f-7953-a80b-e6642cf53596` - Restored the two-skill trading
+  `019ee644-a97f-7953-a80b-e6642cf53596` - Recorded the two-skill trading
   split: `hyperliquid-paper-trading` owns paper perps with leverage,
   cross/isolated margin, and liquidation, while `near-intents-spot-value` owns
   spot-only swaps/value movement; future venues must be separate manifest
-  skills.
+  skills. Superseded by the later runtime cleanup correction.
 - 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Confirmed
   `paper_accounts.starting_balance_usd` as the only stored starting bankroll for
   current agent paper PnL; Agent Board Ledger board rows and PnL snapshot rows
   must not store duplicate baseline values.
+- 2026-06-21 - `019ee84c-2bfb-7ec3-844d-ff6f60412bb2` - Removed the NEAR
+  Intents spot runtime/onboarding path from current Agent Trading truth. Current
+  runtime/onboarding exposes `hyperliquid-paper-trading` as the only trading
+  skill; future spot or venue trading requires a new verified manifest entry.

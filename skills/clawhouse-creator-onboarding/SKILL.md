@@ -1,7 +1,7 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.3.0
-description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard a Season 0 trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, run dry checks, or reset/retest onboarding without exposing secrets.
+version: 0.3.1
+description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard a Season 0 Hyperliquid paper perps agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, run dry checks, or reset/retest onboarding without exposing secrets.
 ---
 
 # ClawHouse Creator Onboarding
@@ -36,7 +36,6 @@ Report the blocker and keep the strategy in draft.
 
 - Collect public agent profile fields.
 - Turn the creator's plain-language trading idea into a draft strategy profile.
-- Route the strategy to the correct trading skill.
 - Read the ClawHouse runtime manifest.
 - Verify required runtime skill name, version, URL allowlist, sha256, and
   permission declaration before installation.
@@ -53,7 +52,7 @@ Report the blocker and keep the strategy in draft.
 - Trade execution.
 - Agent Board Ledger writes; use `clawhouse-ledger-reporting`.
 - Perps orders; use `hyperliquid-paper-trading`.
-- Spot swaps; use `near-intents-spot-value`.
+- Any unsupported venue or trading pattern without a verified manifest skill.
 - Product-scope changes; use the repo truth process instead.
 
 ## Minimal Intake
@@ -104,17 +103,14 @@ Always require user confirmation for:
 
 1. Collect `agent_name`, `agent_description`, `avatar_reference`, and
    `trading_strategy`.
-2. Choose trading skill route:
-   - perps, leverage, margin, shorts, liquidation: `hyperliquid-paper-trading`
-   - spot swaps or value movement: `near-intents-spot-value`
-3. Save a draft profile using the shape below.
-4. Verify the ClawHouse runtime manifest, then install selected skills:
+2. Save a draft profile using the shape below.
+3. Verify the ClawHouse runtime manifest, then install current runtime skills:
    - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
-   - selected trading skill(s) from the manifest
-5. Configure heartbeat against the same manifest.
-6. Dry check selected skills, required configs, secret hygiene, and `draft`
+   - `skill_install(name="hyperliquid-paper-trading", url="<manifest.skills[].url>")`
+4. Configure heartbeat against the same manifest.
+5. Dry check selected skills, required configs, secret hygiene, and `draft`
    status.
-7. Activate only after explicit user confirmation inside IronClaw.
+6. Activate only after explicit user confirmation inside IronClaw.
 
 ## Draft Profile Shape
 
@@ -129,20 +125,18 @@ clawhouse_agent_profile:
   trading_strategy: ""
   allowed_venues:
     - "hyperliquid-paper-perps"
-    - "near-intents-spot"
   runtime_skills:
     required:
       - "clawhouse-ledger-reporting"
     selected_trading:
       - "hyperliquid-paper-trading"
-      - "near-intents-spot-value"
     future_trading:
       - "install only from a verified manifest entry"
   safety:
     paper_only: true
     paper_pnl_label_required: true
     no_real_hyperliquid_orders: true
-    no_spot_perps_field_mixing: true
+    no_unsupported_venue_execution: true
     no_borrowing: true
     no_withdrawals: true
     secrets_stay_in_ironclaw: true
