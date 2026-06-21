@@ -68,6 +68,10 @@ When reporting a product or onboarding flow, write the exact action chain first.
 - Any change to `skills/clawhouse-creator-onboarding/SKILL.md` must be synced to
   `edwardchew97/clawhouse-onboarding-kit` in the same task before reporting
   completion.
+- If the synced public `skills/clawhouse-creator-onboarding/SKILL.md` content
+  changes, bump its frontmatter `version:` in the same repo and public kit sync.
+  Use at least a patch version bump for wording, flow, guardrail, or completion
+  template changes; do not leave the version unchanged after a content change.
 - Also sync related public onboarding files when changed: `agents/openai.yaml`
   and reset/runtime docs referenced by the public manifest or prompt.
 - Verification must include reading the public raw URL:
