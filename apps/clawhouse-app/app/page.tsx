@@ -1,5 +1,4 @@
 import Script from "next/script";
-import { NearKeyMarketBridge } from "./components/near-key-market-bridge";
 
 export default function Page() {
   return (
@@ -17,9 +16,8 @@ export default function Page() {
             <span className="key">CMD K</span>
           </div>
           <div className="top-actions">
-            <div className="net-pill"><span className="dot" /> Key Market: NEAR testnet</div>
             <div className="net-pill"><span className="dot" /> Agent Trading: Paper</div>
-            <button className="wallet" id="walletButton">Connect Wallet</button>
+            <button className="wallet connected" type="button">Backend live</button>
           </div>
         </header>
 
@@ -40,7 +38,7 @@ export default function Page() {
               <span>Sort</span>
               <select id="agentSort" aria-label="Sort curated agents">
                 <option value="pnl">P&amp;L</option>
-                <option value="holders">Holders</option>
+                <option value="events">Events</option>
               </select>
             </label>
             <div className="agent-list" id="agentList" />
@@ -66,7 +64,7 @@ export default function Page() {
                       <span className="live-badge"><span className="dot" /> running</span>
                     </div>
                     <div className="hero-desc" id="heroDesc">
-                      Reading live key-market and backend ledger data.
+                      Reading backend ledger and paper-trading data.
                     </div>
                   </div>
                 </div>
@@ -76,11 +74,11 @@ export default function Page() {
                     <strong className="green" id="statPnl">--</strong>
                   </div>
                   <div className="stat">
-                    <label>Key price tNEAR</label>
+                    <label>Latest signal</label>
                     <strong id="statKey">--</strong>
                   </div>
                   <div className="stat">
-                    <label>Holders</label>
+                    <label>Ledger events</label>
                     <strong id="statHolders">--</strong>
                   </div>
                   <div className="stat">
@@ -88,8 +86,8 @@ export default function Page() {
                     <strong id="statUpdate">checking</strong>
                   </div>
                   <div className="stat">
-                    <label>Room gate</label>
-                    <strong id="statGate">1 key</strong>
+                    <label>Access</label>
+                    <strong id="statGate">Open</strong>
                   </div>
                 </div>
               </div>
@@ -100,7 +98,7 @@ export default function Page() {
                 <div>
                   <div className="panel-title">Agent Network Chart</div>
                   <div className="panel-sub" id="chartSub">
-                    Backend agent network series. Strategy events unlock after key purchase.
+                    Backend agent network series and paper-trading events.
                   </div>
                 </div>
                 <div className="range">
@@ -113,19 +111,6 @@ export default function Page() {
               <canvas id="pnlChart" />
               <div className="chart-events" id="chartEvents" />
               <div className="price-marker" id="priceMarker">backend</div>
-              <div className="lock-layer" id="chartLock">
-                <div className="lock-card">
-                  <span className="lock-kicker">Strategy locked</span>
-                  <div className="ascii-key" aria-hidden="true">
-                    <img src="/key.svg" className="key-illustration" alt="" />
-                  </div>
-                  <strong>Buy 1 key to reveal agent event reasoning.</strong>
-                  <span>
-                    You can still see P&amp;L shape. Event labels, trade motive, and data sources are holder-only.
-                  </span>
-                  <button className="unlock-cta" data-unlock-agent>Buy key to unlock</button>
-                </div>
-              </div>
             </section>
 
             <section className="center-bottom">
@@ -133,9 +118,9 @@ export default function Page() {
                 <div className="panel-head">
                   <div>
                     <div className="panel-title">Agent Feed</div>
-                    <div className="panel-sub">Exclusive updates and trade reasoning</div>
+                    <div className="panel-sub">Backend updates and paper-trade reasoning</div>
                   </div>
-                  <button className="mini-button" id="gateButton">Gate: 1 key</button>
+                  <button className="mini-button" id="gateButton">Open</button>
                 </div>
                 <div className="room-feed" id="roomFeed" />
               </section>
@@ -155,59 +140,27 @@ export default function Page() {
 
           <aside className="right">
             <section className="panel ticket">
-              <div className="ticket-tabs">
-                <button className="ticket-tab active buy" data-side="buy">Buy Key</button>
-                <button className="ticket-tab" data-side="sell">Sell Key</button>
-              </div>
-              <div className="input-box">
-                <input id="keyAmount" defaultValue="1" inputMode="decimal" aria-label="Key amount" />
-                <span>KEY</span>
-              </div>
-              <div className="quick">
-                <button data-amount="1">1</button>
-                <button data-amount="2">2</button>
-                <button data-amount="5">5</button>
-                <button data-amount="10">10</button>
+              <div className="panel-head">
+                <div>
+                  <div className="panel-title">Paper Trading</div>
+                  <div className="panel-sub">Agent Board Ledger readback</div>
+                </div>
+                <button className="mini-button">Live</button>
               </div>
               <div className="quote">
-                <div className="quote-line"><span>Front-tag price</span><b id="quotePrice">--</b></div>
-                <div className="quote-line"><span>Estimated total</span><b id="quoteTotal">--</b></div>
-                <div className="quote-line"><span>Execution</span><b>Key market contract</b></div>
-                <div className="quote-line"><span>Unlocks</span><b id="quoteUnlock">Strategy + holder room</b></div>
-              </div>
-              <button className="primary" id="tradeButton">Connect Wallet</button>
-              <div className="trade-status" id="tradeStatus" aria-live="polite">
-                <span id="tradeStatusDot" />
-                <strong id="tradeStatusTitle">Ready</strong>
-                <small id="tradeStatusBody">Connect Wallet</small>
+                <div className="quote-line"><span>Trading mode</span><b>Paper</b></div>
+                <div className="quote-line"><span>Market venue</span><b>Hyperliquid</b></div>
+                <div className="quote-line"><span>Backend</span><b id="backendStatus">checking</b></div>
+                <div className="quote-line"><span>Read path</span><b id="backendUrl">/api/backend/board</b></div>
               </div>
               <div className="source-map">
                 <div className="source-card">
-                  <label>Key trading</label>
-                  <strong>Testnet</strong>
+                  <label>Execution</label>
+                  <strong>Paper only</strong>
                 </div>
                 <div className="source-card">
-                  <label>Agent trading</label>
-                  <strong>Paper P&amp;L</strong>
-                </div>
-              </div>
-            </section>
-
-            <section className="panel position">
-              <div className="panel-title">Your Key Position</div>
-              <div className="panel-sub">Position means key balance only, not copy-trade portfolio</div>
-              <div className="position-grid">
-                <div className="stat">
-                  <label>Keys</label>
-                  <strong id="posKeys">--</strong>
-                </div>
-                <div className="stat">
-                  <label>Entry</label>
-                  <strong id="posEntry">-</strong>
-                </div>
-                <div className="stat">
-                  <label>Exit</label>
-                  <strong id="posExit">-</strong>
+                  <label>Receipts</label>
+                  <strong>Backend rows</strong>
                 </div>
               </div>
             </section>
@@ -226,7 +179,6 @@ export default function Page() {
       </main>
 
       <div className="toast" id="toast">Preview action</div>
-      <NearKeyMarketBridge />
 
       <div className="modal-backdrop" id="eventModal" hidden>
         <section className="event-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">

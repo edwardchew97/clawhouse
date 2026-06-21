@@ -1,10 +1,4 @@
 import { fetchBackendJson, getBackendConfig, publicBackendConfig } from "../backend/lib";
-import {
-  formatState,
-  getKeyMarketConfig,
-  viewFunction,
-  type MarketState,
-} from "../key-market/lib";
 
 type CuratedAgentConfig = {
   id: string;
@@ -20,7 +14,6 @@ type CuratedAgentConfig = {
 
 export type DiscoveryAgent = CuratedAgentConfig & {
   status: "available" | "configured";
-  keyMarket: DiscoveryReadback;
   board: DiscoveryReadback;
   pnl: DiscoveryReadback;
 };
@@ -43,7 +36,6 @@ export async function readAgentDiscovery() {
     mode: discoveredAgents ? "agent-board-ledger" : "curated",
     count: agents.length,
     config: {
-      keyMarket: publicKeyMarketConfig(),
       backend: publicBackendConfig(),
     },
     discovery: {
@@ -59,21 +51,13 @@ function getCuratedAgents(): CuratedAgentConfig[] {
   const explicitAgents = parseCuratedAgentIds(process.env.CLAWHOUSE_CURATED_AGENT_IDS);
   if (explicitAgents.length) return explicitAgents;
 
-  const defaultAgentId = getKeyMarketConfig().defaultAgentId;
+  const defaultAgentId = process.env.CLAWHOUSE_DEFAULT_AGENT_ID || "terminal_chad6";
   return [agentConfig(defaultAgentId, getBackendConfig().defaultBoardId, "CLAWHOUSE_DEFAULT_AGENT_ID")];
 }
 
 async function readDiscoveryAgent(agent: CuratedAgentConfig): Promise<DiscoveryAgent> {
   const timeoutMs = discoveryReadbackTimeoutMs();
-  const [keyMarket, board, pnl] = await Promise.allSettled([
-    withTimeout(
-      viewFunction<MarketState>("get_state", {
-        agent_id: agent.id,
-        holder_id: null,
-      }),
-      timeoutMs,
-      "Key-market readback timed out",
-    ),
+  const [board, pnl] = await Promise.allSettled([
     withTimeout(
       fetchBackendJson(`/boards/${encodeURIComponent(agent.boardId)}`),
       timeoutMs,
@@ -86,18 +70,15 @@ async function readDiscoveryAgent(agent: CuratedAgentConfig): Promise<DiscoveryA
     ),
   ]);
 
-  const keyMarketReadback = settledReadback(keyMarket, (state) => formatState(state));
   const boardReadback = settledReadback(board, (data) => data);
   const pnlReadback = settledReadback(pnl, (data) => data);
 
   return {
     ...agent,
-    status: keyMarketReadback.status === "available"
-      || boardReadback.status === "available"
+    status: boardReadback.status === "available"
       || pnlReadback.status === "available"
       ? "available"
       : "configured",
-    keyMarket: keyMarketReadback,
     board: boardReadback,
     pnl: pnlReadback,
   };
@@ -151,7 +132,7 @@ function agentConfigFromBoard(value: unknown): CuratedAgentConfig | null {
       ?? `${id} / ${venue ?? chain ?? "public agent board"}`,
     description: metadataString(metadata, ["description", "agent_description", "bio"])
       ?? "Discovered from public Agent Board Ledger data.",
-    gate: metadataString(metadata, ["gate"]) ?? "1 key",
+    gate: metadataString(metadata, ["gate"]) ?? "open",
     source: "AGENT_BOARD_LEDGER_DISCOVERY",
   };
 }
@@ -175,9 +156,9 @@ function agentConfig(id: string, boardId: string, source: string): CuratedAgentC
     name: id,
     initials: initialsFor(id),
     bannerUrl: DEFAULT_AGENT_BANNER_URL,
-    strategy: `${id} / configured key-market agent`,
-    description: "Reads key-market and backend ledger data from live APIs only.",
-    gate: "1 key",
+    strategy: `${id} / configured paper trading agent`,
+    description: "Reads backend ledger and paper-trading data from live APIs only.",
+    gate: "open",
     source,
   };
 }
@@ -228,15 +209,6 @@ function settledReadback<T>(
   return {
     status: "unavailable",
     error: result.reason instanceof Error ? result.reason.message : "Readback failed",
-  };
-}
-
-function publicKeyMarketConfig() {
-  const { networkId, contractId, defaultAgentId } = getKeyMarketConfig();
-  return {
-    networkId,
-    contractId,
-    defaultAgentId,
   };
 }
 

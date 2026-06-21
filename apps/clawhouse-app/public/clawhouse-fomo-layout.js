@@ -6,9 +6,9 @@ let agents = [
     id: "terminal_chad6",
     name: "terminal_chad6",
     initials: "TC",
-    strategy: "terminal_chad6 / configured key-market agent",
-    description: "Reads key-market and backend ledger data from live APIs only.",
-    gate: "1 key",
+    strategy: "terminal_chad6 / paper trading agent",
+    description: "Reads backend ledger and paper-trading data from live APIs only.",
+    gate: "open",
   })
 ];
 let discoveryLoading = true;
@@ -52,25 +52,16 @@ function resolveSelectedId(value) {
 }
 
 const selectedAgent = () => agents.find((agent) => agentSelectionKey(agent) === selectedId) || agents.find((agent) => agent.id === selectedId) || agents[0];
-const chainApplies = (agent) => chainState.state?.agent?.agent_id === agent.id;
-const chainBalance = (agent) => {
-  const value = chainState.state?.holder_balance;
-  if (!chainApplies(agent) || value === null || value === undefined) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-const holderBalance = (agent) => chainBalance(agent);
-const isUnlocked = (agent) => (holderBalance(agent) ?? 0) > 0;
+const isUnlocked = () => true;
 
 function dispatchUiEvent(name) {
   window.dispatchEvent(new CustomEvent(name));
 }
 
 function normalizeDiscoveryAgent(agent = {}, index = 0) {
-  const keyStateAgent = agent.keyMarket?.data?.agent || {};
   const pnlLatest = agent.pnl?.data?.latest || {};
-  const id = String(agent.id || keyStateAgent.agent_id || "terminal_chad6");
-  const name = String(agent.name || keyStateAgent.name || id);
+  const id = String(agent.id || "terminal_chad6");
+  const name = String(agent.name || id);
   const displayName = displayNameForAgent(name, id);
   return {
     id,
@@ -79,14 +70,10 @@ function normalizeDiscoveryAgent(agent = {}, index = 0) {
     initials: agent.initials || initialsFor(displayName),
     color: "#3c4044",
     bannerUrl: agent.bannerUrl || agent.banner_url || DEFAULT_AGENT_BANNER_URL,
-    strategy: agent.strategy || `${id} / configured key-market agent`,
-    desc: agent.description || "Reads key-market and backend ledger data from live APIs only.",
-    key: null,
-    holders: asNumber(keyStateAgent.supply),
-    gate: agent.gate || "1 key",
+    strategy: agent.strategy || `${id} / paper trading agent`,
+    desc: agent.description || "Reads backend ledger and paper-trading data from live APIs only.",
+    gate: agent.gate || "open",
     last: agent.status === "available" ? "live read" : "checking",
-    entry: null,
-    keys: null,
     boardId: agent.boardId || agent.board_id || id,
     pnl: normalizePct(pnlLatest.total_pnl_pct),
     discoveryIndex: index,
@@ -173,35 +160,6 @@ function clearQuote() {
   };
 }
 
-function tradeStatus() {
-  if (chainState.statusTitle || chainState.statusBody) {
-    return {
-      tone: chainState.statusTone || "idle",
-      title: chainState.statusTitle || "Ready",
-      body: chainState.statusBody || "Connect Wallet"
-    };
-  }
-  if (chainState.pending) {
-    return {
-      tone: "pending",
-      title: "Waiting for wallet",
-      body: "Keep the NEAR wallet window open until it returns a result."
-    };
-  }
-  if (chainState.error) {
-    return {
-      tone: "error",
-      title: "Key market read failed",
-      body: chainState.error
-    };
-  }
-  return {
-    tone: chainState.accountId ? "success" : "idle",
-    title: chainState.accountId ? "Wallet ready" : "Ready",
-    body: chainState.accountId ? `${shortAccount(chainState.accountId)} connected.` : "Connect Wallet"
-  };
-}
-
 function hashName(name) {
   return [...name].reduce((hash, char) => Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0, 2166136261);
 }
@@ -244,31 +202,6 @@ function agentIcon(agent) {
 function money(value, suffix = " tNEAR") {
   if (!Number.isFinite(value)) return "--";
   return `${value.toFixed(2)}${suffix}`;
-}
-
-function nearLabel(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return "-";
-  return `${numeric.toFixed(numeric < 1 ? 5 : 2)} tNEAR`;
-}
-
-function keyPriceLabel(agent) {
-  const liveQuote = chainApplies(agent) && chainState.quoteSide === "buy"
-    ? chainState.quote
-    : chainApplies(agent)
-      ? chainState.state?.next_buy_price
-      : null;
-  return liveQuote?.total_cost_near ? nearLabel(liveQuote.total_cost_near) : "--";
-}
-
-function holderCount(agent) {
-  const liveSupply = chainApplies(agent) ? asNumber(chainState.state?.agent?.supply) : null;
-  if (liveSupply !== null) return liveSupply;
-  return asNumber(agent.holders);
-}
-
-function shortAccount(accountId) {
-  return accountId.length > 18 ? `${accountId.slice(0, 9)}...${accountId.slice(-6)}` : accountId;
 }
 
 function shortHash(value) {
@@ -388,14 +321,18 @@ function backendPnlSource(agent) {
 function sortedAgents() {
   const sorted = [...agents];
   sorted.sort((a, b) => {
-    const aValue = agentSort === "holders" ? holderCount(a) : agentRowPnl(a);
-    const bValue = agentSort === "holders" ? holderCount(b) : agentRowPnl(b);
+    const aValue = agentSort === "events" ? agentEventCount(a) : agentRowPnl(a);
+    const bValue = agentSort === "events" ? agentEventCount(b) : agentRowPnl(b);
     if (aValue === null && bValue !== null) return 1;
     if (aValue !== null && bValue === null) return -1;
     if (aValue !== null && bValue !== null && aValue !== bValue) return bValue - aValue;
     return (a.discoveryIndex ?? 0) - (b.discoveryIndex ?? 0);
   });
   return sorted;
+}
+
+function agentEventCount(agent) {
+  return chartModel(agent).events.length;
 }
 
 function formatBackendTime(value) {
@@ -627,37 +564,19 @@ async function loadDiscoveryAgents() {
   }
 }
 
-function setTextWithOptionalLink(node, text, linkUrl) {
-  if (!node) return;
-  node.textContent = "";
-  node.append(document.createTextNode(text));
-  if (!linkUrl) return;
-  node.append(document.createTextNode(" "));
-  const link = document.createElement("a");
-  link.href = linkUrl;
-  link.target = "_blank";
-  link.rel = "noreferrer";
-  link.textContent = "NearBlocks";
-  node.append(link);
-}
-
 function buyOneForUnlock() {
-  tradeSide = "buy";
-  byId("keyAmount").value = "1";
-  showToast("Connect Wallet");
-  dispatchUiEvent("clawhouse:amount-change");
+  showToast("Agent events are open in this preview.");
 }
 
 function renderTicker() {
   const items = agents.flatMap((agent) => {
     const pnl = backendPnl(agent);
     const pnlSource = backendPnlSource(agent);
-    const holders = holderCount(agent);
     const title = agentTitle(agent);
+    const events = chartModel(agent).events.length;
     return [
       `<span class="ticker-item"><b>${escapeHtml(title)}</b><span class="${pnlClass(pnl)}">${pnlLabel(pnl)}</span><span>${pnlSource}</span></span>`,
-      `<span class="ticker-item"><b>${escapeHtml(title)} key</b><span>${keyPriceLabel(agent)}</span><span>Testnet</span></span>`,
-      `<span class="ticker-item"><b>${holders === null ? "--" : holders}</b><span>keys in ${escapeHtml(title)}</span></span>`
+      `<span class="ticker-item"><b>${events}</b><span>ledger events</span><span>${escapeHtml(backendVenue(agent))}</span></span>`
     ];
   });
   const track = byId("tickerTrack");
@@ -718,12 +637,12 @@ function renderAgentList() {
       <div class="agent-copy">
         <div class="agent-name">
           <span class="agent-title" title="${escapeHtml(agent.name)}">${escapeHtml(title)}</span>
-          <span class="tag">${isUnlocked(agent) ? "open" : "locked"}</span>
+          <span class="tag">open</span>
         </div>
         <div class="agent-meta">${escapeHtml(agent.strategy)}</div>
         <div class="agent-stats">
-          <span>${keyPriceLabel(agent)}</span>
-          <span>${holderCount(agent) === null ? "--" : holderCount(agent)} keys</span>
+          <span>${escapeHtml(backendVenue(agent))}</span>
+          <span>${chartModel(agent).events.length} events</span>
           <b class="agent-change ${pnlTone}">${pnlLabel(pnl)}</b>
         </div>
       </div>
@@ -755,23 +674,20 @@ function renderHero(agent) {
   byId("heroDesc").textContent = agent.desc;
   byId("statPnl").textContent = pnl === null ? "--" : signedPct(pnl);
   byId("statPnl").className = pnl === null ? "" : pnl >= 0 ? "green" : "red";
-  byId("statKey").textContent = keyPriceLabel(agent).replace(" tNEAR", "");
-  const holders = holderCount(agent);
-  byId("statHolders").textContent = holders === null ? "--" : holders.toLocaleString();
-  byId("statUpdate").textContent = chainApplies(agent) ? "testnet live" : backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
-  byId("statGate").textContent = isUnlocked(agent) ? "Unlocked" : "Locked";
+  byId("statKey").textContent = chart.events[0]?.action || "--";
+  byId("statHolders").textContent = chart.events.length.toLocaleString();
+  byId("statUpdate").textContent = backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
+  byId("statGate").textContent = "Open";
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
   byId("miniTop").textContent = title;
   byId("miniMove").textContent = pnl === null ? "--" : signedPct(pnl);
   byId("leaderDataSource").textContent = pnlSource;
-  byId("chartSub").textContent = isUnlocked(agent)
-    ? `${chart.message} / ${backendNetwork(agent)} / ${pnlSource}`
-    : `Backend ${backendVenue(agent)} events unlock after key purchase.`;
+  byId("chartSub").textContent = `${chart.message} / ${backendNetwork(agent)} / ${pnlSource}`;
 }
 
 function publicEventText(event) {
-  return `${event.title} / holder-only detail`;
+  return `${event.title} / ${formatBackendAction(event.raw || event)}`;
 }
 
 function renderBackendEmpty(targetId, title, detail) {
@@ -791,31 +707,6 @@ function renderRoom(agent) {
       ? "Agent Board Ledger has not returned any events for this board."
       : backendErrorMessage();
     renderBackendEmpty("roomFeed", title, detail);
-    return;
-  }
-
-  if (!isUnlocked(agent)) {
-    byId("roomFeed").innerHTML = `
-      ${events.map((event) => `
-        <article class="update locked">
-          <div class="update-copy">
-            <div class="update-title">
-              <span>${escapeHtml(event.title)}</span>
-              <span class="tag">locked</span>
-            </div>
-            <div class="update-text">${escapeHtml(formatBackendAction(event.raw || event))}</div>
-          </div>
-          <div class="update-time">${escapeHtml(event.time)}</div>
-        </article>
-      `).join("")}
-      <div class="room-lock">
-        <span class="lock-kicker">Holder room locked</span>
-        <strong>Buy 1 ${agent.name} key to read agent updates.</strong>
-        <span>V0 has no chat and no copy trading. Unlock reveals agent-generated short updates only.</span>
-        <button class="unlock-cta" data-unlock-agent>Buy key to unlock</button>
-      </div>
-    `;
-    bindUnlockButtons();
     return;
   }
 
@@ -860,56 +751,20 @@ function renderActivity(agent) {
 }
 
 function renderTicket(agent) {
-  const amount = Math.max(Number(byId("keyAmount").value || 1), 0);
-  const balance = holderBalance(agent);
-  const busy = Boolean(chainState.pending);
-  const quote = chainApplies(agent) && chainState.quoteSide === tradeSide ? chainState.quote : null;
-  const chainTotal = tradeSide === "sell" ? quote?.payout_near : quote?.total_cost_near;
-  byId("quotePrice").textContent = chainTotal ? nearLabel(chainTotal) : keyPriceLabel(agent);
-  byId("quoteTotal").textContent = chainTotal ? nearLabel(chainTotal) : "--";
-  byId("quoteUnlock").textContent = isUnlocked(agent) ? "Additional room weight" : "Strategy + holder room";
-  byId("tradeButton").textContent = busy
-    ? statusButtonText()
-    : chainState.accountId ? `${tradeSide === "buy" ? "Buy" : "Sell"} ${agent.name} key` : "Connect Wallet";
-  byId("tradeButton").className = `${tradeSide === "buy" ? "primary" : "primary sell"}${busy ? " loading" : ""}`;
-  byId("tradeButton").disabled = busy || (tradeSide === "sell" && (balance === null || balance <= 0));
-  document.querySelectorAll(".ticket-tab, [data-amount], [data-unlock-agent]").forEach((button) => {
-    button.disabled = busy;
-  });
-  byId("keyAmount").disabled = busy;
-  byId("posKeys").textContent = balance === null ? "--" : balance.toString();
-  byId("posEntry").textContent = "-";
-  byId("posExit").textContent = "-";
-  byId("posExit").className = "";
-  byId("gateButton").textContent = isUnlocked(agent) ? "Room open" : "Gate: 1 key";
+  byId("gateButton").textContent = "Open";
   const walletButton = byId("walletButton");
   if (walletButton) {
-    walletButton.textContent = chainState.accountId ? shortAccount(chainState.accountId) : "Connect Wallet";
-    walletButton.classList.toggle("connected", Boolean(chainState.accountId));
-    walletButton.disabled = busy;
+    walletButton.textContent = "Backend live";
+    walletButton.classList.add("connected");
+    walletButton.disabled = false;
   }
-  renderTradeStatus();
+  renderBackendStatus();
 }
 
-function statusButtonText() {
-  if (chainState.phase === "connecting") return "Opening wallet...";
-  if (chainState.phase === "quoting") return "Refreshing quote...";
-  if (chainState.phase === "signing") return "Confirm in wallet...";
-  if (chainState.phase === "refreshing") return "Refreshing balance...";
-  return "Working...";
-}
-
-function renderTradeStatus() {
-  const status = tradeStatus();
-  const container = byId("tradeStatus");
-  if (!container) return;
-  container.className = `trade-status ${status.tone}`;
-  byId("tradeStatusTitle").textContent = status.title;
-  setTextWithOptionalLink(
-    byId("tradeStatusBody"),
-    status.body,
-    status.tone === "success" && chainState.lastTxHash ? chainState.explorerUrl : null
-  );
+function renderBackendStatus() {
+  const backend = backendLabel();
+  byId("backendStatus").textContent = backend.status;
+  byId("backendUrl").textContent = backend.url;
 }
 
 function chartGeometry(values, rect) {
@@ -1111,7 +966,7 @@ function renderChartEvents(agent, rect, model = chartModel(agent)) {
   document.querySelectorAll("[data-chart-event]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!isUnlocked(selectedAgent())) {
-        showToast("Buy this agent key to reveal strategy event details.");
+        showToast("Agent event details are open in this preview.");
         return;
       }
       openEvent(button.dataset.chartEvent);
@@ -1122,7 +977,7 @@ function renderChartEvents(agent, rect, model = chartModel(agent)) {
 function openEvent(eventId) {
   const agent = selectedAgent();
   if (!isUnlocked(agent)) {
-    showToast("Buy this agent key to unlock holder-only reasoning.");
+    showToast("Agent event details are open in this preview.");
     return;
   }
   const event = chartModel(agent).events.find((item) => item.id === eventId);
@@ -1193,9 +1048,8 @@ function bindUnlockButtons() {
 }
 
 function renderGateState(agent) {
-  const unlocked = isUnlocked(agent);
-  byId("chartPanel").classList.toggle("unlocked", unlocked);
-  document.body.classList.toggle("is-unlocked", unlocked);
+  byId("chartPanel").classList.add("unlocked");
+  document.body.classList.add("is-unlocked");
 }
 
 let columnSyncFrame = 0;
@@ -1273,7 +1127,7 @@ const agentSortControl = byId("agentSort");
 if (agentSortControl) {
   agentSortControl.value = agentSort;
   agentSortControl.addEventListener("change", () => {
-    agentSort = agentSortControl.value === "holders" ? "holders" : "pnl";
+    agentSort = agentSortControl.value === "events" ? "events" : "pnl";
     renderAgentList();
     dispatchUiEvent("clawhouse:agent-sort-change");
   });
@@ -1288,31 +1142,21 @@ document.querySelectorAll("[data-amount]").forEach((button) => {
   });
 });
 
-byId("keyAmount").addEventListener("input", () => {
-  clearQuote();
-  renderTicket(selectedAgent());
-  dispatchUiEvent("clawhouse:amount-change");
-});
+const keyAmountInput = byId("keyAmount");
+if (keyAmountInput) {
+  keyAmountInput.addEventListener("input", () => {
+    clearQuote();
+    renderTicket(selectedAgent());
+    dispatchUiEvent("clawhouse:amount-change");
+  });
+}
 
-byId("tradeButton").addEventListener("click", () => {
-  const agent = selectedAgent();
-  const amount = Math.max(Number(byId("keyAmount").value || 1), 0);
-  if (amount <= 0) {
-    showToast("Enter a key amount first.");
-    return;
-  }
-
-  if (tradeSide === "sell") {
-    if (holderBalance(agent) <= 0) {
-      showToast(`No ${agent.name} key to sell.`);
-      return;
-    }
-    showToast("Confirm the sell transaction in your NEAR wallet.");
-    return;
-  }
-
-  showToast("Confirm the buy transaction in your NEAR wallet.");
-});
+const tradeButton = byId("tradeButton");
+if (tradeButton) {
+  tradeButton.addEventListener("click", () => {
+    showToast("Paper trading is read from the backend.");
+  });
+}
 
 byId("modalClose").addEventListener("click", closeModal);
 byId("eventModal").addEventListener("click", (event) => {
