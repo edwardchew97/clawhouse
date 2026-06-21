@@ -11,6 +11,9 @@ description: Use inside the target IronClaw agent when a ClawHouse creator wants
 Run this onboarding in the IronClaw agent that will actually operate the
 ClawHouse trading agent.
 
+Use the manifest and `skill_install`; do not use a ClawHouse setup API as the
+onboarding path.
+
 Do not treat Codex, Claude, or another local assistant as the deployment
 surface. If this skill is being read outside IronClaw, help draft public wording
 only, then tell the user to rerun the onboarding inside the target IronClaw
@@ -97,35 +100,18 @@ Always require user confirmation for:
 
 ## Onboarding Workflow
 
-1. Welcome the creator and explain that onboarding will stay inside IronClaw.
-2. Collect `agent_name`, `agent_description`, `avatar_reference`, and
+1. Collect `agent_name`, `agent_description`, `avatar_reference`, and
    `trading_strategy`.
-3. Build a draft strategy profile with:
-   - status: `draft`
-   - allowed venue: `hyperliquid-paper`
-   - disallowed actions: real Hyperliquid execution, custody, withdrawals,
-     private key handling, and unlabeled paper PnL
-   - risk notes and no-trade conditions from the user's strategy
-4. Read the ClawHouse runtime manifest.
-5. Show one short confirmation line for the required pack. After approval,
-   install each required runtime skill with manifest parameters:
+2. Save a draft profile using the shape below.
+3. Verify the ClawHouse runtime manifest, then install required skills:
    - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
    - `skill_install(name="hyperliquid-paper-trading", url="<manifest.skills[].url>")`
    Treat `near-intents-spot-value` as legacy optional unless the manifest and
    creator explicitly select it.
-6. Write the draft profile into IronClaw memory or workspace under a
-   ClawHouse-specific path.
-7. Configure heartbeat to check the same manifest periodically.
-8. Run a dry check:
-   - strategy profile exists;
-   - required runtime skills are installed or clearly pending;
-   - paper account id, paper signer, ClawHouse paper base URL, and ledger base
-     URL are configured or clearly missing;
-   - no secrets appeared in chat or logs;
-   - strategy status is still `draft`.
-9. Tell the user what is ready, what is missing, and what they must confirm
-   inside IronClaw before activation.
-10. Activate only after explicit user confirmation inside IronClaw.
+4. Configure heartbeat against the same manifest.
+5. Dry check skills, paper account/signer/base URLs, secret hygiene, and
+   `draft` status.
+6. Activate only after explicit user confirmation inside IronClaw.
 
 ## Draft Profile Shape
 

@@ -22,6 +22,47 @@
           ]
         },
         {
+          "id": "agentRegistration.creatorOnboarding.setupReadback",
+          "name": "POST /creator-onboarding/setup",
+          "description": "Calls the ClawHouse App compatibility readback for IronClaw-side onboarding. It returns the manifest and required skill_install parameters; it does not deploy, activate, store secrets, or create wallets.",
+          "type": "http",
+          "access": "public",
+          "method": "POST",
+          "url": "{{clawhouseAppBaseUrl}}/creator-onboarding/setup",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": {
+            "agent_name": "{{agentName}}",
+            "agent_description": "{{agentDescription}}",
+            "avatar_reference": "{{avatarReference}}",
+            "trading_strategy": "{{tradingStrategy}}"
+          },
+          "runningNotes": [
+            "Calling the real ClawHouse App /creator-onboarding/setup route.",
+            "This step should return draft status plus manifest and skill_install parameters, not a deployment success claim."
+          ],
+          "inputs": {
+            "clawhouseAppBaseUrl": "http://127.0.0.1:3000",
+            "agentName": "Terminal Chad",
+            "agentDescription": "Season 0 paper trading agent",
+            "avatarReference": "terminal-chad",
+            "tradingStrategy": "Hyperliquid-style paper trading with no real exchange execution."
+          },
+          "fillDefaultsWhenEmpty": [
+            "clawhouseAppBaseUrl",
+            "agentName",
+            "agentDescription",
+            "avatarReference",
+            "tradingStrategy"
+          ],
+          "setVars": {
+            "creatorOnboardingMode": "response.json.mode",
+            "creatorOnboardingStatus": "response.json.status",
+            "creatorOnboardingManifestUrl": "response.json.manifest.url"
+          }
+        },
+        {
           "id": "agentRegistration.pending.ironclawWalletBinding",
           "name": "Bind Agent Wallet Metadata",
           "description": "The approved agent should expose public wallet metadata that ClawHouse can store without private key material. 未完成: Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet.",
