@@ -985,6 +985,87 @@
       white-space: pre;
     }
 
+    .json-tree {
+      max-height: 460px;
+      overflow: auto;
+      background: #ffffff;
+      color: var(--strong);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.55;
+      padding: 6px 0;
+    }
+
+    .json-toggle {
+      min-width: max-content;
+    }
+
+    .json-toggle > summary {
+      list-style: none;
+      cursor: pointer;
+    }
+
+    .json-toggle > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .json-line {
+      display: flex;
+      align-items: baseline;
+      min-width: max-content;
+      min-height: 20px;
+      padding: 0 12px;
+      white-space: pre;
+    }
+
+    .json-line:hover {
+      background: #fafafa;
+    }
+
+    .json-indent {
+      flex: 0 0 calc(var(--depth) * 16px);
+    }
+
+    .json-caret,
+    .json-caret-spacer {
+      flex: 0 0 14px;
+      color: var(--subtle);
+      user-select: none;
+    }
+
+    .json-caret {
+      transition: transform 120ms ease-out;
+    }
+
+    .json-toggle[open] > summary .json-caret {
+      transform: rotate(90deg);
+    }
+
+    .json-key {
+      color: var(--blue);
+    }
+
+    .json-string {
+      color: var(--green);
+    }
+
+    .json-number {
+      color: var(--amber);
+    }
+
+    .json-boolean {
+      color: var(--red);
+    }
+
+    .json-null,
+    .json-summary {
+      color: var(--subtle);
+    }
+
+    .json-toggle[open] > summary .json-collapsed-close {
+      display: none;
+    }
+
     .pill-row {
       display: flex;
       align-items: center;
@@ -2720,7 +2801,9 @@
           </div>
           <div class="result-message">${escapeHtml(resultMessage(result, parsedJson, ok))}</div>
         </div>
-        ${resultPanelBlock("Body", bodyContent, bodyMeta)}
+        ${bodySource === "parsed"
+          ? resultJsonPanelBlock("Body", parsedJson, bodyMeta, bodyContent)
+          : resultPanelBlock("Body", bodyContent, bodyMeta)}
       `;
       const runnerPanel = Object.keys(runnerMeta).length
         ? resultPanelBlock("Runner metadata", JSON.stringify(runnerMeta, null, 2), "JSON")
@@ -2792,6 +2875,18 @@
       `;
     }
 
+    function resultJsonPanelBlock(title, value, meta, rawContent) {
+      return `
+        <div class="response-panel-block">
+          <div class="result-panel-head">
+            <span>${escapeHtml(title)}</span>
+            <span class="result-panel-meta">${escapeHtml(meta || "JSON")} · ${escapeHtml(byteSize(rawContent))}</span>
+          </div>
+          ${resultJsonTree(value)}
+        </div>
+      `;
+    }
+
     function resultPlaceholderBlock(title, message, meta) {
       return `
         <div class="response-panel-block">
@@ -2802,6 +2897,78 @@
           <div class="stream-empty small">${escapeHtml(message)}</div>
         </div>
       `;
+    }
+
+    function resultJsonTree(value) {
+      return `<div class="json-tree">${renderJsonValue(value, 0, "", "")}</div>`;
+    }
+
+    function renderJsonValue(value, depth, key, suffix) {
+      if (Array.isArray(value)) return renderJsonBranch(value, depth, key, suffix, true);
+      if (value && typeof value === "object") return renderJsonBranch(value, depth, key, suffix, false);
+      return renderJsonPrimitiveLine(value, depth, key, suffix);
+    }
+
+    function renderJsonBranch(value, depth, key, suffix, isArray) {
+      const entries = isArray ? value.map((item, index) => [String(index), item]) : Object.entries(value);
+      const open = isArray ? "[" : "{";
+      const close = isArray ? "]" : "}";
+      const label = isArray ? `${entries.length} item${entries.length === 1 ? "" : "s"}` : `${entries.length} key${entries.length === 1 ? "" : "s"}`;
+      if (!entries.length) {
+        return `
+          <div class="json-line">
+            ${jsonIndent(depth)}
+            <span class="json-caret-spacer"></span>
+            ${jsonKeyLabel(key)}<span>${open}${close}${escapeHtml(suffix)}</span>
+          </div>
+        `;
+      }
+
+      return `
+        <details class="json-toggle" open>
+          <summary class="json-line">
+            ${jsonIndent(depth)}
+            <span class="json-caret">›</span>
+            ${jsonKeyLabel(key)}<span>${open}</span><span class="json-summary"> ${escapeHtml(label)}</span><span class="json-collapsed-close">${close}${escapeHtml(suffix)}</span>
+          </summary>
+          <div class="json-children">
+            ${entries.map(([entryKey, entryValue], index) => (
+              renderJsonValue(entryValue, depth + 1, isArray ? "" : entryKey, index < entries.length - 1 ? "," : "")
+            )).join("")}
+          </div>
+          <div class="json-line">
+            ${jsonIndent(depth)}
+            <span class="json-caret-spacer"></span>
+            <span>${close}${escapeHtml(suffix)}</span>
+          </div>
+        </details>
+      `;
+    }
+
+    function renderJsonPrimitiveLine(value, depth, key, suffix) {
+      return `
+        <div class="json-line">
+          ${jsonIndent(depth)}
+          <span class="json-caret-spacer"></span>
+          ${jsonKeyLabel(key)}${jsonPrimitive(value)}<span>${escapeHtml(suffix)}</span>
+        </div>
+      `;
+    }
+
+    function jsonIndent(depth) {
+      return `<span class="json-indent" style="--depth:${Number(depth) || 0}"></span>`;
+    }
+
+    function jsonKeyLabel(key) {
+      return key ? `<span class="json-key">${escapeHtml(JSON.stringify(key))}</span><span>: </span>` : "";
+    }
+
+    function jsonPrimitive(value) {
+      if (typeof value === "string") return `<span class="json-string">${escapeHtml(JSON.stringify(value))}</span>`;
+      if (typeof value === "number") return `<span class="json-number">${escapeHtml(String(value))}</span>`;
+      if (typeof value === "boolean") return `<span class="json-boolean">${escapeHtml(String(value))}</span>`;
+      if (value === null) return `<span class="json-null">null</span>`;
+      return `<span>${escapeHtml(JSON.stringify(value))}</span>`;
     }
 
     function resultCodeBlock(content) {
