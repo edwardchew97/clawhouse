@@ -2948,13 +2948,41 @@
     }
 
     function applyClears(step) {
+      const clearedInputs = {};
       for (const name of step.clearVars || []) {
         delete state.vars[name];
       }
       for (const [stepId, keys] of Object.entries(step.clearInputs || {})) {
-        if (!Array.isArray(keys) || !state.inputs[stepId]) continue;
+        if (!Array.isArray(keys)) continue;
         for (const key of keys) {
-          delete state.inputs[stepId][key];
+          if (state.inputs[stepId]) delete state.inputs[stepId][key];
+          clearedInputs[stepId] ||= [];
+          clearedInputs[stepId].push(key);
+          if (key === "ledgerBoardId") {
+            delete state.vars.ledgerReadToken;
+            const targetStep = findStepById(stepId);
+            if (
+              targetStep?.inputs
+              && Object.prototype.hasOwnProperty.call(targetStep.inputs, "ledgerReadToken")
+              && state.inputs[stepId]
+            ) {
+              delete state.inputs[stepId].ledgerReadToken;
+            }
+          }
+        }
+      }
+      return clearedInputs;
+    }
+
+    function seedClearedInputsFromVars(clearedInputs) {
+      for (const [stepId, keys] of Object.entries(clearedInputs || {})) {
+        const step = findStepById(stepId);
+        if (!step) continue;
+        const inputKeys = new Set(Object.keys(step.inputs || {}));
+        for (const key of keys) {
+          if (!inputKeys.has(key) || !hasValue(state.vars[key])) continue;
+          state.inputs[stepId] ||= {};
+          state.inputs[stepId][key] = String(state.vars[key]);
         }
       }
     }
@@ -3389,8 +3417,9 @@
           rawResult.durationMs = Math.round(performance.now() - startedMs);
         }
         applySetEnv(step, rawResult);
-        if (rawResult.ok) applyClears(step);
+        const clearedInputs = rawResult.ok ? applyClears(step) : {};
         applySetVars(step, rawResult);
+        seedClearedInputsFromVars(clearedInputs);
         const result = resultForDisplay(rawResult);
         const debugPacket = buildDebugPacket(flow, step, startedAt, targetLabel, payload, result);
         setStepResponse(step, {

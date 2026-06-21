@@ -51,11 +51,21 @@
           "setVars": {
             "ledgerWalletAddress": "response.json.walletAddress",
             "ledgerPublicKey": "response.json.publicKey",
-            "ledgerKeyId": "response.json.keyId"
+            "ledgerKeyId": "response.json.keyId",
+            "ledgerWalletKeyId": "response.json.keyId"
           },
           "clearVars": [
+            "agentId",
             "ledgerBoardId",
-            "paperTradingAccountId"
+            "paperTradingAccountId",
+            "buyMaxPriceNear",
+            "buyQuoteYocto",
+            "minPayoutNear",
+            "sellQuoteYocto",
+            "ledgerReadAccessCheckId",
+            "ledgerReadToken",
+            "paperTradingIocOrderId",
+            "paperTradingIsolatedOrderId"
           ],
           "clearInputs": {
             "agentRegistration.ledger.createBoard": [
@@ -64,9 +74,60 @@
             ],
             "agentRegistration.ledger.getBoard": [
               "ledgerBoardId"
+            ],
+            "agentRegistration.key.create": [
+              "agentId"
+            ],
+            "agentRegistration.key.quoteBuy": [
+              "agentId"
+            ],
+            "userBrowsesAgent.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.state": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteSell": [
+              "agentId"
+            ],
+            "userBuysKey.key.quoteBuy": [
+              "agentId"
+            ],
+            "userBuysKey.key.buy": [
+              "agentId",
+              "buyMaxPriceNear"
+            ],
+            "userBuysKey.key.stateAfterBuy": [
+              "agentId"
+            ],
+            "userBuysKey.ledger.nearKeyMarketReadAccess": [
+              "agentId"
+            ],
+            "userSellsKey.key.quoteSell": [
+              "agentId"
+            ],
+            "userSellsKey.key.sell": [
+              "agentId",
+              "minPayoutNear"
+            ],
+            "userSellsKey.key.stateAfterSell": [
+              "agentId"
+            ],
+            "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
+              "agentId"
+            ],
+            "developerSetup.key.stateScript": [
+              "agentId"
             ]
           },
           "setDerivedVars": {
+            "agentId": {
+              "kind": "workbenchAgentIdFromWalletAddress",
+              "source": "response.json.walletAddress"
+            },
             "ledgerAgentId": {
               "kind": "workbenchAgentIdFromWalletAddress",
               "source": "response.json.walletAddress"
@@ -132,14 +193,201 @@
           ],
           "setVars": {
             "ledgerBoardId": "response.json.boardId",
+            "agentId": "response.json.agentId",
             "ledgerAgentId": "response.json.agentId",
             "ledgerWalletAddress": "response.json.wallet.walletAddress",
             "ledgerPublicKey": "response.json.wallet.publicKey",
+            "ledgerKeyId": "response.json.wallet.keyId",
+            "ledgerWalletKeyId": "response.json.wallet.keyId",
             "paperTradingAccountId": "response.json.paperAccountId"
           },
+          "clearVars": [
+            "buyMaxPriceNear",
+            "buyQuoteYocto",
+            "minPayoutNear",
+            "sellQuoteYocto",
+            "keySupply",
+            "holderBalance",
+            "holderBalanceAfterBuy",
+            "holderBalanceAfterSell",
+            "ledgerReadAccessCheckId",
+            "ledgerReadToken",
+            "ledgerEventId",
+            "ledgerAttachmentId",
+            "ledgerObservationId",
+            "ledgerHoldingSnapshotId",
+            "ledgerPnlSnapshotId",
+            "ledgerPriceSnapshotId",
+            "ledgerBalanceChangeId",
+            "paperTradingIocOrderId",
+            "paperTradingIsolatedOrderId",
+            "paperTradingReplayOrderId"
+          ],
           "clearInputs": {
             "agentRegistration.ledger.getBoard": [
               "ledgerBoardId"
+            ],
+            "agentRegistration.key.create": [
+              "agentId"
+            ],
+            "agentRegistration.key.quoteBuy": [
+              "agentId"
+            ],
+            "userBrowsesAgent.ledger.getBoard": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listEvents": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.getPortfolio": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.getPnl": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listPrices": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listBalanceChanges": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.state": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteSell": [
+              "agentId"
+            ],
+            "clawhouseApp.backend.board": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.key.quoteBuy": [
+              "agentId"
+            ],
+            "userBuysKey.key.buy": [
+              "agentId",
+              "buyMaxPriceNear"
+            ],
+            "userBuysKey.key.stateAfterBuy": [
+              "agentId"
+            ],
+            "userBuysKey.ledger.nearKeyMarketReadAccess": [
+              "ledgerBoardId",
+              "agentId"
+            ],
+            "userBuysKey.ledger.readAccessCheck": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getBoard": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.listEvents": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getPortfolio": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getPnl": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.fullFlow": [
+              "ledgerBoardId",
+              "ledgerAgentId"
+            ],
+            "agentReportsTrade.ledger.createObservation": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.createPrice": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.createBalanceChange": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.nearAccountWatch": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.nearFtWatch": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.listEvents": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.getPortfolio": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.listBalanceChanges": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.getPnl": [
+              "ledgerBoardId"
+            ],
+            "paperTrade.flow.signedOrders": [
+              "ledgerBoardId",
+              "paperTradingAccountId",
+              "ledgerAgentId"
+            ],
+            "paperTrade.account.read": [
+              "paperTradingAccountId"
+            ],
+            "paperTrade.riskCheck": [
+              "paperTradingAccountId"
+            ],
+            "paperTrade.replayProof": [
+              "paperTradingIocOrderId"
+            ],
+            "userSellsKey.key.quoteSell": [
+              "agentId"
+            ],
+            "userSellsKey.key.sell": [
+              "agentId",
+              "minPayoutNear"
+            ],
+            "userSellsKey.key.stateAfterSell": [
+              "agentId"
+            ],
+            "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
+              "ledgerBoardId",
+              "agentId"
+            ],
+            "developerSetup.key.stateScript": [
+              "agentId"
+            ],
+            "developerSetup.wallet.signRequest": [
+              "ledgerBoardId",
+              "ledgerAgentId"
+            ],
+            "developerSetup.wallet.verifyRequest": [
+              "ledgerBoardId",
+              "ledgerAgentId",
+              "ledgerWalletAddress",
+              "ledgerPublicKey"
+            ],
+            "developerSetup.ledger.signedEventTemplate": [
+              "ledgerBoardId",
+              "ledgerWalletAddress",
+              "ledgerPublicKey"
+            ],
+            "developerSetup.ledger.signedAttachmentTemplate": [
+              "ledgerBoardId",
+              "ledgerWalletAddress",
+              "ledgerPublicKey"
+            ],
+            "developerSetup.ledger.fullFlow": [
+              "ledgerBoardId",
+              "ledgerAgentId"
+            ],
+            "developerSetup.ledger.edgeCases": [
+              "ledgerAgentId"
+            ],
+            "developerSetup.paperTrading.fullFlow": [
+              "ledgerBoardId",
+              "paperTradingAccountId",
+              "ledgerAgentId"
             ]
           }
         },
@@ -269,7 +517,7 @@
             "Extracting txHash and the created market state from the transaction result."
           ],
           "inputs": {
-            "agentId": "terminal_chad",
+            "agentId": "",
             "agentName": "Terminal Chad",
             "metadataUri": "ipfs://terminal-chad",
             "STORAGE_DEPOSIT": "1"
@@ -277,6 +525,64 @@
           "setVars": {
             "agentId": "response.json.agentId",
             "createTxHash": "response.json.txHash"
+          },
+          "clearVars": [
+            "buyMaxPriceNear",
+            "buyQuoteYocto",
+            "minPayoutNear",
+            "sellQuoteYocto",
+            "keySupply",
+            "holderBalance",
+            "holderBalanceAfterBuy",
+            "holderBalanceAfterSell",
+            "ledgerReadAccessCheckId",
+            "ledgerReadToken"
+          ],
+          "clearInputs": {
+            "agentRegistration.key.quoteBuy": [
+              "agentId"
+            ],
+            "userBrowsesAgent.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.state": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteSell": [
+              "agentId"
+            ],
+            "userBuysKey.key.quoteBuy": [
+              "agentId"
+            ],
+            "userBuysKey.key.buy": [
+              "agentId",
+              "buyMaxPriceNear"
+            ],
+            "userBuysKey.key.stateAfterBuy": [
+              "agentId"
+            ],
+            "userBuysKey.ledger.nearKeyMarketReadAccess": [
+              "agentId"
+            ],
+            "userSellsKey.key.quoteSell": [
+              "agentId"
+            ],
+            "userSellsKey.key.sell": [
+              "agentId",
+              "minPayoutNear"
+            ],
+            "userSellsKey.key.stateAfterSell": [
+              "agentId"
+            ],
+            "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
+              "agentId"
+            ],
+            "developerSetup.key.stateScript": [
+              "agentId"
+            ]
           }
         },
         {
@@ -332,6 +638,11 @@
             "keyAmount": "response.json.amount",
             "buyMaxPriceNear": "response.json.total_cost_near",
             "buyQuoteYocto": "response.json.total_cost"
+          },
+          "clearInputs": {
+            "userBuysKey.key.buy": [
+              "buyMaxPriceNear"
+            ]
           }
         },
         {
@@ -391,6 +702,85 @@
             "discoveryFirstStatus": "response.json.json.agents.0.status",
             "discoveryFirstKeyMarketStatus": "response.json.json.agents.0.keyMarket.status",
             "discoveryFirstBoardStatus": "response.json.json.agents.0.board.status"
+          },
+          "clearInputs": {
+            "userBrowsesAgent.ledger.getBoard": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listEvents": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.getPortfolio": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.getPnl": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listPrices": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listBalanceChanges": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.state": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteSell": [
+              "agentId"
+            ],
+            "clawhouseApp.backend.board": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.key.quoteBuy": [
+              "agentId"
+            ],
+            "userBuysKey.key.buy": [
+              "agentId"
+            ],
+            "userBuysKey.key.stateAfterBuy": [
+              "agentId"
+            ],
+            "userBuysKey.ledger.nearKeyMarketReadAccess": [
+              "ledgerBoardId",
+              "agentId"
+            ],
+            "userBuysKey.ledger.readAccessCheck": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getBoard": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.listEvents": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getPortfolio": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getPnl": [
+              "ledgerBoardId"
+            ],
+            "userSellsKey.key.quoteSell": [
+              "agentId"
+            ],
+            "userSellsKey.key.sell": [
+              "agentId"
+            ],
+            "userSellsKey.key.stateAfterSell": [
+              "agentId"
+            ],
+            "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
+              "ledgerBoardId",
+              "agentId"
+            ],
+            "developerSetup.key.stateScript": [
+              "agentId"
+            ]
           },
           "runningNotes": [
             "Calling the ClawHouse App discovery API.",
@@ -594,6 +984,11 @@
             "keyAmount": "response.json.amount",
             "buyMaxPriceNear": "response.json.total_cost_near",
             "buyQuoteYocto": "response.json.total_cost"
+          },
+          "clearInputs": {
+            "userBuysKey.key.buy": [
+              "buyMaxPriceNear"
+            ]
           }
         },
         {
@@ -638,6 +1033,46 @@
           "setVars": {
             "contractId": "response.json.json.config.contractId",
             "agentId": "response.json.json.config.defaultAgentId"
+          },
+          "clearInputs": {
+            "clawhouseApp.key.state": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.quoteSell": [
+              "agentId"
+            ],
+            "userBuysKey.key.quoteBuy": [
+              "agentId"
+            ],
+            "userBuysKey.key.buy": [
+              "agentId"
+            ],
+            "userBuysKey.key.stateAfterBuy": [
+              "agentId"
+            ],
+            "userBuysKey.ledger.nearKeyMarketReadAccess": [
+              "contractId",
+              "agentId"
+            ],
+            "userSellsKey.key.quoteSell": [
+              "agentId"
+            ],
+            "userSellsKey.key.sell": [
+              "agentId"
+            ],
+            "userSellsKey.key.stateAfterSell": [
+              "agentId"
+            ],
+            "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
+              "contractId",
+              "agentId"
+            ],
+            "developerSetup.key.stateScript": [
+              "agentId"
+            ]
           }
         },
         {
@@ -742,6 +1177,50 @@
           "setVars": {
             "clawhouseBackendBaseUrl": "response.json.json.config.baseUrl",
             "ledgerBoardId": "response.json.json.config.defaultBoardId"
+          },
+          "clearInputs": {
+            "clawhouseApp.backend.board": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.getBoard": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listEvents": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.getPortfolio": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.getPnl": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listPrices": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listBalanceChanges": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.nearKeyMarketReadAccess": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.readAccessCheck": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getBoard": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.listEvents": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getPortfolio": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getPnl": [
+              "ledgerBoardId"
+            ],
+            "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
+              "ledgerBoardId"
+            ]
           }
         },
         {
@@ -772,6 +1251,47 @@
             "backendBalanceChangeError": "response.json.json.errors.balanceChanges",
             "backendPriceError": "response.json.json.errors.prices",
             "backendPaperLeaderboardError": "response.json.json.errors.paperLeaderboard"
+          },
+          "clearInputs": {
+            "userBrowsesAgent.ledger.getBoard": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listEvents": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.getPortfolio": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.getPnl": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listPrices": [
+              "ledgerBoardId"
+            ],
+            "userBrowsesAgent.ledger.listBalanceChanges": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.nearKeyMarketReadAccess": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.readAccessCheck": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getBoard": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.listEvents": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getPortfolio": [
+              "ledgerBoardId"
+            ],
+            "userBuysKey.ledger.getPnl": [
+              "ledgerBoardId"
+            ],
+            "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
+              "ledgerBoardId"
+            ]
           }
         },
         {
@@ -836,6 +1356,11 @@
             "keyAmount": "response.json.amount",
             "buyMaxPriceNear": "response.json.total_cost_near",
             "buyQuoteYocto": "response.json.total_cost"
+          },
+          "clearInputs": {
+            "userBuysKey.key.buy": [
+              "buyMaxPriceNear"
+            ]
           }
         },
         {
@@ -960,6 +1485,23 @@
             "ledgerReadAccessCheckId": "response.json.json.check.id",
             "holderBalanceAfterBuy": "response.json.json.holder_key_balance",
             "ledgerReadToken": "inputs.ledgerReadToken"
+          },
+          "clearInputs": {
+            "userBuysKey.ledger.getBoard": [
+              "ledgerReadToken"
+            ],
+            "userBuysKey.ledger.listEvents": [
+              "ledgerReadToken"
+            ],
+            "userBuysKey.ledger.getPortfolio": [
+              "ledgerReadToken"
+            ],
+            "userBuysKey.ledger.getPnl": [
+              "ledgerReadToken"
+            ],
+            "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
+              "ledgerReadToken"
+            ]
           }
         },
         {
@@ -1007,6 +1549,20 @@
           "setVars": {
             "ledgerReadAccessCheckId": "response.json.json.check.id",
             "ledgerReadToken": "inputs.ledgerReadToken"
+          },
+          "clearInputs": {
+            "userBuysKey.ledger.getBoard": [
+              "ledgerReadToken"
+            ],
+            "userBuysKey.ledger.listEvents": [
+              "ledgerReadToken"
+            ],
+            "userBuysKey.ledger.getPortfolio": [
+              "ledgerReadToken"
+            ],
+            "userBuysKey.ledger.getPnl": [
+              "ledgerReadToken"
+            ]
           }
         },
         {
@@ -1172,6 +1728,20 @@
             "ledgerHolderKeyBalance": "response.json.json.holder_key_balance",
             "ledgerAccessResult": "response.json.json.access_result",
             "ledgerReadToken": "inputs.ledgerReadToken"
+          },
+          "clearInputs": {
+            "userBuysKey.ledger.getBoard": [
+              "ledgerReadToken"
+            ],
+            "userBuysKey.ledger.listEvents": [
+              "ledgerReadToken"
+            ],
+            "userBuysKey.ledger.getPortfolio": [
+              "ledgerReadToken"
+            ],
+            "userBuysKey.ledger.getPnl": [
+              "ledgerReadToken"
+            ]
           }
         },
         {
@@ -1276,8 +1846,11 @@
           ],
           "setVars": {
             "ledgerBoardId": "response.json.boardId",
+            "ledgerAgentId": "response.json.agentId",
             "ledgerWalletAddress": "response.json.wallet.walletAddress",
             "ledgerPublicKey": "response.json.wallet.publicKey",
+            "ledgerKeyId": "response.json.wallet.keyId",
+            "ledgerWalletKeyId": "response.json.wallet.keyId",
             "paperTradingAccountId": "response.json.paperAccount.id",
             "ledgerClientEventId": "response.json.clientEventId",
             "ledgerTxHash": "response.json.txHash",
@@ -1287,6 +1860,75 @@
             "ledgerEventCount": "response.json.summary.eventCount",
             "ledgerAttachmentCount": "response.json.summary.attachmentCount",
             "ledgerPnlUsd": "response.json.summary.pnlUsd"
+          },
+          "clearInputs": {
+            "agentReportsTrade.ledger.createObservation": [
+              "ledgerBoardId",
+              "ledgerWalletAddress",
+              "ledgerClientEventId",
+              "ledgerTxHash",
+              "ledgerIntentId"
+            ],
+            "agentReportsTrade.ledger.createPrice": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.createBalanceChange": [
+              "ledgerBoardId",
+              "ledgerTxHash",
+              "ledgerIntentId"
+            ],
+            "agentReportsTrade.ledger.nearAccountWatch": [
+              "ledgerBoardId",
+              "ledgerTxHash",
+              "ledgerIntentId"
+            ],
+            "agentReportsTrade.ledger.nearFtWatch": [
+              "ledgerBoardId",
+              "ledgerTxHash",
+              "ledgerIntentId"
+            ],
+            "agentReportsTrade.ledger.listEvents": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.getPortfolio": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.listBalanceChanges": [
+              "ledgerBoardId"
+            ],
+            "agentReportsTrade.ledger.getPnl": [
+              "ledgerBoardId"
+            ],
+            "paperTrade.flow.signedOrders": [
+              "ledgerBoardId",
+              "paperTradingAccountId",
+              "ledgerAgentId"
+            ],
+            "paperTrade.account.read": [
+              "paperTradingAccountId"
+            ],
+            "paperTrade.riskCheck": [
+              "paperTradingAccountId"
+            ],
+            "developerSetup.ledger.signedEventTemplate": [
+              "ledgerBoardId",
+              "ledgerWalletAddress",
+              "ledgerPublicKey",
+              "ledgerClientEventId",
+              "ledgerTxHash",
+              "ledgerIntentId"
+            ],
+            "developerSetup.ledger.signedAttachmentTemplate": [
+              "ledgerBoardId",
+              "ledgerEventId",
+              "ledgerWalletAddress",
+              "ledgerPublicKey"
+            ],
+            "developerSetup.paperTrading.fullFlow": [
+              "ledgerBoardId",
+              "paperTradingAccountId",
+              "ledgerAgentId"
+            ]
           }
         },
         {
@@ -1355,6 +1997,29 @@
             "ledgerClientEventId": "response.json.json.observation.client_event_id",
             "ledgerTxHash": "response.json.json.observation.tx_hash",
             "ledgerIntentId": "response.json.json.observation.intent_id"
+          },
+          "clearInputs": {
+            "agentReportsTrade.ledger.createPrice": [
+              "ledgerObservedAt"
+            ],
+            "agentReportsTrade.ledger.createBalanceChange": [
+              "ledgerObservationId",
+              "ledgerTxHash",
+              "ledgerIntentId"
+            ],
+            "agentReportsTrade.ledger.nearAccountWatch": [
+              "ledgerTxHash",
+              "ledgerIntentId"
+            ],
+            "agentReportsTrade.ledger.nearFtWatch": [
+              "ledgerTxHash",
+              "ledgerIntentId"
+            ],
+            "developerSetup.ledger.signedEventTemplate": [
+              "ledgerClientEventId",
+              "ledgerTxHash",
+              "ledgerIntentId"
+            ]
           }
         },
         {
@@ -1456,6 +2121,11 @@
           ],
           "setVars": {
             "ledgerBalanceChangeId": "response.json.json.balance_changes.0.id"
+          },
+          "clearInputs": {
+            "agentReportsTrade.ledger.listBalanceChanges": [
+              "ledgerBoardId"
+            ]
           }
         },
         {
@@ -1848,6 +2518,17 @@
             "paperTradingIsolatedOrderId": "response.json.ids.isolatedOrderId",
             "paperTradingPassedChecks": "response.json.summary.passed",
             "paperTradingFailedChecks": "response.json.summary.failed"
+          },
+          "clearInputs": {
+            "paperTrade.account.read": [
+              "paperTradingAccountId"
+            ],
+            "paperTrade.riskCheck": [
+              "paperTradingAccountId"
+            ],
+            "paperTrade.replayProof": [
+              "paperTradingIocOrderId"
+            ]
           }
         },
         {
@@ -1990,6 +2671,11 @@
           "setVars": {
             "minPayoutNear": "response.json.payout_near",
             "sellQuoteYocto": "response.json.payout"
+          },
+          "clearInputs": {
+            "userSellsKey.key.sell": [
+              "minPayoutNear"
+            ]
           }
         },
         {
@@ -2308,6 +2994,23 @@
             "walletAddress": "response.json.walletAddress",
             "publicKey": "response.json.publicKey",
             "keyId": "response.json.keyId"
+          },
+          "clearInputs": {
+            "developerSetup.wallet.inspectPublic": [
+              "walletArtifactRelativePath"
+            ],
+            "developerSetup.wallet.readPublic": [
+              "walletArtifactRelativePath"
+            ],
+            "developerSetup.wallet.signRequest": [
+              "walletArtifactRelativePath"
+            ],
+            "developerSetup.wallet.duplicateRefusesOverwrite": [
+              "walletArtifactRelativePath"
+            ],
+            "developerSetup.wallet.inspectPublicAfterDuplicate": [
+              "walletArtifactRelativePath"
+            ]
           }
         },
         {
@@ -2453,6 +3156,31 @@
             "ledgerSignatureTimestamp": "response.json.timestamp",
             "ledgerSignatureNonce": "response.json.nonce",
             "ledgerBodySha256": "response.json.bodyHash"
+          },
+          "clearInputs": {
+            "developerSetup.wallet.verifyRequest": [
+              "ledgerPublicKey",
+              "ledgerWalletAddress",
+              "ledgerSignature",
+              "ledgerSignatureTimestamp",
+              "ledgerSignatureNonce"
+            ],
+            "developerSetup.ledger.signedEventTemplate": [
+              "ledgerWalletAddress",
+              "ledgerPublicKey",
+              "ledgerSignatureTimestamp",
+              "ledgerSignatureNonce",
+              "ledgerBodySha256",
+              "ledgerSignature"
+            ],
+            "developerSetup.ledger.signedAttachmentTemplate": [
+              "ledgerWalletAddress",
+              "ledgerPublicKey",
+              "ledgerSignatureTimestamp",
+              "ledgerSignatureNonce",
+              "ledgerBodySha256",
+              "ledgerSignature"
+            ]
           }
         },
         {
@@ -2786,8 +3514,11 @@
           ],
           "setVars": {
             "ledgerBoardId": "response.json.boardId",
+            "ledgerAgentId": "response.json.agentId",
             "ledgerWalletAddress": "response.json.wallet.walletAddress",
             "ledgerPublicKey": "response.json.wallet.publicKey",
+            "ledgerKeyId": "response.json.wallet.keyId",
+            "ledgerWalletKeyId": "response.json.wallet.keyId",
             "paperTradingAccountId": "response.json.paperAccount.id",
             "ledgerClientEventId": "response.json.clientEventId",
             "ledgerTxHash": "response.json.txHash",
@@ -2797,6 +3528,48 @@
             "ledgerEventCount": "response.json.summary.eventCount",
             "ledgerAttachmentCount": "response.json.summary.attachmentCount",
             "ledgerPnlUsd": "response.json.summary.pnlUsd"
+          },
+          "clearInputs": {
+            "developerSetup.wallet.signRequest": [
+              "ledgerBoardId",
+              "ledgerAgentId"
+            ],
+            "developerSetup.wallet.verifyRequest": [
+              "ledgerBoardId",
+              "ledgerAgentId",
+              "ledgerWalletAddress",
+              "ledgerPublicKey"
+            ],
+            "developerSetup.ledger.signedEventTemplate": [
+              "ledgerBoardId",
+              "ledgerWalletAddress",
+              "ledgerPublicKey",
+              "ledgerClientEventId",
+              "ledgerTxHash",
+              "ledgerIntentId"
+            ],
+            "developerSetup.ledger.signedAttachmentTemplate": [
+              "ledgerBoardId",
+              "ledgerEventId",
+              "ledgerWalletAddress",
+              "ledgerPublicKey"
+            ],
+            "paperTrade.flow.signedOrders": [
+              "ledgerBoardId",
+              "paperTradingAccountId",
+              "ledgerAgentId"
+            ],
+            "paperTrade.account.read": [
+              "paperTradingAccountId"
+            ],
+            "paperTrade.riskCheck": [
+              "paperTradingAccountId"
+            ],
+            "developerSetup.paperTrading.fullFlow": [
+              "ledgerBoardId",
+              "paperTradingAccountId",
+              "ledgerAgentId"
+            ]
           }
         },
         {
@@ -2966,6 +3739,17 @@
             "paperTradingIsolatedOrderId": "response.json.ids.isolatedOrderId",
             "paperTradingPassedChecks": "response.json.summary.passed",
             "paperTradingFailedChecks": "response.json.summary.failed"
+          },
+          "clearInputs": {
+            "paperTrade.account.read": [
+              "paperTradingAccountId"
+            ],
+            "paperTrade.riskCheck": [
+              "paperTradingAccountId"
+            ],
+            "paperTrade.replayProof": [
+              "paperTradingIocOrderId"
+            ]
           }
         },
         {
