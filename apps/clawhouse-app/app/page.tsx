@@ -168,16 +168,6 @@ export default function Page() {
                 <strong id="tradeStatusTitle">Ready</strong>
                 <small id="tradeStatusBody">Connect Wallet</small>
               </div>
-              <div className="source-map">
-                <div className="source-card">
-                  <label>Key trading</label>
-                  <strong>NEAR testnet</strong>
-                </div>
-                <div className="source-card">
-                  <label>Agent trading</label>
-                  <strong>Paper P&amp;L</strong>
-                </div>
-              </div>
             </section>
 
             <section className="panel position">
