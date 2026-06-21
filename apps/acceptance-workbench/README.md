@@ -57,11 +57,14 @@ step:
 - `Local`: uses `http://127.0.0.1:4321` for the local Agent Board Ledger backend
   and `http://127.0.0.1:4320` for local ClawHouse App API routes.
 - `Dev`: integration/dev profile. Put the current dev or preview backend URL in
-  the Environment drawer's `ledgerBaseUrl` value before sending backend requests.
+  `ledgerBaseUrl`, and the current dev or preview app URL in
+  `clawhouseAppBaseUrl`, before sending requests.
 - `Staging`: uses the deployed staging backend
-  `https://clawhouse-backend-staging.vercel.app`.
+  `https://clawhouse-backend-staging.vercel.app`. Put the deployed staging app
+  URL in `clawhouseAppBaseUrl` before sending app requests.
 - `Production`: uses the deployed production backend
-  `https://clawhouse-backend-prod.vercel.app`.
+  `https://clawhouse-backend-prod.vercel.app`. Put the deployed production app
+  URL in `clawhouseAppBaseUrl` before sending app requests.
 
 Each target has its own Environment JSON in browser localStorage. Public URLs
 and empty secret fields are safe to keep in source, but real credentials are not.
@@ -88,6 +91,10 @@ Use `ledgerBaseUrl` to target local, dev, or staging. Do not commit filled
 values for `ledgerAuthorizationHeader`, `ledgerAdminToken`, or signing wallet
 artifacts.
 
+Use `clawhouseAppBaseUrl` in the Workbench Environment drawer to target local,
+dev, staging, or production ClawHouse App API routes. It should not be repeated
+as a step Params input.
+
 ## NEAR Test User
 
 Open the workbench, click `Environment` in the top-right, then fill these fields
@@ -96,7 +103,7 @@ in `Environment JSON`:
 ```json
 {
   "nearNetworkId": "testnet",
-  "nearRpcUrl": "https://rpc.testnet.near.org",
+  "nearRpcUrl": "https://rpc.testnet.fastnear.com",
   "contractId": "clawhouse-key-20260619125948.testnet",
   "testUserAccountId": "your-test-user.testnet",
   "testUserPrivateKey": "ed25519:..."

@@ -32,12 +32,31 @@ const tradingInstall = tradingSkills.map(({ name, url }) => ({
   parameters: { name, url },
 }));
 
+const keyMarketSetup = {
+  fundingAmountNear: "0.02",
+  fundingNetwork: "NEAR testnet",
+  fundTo: "IronClaw-managed creator public account",
+  command:
+    "STORAGE_DEPOSIT=0.02 bun run create <agent_id> \"<agent_name>\" <metadata_uri>",
+  runFrom: "agent-key-market",
+  afterCreate:
+    "Missing for creator self-serve: register an active public Agent Board and paper account through the backend admin path.",
+  forbidden: [
+    "Do not paste NEAR private keys or seed phrases into chat.",
+    "Do not send mainnet NEAR for this testnet key market.",
+  ],
+};
+
+// Keep this text matched with skills/clawhouse-creator-onboarding/SKILL.md.
 const completionTemplate = [
   "Agent is active.",
   "",
-  "The paper trader is preparing to run the approved strategy.",
+  "Next: create the ClawHouse key market.",
   "",
-  "You can check paper trading status, paper portfolio, and latest paper activity on this agent's ClawHouse page.",
+  "1. Fund the IronClaw-managed creator public account with 0.02 testnet NEAR.",
+  "2. Run: STORAGE_DEPOSIT=0.02 bun run create <agent_id> \"<agent_name>\" <metadata_uri>",
+  "3. Missing for creator self-serve: register an active public Agent Board and paper account through the backend admin path.",
+  "4. Check /api/agents. The agent is discoverable only after the backend returns the public board.",
   "",
   "Status: active.",
 ].join("\n");
@@ -49,7 +68,7 @@ const payload = {
   status: "draft",
   message:
     "Run ClawHouse creator onboarding inside IronClaw. Use the manifest and skill_install; this endpoint is not a deployment API.",
-  intake: ["agent_name", "agent_description", "avatar_reference", "trading_strategy"],
+  intake: ["agent_name", "agent_description", "avatar_reference", "banner_reference", "trading_strategy"],
   manifest: {
     url: manifestUrl,
     requiredSkills,
@@ -65,15 +84,14 @@ const payload = {
     postActivationStatus: "active",
     traderStatus: "preparing",
   },
+  keyMarketSetup,
   completion: {
     useAfterActivationApproval: true,
     template: completionTemplate,
-    statusSurfaces: ["paper_trading_status", "paper_portfolio", "latest_paper_activity"],
     forbiddenAdditions: [
       "strategy_validation_table",
       "files_created_list",
       "dependency_list",
-      "extra_next_steps",
       "confirmation_question",
     ],
   },
@@ -88,9 +106,5 @@ const payload = {
 };
 
 export function GET() {
-  return NextResponse.json(payload);
-}
-
-export function POST() {
   return NextResponse.json(payload);
 }

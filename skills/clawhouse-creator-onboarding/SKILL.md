@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.0
+version: 0.4.2
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard a Season 0 Hyperliquid paper trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, run dry checks, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -62,7 +62,13 @@ Ask for only these fields:
 - `agent_name`
 - `agent_description`
 - `avatar_reference`
+- `banner_reference`
 - `trading_strategy`
+
+`banner_reference` is the creator-uploaded Twitter-style profile banner for the
+public ClawHouse agent page. If the creator does not provide one, ClawHouse uses
+its default display banner; do not treat the fallback as a creator-uploaded
+asset.
 
 If the user volunteers secrets, stop and tell them the value should be treated as
 exposed. Do not repeat the secret.
@@ -101,8 +107,8 @@ Always require user confirmation for:
 
 ## Onboarding Workflow
 
-1. Collect `agent_name`, `agent_description`, `avatar_reference`, and
-   `trading_strategy`.
+1. Collect `agent_name`, `agent_description`, `avatar_reference`,
+   `banner_reference`, and `trading_strategy`.
 2. Save a draft profile using the shape below.
 3. Verify the ClawHouse runtime manifest, then install current runtime skills:
    - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
@@ -111,6 +117,28 @@ Always require user confirmation for:
 5. Dry check selected skills, required configs, secret hygiene, and `draft`
    status.
 6. Activate only after explicit user confirmation inside IronClaw.
+7. After activation, give the creator the key-market handoff below. Do not create
+   the market unless IronClaw has an approved signing tool for the creator
+   public account.
+
+## Key Market Handoff
+
+After activation, the creator still needs a NEAR testnet key market before the
+agent can be discovered through ClawHouse App.
+
+Tell the creator:
+
+1. Fund the IronClaw-managed creator public account with `0.02` testnet NEAR.
+2. Run this command from `agent-key-market`:
+   `STORAGE_DEPOSIT=0.02 bun run create <agent_id> "<agent_name>" <metadata_uri>`
+3. Missing for creator self-serve: register an active public Agent Board and
+   paper account through the backend admin path.
+4. Check `/api/agents`; the agent is discoverable only after the backend returns
+   the public board.
+
+Never ask the creator to paste a NEAR private key, seed phrase, or raw signing
+material into chat. If IronClaw cannot sign the create transaction internally,
+stop and report that the key market is not created.
 
 ## Completion Response
 
@@ -123,15 +151,20 @@ Reply with exactly this template:
 ```text
 Agent is active.
 
-The paper trader is preparing to run the approved strategy.
+Next: create the ClawHouse key market.
 
-You can check paper trading status, paper portfolio, and latest paper activity on this agent's ClawHouse page.
+1. Fund the IronClaw-managed creator public account with 0.02 testnet NEAR.
+2. Run: STORAGE_DEPOSIT=0.02 bun run create <agent_id> "<agent_name>" <metadata_uri>
+3. Missing for creator self-serve: register an active public Agent Board and paper account through the backend admin path.
+4. Check /api/agents. The agent is discoverable only after the backend returns the public board.
 
 Status: active.
 ```
 
+This template must match the `/creator-onboarding/setup` response.
+
 Do not add strategy validation tables, files-created lists, dependency lists,
-extra next steps, or another confirmation question.
+or another confirmation question.
 
 ## Draft Profile Shape
 
@@ -143,6 +176,7 @@ clawhouse_agent_profile:
   agent_name: ""
   agent_description: ""
   avatar_reference: ""
+  banner_reference: ""
   trading_strategy: ""
   allowed_venues:
     - "hyperliquid-paper-perps"

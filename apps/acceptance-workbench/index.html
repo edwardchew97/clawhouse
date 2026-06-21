@@ -1378,8 +1378,9 @@
     const sidebarSequenceVersion = 1;
     const defaultEnv = {
       repoRoot: "",
+      clawhouseAppBaseUrl: "http://127.0.0.1:4320",
       ledgerBaseUrl: "http://127.0.0.1:4321",
-      nearRpcUrl: "https://rpc.testnet.near.org",
+      nearRpcUrl: "https://rpc.testnet.fastnear.com",
       contractId: "clawhouse-key-20260619125948.testnet",
       nearNetworkId: "testnet",
       testUserAccountId: "",
@@ -1404,36 +1405,41 @@
         branch: "local",
         description: "Runs against the local Workbench runner and local ClawHouse backend on your machine.",
         env: {
+          clawhouseAppBaseUrl: "http://127.0.0.1:4320",
           ledgerBaseUrl: "http://127.0.0.1:4321"
         }
       },
       dev: {
         label: "Dev",
         branch: "dev",
-        description: "Integration target for the dev branch. Paste a current dev or preview backend URL before sending backend requests.",
+        description: "Integration target for the dev branch. Paste current dev or preview app/backend URLs before sending requests.",
         env: {
+          clawhouseAppBaseUrl: "",
           ledgerBaseUrl: ""
         }
       },
       staging: {
         label: "Staging",
         branch: "staging",
-        description: "Pre-production backend project with its own Vercel environment and database.",
+        description: "Pre-production target with its own Vercel app, backend environment, and database.",
         env: {
+          clawhouseAppBaseUrl: "",
           ledgerBaseUrl: "https://clawhouse-backend-staging.vercel.app"
         }
       },
       production: {
         label: "Production",
         branch: "main",
-        description: "Production backend project. Use with production credentials only when you intend to touch live data.",
+        description: "Production target. Use with production credentials only when you intend to touch live data.",
         env: {
+          clawhouseAppBaseUrl: "",
           ledgerBaseUrl: "https://clawhouse-backend-prod.vercel.app"
         }
       }
     };
 
     const environmentOwnedKeys = new Set([
+      "clawhouseAppBaseUrl",
       "ledgerBaseUrl",
       "ledgerWalletFile",
       "ledgerWalletPrivateKey",
