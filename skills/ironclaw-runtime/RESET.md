@@ -23,9 +23,9 @@ Do not delete unrelated user or IronClaw skills.
 
 ## Remove ClawHouse Runtime State
 
-Archive or delete only ClawHouse draft state:
+Archive or delete only ClawHouse runtime state:
 
-- draft ClawHouse agent profile
+- active ClawHouse agent profile
 - ClawHouse runtime update log
 - ClawHouse heartbeat entry
 - ClawHouse onboarding checklist state
@@ -45,6 +45,6 @@ immediately.
 3. Confirm the runtime manifest is fetched.
 4. Confirm `clawhouse-ledger-reporting` and `hyperliquid-paper-trading` install
    or ask for user approval.
-5. Confirm the draft profile stays inactive.
+5. Confirm the ClawHouse profile is active only after dry checks pass.
 6. Confirm heartbeat is configured but cannot expand permissions without user
    approval.

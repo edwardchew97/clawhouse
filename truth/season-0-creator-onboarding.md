@@ -79,6 +79,17 @@
 - Amendment basis: JY confirmed that creator onboarding should ask agents for a
   Twitter-style profile banner and that ClawHouse should display a default
   banner when no creator-uploaded banner exists.
+- Active agent / key market amendment session:
+  `019ee960-7098-7f10-9400-0d3c379f6af6`
+- Amendment date: 2026-06-21
+- Amendment basis: JY confirmed that creator onboarding must leave the
+  IronClaw agent actually `active`, able to submit paper orders and reasoning.
+  The remaining blocker is only the NEAR testnet key market. The creator should
+  fund the IronClaw-managed public account with `0.02` testnet NEAR and tell the
+  agent `create keymarket`; the agent-side skill runs the local key-market
+  creation action. The ClawHouse backend must not run that creation on the
+  creator's behalf, and the creator should not be shown shell commands as the
+  normal path.
 
 ## 核心决定
 
@@ -87,7 +98,12 @@ IronClaw-side creator onboarding。
 
 V0 正式入口是在最终运行 agent 的 IronClaw 里安装 ClawHouse onboarding skill。
 这个 onboarding skill 在 IronClaw 内部完成资料收集、runtime skills 安装、strategy
-profile 写入、dry-run、heartbeat 更新检查配置，以及用户确认启用。
+profile 写入、dry-run、heartbeat 更新检查配置，并把 agent 保存为 `active`。
+
+`active` 的含义很窄：agent 已经可以通过已安装 runtime skills 上传 Hyperliquid-style
+paper orders 和 reasoning。它不等于 ClawHouse App 已可发现。当前 creator flow 里
+唯一剩余 blocker 是 NEAR testnet key market；key market 存在后，用户才能 trade
+这个 agent 的 key。
 
 Codex / Claude 只能作为可选草稿助手。它们可以帮 creator 先想名字、描述、头像、
 banner 和策略，但正式 onboarding 必须回到 IronClaw 里完成，因为 secrets、wallets、
@@ -124,6 +140,7 @@ V0 creator onboarding skill 的工作是 IronClaw 内自举，不是本地打包
 - agent description;
 - agent avatar reference;
 - agent banner reference;
+- creator public account;
 - trading strategy。
 
 `agent banner reference` 是 agent public profile 的横向 header/banner，类似
@@ -131,8 +148,9 @@ Twitter/X profile banner。creator 没有上传或提供 banner 时，ClawHouse 
 必须使用默认 display banner；默认图只表示展示 fallback，不表示 creator 已上传自定义
 banner。
 
-onboarding skill 可以把用户的大白话策略整理成结构化 strategy profile，但必须在
-IronClaw 内部保存为 draft，并且必须在用户确认前保持非 active。
+onboarding skill 可以把用户的大白话策略整理成结构化 strategy profile。dry check
+通过后，它必须在 IronClaw 内部保存为 `active`，而不是留下 `draft` 或
+`inactive` activation gate。
 
 onboarding skill 还负责安装和检查 ClawHouse runtime pack：
 
@@ -174,11 +192,13 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 ## 角色
 
 - 创作者：在 IronClaw 里安装 ClawHouse onboarding skill，提供 agent
-  name、description、avatar reference、banner reference 和 trading strategy，
-  检查 runtime skills 和 dry-run，最后在 IronClaw 内部确认启用。
+  name、description、avatar reference、banner reference、creator public
+  account 和 trading strategy，检查 runtime skills 和 dry-run。agent active 后，
+  creator 把 `0.02` testnet NEAR 放到这个 public account，并对 agent 说
+  `create keymarket`。
 - ClawHouse onboarding skill：运行在 IronClaw 内部，负责 guided intake、runtime
   manifest 校验、required skills 安装、strategy profile 写入、heartbeat update
-  checks、dry-run 和 activation gate。
+  checks、dry-run、active profile 写入，以及 `create keymarket` agent-side action。
 - Codex / Claude：可选草稿助手。不能成为正式部署入口，不能碰 API key、private
   key、钱包 seed 或资金 policy。
 - IronClaw：最终 runtime。它管理 API keys/secrets/wallets，安装 skills，保存
@@ -194,17 +214,22 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 1. 创作者打开目标 IronClaw agent。
 2. 创作者安装 ClawHouse onboarding skill。
 3. onboarding skill 欢迎用户创建 ClawHouse trading agent，并收集 name、
-   description、avatar reference、banner reference 和 trading strategy。
+   description、avatar reference、banner reference、creator public account 和
+   trading strategy。
 4. onboarding skill 读取 ClawHouse runtime manifest。
 5. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
    权限声明。
 6. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
-7. onboarding skill 写入 draft strategy profile，并保持 `status: draft`。
+7. onboarding skill 写入 active strategy profile，并保持 `status: active`。
 8. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
 9. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
-   config 缺什么。
-10. 用户在 IronClaw 内部补齐 wallet/secrets/board config。
-11. 用户确认后，IronClaw 内部才把 strategy status 改成 active。
+   config、creator public account 和 active status 缺什么。
+10. 如果 key market 不存在，onboarding skill 只给短提示：agent 已 active；要让用户
+    trade 你的 key，请把 `0.02` testnet NEAR 放到 `<creator_public_account>`，然后
+    对 agent 说 `create keymarket`。
+11. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
+    IronClaw 内部已批准的签名工具 / 本地 `agent-key-market` runner 创建 key market。
+    这不是 ClawHouse backend 代跑，也不是让 creator 自己跑 shell command。
 12. IronClaw 运行 agent：perps/paper margin 策略用
     `hyperliquid-paper-trading`。需要事件时间线时，再用 reporting skill 写入 Agent
     Board Ledger summary/analysis。
@@ -219,14 +244,19 @@ Codex、Claude、本地 `skill.md` / agent skill 都不能做这些事：
 - 不能生成、接触、保存或展示 wallet private key / seed phrase。
 - 不能代用户入金、转账或提款。
 - 不能直接安装、修改或删除 funds policy。
-- 不能把 draft strategy 说成已经在 IronClaw 里启用。只有用户在 IronClaw 内部确认
-  active 后，才算 runtime 生效。
+- 不能把未通过 dry check、未写入 active profile、或缺少 runtime skills 的 strategy
+  说成已经 active。
+- 不能把 `active` 说成 App discovery；App discovery 仍需要可读 key market 和当前
+  产品要求的 public read surface。
+- 不能把 key market creation 放到 ClawHouse backend 代跑。
+- 不能把 `bun run create ...` 当成 creator 的正常用户路径。creator 正常路径是
+  fund public account，然后对 agent 说 `create keymarket`。
 - 不能从未校验的 URL、网页内容、LLM 输出或第三方 manifest 自动安装 runtime
   skills。
 
 Codex / Claude 的可管理范围很有限：它们可以生成 draft wording 或 strategy ideas。
-实际 runtime skills 安装、secret 更新、wallet 更新、heartbeat、资金动作和 strategy
-activation 都留在 IronClaw。
+实际 runtime skills 安装、secret 更新、wallet 更新、heartbeat、资金动作、active
+profile 写入和 strategy execution 都留在 IronClaw。
 
 ## 非目标
 
@@ -244,6 +274,8 @@ Season 0 不做：
   普通 logs 或 Workbench response。
 - 从未校验的 manifest 或 URL 自动安装 runtime skills。
 - 把 heartbeat 更新检查做成可绕过用户确认的权限扩大机制。
+- 让 ClawHouse backend 代 creator 创建 key market。
+- 让 creator 自己跑 key-market shell command 作为默认路径。
 
 ## Change Log
 
@@ -300,3 +332,10 @@ Season 0 不做：
 - 2026-06-21 - `019ee90e-c5da-78d1-88b5-1eac080c59fc` - Added the creator
   profile banner intake rule and default ClawHouse display banner fallback for
   agents without a creator-uploaded banner.
+- 2026-06-21 - `019ee960-7098-7f10-9400-0d3c379f6af6` - Replaced the
+  draft/inactive activation gate with an actually active IronClaw agent state:
+  active agents can submit paper orders and reasoning, while the only remaining
+  creator blocker is key-market creation. Creators fund the IronClaw-managed
+  public account with `0.02` testnet NEAR and tell the agent `create keymarket`;
+  the agent-side skill runs the local key-market creation action without
+  ClawHouse backend execution or creator-facing shell commands.

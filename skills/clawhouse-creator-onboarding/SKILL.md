@@ -1,7 +1,7 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.2
-description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard a Season 0 Hyperliquid paper trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, run dry checks, or reset/retest onboarding without exposing secrets.
+version: 0.4.3
+description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
 # ClawHouse Creator Onboarding
@@ -30,19 +30,22 @@ Use IronClaw's official skill and heartbeat docs for runtime behavior:
 - `https://docs.ironclaw.com/zh/capabilities/routines/heartbeat`
 
 If IronClaw's actual installer or UI behaves differently, do not invent support.
-Report the blocker and keep the strategy in draft.
+Report the blocker and do not mark the agent active.
 
 ## What This Skill Owns
 
 - Collect public agent profile fields.
-- Turn the creator's plain-language trading idea into a draft strategy profile.
+- Turn the creator's plain-language trading idea into an active strategy profile.
 - Read the ClawHouse runtime manifest.
 - Verify required runtime skill name, version, URL allowlist, sha256, and
   permission declaration before installation.
 - Install or guide installation of required runtime skills.
 - Configure heartbeat checks for ClawHouse runtime updates.
-- Run a dry check and keep the strategy inactive until the user confirms inside
-  IronClaw.
+- Run a dry check, save the ClawHouse agent profile as `active`, and keep the
+  only remaining launch blocker scoped to the key market when it does not exist.
+- When the creator says `create keymarket`, create the NEAR testnet key market
+  through the agent-side skill action if the creator public account is funded
+  and IronClaw has an approved signing tool.
 
 ## What This Skill Does Not Own
 
@@ -52,6 +55,7 @@ Report the blocker and keep the strategy in draft.
 - Trade execution.
 - Agent Board Ledger writes; use `clawhouse-ledger-reporting`.
 - Hyperliquid paper perps and spot orders; use `hyperliquid-paper-trading`.
+- Backend-run key-market creation.
 - Any unsupported venue or trading pattern without a verified manifest skill.
 - Product-scope changes; use the repo truth process instead.
 
@@ -64,6 +68,7 @@ Ask for only these fields:
 - `avatar_reference`
 - `banner_reference`
 - `trading_strategy`
+- `creator_public_account`
 
 `banner_reference` is the creator-uploaded Twitter-style profile banner for the
 public ClawHouse agent page. If the creator does not provide one, ClawHouse uses
@@ -72,6 +77,10 @@ asset.
 
 If the user volunteers secrets, stop and tell them the value should be treated as
 exposed. Do not repeat the secret.
+
+`creator_public_account` must be a public NEAR testnet account controlled by
+IronClaw. Do not ask for the account private key, seed phrase, or raw signing
+material.
 
 ## Runtime Manifest Gate
 
@@ -108,33 +117,48 @@ Always require user confirmation for:
 ## Onboarding Workflow
 
 1. Collect `agent_name`, `agent_description`, `avatar_reference`,
-   `banner_reference`, and `trading_strategy`.
-2. Save a draft profile using the shape below.
+   `banner_reference`, `trading_strategy`, and the IronClaw-managed
+   `creator_public_account`.
+2. Save an active profile using the shape below.
 3. Verify the ClawHouse runtime manifest, then install current runtime skills:
    - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
    - `skill_install(name="hyperliquid-paper-trading", url="<manifest.skills[].url>")`
 4. Configure heartbeat against the same manifest.
-5. Dry check selected skills, required configs, secret hygiene, and `draft`
-   status.
-6. Activate only after explicit user confirmation inside IronClaw.
-7. After activation, give the creator the key-market handoff below. Do not create
-   the market unless IronClaw has an approved signing tool for the creator
-   public account.
+5. Dry check selected skills, required configs, secret hygiene, `active` status,
+   the creator public account, and whether the key market already exists.
+6. If no key market exists, give the creator the short key-market step below.
+7. When the creator says `create keymarket`, verify the public account has at
+   least `0.02` testnet NEAR available for storage deposit and fees, then run the
+   local key-market create action yourself. Do not ask the creator to run a shell
+   command.
 
 ## Key Market Handoff
 
-After activation, the creator still needs a NEAR testnet key market before the
-agent can be discovered through ClawHouse App.
+The ClawHouse agent is active after onboarding and can use the installed runtime
+skills to submit paper orders and reasoning. The remaining blocker is the NEAR
+testnet key market, which lets users trade the agent key.
 
 Tell the creator:
 
-1. Fund the IronClaw-managed creator public account with `0.02` testnet NEAR.
-2. Run this command from `agent-key-market`:
-   `STORAGE_DEPOSIT=0.02 bun run create <agent_id> "<agent_name>" <metadata_uri>`
-3. Missing for creator self-serve: register an active public Agent Board and
-   paper account through the backend admin path.
-4. Check `/api/agents`; the agent is discoverable only after the backend returns
-   the public board.
+1. Send `0.02` testnet NEAR to `<creator_public_account>`.
+2. Say `create keymarket`.
+
+When the creator says `create keymarket`, the skill should invoke the local
+`agent-key-market` create runner from the agent/IronClaw environment with:
+
+- cwd: `agent-key-market`;
+- script: `scripts/create-agent-key.ts`;
+- storage deposit: `0.02` testnet NEAR;
+- env: `STORAGE_DEPOSIT=0.02`, `ACCOUNT_ID=<creator_public_account>`,
+  `CONTRACT_ID=<key_market_contract_id>`, `NEAR_NETWORK_ID=testnet`;
+- signer/account: `<creator_public_account>`;
+- agent id: `<agent_id>`;
+- agent name: `<agent_name>`;
+- metadata URI: `<metadata_uri>`.
+
+Do not show the creator a `bun run` command as the normal path. If IronClaw
+cannot sign the create transaction internally, or the public account is not
+funded, stop with the exact missing item.
 
 Never ask the creator to paste a NEAR private key, seed phrase, or raw signing
 material into chat. If IronClaw cannot sign the create transaction internally,
@@ -142,21 +166,21 @@ stop and report that the key market is not created.
 
 ## Completion Response
 
-After the profile is saved, required runtime skills are installed or confirmed,
-heartbeat is configured, dry check passes, and IronClaw has recorded the user's
-activation approval, do not generate a setup report.
+After the profile is saved as active, required runtime skills are installed or
+confirmed, heartbeat is configured, and dry check passes, do not generate a
+setup report.
 
 Reply with exactly this template:
 
 ```text
 Agent is active.
 
-Next: create the ClawHouse key market.
+Next: create the ClawHouse key market so users can trade your key.
 
-1. Fund the IronClaw-managed creator public account with 0.02 testnet NEAR.
-2. Run: STORAGE_DEPOSIT=0.02 bun run create <agent_id> "<agent_name>" <metadata_uri>
-3. Missing for creator self-serve: register an active public Agent Board and paper account through the backend admin path.
-4. Check /api/agents. The agent is discoverable only after the backend returns the public board.
+1. Send 0.02 testnet NEAR to <creator_public_account>.
+2. Tell this agent: create keymarket.
+
+The agent can already submit paper orders and reasoning. It will create the key market through the local ClawHouse skill once the account is funded.
 
 Status: active.
 ```
@@ -172,11 +196,12 @@ Use this shape as the saved profile, not as an execution command:
 
 ```yaml
 clawhouse_agent_profile:
-  status: "draft"
+  status: "active"
   agent_name: ""
   agent_description: ""
   avatar_reference: ""
   banner_reference: ""
+  creator_public_account: ""
   trading_strategy: ""
   allowed_venues:
     - "hyperliquid-paper-perps"
@@ -197,8 +222,10 @@ clawhouse_agent_profile:
     no_borrowing: true
     no_withdrawals: true
     secrets_stay_in_ironclaw: true
-  activation:
-    user_confirmed_active: false
+  key_market:
+    status: "missing_until_created"
+    storage_deposit_near: "0.02"
+    create_trigger: "create keymarket"
 ```
 
 ## Heartbeat Rule
@@ -218,7 +245,7 @@ For a clean retest:
 2. Remove the ClawHouse runtime skills through IronClaw skill settings, or delete
    only the ClawHouse skill folders from IronClaw's configured skill paths.
 3. Remove the ClawHouse heartbeat entry.
-4. Archive or delete the draft ClawHouse strategy/profile state.
+4. Archive or delete the active ClawHouse strategy/profile state.
 5. Restart or refresh IronClaw if newly added or removed skills are not
    rediscovered immediately.
 6. Reinstall this onboarding skill and run onboarding again.
