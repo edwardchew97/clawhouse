@@ -96,7 +96,7 @@ in `Environment JSON`:
 ```json
 {
   "nearNetworkId": "testnet",
-  "nearRpcUrl": "https://rpc.testnet.near.org",
+  "nearRpcUrl": "https://rpc.testnet.fastnear.com",
   "contractId": "clawhouse-key-20260619125948.testnet",
   "testUserAccountId": "your-test-user.testnet",
   "testUserPrivateKey": "ed25519:..."
