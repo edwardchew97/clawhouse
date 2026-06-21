@@ -1534,39 +1534,6 @@
 
     transform: translateY(-1px);
 }
-    .source-map {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 9px;
-      margin-top: 9px;
-    }
-
-    .source-card {
-      padding: 8px;
-      border-radius: 4px;
-      border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.03);
-    }
-
-    .source-card label {
-      display: block;
-      color: var(--faint);
-      font-size: 9px;
-      text-transform: uppercase;
-      letter-spacing: 0;
-    }
-
-    .source-card strong {
-      display: block;
-      margin-top: 3px;
-      font-size: 11px;
-      line-height: 14px;
-      color: #fff;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
     .position {
       padding: 10px;
     }
@@ -2053,7 +2020,6 @@
     /* Shared motion system */
     button,
     .stat,
-    .source-card,
     .comments-card,
     .activity-row,
     .panel {
@@ -2072,7 +2038,6 @@
     }
 
     .stat:hover,
-    .source-card:hover,
     .comments-card:hover {
       transform: translateY(-2px);
       border-color: rgba(180, 186, 192, 0.18);
