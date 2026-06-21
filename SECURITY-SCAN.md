@@ -28,14 +28,14 @@ Severity: **Critical / High / Medium / Low / Informational**.
 - Mitigating: git-ignored, `0o600`, testnet accounts.
 - **Action:** Treat as disposable testnet keys; never reuse on mainnet; purge old wallet JSON periodically.
 
-### A3. Acceptance-workbench HTTP server binds to all interfaces with no auth — **Medium** (High on an untrusted network)
-`apps/acceptance-workbench/server.ts` `Bun.serve({ port, fetch })` (~line 459) sets **no `hostname`**, so Bun defaults to `0.0.0.0` (the startup log misleadingly prints `127.0.0.1`). Fixed default port `4317`. Unauthenticated routes: `/run/script`, `/run/http`, `/run/near-view`, `/crypto/encrypt`, `/crypto/decrypt`, `/health`.
+### A3. Acceptance-workbench sensitive endpoints have no auth — **Low** (Medium if exposed beyond localhost)
+`apps/acceptance-workbench/server.ts` `Bun.serve({ port, fetch })` (~line 459) sets **no explicit `hostname`**. On Bun 1.3.14, the default reproduced as `localhost`, not `0.0.0.0`, so the earlier "all interfaces" premise is not valid for the current runtime. The sensitive routes are still unauthenticated: `/run/script`, `/run/http`, `/run/near-view`, `/crypto/encrypt`, `/crypto/decrypt`, `/health`.
 - `/crypto/decrypt` = unauthenticated decryption oracle for the workbench's AES key.
 - `/run/script` runs allowlisted scripts with `NEAR_PRIVATE_KEY` injected as env.
-- **Action:** Set `hostname: "127.0.0.1"`; add a bearer check to `/run/*` and `/crypto/*`.
+- **Action:** Set `hostname: "127.0.0.1"` explicitly for defense against runtime/config drift; add a bearer check to `/run/*` and `/crypto/*`.
 
-### A4. `/run/http` is an unauthenticated open SSRF proxy — **Medium**
-`runHttp()` (~line 224) does `fetch(String(payload.url))` with a caller-supplied URL, no host allowlist, no block on link-local. With A3's 0.0.0.0 bind, a network attacker can reach `169.254.169.254` (cloud metadata) / internal services.
+### A4. `/run/http` is an unauthenticated local SSRF-style fetcher — **Low** (Medium if exposed beyond localhost)
+`runHttp()` (~line 224) does `fetch(String(payload.url))` with a caller-supplied URL, no host allowlist, no block on link-local. Current Bun defaults keep this localhost-only, but any local caller or future non-local bind could use it to reach internal services such as `169.254.169.254`.
 - **Action:** Allowlist outbound targets (or block private/loopback/link-local) and gate behind auth.
 
 ### A5. Non-constant-time comparison for cron secret and read-token hash — **Low**
@@ -143,7 +143,7 @@ Reviewed as a third party from the code itself, not the docs. The backend is one
 
 ## Overall priority order
 1. Rotate Neon password + admin token (A1).
-2. Bind acceptance-workbench to localhost + add auth (A3, A4).
+2. Make acceptance-workbench's localhost bind explicit; add auth and outbound allowlists (A3, A4).
 3. Smart contract: handle transfer failure on the sell payout path (B1).
 4. Backend: fix the read-grant `LIMIT 50` denial bug and the inverted trust model (C3, C4).
 5. Patch the dependency advisories surfaced by `bun audit`; install/run `cargo audit`.
