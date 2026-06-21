@@ -870,6 +870,11 @@
       box-shadow: inset 3px 0 0 var(--red);
     }
 
+    .result-summary.pending {
+      background: #fffdf8;
+      box-shadow: inset 3px 0 0 var(--amber);
+    }
+
     .result-summary.running {
       background: #fffdf8;
       box-shadow: inset 3px 0 0 var(--amber);
@@ -1640,6 +1645,36 @@
       return step.pendingReason || step.description || "This acceptance step is not implemented yet.";
     }
 
+    function pendingStepPrompt(step = activeStep()) {
+      if (Array.isArray(step.responseLines) && step.responseLines.length) return step.responseLines;
+      if (Array.isArray(step.runningNotes) && step.runningNotes.length) return step.runningNotes;
+      return [`未完成: ${pendingReason(step)}`];
+    }
+
+    function pendingStepResult(step = activeStep()) {
+      const reason = pendingReason(step);
+      const publicFacingMessage = step.publicFacingMessage || step.description || reason;
+      return {
+        ok: false,
+        pending: true,
+        status: step.status || "未完成",
+        runnable: false,
+        stepId: step.id,
+        stepName: step.name,
+        error: `未完成: ${reason}`,
+        json: {
+          ok: false,
+          status: step.status || "未完成",
+          runnable: false,
+          stepId: step.id,
+          stepName: step.name,
+          publicFacingMessage,
+          pendingReason: reason,
+          prompt: pendingStepPrompt(step)
+        }
+      };
+    }
+
     function methodLabel(step = activeStep()) {
       if (isPendingStep(step)) return "未完成";
       if (step.type === "http") return step.method || "GET";
@@ -2218,6 +2253,9 @@
       renderRequest();
       renderTabs();
       renderVars();
+      if (isPendingStep(activeStep())) {
+        renderPendingStepResponse(activeFlow(), activeStep());
+      }
       persist();
       queueAutoFill();
     }
@@ -2619,9 +2657,10 @@
 
     function renderResult(result, startedAt, targetLabel) {
       const ok = Boolean(result.ok);
+      const pending = result.pending === true || result.status === "未完成";
       $("resultMeta").innerHTML = `
-        <span class="pill ${ok ? "ok" : "fail"}">${ok ? "success" : "failed"}</span>
-        <span class="pill">started ${escapeHtml(startedAt)}</span>
+        <span class="pill ${ok ? "ok" : pending ? "warn" : "fail"}">${ok ? "success" : pending ? "未完成" : "failed"}</span>
+        ${startedAt ? `<span class="pill">started ${escapeHtml(startedAt)}</span>` : ""}
         ${result.durationMs !== undefined ? `<span class="pill">${escapeHtml(String(result.durationMs))} ms</span>` : ""}
         ${result.status ? `<span class="pill">status ${result.status}</span>` : ""}
         ${result.exitCode !== undefined ? `<span class="pill">exit ${result.exitCode}</span>` : ""}
@@ -2634,6 +2673,10 @@
     function renderReadableResult(result, targetLabel) {
       const ok = Boolean(result.ok);
       const parsedJson = result.json ?? parseJsonText(result.stdout);
+      const parsedRecord = parsedJson && typeof parsedJson === "object" && !Array.isArray(parsedJson)
+        ? parsedJson
+        : null;
+      const pending = result.pending === true || result.status === "未完成" || parsedRecord?.status === "未完成";
       const stdout = typeof result.stdout === "string" ? result.stdout : "";
       const stderr = typeof result.stderr === "string" ? result.stderr : "";
       const text = typeof result.text === "string" ? result.text : "";
@@ -2668,10 +2711,12 @@
           ? resultPanelBlock("Raw response text", text, "Text")
           : ""
       ].filter(Boolean);
+      const summaryClass = ok ? "ok" : pending ? "pending" : "fail";
+      const summaryTitle = ok ? "Step completed" : pending ? "Step not implemented" : "Step failed";
       const bodyPanel = `
-        <div class="result-summary ${ok ? "ok" : "fail"}">
+        <div class="result-summary ${summaryClass}">
           <div class="result-heading">
-            <div class="result-title">${ok ? "Step completed" : "Step failed"}</div>
+            <div class="result-title">${summaryTitle}</div>
           </div>
           <div class="result-message">${escapeHtml(resultMessage(result, parsedJson, ok))}</div>
         </div>
@@ -2687,7 +2732,7 @@
       const varsPanel = renderRuntimeVarsPanel();
 
       return `
-        <div class="response-console ${ok ? "ok" : "fail"}">
+        <div class="response-console ${summaryClass}">
           <div class="response-console-bar">
             ${renderResponseTabs(activeTab)}
             <div class="response-metrics">
@@ -2847,6 +2892,9 @@
       const parsed = parsedJson && typeof parsedJson === "object" && !Array.isArray(parsedJson)
         ? parsedJson
         : null;
+      if (result.pending && parsed && typeof parsed.publicFacingMessage === "string") {
+        return parsed.publicFacingMessage;
+      }
       const messages = [
         typeof result.error === "string" ? result.error : "",
         parsed && typeof parsed.error === "string" ? parsed.error : "",
@@ -2876,6 +2924,7 @@
       const flow = activeFlow();
       const step = activeStep();
       if (isPendingStep(step)) {
+        renderPendingStepResponse(flow, step);
         showToast("This user-story step is marked 未完成.");
         return;
       }
@@ -2939,6 +2988,17 @@
         $("fireStep").disabled = isPendingStep(activeStep());
         persist();
       }
+    }
+
+    function renderPendingStepResponse(flow, step) {
+      const targetLabel = `${methodLabel(step)} ${resolvedTarget(step)}`;
+      const result = pendingStepResult(step);
+      state.responseTab = "body";
+      state.lastResult = result;
+      state.lastDebugPacket = buildDebugPacket(flow, step, "pending-preview", targetLabel, previewPayload(step), result);
+      renderTopbar();
+      renderResult(result, "", targetLabel);
+      renderVars();
     }
 
     function handleSendShortcut(event) {
