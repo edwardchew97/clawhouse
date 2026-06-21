@@ -2539,6 +2539,7 @@
         const steps = sidebarSteps(flow, flowIndex, needle);
         if (!steps.length) return "";
         const countLabel = steps.length === flow.steps.length ? String(flow.steps.length) : `${steps.length}/${flow.steps.length}`;
+        const flowSequence = flowSequenceLabel(flow, flowIndex);
         return `
           <div class="flow-block">
             <button
@@ -2550,7 +2551,7 @@
             >
               <span class="flow-title">
                 <span class="flow-chevron" aria-hidden="true"></span>
-                <span class="flow-sequence">Step ${flowIndex + 1}</span>
+                <span class="flow-sequence">${escapeHtml(flowSequence)}</span>
                 <span class="flow-name">${escapeHtml(flow.name)}</span>
               </span>
               <span class="sidebar-label">${escapeHtml(countLabel)}</span>
@@ -2565,7 +2566,7 @@
                   data-step-id="${escapeAttr(step.id)}"
                   ${flowIndex === state.activeFlow && stepIndex === state.activeStep ? "aria-current=\"true\"" : ""}
                 >
-                  <span class="step-index">${flowIndex + 1}.${stepIndex + 1}</span>
+                  <span class="step-index">${escapeHtml(stepSequenceLabel(flow, flowIndex, stepIndex))}</span>
                   <span class="verb ${escapeAttr(methodClass(step))}">${escapeHtml(methodLabel(step))}</span>
                   <strong>${escapeHtml(step.name)}</strong>
                   ${accessLabel(step) ? `<span class="access-tag ${escapeAttr(stepAccess(step))}">${escapeHtml(accessLabel(step))}</span>` : ""}
@@ -2593,6 +2594,27 @@
         });
         button.addEventListener("keydown", handleSidebarStepKeydown);
       });
+    }
+
+    function isExtraFlow(flow) {
+      return flow?.kind === "extra";
+    }
+
+    function flowStepNumber(flowIndex) {
+      return state.spec.flows
+        .slice(0, flowIndex + 1)
+        .filter((flow) => !isExtraFlow(flow))
+        .length;
+    }
+
+    function flowSequenceLabel(flow, flowIndex) {
+      if (isExtraFlow(flow)) return "Extra";
+      return `Step ${flowStepNumber(flowIndex)}`;
+    }
+
+    function stepSequenceLabel(flow, flowIndex, stepIndex) {
+      if (isExtraFlow(flow)) return `E.${stepIndex + 1}`;
+      return `${flowStepNumber(flowIndex)}.${stepIndex + 1}`;
     }
 
     function flowCollapseKey(flow, flowIndex) {
