@@ -310,7 +310,18 @@ async function ensurePaperAccount(
   runId: string,
 ) {
   const existing = await getJson(options.baseUrl, `/paper/accounts/${paperAccountId}`);
-  if (existing.responseOk) return existing;
+  if (existing.responseOk) {
+    const account = asRecord(existing.json.account);
+    if (
+      (options.boardId && account?.board_id !== options.boardId)
+        || account?.agent_id !== agentId
+        || account?.agent_public_key !== wallet.publicKey
+        || Number(account?.starting_balance_usd) !== options.startingBalanceUsd
+    ) {
+      throw new Error(`Existing paper account ${paperAccountId} does not match this board/agent/wallet/starting balance`);
+    }
+    return existing;
+  }
 
   return await servicePostJson(options, "/paper/accounts", {
     paper_account_id: paperAccountId,

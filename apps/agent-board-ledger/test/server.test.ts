@@ -181,6 +181,9 @@ describe("Agent Board Ledger local backend", () => {
     const trackedWallet = legacy
       .query<Record<string, any>, []>("SELECT * FROM tracked_wallets WHERE board_id = 'board-legacy'")
       .get();
+    const paperAccount = legacy
+      .query<Record<string, any>, []>("SELECT * FROM paper_accounts WHERE board_id = 'board-legacy'")
+      .get();
     const pnl = legacy.query<Record<string, any>, []>("SELECT * FROM pnl_snapshots WHERE id = 'pnl-legacy'").get();
     const drawdownPnl = legacy
       .query<Record<string, any>, []>("SELECT * FROM pnl_snapshots WHERE id = 'pnl-legacy-drawdown'")
@@ -192,6 +195,9 @@ describe("Agent Board Ledger local backend", () => {
     expect(board?.tracking_started_at).toBe("2026-06-19T00:00:00.000Z");
     expect(trackedWallet?.wallet_address).toBe("wallet-legacy");
     expect(trackedWallet?.tracking_started_at).toBe("2026-06-19T00:00:00.000Z");
+    expect(paperAccount?.starting_balance_usd).toBe(100);
+    expect(paperAccount?.cash_balance_usd).toBe(100);
+    expect(paperAccount?.agent_public_key).toBe("public-key-legacy");
     expect(pnl?.agent_id).toBe("ironclaw");
     expect(pnl?.total_pnl_pct).toBeCloseTo(0.15);
     expect(pnl?.high_water_mark_usd).toBe(115);

@@ -56,20 +56,9 @@ async function runLedgerFlow(options: Options, wallet: NearWalletPublicInfo, run
     public_status: "active",
     visibility_mode: "public",
   };
-  const board = await signedServicePostJson(scopedOptions, "/boards", boardId, boardBody);
-  const paperAccountId = `paper-${runId}`;
-  const paperAccount = await servicePostJson(scopedOptions, "/paper/accounts", {
-    paper_account_id: paperAccountId,
-    board_id: boardId,
-    agent_id: agentId,
-    agent_public_key: wallet.publicKey,
-    starting_balance_usd: options.startingBalanceUsd,
-    allowed_markets: ["BTC", "ETH"],
-    metadata: {
-      source: "acceptance-workbench",
-      run_id: runId,
-    },
-  });
+  const board = await ensureBoard(scopedOptions, wallet, boardId, boardBody);
+  const paperAccountId = `${boardId}-paper`;
+  const paperAccount = await ensurePaperAccount(scopedOptions, wallet, boardId, paperAccountId, runId);
 
   const eventBody = {
     client_event_id: clientEventId,
@@ -248,6 +237,59 @@ async function signedServicePostJson(
       ...signed.headers,
     },
     body: rawBody,
+  });
+}
+
+async function ensureBoard(
+  options: Options,
+  wallet: NearWalletPublicInfo,
+  boardId: string,
+  body: JsonRecord,
+) {
+  const existing = await requestJsonResult(options.baseUrl, `/boards/${boardId}`, { method: "GET" });
+  if (existing.responseOk) {
+    const board = asRecord(asRecord(existing.json)?.board) ?? asRecord(existing.json);
+    if (board?.wallet_address !== wallet.walletAddress || board?.agent_id !== options.agentId) {
+      throw new Error(`Existing board ${boardId} does not match this wallet/agent`);
+    }
+    return { ok: true, board };
+  }
+
+  return await signedServicePostJson(options, "/boards", boardId, body);
+}
+
+async function ensurePaperAccount(
+  options: Options,
+  wallet: NearWalletPublicInfo,
+  boardId: string,
+  paperAccountId: string,
+  runId: string,
+) {
+  const existing = await requestJsonResult(options.baseUrl, `/paper/accounts/${paperAccountId}`, { method: "GET" });
+  if (existing.responseOk) {
+    const account = asRecord(asRecord(existing.json)?.account);
+    if (
+      account?.board_id !== boardId
+        || account?.agent_id !== options.agentId
+        || account?.agent_public_key !== wallet.publicKey
+        || Number(account?.starting_balance_usd) !== options.startingBalanceUsd
+    ) {
+      throw new Error(`Existing paper account ${paperAccountId} does not match this board/agent/wallet/starting balance`);
+    }
+    return { ok: true, account };
+  }
+
+  return await servicePostJson(options, "/paper/accounts", {
+    paper_account_id: paperAccountId,
+    board_id: boardId,
+    agent_id: options.agentId,
+    agent_public_key: wallet.publicKey,
+    starting_balance_usd: options.startingBalanceUsd,
+    allowed_markets: ["BTC", "ETH"],
+    metadata: {
+      source: "acceptance-workbench",
+      run_id: runId,
+    },
   });
 }
 
