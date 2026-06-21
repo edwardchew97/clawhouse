@@ -74,7 +74,7 @@ function tradeStatus() {
     return {
       tone: chainState.statusTone || "idle",
       title: chainState.statusTitle || "Ready",
-      body: chainState.statusBody || "Connect NEAR to buy or sell keys."
+      body: chainState.statusBody || "Connect Wallet"
     };
   }
   if (chainState.pending) {
@@ -94,7 +94,7 @@ function tradeStatus() {
   return {
     tone: chainState.accountId ? "success" : "idle",
     title: chainState.accountId ? "Wallet ready" : "Ready",
-    body: chainState.accountId ? `${shortAccount(chainState.accountId)} connected.` : "Connect NEAR to buy or sell keys."
+    body: chainState.accountId ? `${shortAccount(chainState.accountId)} connected.` : "Connect Wallet"
   };
 }
 
@@ -477,7 +477,7 @@ function setTextWithOptionalLink(node, text, linkUrl) {
 function buyOneForUnlock() {
   tradeSide = "buy";
   byId("keyAmount").value = "1";
-  showToast("Connect NEAR and confirm the key buy transaction.");
+  showToast("Connect Wallet");
   dispatchUiEvent("clawhouse:amount-change");
 }
 
@@ -654,7 +654,7 @@ function renderTicket(agent) {
   byId("quoteUnlock").textContent = isUnlocked(agent) ? "Additional room weight" : "Strategy + holder room";
   byId("tradeButton").textContent = busy
     ? statusButtonText()
-    : `${chainState.accountId ? (tradeSide === "buy" ? "Buy" : "Sell") : "Connect NEAR to"} ${agent.name} key`;
+    : chainState.accountId ? `${tradeSide === "buy" ? "Buy" : "Sell"} ${agent.name} key` : "Connect Wallet";
   byId("tradeButton").className = `${tradeSide === "buy" ? "primary" : "primary sell"}${busy ? " loading" : ""}`;
   byId("tradeButton").disabled = busy || (tradeSide === "sell" && (balance === null || balance <= 0));
   document.querySelectorAll(".ticket-tab, [data-amount], [data-unlock-agent]").forEach((button) => {
@@ -672,14 +672,14 @@ function renderTicket(agent) {
     byId("shareBody"),
     isUnlocked(agent)
       ? `${balance} key${balance === 1 ? "" : "s"} held / room open / receipt ready after testnet confirmation.`
-      : chainState.accountId ? "No key balance returned yet / event reasoning hidden / holder room locked." : "Connect NEAR to read key balance.",
+      : chainState.accountId ? "No key balance returned yet / event reasoning hidden / holder room locked." : "Connect Wallet",
     isUnlocked(agent) && chainState.lastTxHash ? chainState.explorerUrl : null
   );
   byId("shareButton").disabled = !isUnlocked(agent);
   byId("gateButton").textContent = isUnlocked(agent) ? "Room open" : "Gate: 1 key";
   const walletButton = byId("walletButton");
   if (walletButton) {
-    walletButton.textContent = chainState.accountId ? shortAccount(chainState.accountId) : "Connect NEAR";
+    walletButton.textContent = chainState.accountId ? shortAccount(chainState.accountId) : "Connect Wallet";
     walletButton.classList.toggle("connected", Boolean(chainState.accountId));
     walletButton.disabled = busy;
   }

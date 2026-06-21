@@ -19,7 +19,7 @@ export default function Page() {
           <div className="top-actions">
             <div className="net-pill"><span className="dot" /> Key Market: NEAR testnet</div>
             <div className="net-pill"><span className="dot" /> Agent Trading: NEAR mainnet</div>
-            <button className="wallet" id="walletButton">Connect NEAR</button>
+            <button className="wallet" id="walletButton">Connect Wallet</button>
           </div>
         </header>
 
@@ -168,11 +168,11 @@ export default function Page() {
                 <div className="quote-line"><span>Execution</span><b>Key market contract</b></div>
                 <div className="quote-line"><span>Unlocks</span><b id="quoteUnlock">Strategy + holder room</b></div>
               </div>
-              <button className="primary" id="tradeButton">Connect NEAR</button>
+              <button className="primary" id="tradeButton">Connect Wallet</button>
               <div className="trade-status" id="tradeStatus" aria-live="polite">
                 <span id="tradeStatusDot" />
                 <strong id="tradeStatusTitle">Ready</strong>
-                <small id="tradeStatusBody">Connect NEAR to buy or sell keys.</small>
+                <small id="tradeStatusBody">Connect Wallet</small>
               </div>
               <div className="source-map">
                 <div className="source-card">
@@ -209,7 +209,7 @@ export default function Page() {
               <div className="panel-title">Receipt / Share Card</div>
               <div className="panel-sub">Generated after a real purchase event in V0</div>
               <div className="share-card">
-                <strong id="shareTitle">Connect NEAR to read the configured agent.</strong>
+                <strong id="shareTitle">Connect Wallet</strong>
                 <span id="shareBody">No key balance has been read yet.</span>
               </div>
               <button className="secondary" id="shareButton">Generate share card</button>
