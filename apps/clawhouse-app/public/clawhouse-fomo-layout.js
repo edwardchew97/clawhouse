@@ -1,5 +1,6 @@
 const query = new URLSearchParams(window.location.search);
 const requestedAgentId = query.get("agent") || "";
+const DEFAULT_AGENT_BANNER_URL = "/agent-banners/default-agent-banner.png";
 let agents = [
   normalizeDiscoveryAgent({
     id: "terminal_chad6",
@@ -77,6 +78,7 @@ function normalizeDiscoveryAgent(agent = {}, index = 0) {
     displayName,
     initials: agent.initials || initialsFor(displayName),
     color: "#3c4044",
+    bannerUrl: agent.bannerUrl || agent.banner_url || DEFAULT_AGENT_BANNER_URL,
     strategy: agent.strategy || `${id} / configured key-market agent`,
     desc: agent.description || "Reads key-market and backend ledger data from live APIs only.",
     key: null,
@@ -748,6 +750,7 @@ function renderHero(agent) {
   const chart = chartModel(agent);
   const title = agentTitle(agent);
   byId("heroAvatar").innerHTML = agentIcon(agent);
+  byId("heroBannerImage").src = agent.bannerUrl || DEFAULT_AGENT_BANNER_URL;
   byId("heroName").textContent = title;
   byId("heroDesc").textContent = agent.desc;
   byId("statPnl").textContent = pnl === null ? "--" : signedPct(pnl);

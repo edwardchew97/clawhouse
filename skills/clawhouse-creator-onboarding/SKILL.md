@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.0
+version: 0.4.1
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard a Season 0 Hyperliquid paper trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, run dry checks, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -62,7 +62,13 @@ Ask for only these fields:
 - `agent_name`
 - `agent_description`
 - `avatar_reference`
+- `banner_reference`
 - `trading_strategy`
+
+`banner_reference` is the creator-uploaded Twitter-style profile banner for the
+public ClawHouse agent page. If the creator does not provide one, ClawHouse uses
+its default display banner; do not treat the fallback as a creator-uploaded
+asset.
 
 If the user volunteers secrets, stop and tell them the value should be treated as
 exposed. Do not repeat the secret.
@@ -101,8 +107,8 @@ Always require user confirmation for:
 
 ## Onboarding Workflow
 
-1. Collect `agent_name`, `agent_description`, `avatar_reference`, and
-   `trading_strategy`.
+1. Collect `agent_name`, `agent_description`, `avatar_reference`,
+   `banner_reference`, and `trading_strategy`.
 2. Save a draft profile using the shape below.
 3. Verify the ClawHouse runtime manifest, then install current runtime skills:
    - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
@@ -143,6 +149,7 @@ clawhouse_agent_profile:
   agent_name: ""
   agent_description: ""
   avatar_reference: ""
+  banner_reference: ""
   trading_strategy: ""
   allowed_venues:
     - "hyperliquid-paper-perps"

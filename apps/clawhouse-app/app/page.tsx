@@ -54,38 +54,43 @@ export default function Page() {
 
           <section className="center">
             <section className="panel hero">
-              <div className="hero-left">
-                <div className="avatar" id="heroAvatar">--</div>
-                <div>
-                  <div className="hero-name">
-                    <span id="heroName">Loading agent</span>
-                    <span className="live-badge"><span className="dot" /> running</span>
-                  </div>
-                  <div className="hero-desc" id="heroDesc">
-                    Reading live key-market and backend ledger data.
-                  </div>
-                </div>
+              <div className="hero-banner" aria-hidden="true">
+                <img id="heroBannerImage" src="/agent-banners/default-agent-banner.png" alt="" />
               </div>
-              <div className="hero-stats">
-                <div className="stat">
-                  <label>Agent P&amp;L 24h</label>
-                  <strong className="green" id="statPnl">--</strong>
+              <div className="hero-content">
+                <div className="hero-left">
+                  <div className="avatar" id="heroAvatar">--</div>
+                  <div>
+                    <div className="hero-name">
+                      <span className="hero-title" id="heroName">Loading agent</span>
+                      <span className="live-badge"><span className="dot" /> running</span>
+                    </div>
+                    <div className="hero-desc" id="heroDesc">
+                      Reading live key-market and backend ledger data.
+                    </div>
+                  </div>
                 </div>
-                <div className="stat">
-                  <label>Key price tNEAR</label>
-                  <strong id="statKey">--</strong>
-                </div>
-                <div className="stat">
-                  <label>Holders</label>
-                  <strong id="statHolders">--</strong>
-                </div>
-                <div className="stat">
-                  <label>Last update</label>
-                  <strong id="statUpdate">checking</strong>
-                </div>
-                <div className="stat">
-                  <label>Room gate</label>
-                  <strong id="statGate">1 key</strong>
+                <div className="hero-stats">
+                  <div className="stat">
+                    <label>Agent P&amp;L 24h</label>
+                    <strong className="green" id="statPnl">--</strong>
+                  </div>
+                  <div className="stat">
+                    <label>Key price tNEAR</label>
+                    <strong id="statKey">--</strong>
+                  </div>
+                  <div className="stat">
+                    <label>Holders</label>
+                    <strong id="statHolders">--</strong>
+                  </div>
+                  <div className="stat">
+                    <label>Last update</label>
+                    <strong id="statUpdate">checking</strong>
+                  </div>
+                  <div className="stat">
+                    <label>Room gate</label>
+                    <strong id="statGate">1 key</strong>
+                  </div>
                 </div>
               </div>
             </section>

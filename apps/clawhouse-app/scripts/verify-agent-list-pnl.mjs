@@ -34,6 +34,7 @@ class FakeElement {
     this.value = id === "keyAmount" ? "1" : "";
     this.textContent = "";
     this.className = "";
+    this.src = "";
     this.disabled = false;
     this.hidden = false;
     this.scrollWidth = 800;
@@ -270,6 +271,10 @@ assert(rendered[1]?.id === "terminal_chad6", "Terminal row should remain second 
 assert(rendered[1]?.title === "Terminal Chad6", "Terminal row should render a readable title instead of the raw id.");
 assert(rendered[1]?.pnl === "--", "Backend detail P&L must not be shown as list-row P&L.");
 assert(rendered[2]?.id === "empty_agent" && rendered[2]?.pnl === "--", "Rows without actual P&L should render --.");
+assert(
+  element("heroBannerImage").src === "/agent-banners/default-agent-banner.png",
+  "Agents without an uploaded banner should render the default banner.",
+);
 assert(rendered.filter((row) => row.id === "ledger-lane-agent-edge-20260620-0936-a13c").every((row) => row.pnl === "--"), "Ambiguous Paper P&L must not be copied across duplicate agent ids.");
 assert(rendered[1]?.selected === "true", "The selected row should use the data-selected marker.");
 assert(!element("agentList").innerHTML.includes("agent-row active"), "Agent rows should not use the old active class.");

@@ -453,6 +453,7 @@
             "agent_name": "{{agentName}}",
             "agent_description": "{{agentDescription}}",
             "avatar_reference": "{{avatarReference}}",
+            "banner_reference": "{{bannerReference}}",
             "trading_strategy": "{{tradingStrategy}}"
           },
           "runningNotes": [
@@ -464,6 +465,7 @@
             "agentName": "Terminal Chad",
             "agentDescription": "Season 0 paper trading agent",
             "avatarReference": "terminal-chad",
+            "bannerReference": "terminal-chad-banner",
             "tradingStrategy": "Hyperliquid-style paper trading with no real exchange execution."
           },
           "fillDefaultsWhenEmpty": [
@@ -471,11 +473,13 @@
             "agentName",
             "agentDescription",
             "avatarReference",
+            "bannerReference",
             "tradingStrategy"
           ],
           "setVars": {
             "creatorOnboardingMode": "response.json.mode",
             "creatorOnboardingStatus": "response.json.status",
+            "creatorOnboardingIntake": "response.json.intake",
             "creatorOnboardingManifestUrl": "response.json.manifest.url",
             "creatorOnboardingCompletionTemplate": "response.json.completion.template",
             "creatorOnboardingStatusSurfaces": "response.json.completion.statusSurfaces"
@@ -700,6 +704,7 @@
             "discoveryAgentCount": "response.json.json.count",
             "discoveryMode": "response.json.json.mode",
             "discoveryFirstStatus": "response.json.json.agents.0.status",
+            "discoveryFirstBannerUrl": "response.json.json.agents.0.bannerUrl",
             "discoveryFirstKeyMarketStatus": "response.json.json.agents.0.keyMarket.status",
             "discoveryFirstBoardStatus": "response.json.json.agents.0.board.status"
           },

@@ -49,7 +49,7 @@ const payload = {
   status: "draft",
   message:
     "Run ClawHouse creator onboarding inside IronClaw. Use the manifest and skill_install; this endpoint is not a deployment API.",
-  intake: ["agent_name", "agent_description", "avatar_reference", "trading_strategy"],
+  intake: ["agent_name", "agent_description", "avatar_reference", "banner_reference", "trading_strategy"],
   manifest: {
     url: manifestUrl,
     requiredSkills,
