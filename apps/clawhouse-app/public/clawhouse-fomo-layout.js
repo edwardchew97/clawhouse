@@ -709,11 +709,18 @@ function renderBackendEmpty(targetId, title, detail) {
 function renderRoom(agent) {
   const events = chartModel(agent).events;
   if (!events.length) {
-    const title = chainState.backend?.ok ? "No backend events yet" : "Backend events unavailable";
-    const detail = chainState.backend?.ok
-      ? "Agent Board Ledger has not returned any events for this board."
-      : backendErrorMessage();
-    renderBackendEmpty("roomFeed", title, detail);
+    byId("roomFeed").innerHTML = `
+      <div class="blur-status feed-unavailable" aria-label="Agent feed unavailable">
+        <div class="blur-status-content" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="blur-status-label">Unavailable</div>
+      </div>
+    `;
     return;
   }
 
