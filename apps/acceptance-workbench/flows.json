@@ -145,13 +145,13 @@
           "type": "pending",
           "status": "未完成",
           "access": "protected",
-          "publicFacingMessage": "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/29c9892313cdd1fbc60ec4c7eaae36535c47c8bb/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.\nAlso read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/29c9892313cdd1fbc60ec4c7eaae36535c47c8bb/skills/clawhouse-creator-onboarding/Q.md.",
+          "publicFacingMessage": "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/6ce2e112ec7d9aa9a2301775bffcf6e218e549f9/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.\nAlso read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/6ce2e112ec7d9aa9a2301775bffcf6e218e549f9/skills/clawhouse-creator-onboarding/Q.md.",
           "pendingReason": "The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
           "inputs": {},
           "setVars": {},
           "responseLines": [
-            "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/29c9892313cdd1fbc60ec4c7eaae36535c47c8bb/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.",
-            "Also read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/29c9892313cdd1fbc60ec4c7eaae36535c47c8bb/skills/clawhouse-creator-onboarding/Q.md."
+            "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/6ce2e112ec7d9aa9a2301775bffcf6e218e549f9/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.",
+            "Also read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/6ce2e112ec7d9aa9a2301775bffcf6e218e549f9/skills/clawhouse-creator-onboarding/Q.md."
           ],
           "runningNotes": [
             "未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet."
@@ -204,20 +204,20 @@
         {
           "id": "agentRegistration.key.fundCreator",
           "name": "Fund Creator Account",
-          "description": "Manual funding gate before key-market creation. Send 0.1 testnet NEAR to the IronClaw-managed creator public account; never paste private keys into Workbench or chat.",
+          "description": "Manual funding gate before key-market creation. Send 0.02 testnet NEAR to the IronClaw-managed creator public account; never paste private keys into Workbench or chat.",
           "type": "pending",
           "status": "manual",
           "access": "protected",
           "pendingReason": "Funding must happen in the user's NEAR testnet wallet or IronClaw-managed signing environment. Workbench records the instruction; it does not custody funds.",
           "inputs": {
-            "keyMarketFundingAmountNear": "0.1",
+            "keyMarketFundingAmountNear": "0.02",
             "creatorPublicAccount": "{{testUserAccountId}}"
           },
           "fillDefaultsWhenEmpty": [
             "keyMarketFundingAmountNear"
           ],
           "responseLines": [
-            "Send 0.1 testnet NEAR to the creator public account.",
+            "Send 0.02 testnet NEAR to the creator public account.",
             "Use the account that will sign Create Agent Key Market.",
             "Do not paste a NEAR private key or seed phrase into chat."
           ],
@@ -252,7 +252,7 @@
             "agentId": "",
             "agentName": "NEAR Dip Scout",
             "metadataUri": "ipfs://near-dip-scout",
-            "STORAGE_DEPOSIT": "0.1"
+            "STORAGE_DEPOSIT": "0.02"
           },
           "setVars": {
             "agentId": "response.json.agentId",
@@ -1404,7 +1404,7 @@
             "agentId": "",
             "keyAmount": "1",
             "buyMaxPriceNear": "",
-            "STORAGE_DEPOSIT": "0.1"
+            "STORAGE_DEPOSIT": "0.02"
           },
           "fillDefaultsWhenEmpty": [
             "keyAmount"

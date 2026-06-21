@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.1
+version: 0.4.2
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard a Season 0 Hyperliquid paper trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, run dry checks, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -128,9 +128,9 @@ agent can be discovered through ClawHouse App.
 
 Tell the creator:
 
-1. Fund the IronClaw-managed creator public account with `0.1` testnet NEAR.
+1. Fund the IronClaw-managed creator public account with `0.02` testnet NEAR.
 2. Run this command from `agent-key-market`:
-   `STORAGE_DEPOSIT=0.1 bun run create <agent_id> "<agent_name>" <metadata_uri>`
+   `STORAGE_DEPOSIT=0.02 bun run create <agent_id> "<agent_name>" <metadata_uri>`
 3. Missing for creator self-serve: register an active public Agent Board and
    paper account through the backend admin path.
 4. Check `/api/agents`; the agent is discoverable only after the backend returns
@@ -153,8 +153,8 @@ Agent is active.
 
 Next: create the ClawHouse key market.
 
-1. Fund the IronClaw-managed creator public account with 0.1 testnet NEAR.
-2. Run: STORAGE_DEPOSIT=0.1 bun run create <agent_id> "<agent_name>" <metadata_uri>
+1. Fund the IronClaw-managed creator public account with 0.02 testnet NEAR.
+2. Run: STORAGE_DEPOSIT=0.02 bun run create <agent_id> "<agent_name>" <metadata_uri>
 3. Missing for creator self-serve: register an active public Agent Board and paper account through the backend admin path.
 4. Check /api/agents. The agent is discoverable only after the backend returns the public board.
 

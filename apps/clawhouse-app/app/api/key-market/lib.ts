@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 const defaultNetworkId = "testnet";
 const defaultContractId = "clawhouse-key-20260619125948.testnet";
 const defaultGas = "100000000000000";
-const defaultStorageDepositNear = "0.1";
+const defaultStorageDepositNear = "0.02";
 const defaultRpcUrls: Record<string, string> = {
   mainnet: "https://rpc.mainnet.fastnear.com",
   testnet: "https://rpc.testnet.fastnear.com",

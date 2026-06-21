@@ -33,11 +33,11 @@ const tradingInstall = tradingSkills.map(({ name, url }) => ({
 }));
 
 const keyMarketSetup = {
-  fundingAmountNear: "0.1",
+  fundingAmountNear: "0.02",
   fundingNetwork: "NEAR testnet",
   fundTo: "IronClaw-managed creator public account",
   command:
-    "STORAGE_DEPOSIT=0.1 bun run create <agent_id> \"<agent_name>\" <metadata_uri>",
+    "STORAGE_DEPOSIT=0.02 bun run create <agent_id> \"<agent_name>\" <metadata_uri>",
   runFrom: "agent-key-market",
   afterCreate:
     "Missing for creator self-serve: register an active public Agent Board and paper account through the backend admin path.",
@@ -53,8 +53,8 @@ const completionTemplate = [
   "",
   "Next: create the ClawHouse key market.",
   "",
-  "1. Fund the IronClaw-managed creator public account with 0.1 testnet NEAR.",
-  "2. Run: STORAGE_DEPOSIT=0.1 bun run create <agent_id> \"<agent_name>\" <metadata_uri>",
+  "1. Fund the IronClaw-managed creator public account with 0.02 testnet NEAR.",
+  "2. Run: STORAGE_DEPOSIT=0.02 bun run create <agent_id> \"<agent_name>\" <metadata_uri>",
   "3. Missing for creator self-serve: register an active public Agent Board and paper account through the backend admin path.",
   "4. Check /api/agents. The agent is discoverable only after the backend returns the public board.",
   "",
