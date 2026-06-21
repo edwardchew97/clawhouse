@@ -310,6 +310,19 @@ describe("paper-trading market data", () => {
     });
     expect((await json<{ order: { reject_reason: string } }>(res)).order.reject_reason).toBe("market_not_allowed");
   });
+
+  test("latest market snapshot uses ingestion order when observed_at ties", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({ coin: "BTC", mark_px: 100, bids: [{ px: 99, sz: 5 }], asks: [{ px: 100, sz: 5 }] });
+    const latest = await createPaperMarketSnapshot({ coin: "BTC", mark_px: 200, bids: [{ px: 199, sz: 5 }], asks: [{ px: 200, sz: 5 }] });
+    const res = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "latest-snapshot", coin: "BTC",
+      side: "buy", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 10,
+    });
+    const body = await json<{ order: { avg_fill_px: number; market_snapshot_id: string } }>(res);
+    expect(body.order.market_snapshot_id).toBe(latest.id);
+    expect(body.order.avg_fill_px).toBe(200);
+  });
 });
 
 // ============================================================================
@@ -699,6 +712,23 @@ describe("paper-trading liquidation", () => {
     expect(pos?.status).toBe("liquidated");
     expect(pos?.signed_size).toBe(0);
   });
+
+  test("cross liquidation floors cash and equity at zero", async () => {
+    await registerPaperAccount({ starting_balance_usd: 1000 });
+    await createPaperMarketSnapshot({ coin: "BTC", mark_px: 100, bids: [{ px: 100, sz: 200 }], asks: [{ px: 100, sz: 200 }] });
+    await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "cross-bankruptcy-open", coin: "BTC",
+      side: "buy", tif: "Ioc", size: 90, margin_mode: "cross", leverage: 10,
+    });
+    currentNow = new Date(currentNow.getTime() + 1000);
+    await createPaperMarketSnapshot({ coin: "BTC", mark_px: 50, bids: [{ px: 50, sz: 200 }], asks: [{ px: 50, sz: 200 }] });
+    const res = await postJson("/paper/accounts/paper-1/risk-check", {});
+    const body = await json<{ risk: { risk: { cash_balance_usd: number; equity_usd: number } }; liquidations: unknown[] }>(res);
+    expect(body.liquidations).toHaveLength(1);
+    expect(account().cash_balance_usd).toBe(0);
+    expect(body.risk.risk.cash_balance_usd).toBe(0);
+    expect(body.risk.risk.equity_usd).toBe(0);
+  });
 });
 
 // ============================================================================
@@ -764,12 +794,26 @@ describe("paper-trading idempotency & precision", () => {
       side: "buy", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 10,
     });
     const rows = sqliteDb.raw.query<{ event_hash: string; previous_hash: string | null }, []>(
-      "SELECT event_hash, previous_hash FROM paper_audit_events ORDER BY created_at ASC, id ASC",
+      "SELECT event_hash, previous_hash FROM paper_audit_events ORDER BY COALESCE(ingest_sequence, 0) ASC, created_at ASC, id ASC",
     ).all();
     expect(rows.length).toBeGreaterThan(1);
     for (let i = 1; i < rows.length; i++) {
       expect(rows[i].previous_hash).toBe(rows[i - 1].event_hash);
     }
+  });
+
+  test("latest risk snapshot uses ingestion order when created_at ties", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({ coin: "BTC", mark_px: 100, bids: [{ px: 100, sz: 50 }], asks: [{ px: 100, sz: 50 }] });
+    await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "risk-source-open", coin: "BTC",
+      side: "buy", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 10,
+    });
+    const latest = await createPaperMarketSnapshot({ coin: "BTC", mark_px: 101, bids: [{ px: 101, sz: 50 }], asks: [{ px: 101, sz: 50 }] });
+    await postJson("/paper/accounts/paper-1/risk-check", {});
+    const res = await app.fetch(new Request("http://ledger.test/paper/accounts/paper-1"));
+    const body = await json<{ latest_risk: { source_market_snapshot_id: string } }>(res);
+    expect(body.latest_risk.source_market_snapshot_id).toBe(latest.id);
   });
 });
 
@@ -832,7 +876,8 @@ function signPaper(
   nonceOverride?: string,
   timestampOverride?: string,
 ) {
-  const rawBody = JSON.stringify(body);
+  const signedBody = paperOrderTestBody(body);
+  const rawBody = JSON.stringify(signedBody);
   const timestamp = timestampOverride ?? currentNow.getTime().toString();
   const nonce = nonceOverride ?? crypto.randomUUID();
   const bodyHash = sha256Hex(rawBody);
@@ -852,6 +897,20 @@ function signPaper(
       "x-clawhouse-paper-signature": Buffer.from(signature).toString("base64url"),
     } as Record<string, string>,
   };
+}
+
+function paperOrderTestBody(body: Record<string, unknown>) {
+  const next = { ...body };
+  const tif = String(next.tif ?? next.timeInForce ?? next.time_in_force ?? next.orderType ?? next.order_type ?? "Ioc").toLowerCase();
+  const hasLimitPx = next.limitPx !== undefined || next.limit_px !== undefined;
+  const hasMaxSlippage = next.maxSlippageBps !== undefined || next.max_slippage_bps !== undefined;
+  if (!hasLimitPx && !hasMaxSlippage && (tif === "ioc" || tif === "market")) {
+    next.max_slippage_bps = 50;
+  }
+  if (next.reason === undefined) {
+    next.reason = "Paper trading edge test order.";
+  }
+  return next;
 }
 
 async function paperSignedPost(

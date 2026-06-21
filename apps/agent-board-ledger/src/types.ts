@@ -195,6 +195,7 @@ export type PaperAccountRow = {
 
 export type PaperMarketSnapshotRow = {
   id: string;
+  ingest_sequence: number | null;
   market_type: string;
   coin: string;
   source: string;
@@ -274,6 +275,7 @@ export type PaperPositionRow = {
 
 export type PaperRiskSnapshotRow = {
   id: string;
+  ingest_sequence: number | null;
   paper_account_id: string;
   equity_usd: number;
   cash_balance_usd: number;
@@ -315,6 +317,7 @@ export type PaperLeaderboardSnapshotRow = {
 
 export type PaperAuditEventRow = {
   id: string;
+  ingest_sequence: number | null;
   paper_account_id: string | null;
   subject_type: string;
   subject_id: string;

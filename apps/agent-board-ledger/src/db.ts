@@ -411,6 +411,7 @@ export function migrate(db: Database) {
 
     CREATE TABLE IF NOT EXISTS paper_market_snapshots (
       id TEXT PRIMARY KEY,
+      ingest_sequence INTEGER,
       market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       source TEXT NOT NULL,
@@ -503,6 +504,7 @@ export function migrate(db: Database) {
 
     CREATE TABLE IF NOT EXISTS paper_risk_snapshots (
       id TEXT PRIMARY KEY,
+      ingest_sequence INTEGER,
       paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
       equity_usd REAL NOT NULL,
       cash_balance_usd REAL NOT NULL,
@@ -550,6 +552,7 @@ export function migrate(db: Database) {
 
     CREATE TABLE IF NOT EXISTS paper_audit_events (
       id TEXT PRIMARY KEY,
+      ingest_sequence INTEGER,
       paper_account_id TEXT REFERENCES paper_accounts(id),
       subject_type TEXT NOT NULL,
       subject_id TEXT NOT NULL,
@@ -614,8 +617,11 @@ export function migrate(db: Database) {
   ensureColumn(db, "pnl_snapshots", "reason_missing_count", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "pnl_snapshots", "staleness_status", "TEXT NOT NULL DEFAULT 'unknown'");
   ensureColumn(db, "pnl_snapshots", "completeness_status", "TEXT NOT NULL DEFAULT 'unknown'");
+  ensureColumn(db, "paper_market_snapshots", "ingest_sequence", "INTEGER");
   ensureColumn(db, "paper_market_snapshots", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
   ensureColumn(db, "paper_market_snapshots", "max_leverage", "REAL");
+  ensureColumn(db, "paper_risk_snapshots", "ingest_sequence", "INTEGER");
+  ensureColumn(db, "paper_audit_events", "ingest_sequence", "INTEGER");
   ensureColumn(db, "paper_orders", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
   ensureColumn(db, "paper_fills", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
   ensureColumn(db, "paper_positions", "market_type", "TEXT NOT NULL DEFAULT 'perp'");

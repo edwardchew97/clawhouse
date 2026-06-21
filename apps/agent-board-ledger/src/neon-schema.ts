@@ -242,6 +242,7 @@ export const neonSchemaStatements = [
   `
     CREATE TABLE IF NOT EXISTS paper_market_snapshots (
       id TEXT PRIMARY KEY,
+      ingest_sequence INTEGER,
       market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       source TEXT NOT NULL,
@@ -256,6 +257,7 @@ export const neonSchemaStatements = [
       created_at TEXT NOT NULL
     )
   `,
+  "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS ingest_sequence INTEGER",
   "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
   "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS max_leverage DOUBLE PRECISION",
   "CREATE INDEX IF NOT EXISTS paper_market_snapshots_coin_observed_idx ON paper_market_snapshots(market_type, coin, observed_at)",
@@ -336,6 +338,7 @@ export const neonSchemaStatements = [
   `
     CREATE TABLE IF NOT EXISTS paper_risk_snapshots (
       id TEXT PRIMARY KEY,
+      ingest_sequence INTEGER,
       paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
       equity_usd DOUBLE PRECISION NOT NULL,
       cash_balance_usd DOUBLE PRECISION NOT NULL,
@@ -347,6 +350,7 @@ export const neonSchemaStatements = [
       created_at TEXT NOT NULL
     )
   `,
+  "ALTER TABLE paper_risk_snapshots ADD COLUMN IF NOT EXISTS ingest_sequence INTEGER",
   "CREATE INDEX IF NOT EXISTS paper_risk_snapshots_account_created_idx ON paper_risk_snapshots(paper_account_id, created_at)",
   `
     CREATE TABLE IF NOT EXISTS paper_liquidation_events (
@@ -382,6 +386,7 @@ export const neonSchemaStatements = [
   `
     CREATE TABLE IF NOT EXISTS paper_audit_events (
       id TEXT PRIMARY KEY,
+      ingest_sequence INTEGER,
       paper_account_id TEXT REFERENCES paper_accounts(id),
       subject_type TEXT NOT NULL,
       subject_id TEXT NOT NULL,
@@ -393,6 +398,7 @@ export const neonSchemaStatements = [
       created_at TEXT NOT NULL
     )
   `,
+  "ALTER TABLE paper_audit_events ADD COLUMN IF NOT EXISTS ingest_sequence INTEGER",
   "CREATE INDEX IF NOT EXISTS paper_audit_events_subject_idx ON paper_audit_events(subject_type, subject_id)",
   "ALTER TABLE boards ADD COLUMN IF NOT EXISTS chain TEXT DEFAULT 'near'",
   "ALTER TABLE boards ADD COLUMN IF NOT EXISTS venue_namespace TEXT DEFAULT 'near-intents'",

@@ -132,6 +132,7 @@ export async function createPaperMarketSnapshot(db: LedgerDb, body: BodyInput, c
   const data = asObject(body.json);
   const snapshot: PaperMarketSnapshotRow = {
     id: cleanString(data.snapshotId ?? data.snapshot_id) ?? newId("paper_mkt"),
+    ingest_sequence: await nextIngestSequence(db, "paper_market_snapshots"),
     market_type: normalizeMarketType(data.marketType ?? data.market_type),
     coin: normalizeCoin(data.coin),
     source: cleanString(data.source) ?? "hyperliquid",
@@ -148,11 +149,12 @@ export async function createPaperMarketSnapshot(db: LedgerDb, body: BodyInput, c
 
   await db.run(
     `INSERT INTO paper_market_snapshots
-      (id, market_type, coin, source, mark_px, oracle_px, funding_rate, maintenance_margin_rate,
+      (id, ingest_sequence, market_type, coin, source, mark_px, oracle_px, funding_rate, maintenance_margin_rate,
        max_leverage, book_json, observed_at, staleness_status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       snapshot.id,
+      snapshot.ingest_sequence,
       snapshot.market_type,
       snapshot.coin,
       snapshot.source,
@@ -845,6 +847,7 @@ async function computeAccountRisk(
   }
   return {
     id: newId("paper_risk"),
+    ingest_sequence: await nextIngestSequence(db, "paper_risk_snapshots"),
     paper_account_id: paperAccountId,
     equity_usd: account.cash_balance_usd + unrealizedPnl,
     cash_balance_usd: account.cash_balance_usd,
@@ -880,13 +883,19 @@ async function liquidatePosition(
 ) {
   const account = await requirePaperAccount(db, paperAccountId);
   const positionRisk = computePositionRisk(position, snapshot);
-  const cashDelta = position.margin_mode === "isolated"
+  const uncappedCashDelta = position.margin_mode === "isolated"
     ? position.isolated_margin_usd + positionRisk.unrealizedPnl
     : positionRisk.unrealizedPnl;
+  const cashDelta = position.margin_mode === "isolated"
+    ? Math.max(0, uncappedCashDelta)
+    : Math.max(uncappedCashDelta, -account.cash_balance_usd);
+  const realizedPnl = position.margin_mode === "isolated"
+    ? cashDelta - position.isolated_margin_usd
+    : cashDelta;
   await updatePaperAccountCash(db, account, cashDelta, createdAt);
   await db.run(
     "UPDATE paper_positions SET signed_size = 0, status = 'liquidated', realized_pnl_usd = ?, isolated_margin_usd = 0, updated_at = ? WHERE id = ?",
-    [position.realized_pnl_usd + positionRisk.unrealizedPnl, createdAt, position.id],
+    [position.realized_pnl_usd + realizedPnl, createdAt, position.id],
   );
   const event: PaperLiquidationEventRow = {
     id: newId("paper_liq"),
@@ -1011,7 +1020,7 @@ function readLevels(value: unknown, name: string, order: "asc" | "desc") {
 
 async function latestMarketSnapshot(db: LedgerDb, marketType: MarketType | string, coin: string) {
   return await db.get<PaperMarketSnapshotRow>(
-    "SELECT * FROM paper_market_snapshots WHERE market_type = ? AND coin = ? ORDER BY observed_at DESC, created_at DESC, id DESC LIMIT 1",
+    "SELECT * FROM paper_market_snapshots WHERE market_type = ? AND coin = ? ORDER BY observed_at DESC, COALESCE(ingest_sequence, 0) DESC, created_at DESC, id DESC LIMIT 1",
     [marketType, coin],
   );
 }
@@ -1032,7 +1041,11 @@ function positionKey(position: Pick<PaperPositionRow, "market_type" | "coin">) {
 }
 
 function latestSnapshotId(snapshots: Map<string, PaperMarketSnapshotRow>) {
-  return [...snapshots.values()].sort((a, b) => b.observed_at.localeCompare(a.observed_at))[0]?.id ?? null;
+  return [...snapshots.values()].sort((a, b) => {
+    const observed = b.observed_at.localeCompare(a.observed_at);
+    if (observed !== 0) return observed;
+    return (b.ingest_sequence ?? 0) - (a.ingest_sequence ?? 0);
+  })[0]?.id ?? null;
 }
 
 function marketIsStale(snapshot: PaperMarketSnapshotRow, nowMs: number) {
@@ -1066,7 +1079,7 @@ async function listFills(db: LedgerDb, orderId: string) {
 
 async function latestRiskSnapshot(db: LedgerDb, paperAccountId: string) {
   const row = await db.get<PaperRiskSnapshotRow>(
-    "SELECT * FROM paper_risk_snapshots WHERE paper_account_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+    "SELECT * FROM paper_risk_snapshots WHERE paper_account_id = ? ORDER BY created_at DESC, COALESCE(ingest_sequence, 0) DESC, id DESC LIMIT 1",
     [paperAccountId],
   );
   return row ? presentRisk(row) : null;
@@ -1124,12 +1137,12 @@ async function insertPosition(db: LedgerDb, position: PaperPositionRow) {
 async function insertRiskSnapshot(db: LedgerDb, risk: PaperRiskSnapshotRow) {
   await db.run(
     `INSERT INTO paper_risk_snapshots
-      (id, paper_account_id, equity_usd, cash_balance_usd, total_notional_usd,
+      (id, ingest_sequence, paper_account_id, equity_usd, cash_balance_usd, total_notional_usd,
        maintenance_margin_usd, unrealized_pnl_usd, staleness_status,
        source_market_snapshot_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      risk.id, risk.paper_account_id, risk.equity_usd, risk.cash_balance_usd,
+      risk.id, risk.ingest_sequence, risk.paper_account_id, risk.equity_usd, risk.cash_balance_usd,
       risk.total_notional_usd, risk.maintenance_margin_usd, risk.unrealized_pnl_usd,
       risk.staleness_status, risk.source_market_snapshot_id, risk.created_at,
     ],
@@ -1182,11 +1195,13 @@ async function appendPaperAuditEvent(
   input: unknown,
   createdAt: string,
 ) {
+  const ingestSequence = await nextIngestSequence(db, "paper_audit_events");
   const previous = await db.get<{ event_hash: string }>(
-    "SELECT event_hash FROM paper_audit_events ORDER BY created_at DESC, id DESC LIMIT 1",
+    "SELECT event_hash FROM paper_audit_events ORDER BY COALESCE(ingest_sequence, 0) DESC, created_at DESC, id DESC LIMIT 1",
   );
   const inputHash = sha256Hex(JSON.stringify(input));
   const eventHash = sha256Hex(JSON.stringify({
+    ingest_sequence: ingestSequence,
     paper_account_id: paperAccountId,
     subject_type: subjectType,
     subject_id: subjectId,
@@ -1197,15 +1212,25 @@ async function appendPaperAuditEvent(
   }));
   await db.run(
     `INSERT INTO paper_audit_events
-      (id, paper_account_id, subject_type, subject_id, action, input_hash,
+      (id, ingest_sequence, paper_account_id, subject_type, subject_id, action, input_hash,
        previous_hash, event_hash, metadata_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      newId("paper_audit"), paperAccountId, subjectType, subjectId, action,
+      newId("paper_audit"), ingestSequence, paperAccountId, subjectType, subjectId, action,
       inputHash, previous?.event_hash ?? null, eventHash, JSON.stringify(input),
       createdAt,
     ],
   );
+}
+
+async function nextIngestSequence(
+  db: LedgerDb,
+  table: "paper_market_snapshots" | "paper_risk_snapshots" | "paper_audit_events",
+) {
+  const row = await db.get<{ next_sequence: number }>(
+    `SELECT COALESCE(MAX(ingest_sequence), 0) + 1 AS next_sequence FROM ${table}`,
+  );
+  return row?.next_sequence ?? 1;
 }
 
 function presentPaperAccount(account: PaperAccountRow) {
@@ -1219,7 +1244,7 @@ function presentPaperAccount(account: PaperAccountRow) {
 }
 
 function presentMarketSnapshot(snapshot: PaperMarketSnapshotRow) {
-  return { ...snapshot, book: parseJson(snapshot.book_json), book_json: undefined };
+  return { ...snapshot, ingest_sequence: undefined, book: parseJson(snapshot.book_json), book_json: undefined };
 }
 
 function presentOrder(order: PaperOrderRow) {
@@ -1235,7 +1260,7 @@ function presentPosition(position: PaperPositionRow) {
 }
 
 function presentRisk(risk: PaperRiskSnapshotRow) {
-  return risk;
+  return { ...risk, ingest_sequence: undefined };
 }
 
 function presentLiquidation(event: PaperLiquidationEventRow) {
@@ -1247,7 +1272,7 @@ function presentLeaderboardSnapshot(snapshot: PaperLeaderboardSnapshotRow) {
 }
 
 function presentAudit(event: PaperAuditEventRow) {
-  return { ...event, metadata: parseJson(event.metadata_json), metadata_json: undefined };
+  return { ...event, ingest_sequence: undefined, metadata: parseJson(event.metadata_json), metadata_json: undefined };
 }
 
 function sumNotional(fills: FillCandidate[]) {
