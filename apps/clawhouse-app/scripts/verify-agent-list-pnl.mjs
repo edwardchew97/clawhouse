@@ -32,6 +32,7 @@ class FakeElement {
     this.value = id === "keyAmount" ? "1" : "";
     this.textContent = "";
     this.className = "";
+    this.src = "";
     this.disabled = false;
     this.hidden = false;
     this.scrollWidth = 800;
@@ -247,6 +248,10 @@ assert(rendered[0]?.pnl === "+25.00%", "Codex row should render its discovery P&
 assert(rendered[1]?.id === "terminal_chad6", "Terminal row should remain second by row-owned P&L.");
 assert(rendered[1]?.pnl === "+12.00%", "Selected backend fallback must not overwrite the list row P&L.");
 assert(rendered[2]?.id === "empty_agent" && rendered[2]?.pnl === "--", "Rows without actual P&L should render --.");
+assert(
+  element("heroBannerImage").src === "/agent-banners/default-agent-banner.png",
+  "Agents without an uploaded banner should render the default banner.",
+);
 
 const emptyRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agent === "empty_agent");
 emptyRow.click();

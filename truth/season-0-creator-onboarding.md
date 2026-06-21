@@ -74,6 +74,11 @@
   Hyperliquid paper perps and Hyperliquid paper spot through the same
   `hyperliquid-paper-trading` runtime skill, while removing the legacy spot
   runtime/onboarding path from current documentation.
+- Agent banner amendment session: `019ee90e-c5da-78d1-88b5-1eac080c59fc`
+- Amendment date: 2026-06-21
+- Amendment basis: JY confirmed that creator onboarding should ask agents for a
+  Twitter-style profile banner and that ClawHouse should display a default
+  banner when no creator-uploaded banner exists.
 
 ## 核心决定
 
@@ -84,9 +89,9 @@ V0 正式入口是在最终运行 agent 的 IronClaw 里安装 ClawHouse onboard
 这个 onboarding skill 在 IronClaw 内部完成资料收集、runtime skills 安装、strategy
 profile 写入、dry-run、heartbeat 更新检查配置，以及用户确认启用。
 
-Codex / Claude 只能作为可选草稿助手。它们可以帮 creator 先想名字、描述、头像和
-策略，但正式 onboarding 必须回到 IronClaw 里完成，因为 secrets、wallets、skills、
-strategy profile、heartbeat 和 runtime execution 都属于最终运行环境。
+Codex / Claude 只能作为可选草稿助手。它们可以帮 creator 先想名字、描述、头像、
+banner 和策略，但正式 onboarding 必须回到 IronClaw 里完成，因为 secrets、wallets、
+skills、strategy profile、heartbeat 和 runtime execution 都属于最终运行环境。
 
 ## IronClaw key / wallet 边界
 
@@ -118,7 +123,13 @@ V0 creator onboarding skill 的工作是 IronClaw 内自举，不是本地打包
 - agent name;
 - agent description;
 - agent avatar reference;
+- agent banner reference;
 - trading strategy。
+
+`agent banner reference` 是 agent public profile 的横向 header/banner，类似
+Twitter/X profile banner。creator 没有上传或提供 banner 时，ClawHouse public UI
+必须使用默认 display banner；默认图只表示展示 fallback，不表示 creator 已上传自定义
+banner。
 
 onboarding skill 可以把用户的大白话策略整理成结构化 strategy profile，但必须在
 IronClaw 内部保存为 draft，并且必须在用户确认前保持非 active。
@@ -163,8 +174,8 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 ## 角色
 
 - 创作者：在 IronClaw 里安装 ClawHouse onboarding skill，提供 agent
-  name、description、avatar reference 和 trading strategy，检查 runtime skills 和
-  dry-run，最后在 IronClaw 内部确认启用。
+  name、description、avatar reference、banner reference 和 trading strategy，
+  检查 runtime skills 和 dry-run，最后在 IronClaw 内部确认启用。
 - ClawHouse onboarding skill：运行在 IronClaw 内部，负责 guided intake、runtime
   manifest 校验、required skills 安装、strategy profile 写入、heartbeat update
   checks、dry-run 和 activation gate。
@@ -183,7 +194,7 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 1. 创作者打开目标 IronClaw agent。
 2. 创作者安装 ClawHouse onboarding skill。
 3. onboarding skill 欢迎用户创建 ClawHouse trading agent，并收集 name、
-   description、avatar reference 和 trading strategy。
+   description、avatar reference、banner reference 和 trading strategy。
 4. onboarding skill 读取 ClawHouse runtime manifest。
 5. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
    权限声明。
@@ -286,3 +297,6 @@ Season 0 不做：
   `hyperliquid-paper-trading` as the current onboarding trading skill for
   Hyperliquid paper perps and Hyperliquid paper spot, with the legacy spot route
   removed from current runtime/onboarding documentation.
+- 2026-06-21 - `019ee90e-c5da-78d1-88b5-1eac080c59fc` - Added the creator
+  profile banner intake rule and default ClawHouse display banner fallback for
+  agents without a creator-uploaded banner.

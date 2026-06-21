@@ -11,6 +11,7 @@ type CuratedAgentConfig = {
   boardId: string;
   name: string;
   initials: string;
+  bannerUrl: string;
   strategy: string;
   description: string;
   gate: string;
@@ -29,6 +30,8 @@ type DiscoveryReadback = {
   data?: unknown;
   error?: string;
 };
+
+const DEFAULT_AGENT_BANNER_URL = "/agent-banners/default-agent-banner.png";
 
 export async function readAgentDiscovery() {
   const backendDiscovery = await readBackendDiscoveryAgents();
@@ -142,6 +145,8 @@ function agentConfigFromBoard(value: unknown): CuratedAgentConfig | null {
     boardId,
     name,
     initials: metadataString(metadata, ["initials"]) ?? initialsFor(name),
+    bannerUrl: metadataString(metadata, ["banner_url", "bannerUrl", "profile_banner_url", "profileBannerUrl"])
+      ?? DEFAULT_AGENT_BANNER_URL,
     strategy: metadataString(metadata, ["strategy", "strategy_summary", "trading_strategy"])
       ?? `${id} / ${venue ?? chain ?? "public agent board"}`,
     description: metadataString(metadata, ["description", "agent_description", "bio"])
@@ -169,6 +174,7 @@ function agentConfig(id: string, boardId: string, source: string): CuratedAgentC
     boardId,
     name: id,
     initials: initialsFor(id),
+    bannerUrl: DEFAULT_AGENT_BANNER_URL,
     strategy: `${id} / configured key-market agent`,
     description: "Reads key-market and backend ledger data from live APIs only.",
     gate: "1 key",
