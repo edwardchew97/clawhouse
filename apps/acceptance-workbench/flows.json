@@ -278,17 +278,31 @@
       },
       "steps": [
         {
-          "id": "userBrowsesAgent.pending.publicAgentDiscovery",
+          "id": "userBrowsesAgent.discovery.listAgents",
           "name": "Open Agent Discovery List",
-          "description": "A user should be able to open a ClawHouse discovery list and pick a curated agent. 未完成: The user-facing discovery/listing page and API are not implemented yet.",
-          "type": "pending",
-          "status": "未完成",
+          "description": "A user should be able to open a ClawHouse discovery list and pick a configured curated agent.",
+          "type": "http",
           "access": "public",
-          "pendingReason": "The user-facing discovery/listing page and API are not implemented yet.",
-          "inputs": {},
-          "setVars": {},
+          "method": "GET",
+          "url": "{{clawhouseAppBaseUrl}}/api/agents",
+          "inputs": {
+            "clawhouseAppBaseUrl": "http://localhost:4320"
+          },
+          "fillDefaultsWhenEmpty": [
+            "clawhouseAppBaseUrl"
+          ],
+          "setVars": {
+            "agentId": "response.json.json.agents.0.id",
+            "ledgerBoardId": "response.json.json.agents.0.boardId",
+            "discoveryAgentCount": "response.json.json.count",
+            "discoveryFirstStatus": "response.json.json.agents.0.status",
+            "discoveryFirstKeyMarketStatus": "response.json.json.agents.0.keyMarket.status",
+            "discoveryFirstBoardStatus": "response.json.json.agents.0.board.status"
+          },
           "runningNotes": [
-            "未完成: The user-facing discovery/listing page and API are not implemented yet."
+            "Calling the ClawHouse App discovery API.",
+            "The response comes from configured curated agents and includes live key-market/backend readback status.",
+            "This step picks the first configured agent and stores its app agentId and Agent Board Ledger boardId for downstream reads."
           ]
         },
         {

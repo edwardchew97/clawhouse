@@ -1,24 +1,18 @@
-const agents = [
-  {
+const query = new URLSearchParams(window.location.search);
+const requestedAgentId = query.get("agent") || "";
+let agents = [
+  normalizeDiscoveryAgent({
     id: "terminal_chad6",
     name: "terminal_chad6",
     initials: "TC",
-    color: "#3c4044",
     strategy: "terminal_chad6 / configured key-market agent",
-    desc: "Reads key-market and backend ledger data from live APIs only.",
-    key: null,
-    holders: null,
+    description: "Reads key-market and backend ledger data from live APIs only.",
     gate: "1 key",
-    last: "checking",
-    entry: null,
-    keys: null,
-  }
+  })
 ];
-
-const query = new URLSearchParams(window.location.search);
 document.body.classList.add("motion-prep");
 
-let selectedId = query.get("agent") || agents[0].id;
+let selectedId = requestedAgentId || agents[0].id;
 if (!agents.some((agent) => agent.id === selectedId)) selectedId = agents[0].id;
 let tradeSide = "buy";
 let activeEventId = null;
@@ -52,6 +46,34 @@ const isUnlocked = (agent) => (holderBalance(agent) ?? 0) > 0;
 
 function dispatchUiEvent(name) {
   window.dispatchEvent(new CustomEvent(name));
+}
+
+function normalizeDiscoveryAgent(agent = {}, index = 0) {
+  const keyStateAgent = agent.keyMarket?.data?.agent || {};
+  const id = String(agent.id || keyStateAgent.agent_id || "terminal_chad6");
+  const name = String(agent.name || keyStateAgent.name || id);
+  return {
+    id,
+    name,
+    initials: agent.initials || initialsFor(name),
+    color: "#3c4044",
+    strategy: agent.strategy || `${id} / configured key-market agent`,
+    desc: agent.description || "Reads key-market and backend ledger data from live APIs only.",
+    key: null,
+    holders: null,
+    gate: agent.gate || "1 key",
+    last: agent.status === "available" ? "live read" : "checking",
+    entry: null,
+    keys: null,
+    boardId: agent.boardId || agent.board_id || id,
+    discoveryIndex: index,
+  };
+}
+
+function initialsFor(value) {
+  const parts = String(value || "").split(/[_\-.]+/).filter(Boolean);
+  const initials = parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
+  return initials || String(value || "AG").slice(0, 2).toUpperCase();
 }
 
 function setChainState(nextState) {
@@ -458,6 +480,44 @@ function showToast(message, options = {}) {
   toast.classList.add("show");
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => toast.classList.remove("show"), options.durationMs || (options.linkUrl ? 9000 : 1800));
+}
+
+async function loadDiscoveryAgents() {
+  try {
+    const response = await fetch("/api/agents", { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok || data.ok === false) {
+      throw new Error(data.error || `Discovery request failed: ${response.status}`);
+    }
+
+    const nextAgents = Array.isArray(data.agents)
+      ? data.agents.map((agent, index) => normalizeDiscoveryAgent(agent, index))
+      : [];
+    if (!nextAgents.length) {
+      throw new Error("Discovery API returned no configured agents.");
+    }
+
+    agents = nextAgents;
+    const preferredId = requestedAgentId && agents.some((agent) => agent.id === requestedAgentId)
+      ? requestedAgentId
+      : selectedId;
+    selectedId = agents.some((agent) => agent.id === preferredId) ? preferredId : agents[0].id;
+    chainState = {
+      ...chainState,
+      discovery: data,
+      discoveryError: null,
+    };
+    chartAnimationPending = true;
+    render();
+    dispatchUiEvent("clawhouse:agent-change");
+  } catch (error) {
+    chainState = {
+      ...chainState,
+      discoveryError: error instanceof Error ? error.message : "Discovery unavailable.",
+    };
+    render();
+    showToast(`Discovery unavailable: ${chainState.discoveryError}`, { durationMs: 4200 });
+  }
 }
 
 function setTextWithOptionalLink(node, text, linkUrl) {
@@ -1172,6 +1232,7 @@ window.ClawHouseDemo = {
 
 render();
 dispatchUiEvent("clawhouse:ready");
+void loadDiscoveryAgents();
 window.requestAnimationFrame(() => document.body.classList.add("ui-ready"));
 animateAsciiKey();
 if (query.get("event")) {
