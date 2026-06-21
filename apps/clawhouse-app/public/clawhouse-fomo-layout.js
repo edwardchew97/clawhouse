@@ -709,11 +709,18 @@ function renderBackendEmpty(targetId, title, detail) {
 function renderRoom(agent) {
   const events = chartModel(agent).events;
   if (!events.length) {
-    const title = chainState.backend?.ok ? "No backend events yet" : "Backend events unavailable";
-    const detail = chainState.backend?.ok
-      ? "Agent Board Ledger has not returned any events for this board."
-      : backendErrorMessage();
-    renderBackendEmpty("roomFeed", title, detail);
+    byId("roomFeed").innerHTML = `
+      <div class="blur-status feed-unavailable" aria-label="Agent feed unavailable">
+        <div class="blur-status-content" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div class="blur-status-label">Unavailable</div>
+      </div>
+    `;
     return;
   }
 
@@ -775,21 +782,47 @@ function renderBackendStatus() {
 }
 
 function chartGeometry(values, rect) {
-  const minValue = Math.min(...values);
-  const maxValue = Math.max(...values);
+  const minValue = Math.min(...values, 0);
+  const maxValue = Math.max(...values, 0);
   const spread = Math.max(1, maxValue - minValue);
-  const min = minValue - spread * 0.18;
-  const max = maxValue + spread * 0.18;
-  const pad = 22;
-  const width = rect.width - pad * 2;
-  const height = rect.height - pad * 2;
+  const paddedMin = minValue - spread * 0.12;
+  const paddedMax = maxValue + spread * 0.12;
+  const tickStep = niceTickStep(paddedMax - paddedMin, 5);
+  const min = Math.floor(paddedMin / tickStep) * tickStep;
+  const max = Math.ceil(paddedMax / tickStep) * tickStep;
+  const left = 48;
+  const right = 18;
+  const top = 24;
+  const bottom = 30;
+  const width = Math.max(1, rect.width - left - right);
+  const height = Math.max(1, rect.height - top - bottom);
+  const ticks = [];
+  for (let tick = min; tick <= max + tickStep / 2; tick += tickStep) ticks.push(tick);
   return {
-    pad,
+    left,
+    right,
+    top,
+    bottom,
+    rightX: rect.width - right,
+    bottomY: rect.height - bottom,
     width,
     height,
-    yFor: (value) => pad + (1 - (value - min) / (max - min)) * height,
-    xFor: (index) => pad + (index / (values.length - 1)) * width
+    min,
+    max,
+    ticks,
+    yFor: (value) => top + (1 - (value - min) / (max - min)) * height,
+    xFor: (index) => left + (values.length > 1 ? index / (values.length - 1) : 1) * width
   };
+}
+
+function niceTickStep(range, targetIntervals) {
+  const rough = Math.max(0.1, range / targetIntervals);
+  const power = 10 ** Math.floor(Math.log10(rough));
+  const fraction = rough / power;
+  if (fraction <= 1) return power;
+  if (fraction <= 2) return 2 * power;
+  if (fraction <= 5) return 5 * power;
+  return 10 * power;
 }
 
 function drawChart(agent, progress = 1) {
@@ -807,26 +840,28 @@ function drawChart(agent, progress = 1) {
   if (values.length < 2) {
     drawEmptyChart(ctx, rect, model.message);
     byId("chartEvents").innerHTML = "";
+    hidePriceMarker();
     return;
   }
 
   const geo = chartGeometry(values, rect);
   const zeroY = geo.yFor(0);
   const trend = values[values.length - 1] - values[0];
+  drawChartAxes(ctx, geo, values);
 
   ctx.strokeStyle = "rgba(255,255,255,0.09)";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(geo.pad, zeroY);
-  ctx.lineTo(rect.width - geo.pad, zeroY);
+  ctx.moveTo(geo.left, zeroY);
+  ctx.lineTo(geo.rightX, zeroY);
   ctx.stroke();
 
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, 0, rect.width * Math.max(0, Math.min(1, progress)), rect.height);
+  ctx.rect(geo.left, geo.top, geo.width * Math.max(0, Math.min(1, progress)), geo.height);
   ctx.clip();
 
-  const gradient = ctx.createLinearGradient(0, geo.pad, 0, rect.height - geo.pad);
+  const gradient = ctx.createLinearGradient(0, geo.top, 0, geo.bottomY);
   if (trend >= 0) {
     gradient.addColorStop(0, "rgba(30,203,115,0.34)");
     gradient.addColorStop(1, "rgba(30,203,115,0)");
@@ -842,8 +877,8 @@ function drawChart(agent, progress = 1) {
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
-  ctx.lineTo(geo.xFor(values.length - 1), rect.height - geo.pad);
-  ctx.lineTo(geo.xFor(0), rect.height - geo.pad);
+  ctx.lineTo(geo.xFor(values.length - 1), geo.bottomY);
+  ctx.lineTo(geo.xFor(0), geo.bottomY);
   ctx.closePath();
   ctx.fillStyle = gradient;
   ctx.fill();
@@ -872,7 +907,7 @@ function drawChart(agent, progress = 1) {
     const x = geo.xFor(i) - barWidth / 2;
     const barHeight = 12 + Math.abs(values[i + 1] - values[i]) * 9;
     ctx.fillStyle = values[i + 1] >= values[i] ? "rgba(30,203,115,0.28)" : "rgba(255,106,74,0.28)";
-    ctx.fillRect(x, rect.height - geo.pad - barHeight, barWidth, barHeight);
+    ctx.fillRect(x, geo.bottomY - barHeight, barWidth, barHeight);
   }
 
   values.forEach((value, index) => {
@@ -887,26 +922,93 @@ function drawChart(agent, progress = 1) {
   });
 
   ctx.restore();
+  updatePriceMarker(canvas, model, geo);
   if (progress >= 1) renderChartEvents(agent, rect, model);
   else byId("chartEvents").innerHTML = "";
 }
 
 function drawEmptyChart(ctx, rect, message) {
-  ctx.strokeStyle = "rgba(255,255,255,0.07)";
-  ctx.lineWidth = 1;
-  for (let i = 1; i <= 4; i += 1) {
-    const y = (rect.height / 5) * i;
-    ctx.beginPath();
-    ctx.moveTo(18, y);
-    ctx.lineTo(rect.width - 18, y);
-    ctx.stroke();
-  }
+  const geo = chartGeometry([-10, 0, 10], rect);
+  drawChartAxes(ctx, geo, [-10, 0, 10]);
   ctx.fillStyle = "rgba(255,255,255,0.72)";
   ctx.font = "700 12px system-ui, sans-serif";
-  ctx.fillText("Backend chart data unavailable", 22, 36);
+  ctx.fillText("Backend chart data unavailable", geo.left + 8, geo.top + 12);
   ctx.fillStyle = "rgba(255,255,255,0.44)";
   ctx.font = "500 11px system-ui, sans-serif";
-  wrapCanvasText(ctx, message || "No backend time series has been recorded for this agent.", 22, 56, rect.width - 44, 16);
+  wrapCanvasText(ctx, message || "No backend time series has been recorded for this agent.", geo.left + 8, geo.top + 32, rect.width - geo.left - geo.right - 16, 16);
+}
+
+function axisPctLabel(value) {
+  const normalized = Math.abs(value) < 0.05 ? 0 : value;
+  const display = Math.abs(normalized) >= 10 ? Math.round(normalized) : Number(normalized.toFixed(1));
+  return `${display > 0 ? "+" : ""}${display}%`;
+}
+
+function drawChartAxes(ctx, geo, values) {
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.font = "500 10px system-ui, sans-serif";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "right";
+  geo.ticks.forEach((tick) => {
+    const y = geo.yFor(tick);
+    ctx.strokeStyle = "rgba(255,255,255,0.055)";
+    ctx.beginPath();
+    ctx.moveTo(geo.left, y);
+    ctx.lineTo(geo.rightX, y);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.42)";
+    ctx.fillText(axisPctLabel(tick), geo.left - 8, y);
+  });
+
+  ctx.strokeStyle = "rgba(255,255,255,0.12)";
+  ctx.beginPath();
+  ctx.moveTo(geo.left, geo.top);
+  ctx.lineTo(geo.left, geo.bottomY);
+  ctx.lineTo(geo.rightX, geo.bottomY);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(255,255,255,0.52)";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText("P&L %", geo.left, 8);
+
+  const lastIndex = values.length - 1;
+  const xTicks = lastIndex > 1
+    ? [
+      { index: 0, label: "start" },
+      { index: Math.round(lastIndex / 2), label: "mid" },
+      { index: lastIndex, label: "latest" },
+    ]
+    : [
+      { index: 0, label: "start" },
+      { index: lastIndex, label: "latest" },
+    ];
+
+  ctx.textBaseline = "top";
+  xTicks.forEach((tick) => {
+    const x = geo.xFor(tick.index);
+    ctx.textAlign = tick.index === 0 ? "left" : tick.index === lastIndex ? "right" : "center";
+    ctx.fillStyle = "rgba(255,255,255,0.42)";
+    ctx.fillText(tick.label, x, geo.bottomY + 9);
+  });
+  ctx.restore();
+}
+
+function hidePriceMarker() {
+  const marker = byId("priceMarker");
+  marker.hidden = true;
+}
+
+function updatePriceMarker(canvas, model, geo) {
+  const marker = byId("priceMarker");
+  const latest = model.values[model.values.length - 1];
+  marker.hidden = false;
+  marker.textContent = signedPct(latest);
+  marker.style.background = latest >= 0 ? "var(--green)" : "var(--red)";
+  marker.style.color = latest >= 0 ? "#03140b" : "#230702";
+  marker.style.boxShadow = latest >= 0 ? "0 0 24px rgba(32, 239, 131, 0.28)" : "0 0 24px rgba(255, 106, 74, 0.26)";
+  marker.style.top = `${canvas.offsetTop + geo.yFor(latest)}px`;
 }
 
 function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight) {

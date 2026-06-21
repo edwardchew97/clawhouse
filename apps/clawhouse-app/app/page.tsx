@@ -166,12 +166,17 @@ export default function Page() {
             </section>
 
             <section className="panel comments">
-              <div className="panel-title">User Comments</div>
+              <div className="panel-title">Community Comments</div>
               <div className="panel-sub">Coming soon</div>
-              <div className="comments-card" aria-label="User comments coming soon">
-                <span className="comments-kicker">Coming soon</span>
-                <strong>Community comments</strong>
-                <span>User comments are not live yet.</span>
+              <div className="blur-status comments-card" aria-label="Community comments coming soon">
+                <div className="blur-status-content" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <div className="blur-status-label">Coming soon</div>
               </div>
             </section>
           </aside>

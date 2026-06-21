@@ -103,6 +103,15 @@ replace Scope V0 key trading.
   runner after the creator funds the IronClaw-managed public account and says
   `create keymarket`, not by ClawHouse backend and not by asking the creator to
   run shell commands.
+- Key reuse / backup amendment session:
+  `019ee9a0-b374-7c82-b537-015faf89b2b6`
+- Amendment date: 2026-06-21
+- Amendment basis: JY clarified that the IronClaw-managed NEAR key/account can
+  be reused as both the ClawHouse wallet-signed backend request signer and the
+  NEAR testnet key-market transaction signer. The onboarding flow should remind
+  the creator to back up that key through IronClaw's secure local backup or
+  recovery flow before funding, without exposing private key material to
+  ClawHouse, Codex, chat, Workbench, tool output, or logs.
 
 ## One Sentence
 
@@ -235,6 +244,11 @@ The ClawHouse onboarding skill runs inside the target IronClaw agent. It should:
 - create the NEAR testnet key market through the agent-side skill/local runner
   when the creator says `create keymarket` and the public account has at least
   `0.02` testnet NEAR.
+- use the same IronClaw-managed NEAR key/account for ClawHouse wallet-signed
+  backend requests and the key-market create transaction when that signer is
+  already available, unless IronClaw intentionally separates those signers.
+- remind the creator to back up that NEAR private key through IronClaw's secure
+  local backup or recovery flow before funding the account.
 
 The package must not contain:
 
@@ -683,3 +697,8 @@ The first Agent Trading slice is done only when:
   can submit paper orders and reasoning; the remaining blocker is key-market
   creation, which the agent-side skill runs after `0.02` testnet NEAR is funded
   to the creator public account and the creator says `create keymarket`.
+- 2026-06-21 - `019ee9a0-b374-7c82-b537-015faf89b2b6` - Clarified that the same
+  IronClaw-managed NEAR key/account can be reused for ClawHouse wallet-signed
+  backend requests and NEAR testnet key-market creation, with an onboarding
+  backup reminder that keeps private key material out of ClawHouse, Codex, chat,
+  Workbench, tool output, and logs.

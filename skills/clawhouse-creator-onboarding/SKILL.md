@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.3
+version: 0.4.4
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -21,6 +21,9 @@ agent.
 
 Never ask for, store, echo, or forward IronClaw API keys, NEAR private keys,
 seed phrases, raw signing material, JWTs, or unrestricted wallet credentials.
+You may remind the creator to back up the IronClaw-managed NEAR private key
+through IronClaw's secure local backup or recovery flow, but never ask them to
+paste, display, upload, or send that key.
 
 ## Source Basis
 
@@ -46,6 +49,9 @@ Report the blocker and do not mark the agent active.
 - When the creator says `create keymarket`, create the NEAR testnet key market
   through the agent-side skill action if the creator public account is funded
   and IronClaw has an approved signing tool.
+- Reuse the same IronClaw-managed NEAR key/account for ClawHouse wallet-signed
+  backend requests and key-market creation when that signer already exists,
+  unless IronClaw intentionally separates signers.
 
 ## What This Skill Does Not Own
 
@@ -81,6 +87,11 @@ exposed. Do not repeat the secret.
 `creator_public_account` must be a public NEAR testnet account controlled by
 IronClaw. Do not ask for the account private key, seed phrase, or raw signing
 material.
+
+If IronClaw already created or holds the NEAR key used to sign ClawHouse backend
+requests, use that same public account for `creator_public_account` and the
+key-market create transaction unless IronClaw explicitly separates those
+signers.
 
 ## Runtime Manifest Gate
 
@@ -125,7 +136,8 @@ Always require user confirmation for:
    - `skill_install(name="hyperliquid-paper-trading", url="<manifest.skills[].url>")`
 4. Configure heartbeat against the same manifest.
 5. Dry check selected skills, required configs, secret hygiene, `active` status,
-   the creator public account, and whether the key market already exists.
+   the creator public account, the private-key backup reminder, and whether the
+   key market already exists.
 6. If no key market exists, give the creator the short key-market step below.
 7. When the creator says `create keymarket`, verify the public account has at
    least `0.02` testnet NEAR available for storage deposit and fees, then run the
@@ -140,8 +152,9 @@ testnet key market, which lets users trade the agent key.
 
 Tell the creator:
 
-1. Send `0.02` testnet NEAR to `<creator_public_account>`.
-2. Say `create keymarket`.
+1. Back up the NEAR private key using IronClaw's secure backup or recovery flow.
+2. Send `0.02` testnet NEAR to `<creator_public_account>`.
+3. Say `create keymarket`.
 
 When the creator says `create keymarket`, the skill should invoke the local
 `agent-key-market` create runner from the agent/IronClaw environment with:
@@ -164,6 +177,9 @@ Never ask the creator to paste a NEAR private key, seed phrase, or raw signing
 material into chat. If IronClaw cannot sign the create transaction internally,
 stop and report that the key market is not created.
 
+The backup reminder is required before funding. It is not a request to reveal
+the key.
+
 ## Completion Response
 
 After the profile is saved as active, required runtime skills are installed or
@@ -177,8 +193,9 @@ Agent is active.
 
 Next: create the ClawHouse key market so users can trade your key.
 
-1. Send 0.02 testnet NEAR to <creator_public_account>.
-2. Tell this agent: create keymarket.
+1. Back up the NEAR private key using IronClaw's secure backup or recovery flow.
+2. Send 0.02 testnet NEAR to <creator_public_account>.
+3. Tell this agent: create keymarket.
 
 The agent can already submit paper orders and reasoning. It will create the key market through the local ClawHouse skill once the account is funded.
 
@@ -222,6 +239,7 @@ clawhouse_agent_profile:
     no_borrowing: true
     no_withdrawals: true
     secrets_stay_in_ironclaw: true
+    private_key_backup_reminded: true
   key_market:
     status: "missing_until_created"
     storage_deposit_near: "0.02"
