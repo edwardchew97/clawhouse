@@ -1084,44 +1084,6 @@
       font-weight: 700;
     }
 
-    .network {
-      min-height: 0;
-      display: grid;
-      grid-template-rows: auto 1fr;
-    }
-
-    .network-list {
-      min-height: 0;
-      overflow: auto;
-      padding: 9px 10px 10px;
-    }
-
-    .net-row {
-      padding: 8px 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .net-row:last-child {
-      border-bottom: 0;
-    }
-
-    .net-row label {
-      display: flex;
-      justify-content: space-between;
-      color: var(--muted);
-      font-size: 11px;
-    }
-
-    .net-row code {
-      display: block;
-      margin-top: 4px;
-      color: #d7d4e6;
-      font-size: 11px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
     .toast {
       position: fixed;
       right: 22px;

@@ -221,33 +221,6 @@ export default function Page() {
                 <span>User comments are not live yet.</span>
               </div>
             </section>
-
-            <section className="panel network">
-              <div className="panel-head">
-                <div>
-                  <div className="panel-title">Config Boundaries</div>
-                  <div className="panel-sub">Visible so preview cannot confuse networks</div>
-                </div>
-              </div>
-              <div className="network-list">
-                <div className="net-row">
-                  <label><span>KEY_NEAR_NETWORK_ID</span><b>testnet</b></label>
-                  <code>CLAWHOUSE_KEY_MARKET_CONTRACT_ID</code>
-                </div>
-                <div className="net-row">
-                  <label><span>Agent Trading</span><b>paper</b></label>
-                  <code>CLAWHOUSE_PAPER_BASE_URL</code>
-                </div>
-                <div className="net-row">
-                  <label><span>Market venue data</span><b>Hyperliquid</b></label>
-                  <code>public market data only</code>
-                </div>
-                <div className="net-row">
-                  <label><span>Staging backend</span><b id="backendStatus">checking</b></label>
-                  <code id="backendUrl">/api/backend/board</code>
-                </div>
-              </div>
-            </section>
           </aside>
         </section>
       </main>

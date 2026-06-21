@@ -385,10 +385,16 @@
       border-color: rgba(255, 255, 255, 0.055);
     }
 
-    .agent-row.active {
-      background: linear-gradient(90deg, rgba(86, 92, 98, 0.16), rgba(32, 35, 38, 0.12));
-      border-color: rgba(145, 151, 157, 0.22);
-      box-shadow: inset 2px 0 0 #9ba1a7, inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+    .agent-row[data-selected="true"] {
+      background: rgba(255, 255, 255, 0.035);
+      border-color: rgba(145, 151, 157, 0.18);
+      box-shadow: inset 2px 0 0 #63d8bd;
+    }
+
+    .agent-row:focus-visible {
+      outline: none;
+      border-color: rgba(99, 216, 189, 0.42);
+      box-shadow: inset 2px 0 0 #63d8bd, 0 0 0 1px rgba(99, 216, 189, 0.16);
     }
 
     .agent-row-skeleton {
@@ -503,7 +509,8 @@
       font-weight: 720;
     }
 
-    .agent-name > span:first-child {
+    .agent-title {
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -557,13 +564,20 @@
 
     .agent-change {
       margin-left: auto;
-      color: var(--green);
       font-size: 10px;
       font-weight: 700;
     }
 
+    .agent-change.up {
+      color: var(--green);
+    }
+
     .agent-change.down {
       color: var(--red);
+    }
+
+    .agent-change.empty {
+      color: var(--faint);
     }
 
     .leader-mini {
@@ -1641,56 +1655,6 @@
     transition: all .15s ease;
 }
 
-    .network {
-      min-height: 0;
-      display: grid;
-      grid-template-rows: auto 1fr;
-    }
-
-    .network-list {
-      min-height: 0;
-      overflow: visible;
-      padding: 9px 10px 10px;
-    }
-
-    .net-row {
-      padding: 8px 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .net-row:last-child {
-      border-bottom: 0;
-    }
-
-    .net-row label {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 14px;
-      min-width: 0;
-    }
-
-    .net-row label span,
-    .net-row label b {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .net-row code {
-      display: block;
-      margin-top: 4px;
-      color: #d7d7d7;
-      font-size: 11px;
-      line-height: 14px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
     .toast {
       position: fixed;
       right: 22px;
@@ -2048,7 +2012,6 @@
     .stat,
     .source-card,
     .comments-card,
-    .net-row,
     .activity-row,
     .panel {
       transition:
@@ -2073,8 +2036,7 @@
       box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
     }
 
-    .activity-row:hover,
-    .net-row:hover {
+    .activity-row:hover {
       background: rgba(255, 255, 255, 0.025);
     }
 
