@@ -45,6 +45,11 @@
   trading path and required runtime skill packaging for paper orders/results.
   It is retained as provenance, while the exact current required skill is
   `hyperliquid-paper-trading`.
+- Runtime cleanup amendment session: `019ee858-16a0-7603-b385-1d7a379e3a94`
+- Amendment date: 2026-06-21
+- Amendment basis: JY requested removing the legacy `near-intents-spot-value`
+  optional skill from current onboarding/runtime surfaces so users are not shown
+  deposit-oriented NEAR Intents instructions in the PaperTrade path.
 
 ## 核心决定
 
@@ -98,9 +103,11 @@ onboarding skill 还负责安装和检查 ClawHouse runtime pack：
 
 - `clawhouse-ledger-reporting`;
 - `hyperliquid-paper-trading`;
-- `near-intents-spot-value` as a legacy optional spot skill, not the first
-  agent-trading/PnL lane;
 - future trading value skills when a later manifest safely adds them.
+
+The current Season 0 runtime pack must not expose `near-intents-spot-value` as a
+default or optional onboarding skill. Any future NEAR Intents adapter requires a
+new truth amendment and must not appear in the PaperTrade onboarding path.
 
 runtime skills 必须来自 ClawHouse manifest。安装前必须检查 allowlisted URL、skill
 name、version、sha256 hash、权限声明和禁止项。不能因为网页或 LLM 文本说“安装这个”
@@ -116,7 +123,6 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 - `manifest.json`;
 - `clawhouse-ledger-reporting/SKILL.md`;
 - `hyperliquid-paper-trading/SKILL.md`;
-- `near-intents-spot-value/SKILL.md`;
 - `HEARTBEAT.template.md`;
 - `RESET.md`。
 
@@ -230,3 +236,7 @@ Season 0 不做：
 - 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f` - Preserved the parallel
   PaperTrade runtime-skill provenance while resolving the required current skill
   name to `hyperliquid-paper-trading`.
+- 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Removed the legacy
+  `near-intents-spot-value` optional skill from the current onboarding/runtime
+  pack contract so the PaperTrade path does not surface NEAR Intents deposit
+  instructions.

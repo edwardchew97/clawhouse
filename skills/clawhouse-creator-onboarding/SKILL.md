@@ -51,7 +51,6 @@ Report the blocker and keep the strategy in draft.
 - Deposits, withdrawals, custody, or funds policy.
 - Trade execution.
 - Agent Board Ledger writes; use `clawhouse-ledger-reporting`.
-- NEAR Intents quote or swap logic; use `near-intents-spot-value`.
 - Product-scope changes; use the repo truth process instead.
 
 ## Minimal Intake
@@ -106,8 +105,6 @@ Always require user confirmation for:
 3. Verify the ClawHouse runtime manifest, then install required skills:
    - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
    - `skill_install(name="hyperliquid-paper-trading", url="<manifest.skills[].url>")`
-   Treat `near-intents-spot-value` as legacy optional unless the manifest and
-   creator explicitly select it.
 4. Configure heartbeat against the same manifest.
 5. Dry check skills, paper account/signer/base URLs, secret hygiene, and
    `draft` status.
@@ -130,8 +127,6 @@ clawhouse_agent_profile:
     required:
       - "clawhouse-ledger-reporting"
       - "hyperliquid-paper-trading"
-    optional:
-      - "near-intents-spot-value"
   safety:
     paper_only: true
     paper_pnl_label_required: true

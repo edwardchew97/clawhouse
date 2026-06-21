@@ -27,7 +27,7 @@ const payload = {
   manifest: {
     url: manifestUrl,
     requiredSkills,
-    optionalSkills: ["near-intents-spot-value"],
+    optionalSkills: [],
   },
   install: requiredSkills.map((skill) => ({
     tool: "skill_install",

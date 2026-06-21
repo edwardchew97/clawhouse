@@ -1721,7 +1721,7 @@
             "paperTradingWalletFile": "work/acceptance-workbench/agent-board-ledger/paper-wallet.json",
             "paperTradingAccountId": "",
             "ledgerAgentId": "ironclaw-paper-workbench",
-            "paperTradingStartingBalanceUsd": "1000"
+            "paperTradingStartingBalanceUsd": "10000"
           },
           "fillDefaultsWhenEmpty": [
             "ledgerBaseUrl",
@@ -2835,7 +2835,7 @@
             "paperTradingWalletFile": "work/acceptance-workbench/agent-board-ledger/paper-wallet.json",
             "paperTradingAccountId": "",
             "ledgerAgentId": "ironclaw-paper-workbench",
-            "paperTradingStartingBalanceUsd": "1000"
+            "paperTradingStartingBalanceUsd": "10000"
           },
           "fillDefaultsWhenEmpty": [
             "ledgerBaseUrl",

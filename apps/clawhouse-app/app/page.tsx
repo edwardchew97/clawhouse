@@ -228,12 +228,12 @@ export default function Page() {
                   <code>CLAWHOUSE_KEY_MARKET_CONTRACT_ID</code>
                 </div>
                 <div className="net-row">
-                  <label><span>AGENT_NEAR_NETWORK_ID</span><b>mainnet</b></label>
-                  <code>CLAWHOUSE_AGENT_API_BASE_URL</code>
+                  <label><span>Agent Trading</span><b>paper</b></label>
+                  <code>CLAWHOUSE_PAPER_BASE_URL</code>
                 </div>
                 <div className="net-row">
-                  <label><span>NEAR Intents</span><b>mainnet</b></label>
-                  <code>https://1click.chaindefuser.com</code>
+                  <label><span>Market venue data</span><b>Hyperliquid</b></label>
+                  <code>public market data only</code>
                 </div>
                 <div className="net-row">
                   <label><span>Staging backend</span><b id="backendStatus">checking</b></label>
@@ -271,7 +271,7 @@ export default function Page() {
             </div>
             <div>
               <label>Venue</label>
-              <strong id="modalVenue">near-intents</strong>
+              <strong id="modalVenue">hyperliquid-paper</strong>
             </div>
             <div>
               <label>Agent action</label>
@@ -282,7 +282,7 @@ export default function Page() {
           <div className="event-path" id="modalPath" aria-label="Event execution path">
             <span><b>01</b>Signal</span>
             <span><b>02</b>Route check</span>
-            <span><b>03</b>Mainnet trade</span>
+            <span><b>03</b>Paper trade</span>
           </div>
 
           <div className="receipt-body">

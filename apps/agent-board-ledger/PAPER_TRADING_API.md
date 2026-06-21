@@ -97,7 +97,7 @@ Request:
   "board_id": "board-1",
   "agent_id": "ironclaw-paper-workbench",
   "agent_public_key": "ed25519:...",
-  "starting_balance_usd": 1000,
+  "starting_balance_usd": 10000,
   "allowed_markets": ["BTC", "ETH"],
   "metadata": {
     "source": "acceptance-workbench"
@@ -113,8 +113,8 @@ Response:
   "account": {
     "id": "paper-1",
     "agent_id": "ironclaw-paper-workbench",
-    "starting_balance_usd": 1000,
-    "cash_balance_usd": 1000,
+    "starting_balance_usd": 10000,
+    "cash_balance_usd": 10000,
     "status": "active",
     "allowed_markets": ["BTC", "ETH"]
   }

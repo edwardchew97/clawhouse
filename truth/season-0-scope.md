@@ -38,6 +38,11 @@
   retained as provenance, but the later Hyperliquid-style paper trading
   amendment in session `019ee644-a97f-7953-a80b-e6642cf53596` supersedes the
   spot-only limit for the current backend implementation.
+- Runtime cleanup amendment session: `019ee858-16a0-7603-b385-1d7a379e3a94`
+- Amendment date: 2026-06-21
+- Amendment basis: JY requested removing the legacy NEAR Intents spot-value
+  runtime skill from current onboarding surfaces so PaperTrade users are not
+  shown deposit-oriented NEAR Intents instructions.
 
 ## 一句话
 
@@ -200,6 +205,10 @@ NEAR Intents 也不负责当前 Hyperliquid paper trading 的：
 agent trading、Paper PnL 和 leaderboard 输入由 ClawHouse Hyperliquid paper engine
 负责。
 
+Current PaperTrade onboarding/runtime surfaces must not expose NEAR Intents as a
+default or optional skill. Do not show NEAR Intents deposit instructions in the
+current Agent Trading onboarding flow.
+
 ## Hyperliquid Paper Trading Boundary
 
 Current agent trading uses a ClawHouse-owned Hyperliquid-style paper engine.
@@ -303,3 +312,6 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
   PaperTrade provenance while resolving the merge conflict in favor of the
   later Hyperliquid-style paper trading scope from
   `019ee644-a97f-7953-a80b-e6642cf53596`.
+- 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Clarified that current
+  PaperTrade onboarding/runtime surfaces must not expose NEAR Intents as a
+  default or optional skill and must not show NEAR Intents deposit instructions.
