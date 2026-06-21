@@ -234,9 +234,11 @@ context.fetch = async (path) => {
 };
 
 vm.createContext(context);
+const agentChange = new Promise((resolve) => {
+  context.window.addEventListener("clawhouse:agent-change", resolve);
+});
 vm.runInContext(script, context, { filename: "clawhouse-fomo-layout.js" });
-await Promise.resolve();
-await Promise.resolve();
+await agentChange;
 
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("terminal_chad6", 0.99) });
 let rendered = rows();
