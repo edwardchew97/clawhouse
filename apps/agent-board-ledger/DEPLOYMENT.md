@@ -39,9 +39,19 @@ Set these in each Vercel project:
 - `AGENT_BOARD_LEDGER_ADMIN_TOKEN`
 - `CRON_SECRET`
 - `AGENT_BOARD_LEDGER_NEAR_RPC_URL` for the automatic cron NEAR account watcher
+- `HYPERLIQUID_INFO_URL` if the Hyperliquid info endpoint must be overridden
+- `HYPERLIQUID_DEX` if paper trading must target a specific Hyperliquid dex
+  namespace
 
 Use separate staging and production values. Do not point staging cron at the
 production database.
+
+Prefer `AGENT_BOARD_LEDGER_DATABASE_URL` for hosted deployments. `DATABASE_URL`
+is supported as a compatibility alias. `AGENT_BOARD_LEDGER_PORT` is local-only
+and should not be set in Vercel.
+
+The staging backend project's Production Branch must be `staging`; the
+production backend project's Production Branch must be `main`.
 
 ## GitHub Actions
 
