@@ -1607,56 +1607,6 @@
     transition: all .15s ease;
 }
 
-    .network {
-      min-height: 0;
-      display: grid;
-      grid-template-rows: auto 1fr;
-    }
-
-    .network-list {
-      min-height: 0;
-      overflow: visible;
-      padding: 9px 10px 10px;
-    }
-
-    .net-row {
-      padding: 8px 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .net-row:last-child {
-      border-bottom: 0;
-    }
-
-    .net-row label {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 14px;
-      min-width: 0;
-    }
-
-    .net-row label span,
-    .net-row label b {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .net-row code {
-      display: block;
-      margin-top: 4px;
-      color: #d7d7d7;
-      font-size: 11px;
-      line-height: 14px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
     .toast {
       position: fixed;
       right: 22px;
@@ -2014,7 +1964,6 @@
     .stat,
     .source-card,
     .comments-card,
-    .net-row,
     .activity-row,
     .panel {
       transition:
@@ -2039,8 +1988,7 @@
       box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
     }
 
-    .activity-row:hover,
-    .net-row:hover {
+    .activity-row:hover {
       background: rgba(255, 255, 255, 0.025);
     }
 

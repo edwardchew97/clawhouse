@@ -554,13 +554,6 @@ function chartModel(agent) {
   };
 }
 
-function backendLabel() {
-  if (!chainState.backend) return { status: "checking", url: "/api/backend/board" };
-  const baseUrl = chainState.backend.config?.baseUrl || "/api/backend/board";
-  if (chainState.backend.ok) return { status: "connected", url: baseUrl };
-  return { status: "unavailable", url: baseUrl };
-}
-
 function signedPct(value) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
@@ -893,7 +886,6 @@ function renderTicket(agent) {
     walletButton.disabled = busy;
   }
   renderTradeStatus();
-  renderBackendStatus();
 }
 
 function statusButtonText() {
@@ -915,12 +907,6 @@ function renderTradeStatus() {
     status.body,
     status.tone === "success" && chainState.lastTxHash ? chainState.explorerUrl : null
   );
-}
-
-function renderBackendStatus() {
-  const backend = backendLabel();
-  byId("backendStatus").textContent = backend.status;
-  byId("backendUrl").textContent = backend.url;
 }
 
 function chartGeometry(values, rect) {
