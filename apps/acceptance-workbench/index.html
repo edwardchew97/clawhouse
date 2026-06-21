@@ -2589,7 +2589,7 @@
 
       document.querySelectorAll("[data-step]").forEach((button) => {
         button.addEventListener("click", () => {
-          selectStep(Number(button.dataset.flow), Number(button.dataset.step), { historyMode: "push" });
+          selectStep(Number(button.dataset.flow), Number(button.dataset.step), { historyMode: "push", focusSidebar: true });
         });
         button.addEventListener("keydown", handleSidebarStepKeydown);
       });
