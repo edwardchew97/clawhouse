@@ -2,10 +2,10 @@
   "schema": "clawhouse.runtime-pack.v0",
   "pack": {
     "name": "clawhouse-ironclaw-runtime",
-    "version": "0.1.0-dev",
+    "version": "0.2.0-dev",
     "distribution_status": "development",
     "source_branch": "public-onboarding-kit-main",
-    "updated_at": "2026-06-19",
+    "updated_at": "2026-06-21",
     "heartbeat_template_url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/HEARTBEAT.template.md",
     "reset_guide_url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/RESET.md"
   },
@@ -70,9 +70,49 @@
       "heartbeat_auto_update": true
     },
     {
-      "name": "near-intents-spot-value",
+      "name": "hyperliquid-paper-trading",
       "version": "0.1.0",
       "required": true,
+      "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
+      "sha256": "16b01b8fface403d0c7900481c8c675e294d8075dff063948ee8a9f462761a8a",
+      "install": {
+        "tool": "skill_install",
+        "parameters": {
+          "name": "hyperliquid-paper-trading",
+          "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md"
+        }
+      },
+      "permissions": {
+        "network": [
+          "CLAWHOUSE_PAPER_BASE_URL"
+        ],
+        "wallet_signing": "ironclaw-configured-paper-signer-only",
+        "writes": [
+          "/paper/orders"
+        ],
+        "reads": [
+          "/paper/accounts/{paperAccountId}",
+          "/paper/orders/{orderId}/replay",
+          "/paper/leaderboard"
+        ],
+        "secrets": []
+      },
+      "forbidden_behaviors": [
+        "real_hyperliquid_order_submission",
+        "custody",
+        "withdrawal",
+        "private_key_request",
+        "api_key_request",
+        "seed_phrase_request",
+        "paper_pnl_as_real_pnl"
+      ],
+      "initial_onboarding_install": "allowed_after_manifest_check_and_user_pack_approval",
+      "heartbeat_auto_update": true
+    },
+    {
+      "name": "near-intents-spot-value",
+      "version": "0.1.0",
+      "required": false,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/near-intents-spot-value/SKILL.md",
       "sha256": "4e7336786fb8a83b86aea981e448476b374b858b7e58a39bf5fe2517905b3eea",
       "install": {

@@ -23,17 +23,25 @@
   be deleted or merged. The still-valid split-network preview constraints from
   Codex thread `019ede1f-65e9-73f0-8632-923a11145d39` were extracted onto
   current `dev` without raw-merging the stale branch.
-- PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
-- Date: 2026-06-21
-- Basis: JY decided that current Agent Trading should move from real trading to
-  PaperTrade. The first surface is public paper, the second surface is board
-  paper, Hyperliquid board paper is long-only spot only, the paper leaderboard
-  must be public, dev and staging must both be deployed, staging is the final
-  acceptance surface, and OutLayer is deferred.
+- Hyperliquid paper trading amendment session:
+  `019ee644-a97f-7953-a80b-e6642cf53596`
+- Amendment date: 2026-06-21
+- Amendment basis: JY reopened the agent-trading direction and confirmed that
+  ClawHouse should first build Hyperliquid-style paper trading in the existing
+  ClawHouse backend, not OutLayer, with agent orders sent to ClawHouse for
+  depth/risk validation, cross and isolated margin support, timely liquidation,
+  Paper PnL in the leaderboard, and a runtime skill agents can use to trade.
+- Prior PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
+- Amendment date: 2026-06-21
+- Amendment basis: That parallel edit accepted Season 0 PaperTrade as public
+  paper plus board paper and kept Hyperliquid board paper long-only spot. It is
+  retained as provenance, but the later Hyperliquid-style paper trading
+  amendment in session `019ee644-a97f-7953-a80b-e6642cf53596` supersedes the
+  spot-only limit for the current backend implementation.
 
 ## 一句话
 
-ClawHouse Season 0 是一个短期、会传播的消费级金融游戏：用户围绕一批精选 trading agents 买卖 access keys，看公开 PaperTrade 排行、进 holder-facing surface、分享收益/身份卡，并通过清楚标记的 paper performance 理解 agent 表现。
+ClawHouse Season 0 是一个短期、会传播的消费级金融游戏：用户围绕一批精选 trading agents 买卖 access keys，看排行、进 holder-facing surface、分享收益/身份卡，并通过 NEAR 相关能力完成支付、资金流转和风险辅助。
 
 ## 当前目标
 
@@ -46,7 +54,7 @@ Season 0 不是先做一个长期的 B2B agent proof layer，也不是先做完�
 - key 代表 access、status 和参与权，不代表 profit sharing。
 - holder-facing room/feed 是产品体验的一部分。Scope V0 preview 先做第一方
   holder-facing room，不用 Telegram 或 chat 代替产品体验。
-- share cards / receipts / public paper leaderboard 是传播核心。
+- share cards / receipts / leaderboard 是传播核心。
 
 ## Agent Creation
 
@@ -60,9 +68,8 @@ Scope V0 的 key market contract 是 permissionless：任何账号都可以在�
 
 Scope V0 preview 的产品面仍然是 curated：目标是 3 个 ClawHouse-curated
 agents。它必须按 multi-agent 产品模型设计，不能写成只能容纳一个 agent 的一次性
-demo。Preview 里出现的 agent 名字、身份和 room 都必须来自真实配置或真实产品事件。
-leaderboard 和 PnL 必须来自 PaperTrade 的真实服务记录、paper order、paper fill、
-paper holding 和 paper price snapshot，不允许用 seed content 伪造。
+demo。Preview 里出现的 agent 名字、身份、room、leaderboard 和 PnL 都必须来自真实
+配置、真实运行数据、真实链上状态或真实产品事件，不允许用 seed content 伪造。
 
 Scope V0 preview 不提供 public-facing agent onboarding。V0 agent 由 ClawHouse
 内部创建、部署、管理和更新；外部创作者 onboarding 仍按
@@ -78,9 +85,9 @@ Scope V0 preview 不提供 public-facing agent onboarding。V0 agent 由 ClawHou
 
 ## Scope V0 Build Slice
 
-Scope V0 的第一刀是 NEAR 上的 agent key market 加 PaperTrade 排行体验，但产品目标不是只停在本地脚本。
+Scope V0 的第一刀是 NEAR 上的 agent key market，但产品目标不是只停在本地脚本。
 当前 preview 必须是内部用户可访问的产品切片：key market、holder room、agent
-updates、public paper leaderboard/PnL 和 receipt/share card 要连成一条真实可读的体验。
+updates、leaderboard/PnL 和 receipt/share card 要连成一条真实可读的体验。
 
 必须包含：
 
@@ -91,8 +98,8 @@ updates、public paper leaderboard/PnL 和 receipt/share card 要连成一条真
 - 查询 key price / supply / reserve / holder balance。
 - 本地简单脚本：create、quote、buy、sell、state。
 - 3 个 ClawHouse-curated agents 的可访问 preview。
-- 至少 1 个真正跑起来的 agent，可以自己发真实短 update，并通过 PaperTrade
-  服务产生 paper leaderboard/PnL 输入。
+- 至少 1 个真正跑起来的 agent，可以自己发真实短 update，并产生真实
+  leaderboard/PnL 输入。
 - 第一方 holder-facing room。
 - receipt / share card。
 
@@ -108,30 +115,27 @@ updates、public paper leaderboard/PnL 和 receipt/share card 要连成一条真
 - 买卖都收 5% protocol fee 和 5% creator fee。
 - 买 key 必须支持 `max_price`，卖 key 必须支持 `min_payout`，避免用户在价格变化后吃亏成交。
 
-## Scope V0 Preview, Data, Deploy, And Networks
+## Scope V0 Preview, Data, And Networks
 
-Scope V0 preview 使用 split-surface 架构：
+Scope V0 preview 使用 split-network 架构：
 
 - key trading / key market / holder gate：NEAR testnet。
-- agent trading / agent PnL：PaperTrade service。
-- public paper：公开 paper competition 和 public paper leaderboard。
-- board paper：每个 agent board 的 paper account、paper order、paper fills、
-  paper holdings 和 paper PnL。
+- agent trading / Paper PnL / leaderboard：ClawHouse backend 上的
+  Hyperliquid-style paper trading。
 
 这个拆分是强约束。key trading 可以先在 testnet 展示真实合约状态和 holder gate；
-agent performance 先走 PaperTrade，不要求真实资金、真实钱包、NEAR Intents mainnet
-资金路径或真实交易。
+agent trading 不再用 NEAR Intents spot 作为第一条交易主线。ClawHouse backend 接收
+agent paper orders，用 Hyperliquid market data 做 depth、margin、risk 和 liquidation
+计算，并把 Paper PnL 作为 leaderboard 的 agent-trading 输入。
 
 产品里出现的 agent、room update、leaderboard、PnL、key price、holder count、
 supply、reserve、holder balance、receipt/share card 数据都必须来自真实配置、真实
-agent 运行结果、真实链上状态、真实产品事件或 PaperTrade 服务记录。做不到这些来源时，不要用假数据补位。
+agent 运行结果、真实链上状态、真实 Hyperliquid market data、或 ClawHouse paper
+engine 写入的可 replay 事件。做不到真实数据时，不要用假数据补位。
 
 所有 UI、receipt、share card 和 backend response 都必须清楚标出 key market 是
-testnet，agent performance / PnL 是 paper，不能让用户误以为 testnet key price 或
-paper PnL 是真实资金收益。
-
-Dev 和 staging 都必须部署当前 PaperTrade 方向。staging 是当前最终验收环境；
-测试验收应在 staging 上发生，而不是只用本地或 dev 结果代替。
+testnet，agent trading / PnL 是 paper，不能让用户误以为 testnet key price 或
+paper PnL 是 mainnet 金钱收益。
 
 ## Scope V0 Holder Room
 
@@ -159,37 +163,31 @@ Room 不包含：
 
 ## Scope V0 OutLayer Boundary
 
-Scope V0 不做任何 OutLayer、OutLayer policy 或 OutLayer gate。
+Scope V0 第一版 Hyperliquid paper trading 不依赖 OutLayer、OutLayer policy 或
+OutLayer gate。
 
 这条边界同时适用于：
 
 - V0 agent key market；
 - V0 Agent Board Ledger；
-- 当前 PaperTrade、agent board paper account、paper order、paper fill、portfolio
-  和 PnL 记录。
+- 当前 Hyperliquid paper trading order intake、risk、liquidation 和 leaderboard
+  Paper PnL。
 
-大白话：这一版不要等 OutLayer，也不要把 OutLayer 写成 V0 的依赖。
-Agent 先发 paper order，ClawHouse PaperTrade 服务做 paper 级别的规则检查、深度检查、
-模拟成交和记录；这不是 OutLayer policy，也不是真实资金执行。
+大白话：这一版不要等 OutLayer，也不要把 OutLayer 写成 V0 的依赖。Agent 把
+paper order 发给 ClawHouse backend；ClawHouse backend 做 depth/risk 校验、
+paper fill、position accounting、timely liquidation 和可 replay 的 proof。
 
 如果其他旧 truth 或 reference 提到 OutLayer 作为 creator/runtime/policy 的
-可能目标，不要把它读成当前 Scope V0 key market、PaperTrade 或 Agent Board Ledger 的依赖。
+可能目标，不要把它读成当前 Scope V0 key market 或 Agent Board Ledger 的依赖。
 
 ## NEAR Intents Boundary
 
-NEAR Intents 在当前 scope 里主要用于未来资金路径或后续真实交易，不是当前 PaperTrade
-验收依赖：
-
-- spot / cross-chain swap。
-- 出入金 / funding layer，把用户资金换成或带到后续真实 NEAR mainnet agent trading
-  可能需要的资金路径。
-- copy-with-constraints 的未来 intent 表达。
-- funding / portfolio allocation / rebalancing。
+NEAR Intents 不再是当前 agent-trading / leaderboard PnL 的第一条交易主线。
 
 Scope V0 preview 明确不使用 NEAR Intents 直接买卖 key。用户 buy key / sell key
 发生在 NEAR testnet 的 key market contract 上。
 
-不要假设 NEAR Intents 原生提供：
+NEAR Intents 也不负责当前 Hyperliquid paper trading 的：
 
 - perps。
 - order book trading。
@@ -198,10 +196,37 @@ Scope V0 preview 明确不使用 NEAR Intents 直接买卖 key。用户 buy key 
 - leverage。
 - agent key market execution。
 
-当前 PaperTrade 的 Hyperliquid board surface 只允许 long-only spot。不要把它写成
-Hyperliquid perps、short、borrow、leverage、funding rate、liquidation 或真实下单。
-NEAR Intents 最多作为后续 funding / cross-chain payment rails，不是当前 PaperTrade
-leaderboard 的资金来源。
+如果未来重新使用 NEAR Intents，它最多是 funding / cross-chain payment rails；当前
+agent trading、Paper PnL 和 leaderboard 输入由 ClawHouse Hyperliquid paper engine
+负责。
+
+## Hyperliquid Paper Trading Boundary
+
+Current agent trading uses a ClawHouse-owned Hyperliquid-style paper engine.
+It is not real-money execution and it must be labeled as paper in product and
+API surfaces.
+
+The first backend slice must support:
+
+- agent-submitted paper orders over HTTPS;
+- Hyperliquid market-data-backed depth checks;
+- deterministic paper fills for IOC and market-like orders;
+- resting paper limit orders with GTC and ALO time-in-force;
+- cross margin and isolated margin position accounting;
+- funding and fee accounting when the source data is available;
+- timely liquidation from fresh mark/risk data;
+- hash-linked audit/replay proof for orders, fills, risk checks, liquidations,
+  and leaderboard snapshots;
+- Paper PnL, drawdown, liquidation count, and staleness status in the
+  leaderboard.
+
+The first backend slice does not:
+
+- submit real orders to Hyperliquid;
+- collect Hyperliquid API keys;
+- hold user or agent private keys;
+- treat paper PnL as real realized trading PnL;
+- depend on OutLayer before the later OutLayer migration.
 
 ## Private Inference Boundary
 
@@ -222,14 +247,12 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
 
 - 完整 PVE arena。
 - 三个 venue 的 proof league。
-- 以 Hyperliquid perps 作为当前主线。
-- 真实交易作为当前 Agent Trading 主线。
-- 杠杆、爆仓、资金费率。
+- 真实 Hyperliquid perps execution。
+- 真实资金的杠杆、爆仓、资金费率。
 - key profit sharing。
 - permissionless agent onboarding / certification / deployment。
 - public-facing agent onboarding。
-- seed content / seed feed / fake leaderboard / fake PnL。
-- 未标记为 paper 的 leaderboard 或 PnL。
+- seed content / seed feed / fake leaderboard / unlabeled paper PnL。
 - Telegram as the Scope V0 holder room or primary product surface。
 - holder chat。
 - copy trading。
@@ -270,8 +293,13 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
   content, uses first-party holder rooms, splits key trading on NEAR testnet from
   agent trading / NEAR Intents funding on NEAR mainnet, and keeps NEAR Intents
   out of direct key buy/sell execution.
-- 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f` - Superseded the current
-  real-trading Agent Trading direction with PaperTrade for Season 0: public
-  paper plus board paper, public paper leaderboard, Hyperliquid board paper as
-  long-only spot, dev and staging deploy targets, staging as final acceptance,
-  and OutLayer deferred.
+- 2026-06-21 - `019ee644-a97f-7953-a80b-e6642cf53596` - Reopened agent trading
+  around ClawHouse-hosted Hyperliquid-style paper trading: OutLayer is deferred,
+  NEAR Intents is no longer the first agent-trading/PnL lane, Paper PnL may feed
+  the leaderboard when labeled as paper, and the backend must support agent
+  order intake, Hyperliquid market-data-backed depth checks, cross and isolated
+  margin, timely liquidation, replay proof, and an installable runtime skill.
+- 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f` - Preserved the parallel
+  PaperTrade provenance while resolving the merge conflict in favor of the
+  later Hyperliquid-style paper trading scope from
+  `019ee644-a97f-7953-a80b-e6642cf53596`.

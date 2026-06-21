@@ -242,9 +242,26 @@ function backendEvents(agent = selectedAgent()) {
   return Array.isArray(events) ? events : [];
 }
 
+function paperLeaderboardRow(agent) {
+  const rows = chainState.backend?.paperLeaderboard?.leaderboard;
+  if (!Array.isArray(rows)) return null;
+  const boardId = agent.boardId ?? agent.id;
+  return rows.find((row) =>
+    row?.agent_id === agent.id
+    || row?.paper_account_id === boardId
+    || row?.paper_account_id === agent.id
+  ) ?? null;
+}
+
 function backendPnl(agent) {
+  const paper = paperLeaderboardRow(agent);
+  if (paper) return normalizePct(paper.paper_pnl_pct);
   if (!backendApplies(agent) || !chainState.backend?.ok) return null;
   return normalizePct(chainState.backend?.pnl?.latest?.total_pnl_pct);
+}
+
+function backendPnlSource(agent) {
+  return paperLeaderboardRow(agent) ? "Paper P&L" : "Backend P&L";
 }
 
 function formatBackendTime(value) {
@@ -467,9 +484,10 @@ function buyOneForUnlock() {
 function renderTicker() {
   const items = agents.flatMap((agent) => {
     const pnl = backendPnl(agent);
+    const pnlSource = backendPnlSource(agent);
     const holders = holderCount(agent);
     return [
-      `<span class="ticker-item"><b>${agent.name}</b><span class="${pnlClass(pnl)}">${pnlLabel(pnl)}</span><span>Backend P&L</span></span>`,
+      `<span class="ticker-item"><b>${agent.name}</b><span class="${pnlClass(pnl)}">${pnlLabel(pnl)}</span><span>${pnlSource}</span></span>`,
       `<span class="ticker-item"><b>${agent.name} key</b><span>${keyPriceLabel(agent)}</span><span>Testnet</span></span>`,
       `<span class="ticker-item"><b>${holders === null ? "--" : holders}</b><span>keys in ${agent.name}</span></span>`
     ];
@@ -514,6 +532,7 @@ function renderAgentList() {
 
 function renderHero(agent) {
   const pnl = backendPnl(agent);
+  const pnlSource = backendPnlSource(agent);
   const chart = chartModel(agent);
   byId("heroAvatar").innerHTML = agentIcon(agent);
   byId("heroName").textContent = agent.name;
@@ -529,8 +548,9 @@ function renderHero(agent) {
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
   byId("miniTop").textContent = agent.name;
   byId("miniMove").textContent = pnl === null ? "--" : signedPct(pnl);
+  byId("leaderDataSource").textContent = pnlSource;
   byId("chartSub").textContent = isUnlocked(agent)
-    ? `${chart.message} / ${backendNetwork(agent)}`
+    ? `${chart.message} / ${backendNetwork(agent)} / ${pnlSource}`
     : `Backend ${backendVenue(agent)} events unlock after key purchase.`;
 }
 

@@ -1,5 +1,7 @@
 import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openRuntimeLedgerDb, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAuthPayload, readSignedHeaders, sha256Hex, timestampIsFresh, verifySignature } from "./auth.js";
+import { refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
+import { PaperAuthError, createPaperAccount, createPaperMarketSnapshot, readPaperAccount, readPaperLeaderboard, replayPaperOrder, runPaperRiskCheck, submitPaperOrder } from "./paper-trading.js";
 import type { AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
 
 type AppOptions = {
@@ -66,6 +68,9 @@ export function createApp(options: AppOptions) {
         const nearFtWatchMatch = path.match(/^\/boards\/([^/]+)\/watch\/near-ft$/);
         const portfolioMatch = path.match(/^\/boards\/([^/]+)\/portfolio$/);
         const pnlMatch = path.match(/^\/boards\/([^/]+)\/pnl$/);
+        const paperAccountMatch = path.match(/^\/paper\/accounts\/([^/]+)$/);
+        const paperRiskCheckMatch = path.match(/^\/paper\/accounts\/([^/]+)\/risk-check$/);
+        const paperOrderReplayMatch = path.match(/^\/paper\/orders\/([^/]+)\/replay$/);
 
         if (method === "POST" && path === "/boards") {
           assertServiceBearer(request.headers, adminToken);
@@ -150,6 +155,38 @@ export function createApp(options: AppOptions) {
           const board = await requireBoard(db, pnlMatch[1]);
           await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail", rpcFetch);
           return json(await readPnl(db, board.id));
+        }
+        if (method === "POST" && path === "/paper/accounts") {
+          assertServiceBearer(request.headers, adminToken);
+          return json(await createPaperAccount(db, await readBody(request), now()), 201);
+        }
+        if (method === "GET" && paperAccountMatch) {
+          return json(await readPaperAccount(db, paperAccountMatch[1]));
+        }
+        if (method === "POST" && path === "/paper/market-snapshots") {
+          assertServiceBearer(request.headers, adminToken);
+          return json(await createPaperMarketSnapshot(db, await readBody(request), now()), 201);
+        }
+        if (method === "POST" && path === "/paper/market-snapshots/hyperliquid") {
+          assertServiceBearer(request.headers, adminToken);
+          return json(await refreshHyperliquidPaperMarketSnapshots(db, rpcFetch, env, await readBody(request), now()), 201);
+        }
+        if (method === "POST" && path === "/paper/orders") {
+          return json(await submitPaperOrder(db, request, await readBody(request), path, now()), 201);
+        }
+        if (method === "POST" && path === "/paper/liquidation-monitor/tick") {
+          assertServiceBearer(request.headers, adminToken);
+          return json(await runPaperLiquidationMonitor(db, rpcFetch, env, now()));
+        }
+        if (method === "POST" && paperRiskCheckMatch) {
+          assertServiceBearer(request.headers, adminToken);
+          return json(await runPaperRiskCheck(db, paperRiskCheckMatch[1], now()));
+        }
+        if (method === "GET" && path === "/paper/leaderboard") {
+          return json(await readPaperLeaderboard(db));
+        }
+        if (method === "GET" && paperOrderReplayMatch) {
+          return json(await replayPaperOrder(db, paperOrderReplayMatch[1]));
         }
 
         return json({ ok: false, error: "Not found" }, 404);
@@ -863,20 +900,43 @@ async function runCronTick(db: LedgerDb, rpcFetch: FetchLike, env: RuntimeEnv, c
   const nearAccountWatch = await runTrackedNearAccountWatches(db, rpcFetch, env, createdAt);
   const ledgerTick = await reconcileCronLedgerTick(db, createdAt);
   const nearAccountDidWork = nearAccountWatch.checked > 0;
+  const paperMonitor = await runPaperLiquidationMonitorSafely(db, rpcFetch, env, createdAt);
+  const paperMonitorDidWork = paperMonitor.status === "checked" || paperMonitor.status === "liquidations_executed";
 
   return {
     ...ledgerTick,
-    status: ledgerTick.status === "updated" || nearAccountDidWork ? "updated" : ledgerTick.status,
+    status: ledgerTick.status === "updated" || nearAccountDidWork || paperMonitorDidWork ? "updated" : ledgerTick.status,
     nearAccountWatch,
+    paperMonitor,
     summary: {
       ...ledgerTick.summary,
       nearAccountWatchStatus: nearAccountWatch.status,
       nearAccountWatchesAttempted: nearAccountWatch.attempted,
       nearAccountWatchesChecked: nearAccountWatch.checked,
       nearAccountWatchesFailed: nearAccountWatch.failed,
-      noNewData: ledgerTick.summary.noNewData && !nearAccountDidWork,
+      paperMonitorStatus: paperMonitor.status,
+      paperMonitorAccountsChecked: paperMonitor.accounts_checked,
+      paperMonitorLiquidations: paperMonitor.liquidations.length,
+      noNewData: ledgerTick.summary.noNewData && !nearAccountDidWork && !paperMonitorDidWork,
     },
   };
+}
+
+async function runPaperLiquidationMonitorSafely(db: LedgerDb, rpcFetch: FetchLike, env: RuntimeEnv, createdAt: string) {
+  try {
+    return await runPaperLiquidationMonitor(db, rpcFetch, env, createdAt);
+  } catch (error) {
+    return {
+      ok: false,
+      status: "failed",
+      coins: [] as string[],
+      snapshots: [] as unknown[],
+      accounts_checked: 0,
+      risk_checks: [] as unknown[],
+      liquidations: [] as unknown[],
+      failures: [{ error: safeErrorMessage(error) }],
+    };
+  }
 }
 
 async function runTrackedNearAccountWatches(db: LedgerDb, rpcFetch: FetchLike, env: RuntimeEnv, createdAt: string) {
@@ -2020,7 +2080,7 @@ function json(data: unknown, status = 200) {
 }
 
 function handleError(error: unknown) {
-  if (error instanceof AuthError || error instanceof ServiceAuthError || error instanceof RequestError) {
+  if (error instanceof AuthError || error instanceof ServiceAuthError || error instanceof RequestError || error instanceof PaperAuthError) {
     return json({ ok: false, error: error.message }, error.status);
   }
   if (isUniqueViolation(error)) {

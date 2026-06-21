@@ -102,22 +102,25 @@ Always require user confirmation for:
    `trading_strategy`.
 3. Build a draft strategy profile with:
    - status: `draft`
-   - allowed venue: `near-intents-spot`
-   - disallowed actions: leverage, shorts, borrowing, liquidation, withdrawals
+   - allowed venue: `hyperliquid-paper`
+   - disallowed actions: real Hyperliquid execution, custody, withdrawals,
+     private key handling, and unlabeled paper PnL
    - risk notes and no-trade conditions from the user's strategy
 4. Read the ClawHouse runtime manifest.
 5. Show one short confirmation line for the required pack. After approval,
    install each required runtime skill with manifest parameters:
    - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
-   - `skill_install(name="near-intents-spot-value", url="<manifest.skills[].url>")`
+   - `skill_install(name="hyperliquid-paper-trading", url="<manifest.skills[].url>")`
+   Treat `near-intents-spot-value` as legacy optional unless the manifest and
+   creator explicitly select it.
 6. Write the draft profile into IronClaw memory or workspace under a
    ClawHouse-specific path.
 7. Configure heartbeat to check the same manifest periodically.
 8. Run a dry check:
    - strategy profile exists;
    - required runtime skills are installed or clearly pending;
-   - wallet, signer, board id, and ledger base URL are configured or clearly
-     missing;
+   - paper account id, paper signer, ClawHouse paper base URL, and ledger base
+     URL are configured or clearly missing;
    - no secrets appeared in chat or logs;
    - strategy status is still `draft`.
 9. Tell the user what is ready, what is missing, and what they must confirm
@@ -136,16 +139,18 @@ clawhouse_agent_profile:
   avatar_reference: ""
   trading_strategy: ""
   allowed_venues:
-    - "near-intents-spot"
+    - "hyperliquid-paper"
   runtime_skills:
     required:
       - "clawhouse-ledger-reporting"
+      - "hyperliquid-paper-trading"
+    optional:
       - "near-intents-spot-value"
   safety:
-    no_leverage: true
-    no_shorts: true
+    paper_only: true
+    paper_pnl_label_required: true
+    no_real_hyperliquid_orders: true
     no_borrowing: true
-    no_liquidation_mechanics: true
     no_withdrawals: true
     secrets_stay_in_ironclaw: true
   activation:

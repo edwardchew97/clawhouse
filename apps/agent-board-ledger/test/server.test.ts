@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrate, openRuntimeLedgerDb, openSqliteLedgerDb, type SqliteLedgerDb } from "../src/db";
 import { ADMIN_TOKEN_ENV, canonicalAuthPayload, sha256Hex } from "../src/auth";
+import { canonicalPaperAuthPayload } from "../src/paper-trading";
 import { createApp } from "../src/server";
 import { CRON_SECRET_ENV, handleVercelLedgerRequest } from "../src/vercel";
 
@@ -150,6 +151,20 @@ describe("Agent Board Ledger local backend", () => {
       .all()
       .map((row) => row.name);
     for (const table of ["tracked_wallets", "balance_changes", "price_snapshots", "read_access_checks", "audit_events"]) {
+      expect(tables).toContain(table);
+    }
+    for (const table of [
+      "paper_accounts",
+      "paper_auth_nonces",
+      "paper_market_snapshots",
+      "paper_orders",
+      "paper_fills",
+      "paper_positions",
+      "paper_risk_snapshots",
+      "paper_liquidation_events",
+      "paper_leaderboard_snapshots",
+      "paper_audit_events",
+    ]) {
       expect(tables).toContain(table);
     }
     for (const column of ["chain", "venue_namespace", "tracking_started_at", "owner_wallet_address", "funding_source"]) {
@@ -1256,6 +1271,35 @@ describe("Agent Board Ledger local backend", () => {
     expect(response.status).toBe(201);
   });
 
+  test("normalizes Vercel paper trading rewrites", async () => {
+    const response = await handleVercelLedgerRequest(
+      new Request("http://ledger.test/api/ledger?ledgerPath=/paper/accounts/", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          paper_account_id: "paper-vercel",
+          agent_id: "ironclaw",
+          agent_public_key: wallet.publicKey,
+          starting_balance_usd: 1000,
+        }),
+      }),
+      { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
+    );
+    expect(response.status).toBe(201);
+
+    const read = await handleVercelLedgerRequest(
+      new Request("http://ledger.test/api/ledger?ledgerPath=/paper/accounts/paper-vercel/"),
+      { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
+    );
+    const body = await jsonOf<{ account: { id: string } }>(read);
+
+    expect(read.status).toBe(200);
+    expect(body.account.id).toBe("paper-vercel");
+  });
+
   test("rejects Vercel cron requests without the cron secret", async () => {
     const response = await handleVercelLedgerRequest(
       new Request("http://ledger.test/api/cron", {
@@ -1408,6 +1452,327 @@ describe("Agent Board Ledger local backend", () => {
     expect(negativeWithdrawal.status).toBe(400);
     expect((await jsonOf<{ error: string }>(negativeWithdrawal)).error).toBe("withdrawal_usd must be greater than or equal to 0");
   });
+
+  test("fills a signed Hyperliquid-style IOC paper order and exposes leaderboard and replay proof", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      bids: [{ px: 99, sz: 5 }],
+      asks: [{ px: 100, sz: 0.4 }, { px: 101, sz: 1 }],
+    });
+
+    const response = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "ioc-1",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 0.5,
+      margin_mode: "cross",
+      leverage: 10,
+      max_slippage_bps: 200,
+      reason: "Open a paper BTC long after strategy signal.",
+    });
+    const body = await jsonOf<{
+      order: { id: string; status: string; avg_fill_px: number; notional_usd: number };
+      fills: Array<{ px: number; size: number }>;
+      risk: { leaderboard: { paper_pnl_usd: number; stale_data_status: string } };
+    }>(response);
+
+    expect(response.status).toBe(201);
+    expect(body.order.status).toBe("filled");
+    expect(body.order.avg_fill_px).toBeCloseTo(100.2);
+    expect(body.order.notional_usd).toBeCloseTo(50.1);
+    expect(body.fills).toHaveLength(2);
+    expect(sqliteDb.raw.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM paper_positions").get()?.count).toBe(1);
+    expect(body.risk.leaderboard.paper_pnl_usd).toBeLessThan(0);
+    expect(body.risk.leaderboard.stale_data_status).toBe("fresh");
+
+    const leaderboard = await jsonOf<{ label: string; leaderboard: Array<{ paper_account_id: string; paper_pnl_pct: number }> }>(
+      await app.fetch(new Request("http://ledger.test/paper/leaderboard")),
+    );
+    expect(leaderboard.label).toBe("paper");
+    expect(leaderboard.leaderboard[0]?.paper_account_id).toBe("paper-1");
+
+    const replay = await jsonOf<{ replay: { order: { id: string }; market_snapshot: { coin: string }; fills: unknown[]; audit: unknown[] } }>(
+      await app.fetch(new Request(`http://ledger.test/paper/orders/${body.order.id}/replay`)),
+    );
+    expect(replay.replay.order.id).toBe(body.order.id);
+    expect(replay.replay.market_snapshot.coin).toBe("BTC");
+    expect(replay.replay.fills).toHaveLength(2);
+    expect(replay.replay.audit.length).toBeGreaterThan(0);
+  });
+
+  test("supports GTC resting paper orders and rejects crossing ALO post-only orders", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({
+      coin: "ETH",
+      mark_px: 2000,
+      bids: [{ px: 1995, sz: 5 }],
+      asks: [{ px: 2005, sz: 5 }],
+    });
+
+    const gtc = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "gtc-1",
+      coin: "ETH",
+      side: "buy",
+      tif: "Gtc",
+      limit_px: 1900,
+      size: 0.1,
+      margin_mode: "cross",
+      leverage: 5,
+      reason: "Rest a bid below current book.",
+    });
+    const gtcBody = await jsonOf<{ order: { status: string; remaining_size: number } }>(gtc);
+    expect(gtc.status).toBe(201);
+    expect(gtcBody.order.status).toBe("resting");
+    expect(gtcBody.order.remaining_size).toBe(0.1);
+
+    const alo = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "alo-cross",
+      coin: "ETH",
+      side: "buy",
+      tif: "Alo",
+      limit_px: 2005,
+      size: 0.1,
+      margin_mode: "cross",
+      leverage: 5,
+      reason: "This post-only order should not cross.",
+    });
+    const aloBody = await jsonOf<{ order: { status: string; reject_reason: string } }>(alo);
+    expect(alo.status).toBe(201);
+    expect(aloBody.order.status).toBe("rejected");
+    expect(aloBody.order.reject_reason).toBe("post_only_would_cross");
+  });
+
+  test("refreshes Hyperliquid paper market snapshots from the info endpoint shape", async () => {
+    currentRpcFetch = mockHyperliquidFetch({
+      meta: [{ name: "BTC", maxLeverage: 40 }],
+      contexts: [{ markPx: "100", oraclePx: "101", funding: "0.00001" }],
+      books: {
+        BTC: {
+          bids: [{ px: "99", sz: "5", n: 2 }],
+          asks: [{ px: "100", sz: "3", n: 4 }],
+        },
+      },
+    });
+
+    const response = await postJson("/paper/market-snapshots/hyperliquid", { coin: "BTC" });
+    const body = await jsonOf<{ snapshots: Array<{ coin: string; source: string; mark_px: number; oracle_px: number; funding_rate: number; max_leverage: number; book: { bids: unknown[]; asks: unknown[] } }> }>(response);
+
+    expect(response.status).toBe(201);
+    expect(body.snapshots[0]?.coin).toBe("BTC");
+    expect(body.snapshots[0]?.source).toBe("hyperliquid");
+    expect(body.snapshots[0]?.mark_px).toBe(100);
+    expect(body.snapshots[0]?.oracle_px).toBe(101);
+    expect(body.snapshots[0]?.funding_rate).toBe(0.00001);
+    expect(body.snapshots[0]?.max_leverage).toBe(40);
+    expect(body.snapshots[0]?.book.bids).toHaveLength(1);
+    expect(body.snapshots[0]?.book.asks).toHaveLength(1);
+  });
+
+  test("rejects paper orders above the Hyperliquid market max leverage", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      max_leverage: 5,
+      bids: [{ px: 99, sz: 5 }],
+      asks: [{ px: 100, sz: 5 }],
+    });
+
+    const response = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "leverage-too-high",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 1,
+      margin_mode: "isolated",
+      leverage: 10,
+      reason: "This leverage should exceed the market cap.",
+    });
+    const body = await jsonOf<{ order: { status: string; reject_reason: string } }>(response);
+
+    expect(response.status).toBe(201);
+    expect(body.order.status).toBe("rejected");
+    expect(body.order.reject_reason).toBe("leverage_exceeds_hyperliquid_max");
+  });
+
+  test("liquidates an isolated paper position when mark price breaches maintenance margin", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      bids: [{ px: 99, sz: 5 }],
+      asks: [{ px: 100, sz: 5 }],
+    });
+    const order = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "iso-1",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 1,
+      margin_mode: "isolated",
+      leverage: 10,
+      reason: "Open isolated paper long.",
+    });
+    expect(order.status).toBe(201);
+
+    currentNow = new Date("2026-06-19T00:00:02.000Z");
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 90,
+      bids: [{ px: 89, sz: 5 }],
+      asks: [{ px: 90, sz: 5 }],
+    });
+    const liquidation = await postJson("/paper/accounts/paper-1/risk-check", {});
+    const body = await jsonOf<{ liquidations: Array<{ reason: string; liquidation_px: number }>; risk: { leaderboard: { liquidation_count: number } } }>(liquidation);
+
+    expect(liquidation.status).toBe(200);
+    expect(body.liquidations).toHaveLength(1);
+    expect(body.liquidations[0]?.reason).toBe("isolated_maintenance_margin_breach");
+    expect(body.liquidations[0]?.liquidation_px).toBe(90);
+    expect(body.risk.leaderboard.liquidation_count).toBe(1);
+    const position = sqliteDb.raw.query<{ status: string; signed_size: number }, []>("SELECT status, signed_size FROM paper_positions WHERE paper_account_id = 'paper-1'").get();
+    expect(position?.status).toBe("liquidated");
+    expect(position?.signed_size).toBe(0);
+  });
+
+  test("cron refreshes Hyperliquid market data and liquidates breached paper positions", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      max_leverage: 40,
+      bids: [{ px: 99, sz: 5 }],
+      asks: [{ px: 100, sz: 5 }],
+    });
+    const order = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "cron-monitor-iso",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 1,
+      margin_mode: "isolated",
+      leverage: 10,
+      reason: "Open isolated paper long before cron monitor.",
+    });
+    expect(order.status).toBe(201);
+
+    currentNow = new Date("2026-06-19T00:00:02.000Z");
+    currentRpcFetch = mockHyperliquidFetch({
+      meta: [{ name: "BTC", maxLeverage: 40 }],
+      contexts: [{ markPx: "90", oraclePx: "90", funding: "0.00001" }],
+      books: {
+        BTC: {
+          bids: [{ px: "89", sz: "5", n: 2 }],
+          asks: [{ px: "90", sz: "5", n: 4 }],
+        },
+      },
+    });
+
+    const tick = await postJson("/cron/tick", {});
+    const body = await jsonOf<{ paperMonitor: { status: string; accounts_checked: number; liquidations: Array<{ reason: string; liquidation_px: number }> } }>(tick);
+
+    expect(tick.status).toBe(200);
+    expect(body.paperMonitor.status).toBe("liquidations_executed");
+    expect(body.paperMonitor.accounts_checked).toBe(1);
+    expect(body.paperMonitor.liquidations).toHaveLength(1);
+    expect(body.paperMonitor.liquidations[0]?.reason).toBe("isolated_maintenance_margin_breach");
+    expect(body.paperMonitor.liquidations[0]?.liquidation_px).toBe(90);
+  });
+
+  test("enforces reduce-only paper orders and reopens a closed position", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      bids: [{ px: 99, sz: 5 }],
+      asks: [{ px: 100, sz: 5 }],
+    });
+
+    const open = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "reopen-open",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 1,
+      margin_mode: "cross",
+      leverage: 10,
+      reason: "Open a cross paper long.",
+    });
+    expect(open.status).toBe(201);
+
+    const increase = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "reduce-only-increase",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 0.1,
+      reduce_only: true,
+      margin_mode: "cross",
+      leverage: 10,
+      reason: "A reduce-only order cannot add to a long.",
+    });
+    const increaseBody = await jsonOf<{ order: { status: string; reject_reason: string } }>(increase);
+    expect(increase.status).toBe(201);
+    expect(increaseBody.order.status).toBe("rejected");
+    expect(increaseBody.order.reject_reason).toBe("reduce_only_would_increase");
+
+    const close = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "reduce-only-close",
+      coin: "BTC",
+      side: "sell",
+      tif: "Ioc",
+      size: 1,
+      reduce_only: true,
+      margin_mode: "cross",
+      leverage: 10,
+      reason: "Close the cross paper long.",
+    });
+    const closeBody = await jsonOf<{ order: { status: string } }>(close);
+    expect(close.status).toBe(201);
+    expect(closeBody.order.status).toBe("filled");
+
+    const closedPosition = sqliteDb.raw.query<{ status: string; signed_size: number }, []>(
+      "SELECT status, signed_size FROM paper_positions WHERE paper_account_id = 'paper-1' AND coin = 'BTC' AND margin_mode = 'cross'",
+    ).get();
+    expect(closedPosition?.status).toBe("closed");
+    expect(closedPosition?.signed_size).toBe(0);
+
+    const reopen = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "reopen-after-close",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 0.5,
+      margin_mode: "cross",
+      leverage: 10,
+      reason: "Reopen a cross paper long after full close.",
+    });
+    const reopenBody = await jsonOf<{ order: { status: string } }>(reopen);
+    expect(reopen.status).toBe(201);
+    expect(reopenBody.order.status).toBe("filled");
+
+    const reopenedPosition = sqliteDb.raw.query<{ status: string; signed_size: number; count: number }, []>(
+      `SELECT status, signed_size, COUNT(*) OVER () AS count
+       FROM paper_positions
+       WHERE paper_account_id = 'paper-1' AND coin = 'BTC' AND margin_mode = 'cross'`,
+    ).get();
+    expect(reopenedPosition?.status).toBe("open");
+    expect(reopenedPosition?.signed_size).toBe(0.5);
+    expect(reopenedPosition?.count).toBe(1);
+  });
 });
 
 async function registerBoard(overrides: Record<string, unknown> = {}) {
@@ -1426,6 +1791,30 @@ async function registerBoard(overrides: Record<string, unknown> = {}) {
 
   expect(response.status).toBe(201);
   return (await jsonOf<{ board: Record<string, any> }>(response)).board;
+}
+
+async function registerPaperAccount(overrides: Record<string, unknown> = {}) {
+  const response = await postJson("/paper/accounts", {
+    paper_account_id: "paper-1",
+    agent_id: "ironclaw",
+    agent_public_key: wallet.publicKey,
+    starting_balance_usd: 1000,
+    allowed_markets: ["BTC", "ETH"],
+    ...overrides,
+  });
+  expect(response.status).toBe(201);
+  return (await jsonOf<{ account: Record<string, any> }>(response)).account;
+}
+
+async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
+  const response = await postJson("/paper/market-snapshots", {
+    source: "hyperliquid-test-fixture",
+    maintenance_margin_rate: 0.005,
+    observed_at: currentNow.toISOString(),
+    ...overrides,
+  });
+  expect(response.status).toBe(201);
+  return (await jsonOf<{ snapshot: Record<string, any> }>(response)).snapshot;
 }
 
 async function postJson(
@@ -1463,6 +1852,38 @@ async function signedFetch(
     method,
     headers: signed.headers,
     body: signed.rawBody,
+  }));
+}
+
+async function paperSignedPost(path: string, body: Record<string, unknown>, signer = wallet) {
+  const rawBody = JSON.stringify(body);
+  const timestamp = currentNow.getTime().toString();
+  const nonce = crypto.randomUUID();
+  const bodyHash = sha256Hex(rawBody);
+  const paperAccountId = cleanBodyString(body.paper_account_id ?? body.paperAccountId, "paper_account_id");
+  const payload = canonicalPaperAuthPayload({
+    method: "POST",
+    path,
+    bodyHash,
+    timestamp,
+    nonce,
+    paperAccountId,
+    agentId: "ironclaw",
+  });
+  const signature = signer.keyPair.sign(new TextEncoder().encode(payload)).signature;
+
+  return await app.fetch(new Request(`http://ledger.test${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-clawhouse-paper-account-id": paperAccountId,
+      "x-clawhouse-agent-id": "ironclaw",
+      "x-clawhouse-paper-timestamp": timestamp,
+      "x-clawhouse-paper-nonce": nonce,
+      "x-clawhouse-paper-body-sha256": bodyHash,
+      "x-clawhouse-paper-signature": Buffer.from(signature).toString("base64url"),
+    },
+    body: rawBody,
   }));
 }
 
@@ -1529,6 +1950,43 @@ function columnNames(db: Database, table: string) {
 
 function countRows(table: "holding_snapshots" | "pnl_snapshots" | "events" | "observations" | "balance_changes") {
   return sqliteDb.raw.query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM ${table}`).get()?.count ?? 0;
+}
+
+function mockHyperliquidFetch(input: {
+  meta: Array<{ name: string; maxLeverage: number }>;
+  contexts: Array<{ markPx: string; oraclePx: string; funding: string }>;
+  books: Record<string, { bids: Array<{ px: string; sz: string; n: number }>; asks: Array<{ px: string; sz: string; n: number }> }>;
+}) {
+  return async (_request: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { type?: string; coin?: string };
+    if (body.type === "metaAndAssetCtxs") {
+      return new Response(JSON.stringify([{ universe: input.meta }, input.contexts]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (body.type === "l2Book" && body.coin) {
+      const book = input.books[body.coin.toUpperCase()];
+      if (!book) {
+        return new Response(JSON.stringify({ error: `missing book for ${body.coin}` }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({
+        coin: body.coin.toUpperCase(),
+        time: currentNow.getTime(),
+        levels: [book.bids, book.asks],
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ error: "unsupported hyperliquid mock request" }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    });
+  };
 }
 
 function nearViewResponse(value: unknown) {
