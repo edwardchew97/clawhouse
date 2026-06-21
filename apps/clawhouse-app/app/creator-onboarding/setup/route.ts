@@ -20,13 +20,6 @@ const tradingSkills = [
     decisionFields: ["direction", "leverage", "margin_mode", "size", "tif", "max_slippage_bps", "liquidation_risk"],
     url: "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
   },
-  {
-    name: "near-intents-spot-value",
-    venue: "near-intents-spot",
-    useWhen: "spot swaps or value movement without leverage, margin, shorts, or liquidation",
-    decisionFields: ["origin_asset", "destination_asset", "amount", "recipient", "refund_address", "slippage_bps", "deadline"],
-    url: "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/near-intents-spot-value/SKILL.md",
-  },
 ];
 
 const requiredInstall = requiredSkills.map((skill) => ({

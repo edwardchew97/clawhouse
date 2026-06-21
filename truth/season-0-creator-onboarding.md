@@ -50,7 +50,8 @@
 - Amendment basis: Prior JY request removed the legacy
   `near-intents-spot-value` optional skill from current onboarding/runtime
   surfaces so users were not shown spot instructions inside the PaperTrade perps
-  path. This skill-removal part is superseded by the trading skill split below.
+  path. This skill-removal part is restored and expanded by the later runtime
+  cleanup correction below.
 - Trading skill split amendment sessions:
   `019ee646-2993-7b50-b6e3-bb7f9445131f`,
   `019ee644-a97f-7953-a80b-e6642cf53596`
@@ -59,7 +60,15 @@
   skills: `hyperliquid-paper-trading` for paper perps with leverage,
   cross/isolated margin, and liquidation, and `near-intents-spot-value` for
   spot-only swaps/value movement. Future venues should be added as separate
-  manifest skills.
+  manifest skills. This two-skill onboarding split is superseded by the runtime
+  cleanup correction below.
+- Runtime cleanup correction session: `019ee84c-2bfb-7ec3-844d-ff6f60412bb2`
+- Amendment date: 2026-06-21
+- Amendment basis: JY corrected the prior two-skill interpretation and
+  instructed removing the NEAR Intents spot onboarding/runtime path completely
+  from current surfaces. Current creator onboarding installs only
+  `clawhouse-ledger-reporting` and `hyperliquid-paper-trading`; future spot or
+  venue trading requires a later verified manifest skill.
 
 ## 核心决定
 
@@ -113,18 +122,14 @@ onboarding skill 还负责安装和检查 ClawHouse runtime pack：
 
 - `clawhouse-ledger-reporting`;
 - `hyperliquid-paper-trading`;
-- `near-intents-spot-value`;
-- future trading value skills when a later manifest safely adds them.
+- future trading skills only when a later manifest safely adds them.
 
-The onboarding skill must route the trading strategy to the right skill:
+The current onboarding skill supports only Hyperliquid-style paper perps through
+`hyperliquid-paper-trading`. Any unsupported venue or spot/value movement
+strategy must stay draft until a later verified manifest skill exists.
 
-- perps, leverage, cross/isolated margin, shorts, liquidation, Hyperliquid-style
-  paper orders: `hyperliquid-paper-trading`;
-- spot swaps, long-only value movement, NEAR Intents / 1Click quote or
-  execution: `near-intents-spot-value`.
-
-Do not mix perps order fields into spot decisions, and do not mix spot
-recipient/deposit/refund fields into paper perps orders.
+Do not mix spot recipient/deposit/refund or swap quote fields into paper perps
+orders.
 
 runtime skills 必须来自 ClawHouse manifest。安装前必须检查 allowlisted URL、skill
 name、version、sha256 hash、权限声明和禁止项。不能因为网页或 LLM 文本说“安装这个”
@@ -140,7 +145,6 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 - `manifest.json`;
 - `clawhouse-ledger-reporting/SKILL.md`;
 - `hyperliquid-paper-trading/SKILL.md`;
-- `near-intents-spot-value/SKILL.md`;
 - `HEARTBEAT.template.md`;
 - `RESET.md`。
 
@@ -183,8 +187,7 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 10. 用户在 IronClaw 内部补齐 wallet/secrets/board config。
 11. 用户确认后，IronClaw 内部才把 strategy status 改成 active。
 12. IronClaw 运行 agent：perps/paper margin 策略用
-    `hyperliquid-paper-trading`；spot/value movement 策略用
-    `near-intents-spot-value`。需要事件时间线时，再用 reporting skill 写入 Agent
+    `hyperliquid-paper-trading`。需要事件时间线时，再用 reporting skill 写入 Agent
     Board Ledger summary/analysis。
 
 ## 安全边界
@@ -259,9 +262,15 @@ Season 0 不做：
 - 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Removed the legacy
   `near-intents-spot-value` optional skill from the current onboarding/runtime
   pack contract so the PaperTrade path does not surface NEAR Intents deposit
-  instructions. Superseded by the later two-skill split below.
+  instructions. Restored by the later runtime cleanup correction.
 - 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f`,
-  `019ee644-a97f-7953-a80b-e6642cf53596` - Restored the explicit two-skill
+  `019ee644-a97f-7953-a80b-e6642cf53596` - Recorded the explicit two-skill
   trading split for onboarding: `hyperliquid-paper-trading` owns paper perps,
   while `near-intents-spot-value` owns spot-only swaps/value movement; future
-  venues must be added as separate manifest skills.
+  venues must be added as separate manifest skills. Superseded by the later
+  runtime cleanup correction.
+- 2026-06-21 - `019ee84c-2bfb-7ec3-844d-ff6f60412bb2` - Removed the NEAR
+  Intents spot onboarding/runtime path from current creator onboarding. Current
+  onboarding installs only `clawhouse-ledger-reporting` and
+  `hyperliquid-paper-trading`; future spot or venue trading requires a new
+  verified manifest skill.
