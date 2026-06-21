@@ -70,17 +70,19 @@ Do not commit filled values for `ledgerAuthorizationHeader`, `ledgerAdminToken`,
 other tokens. Fill them only through the local Workbench Environment drawer or
 through your local `.env`.
 
-## Hyperliquid Paper Perps Flow
+## Hyperliquid Paper Trading Flow
 
-The `Hyperliquid Paper Perps` flow is the Workbench acceptance route for the
-current perps lane. It targets the implemented Agent Board Ledger backend
-paper-trading API under `/paper/...`, not a separate `/paper-trade/...` service.
+The `Hyperliquid Paper Trading` flow is the Workbench acceptance route for the
+current Hyperliquid paper lane. It targets the implemented Agent Board Ledger
+backend paper-trading API under `/paper/...`, not a separate `/paper-trade/...`
+service.
 
 The flow checks the local `hyperliquid-paper-trading` runtime skill, refreshes a
 Hyperliquid public market-data snapshot, runs the signed paper-order script, and
 then reads account state, risk, the public paper leaderboard, and replay proof.
-This lane is Hyperliquid-style paper perps/margin trading; it is not the older
-long-only spot wording from the superseded PaperTrade draft.
+The signed script covers both Hyperliquid-style paper perps and paper spot:
+perps exercise IOC/GTC/ALO orders, margin, risk, liquidation, and replay proof;
+spot exercises IOC fills, paper cash checks, holding checks, and replay proof.
 
 Use `ledgerBaseUrl` to target local, dev, or staging. Do not commit filled
 values for `ledgerAuthorizationHeader`, `ledgerAdminToken`, or signing wallet

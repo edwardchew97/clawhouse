@@ -1613,6 +1613,135 @@ describe("Agent Board Ledger local backend", () => {
     expect(body.snapshots[0]?.book.asks).toHaveLength(1);
   });
 
+  test("refreshes Hyperliquid paper spot snapshots from the spot info endpoint shape", async () => {
+    currentRpcFetch = mockHyperliquidFetch({
+      meta: [],
+      contexts: [],
+      spotMeta: [{ name: "PURR/USDC", index: 0 }],
+      spotContexts: [{ markPx: "0.2", midPx: "0.2" }],
+      books: {
+        "PURR/USDC": {
+          bids: [{ px: "0.19", sz: "100", n: 2 }],
+          asks: [{ px: "0.2", sz: "100", n: 4 }],
+        },
+      },
+    });
+
+    const response = await postJson("/paper/market-snapshots/hyperliquid", {
+      market_type: "spot",
+      coin: "PURR/USDC",
+    });
+    const body = await jsonOf<{ snapshots: Array<{ market_type: string; coin: string; source: string; mark_px: number; funding_rate: number | null; max_leverage: number | null; book: { bids: unknown[]; asks: unknown[] } }> }>(response);
+
+    expect(response.status).toBe(201);
+    expect(body.snapshots[0]?.market_type).toBe("spot");
+    expect(body.snapshots[0]?.coin).toBe("PURR/USDC");
+    expect(body.snapshots[0]?.source).toBe("hyperliquid");
+    expect(body.snapshots[0]?.mark_px).toBe(0.2);
+    expect(body.snapshots[0]?.funding_rate).toBeNull();
+    expect(body.snapshots[0]?.max_leverage).toBeNull();
+    expect(body.snapshots[0]?.book.bids).toHaveLength(1);
+    expect(body.snapshots[0]?.book.asks).toHaveLength(1);
+  });
+
+  test("refreshes non-PURR Hyperliquid paper spot snapshots using the spot pair index book symbol", async () => {
+    currentRpcFetch = mockHyperliquidFetch({
+      meta: [],
+      contexts: [],
+      spotMeta: [{ name: "HYPE/USDC", index: 107 }],
+      spotContexts: [{ markPx: "32", midPx: "32" }],
+      books: {
+        "@107": {
+          bids: [{ px: "31.9", sz: "10", n: 2 }],
+          asks: [{ px: "32", sz: "10", n: 4 }],
+        },
+      },
+    });
+
+    const response = await postJson("/paper/market-snapshots/hyperliquid", {
+      market_type: "spot",
+      coin: "HYPE/USDC",
+    });
+    const body = await jsonOf<{ snapshots: Array<{ market_type: string; coin: string; mark_px: number; book: { bids: unknown[]; asks: unknown[] } }> }>(response);
+
+    expect(response.status).toBe(201);
+    expect(body.snapshots[0]?.market_type).toBe("spot");
+    expect(body.snapshots[0]?.coin).toBe("HYPE/USDC");
+    expect(body.snapshots[0]?.mark_px).toBe(32);
+    expect(body.snapshots[0]?.book.bids).toHaveLength(1);
+    expect(body.snapshots[0]?.book.asks).toHaveLength(1);
+  });
+
+  test("fills a signed Hyperliquid spot paper order and rejects selling more than held", async () => {
+    await registerPaperAccount({ allowed_markets: ["spot:PURR/USDC"] });
+    await createPaperMarketSnapshot({
+      market_type: "spot",
+      coin: "PURR/USDC",
+      mark_px: 0.2,
+      maintenance_margin_rate: 0.001,
+      bids: [{ px: 0.19, sz: 100 }],
+      asks: [{ px: 0.2, sz: 50 }],
+    });
+
+    const buy = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "spot-buy",
+      market_type: "spot",
+      coin: "PURR/USDC",
+      side: "buy",
+      tif: "Ioc",
+      size: 10,
+      margin_mode: "spot",
+      reason: "Open a paper spot PURR position.",
+    });
+    const buyBody = await jsonOf<{
+      order: { id: string; market_type: string; status: string; notional_usd: number };
+      fills: Array<{ market_type: string; px: number; size: number }>;
+      risk: { risk: { equity_usd: number; maintenance_margin_usd: number } };
+    }>(buy);
+
+    expect(buy.status).toBe(201);
+    expect(buyBody.order.market_type).toBe("spot");
+    expect(buyBody.order.status).toBe("filled");
+    expect(buyBody.order.notional_usd).toBeCloseTo(2);
+    expect(buyBody.fills[0]?.market_type).toBe("spot");
+    expect(buyBody.risk.risk.maintenance_margin_usd).toBe(0);
+
+    const account = sqliteDb.raw.query<{ cash_balance_usd: number }, []>(
+      "SELECT cash_balance_usd FROM paper_accounts WHERE id = 'paper-1'",
+    ).get();
+    expect(account?.cash_balance_usd).toBeCloseTo(997.9993);
+    const position = sqliteDb.raw.query<{ market_type: string; margin_mode: string; signed_size: number }, []>(
+      "SELECT market_type, margin_mode, signed_size FROM paper_positions WHERE paper_account_id = 'paper-1' AND coin = 'PURR/USDC'",
+    ).get();
+    expect(position?.market_type).toBe("spot");
+    expect(position?.margin_mode).toBe("spot");
+    expect(position?.signed_size).toBe(10);
+
+    const oversell = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "spot-oversell",
+      market_type: "spot",
+      coin: "PURR/USDC",
+      side: "sell",
+      tif: "Ioc",
+      size: 11,
+      margin_mode: "spot",
+      reason: "This should fail because the paper spot account holds only 10 PURR.",
+    });
+    const oversellBody = await jsonOf<{ order: { status: string; reject_reason: string } }>(oversell);
+    expect(oversell.status).toBe(201);
+    expect(oversellBody.order.status).toBe("rejected");
+    expect(oversellBody.order.reject_reason).toBe("spot_insufficient_position");
+
+    const replay = await jsonOf<{ replay: { order: { market_type: string }; market_snapshot: { market_type: string }; fills: unknown[] } }>(
+      await app.fetch(new Request(`http://ledger.test/paper/orders/${buyBody.order.id}/replay`)),
+    );
+    expect(replay.replay.order.market_type).toBe("spot");
+    expect(replay.replay.market_snapshot.market_type).toBe("spot");
+    expect(replay.replay.fills).toHaveLength(1);
+  });
+
   test("rejects paper orders above the Hyperliquid market max leverage", async () => {
     await registerPaperAccount();
     await createPaperMarketSnapshot({
@@ -1682,6 +1811,80 @@ describe("Agent Board Ledger local backend", () => {
     expect(position?.signed_size).toBe(0);
   });
 
+  test("risk-check liquidates breached perps without liquidating spot paper positions", async () => {
+    await registerPaperAccount({ allowed_markets: ["BTC", "spot:PURR/USDC"] });
+    await createPaperMarketSnapshot({
+      market_type: "spot",
+      coin: "PURR/USDC",
+      mark_px: 0.2,
+      bids: [{ px: 0.19, sz: 100 }],
+      asks: [{ px: 0.2, sz: 100 }],
+    });
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      bids: [{ px: 99, sz: 200 }],
+      asks: [{ px: 100, sz: 200 }],
+    });
+
+    const spotOrder = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "risk-check-spot",
+      market_type: "spot",
+      coin: "PURR/USDC",
+      side: "buy",
+      tif: "Ioc",
+      size: 10,
+      margin_mode: "spot",
+      reason: "Open spot inventory that must survive perp liquidation.",
+    });
+    expect(spotOrder.status).toBe(201);
+
+    const perpOrder = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "risk-check-cross-perp",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 90,
+      margin_mode: "cross",
+      leverage: 10,
+      reason: "Open cross-margin paper long for liquidation regression.",
+    });
+    expect(perpOrder.status).toBe(201);
+
+    currentNow = new Date("2026-06-19T00:00:02.000Z");
+    await createPaperMarketSnapshot({
+      market_type: "spot",
+      coin: "PURR/USDC",
+      mark_px: 0.2,
+      bids: [{ px: 0.19, sz: 100 }],
+      asks: [{ px: 0.2, sz: 100 }],
+    });
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 88,
+      bids: [{ px: 87, sz: 200 }],
+      asks: [{ px: 88, sz: 200 }],
+    });
+
+    const riskCheck = await postJson("/paper/accounts/paper-1/risk-check", {});
+    const body = await jsonOf<{ liquidations: Array<{ reason: string; liquidation_px: number }> }>(riskCheck);
+
+    expect(riskCheck.status).toBe(200);
+    expect(body.liquidations).toHaveLength(1);
+    expect(body.liquidations[0]?.reason).toBe("cross_maintenance_margin_breach");
+    expect(body.liquidations[0]?.liquidation_px).toBe(88);
+
+    const positions = sqliteDb.raw.query<{ market_type: string; status: string; signed_size: number }, []>(
+      "SELECT market_type, status, signed_size FROM paper_positions WHERE paper_account_id = 'paper-1' ORDER BY market_type ASC",
+    ).all();
+    expect(positions).toEqual([
+      { market_type: "perp", status: "liquidated", signed_size: 0 },
+      { market_type: "spot", status: "open", signed_size: 10 },
+    ]);
+  });
+
   test("cron refreshes Hyperliquid market data and liquidates breached paper positions", async () => {
     await registerPaperAccount();
     await createPaperMarketSnapshot({
@@ -1725,6 +1928,41 @@ describe("Agent Board Ledger local backend", () => {
     expect(body.paperMonitor.liquidations).toHaveLength(1);
     expect(body.paperMonitor.liquidations[0]?.reason).toBe("isolated_maintenance_margin_breach");
     expect(body.paperMonitor.liquidations[0]?.liquidation_px).toBe(90);
+  });
+
+  test("cron paper liquidation monitor ignores open spot paper positions", async () => {
+    await registerPaperAccount({ allowed_markets: ["spot:PURR/USDC"] });
+    await createPaperMarketSnapshot({
+      market_type: "spot",
+      coin: "PURR/USDC",
+      mark_px: 0.2,
+      bids: [{ px: 0.19, sz: 100 }],
+      asks: [{ px: 0.2, sz: 100 }],
+    });
+    const order = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "cron-monitor-spot",
+      market_type: "spot",
+      coin: "PURR/USDC",
+      side: "buy",
+      tif: "Ioc",
+      size: 10,
+      margin_mode: "spot",
+      reason: "Open a paper spot position before cron monitor.",
+    });
+    expect(order.status).toBe(201);
+
+    currentRpcFetch = async () => {
+      throw new Error("cron monitor should not refresh Hyperliquid perps for spot paper positions");
+    };
+
+    const tick = await postJson("/cron/tick", {});
+    const body = await jsonOf<{ paperMonitor: { status: string; accounts_checked: number; liquidations: unknown[] } }>(tick);
+
+    expect(tick.status).toBe(200);
+    expect(body.paperMonitor.status).toBe("skipped_no_open_positions");
+    expect(body.paperMonitor.accounts_checked).toBe(0);
+    expect(body.paperMonitor.liquidations).toHaveLength(0);
   });
 
   test("enforces reduce-only paper orders and reopens a closed position", async () => {
@@ -2005,12 +2243,20 @@ function countRows(table: "holding_snapshots" | "pnl_snapshots" | "events" | "ob
 function mockHyperliquidFetch(input: {
   meta: Array<{ name: string; maxLeverage: number }>;
   contexts: Array<{ markPx: string; oraclePx: string; funding: string }>;
+  spotMeta?: Array<{ name: string; index: number }>;
+  spotContexts?: Array<{ markPx?: string; midPx?: string; oraclePx?: string }>;
   books: Record<string, { bids: Array<{ px: string; sz: string; n: number }>; asks: Array<{ px: string; sz: string; n: number }> }>;
 }) {
   return async (_request: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as { type?: string; coin?: string };
     if (body.type === "metaAndAssetCtxs") {
       return new Response(JSON.stringify([{ universe: input.meta }, input.contexts]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (body.type === "spotMetaAndAssetCtxs") {
+      return new Response(JSON.stringify([{ universe: input.spotMeta ?? [] }, input.spotContexts ?? []]), {
         status: 200,
         headers: { "content-type": "application/json" },
       });

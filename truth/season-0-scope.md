@@ -37,29 +37,35 @@
   paper plus board paper and kept Hyperliquid board paper long-only spot. It is
   retained as provenance, but the later Hyperliquid-style paper trading
   amendment in session `019ee644-a97f-7953-a80b-e6642cf53596` supersedes the
-  spot-only limit for the current backend implementation.
+  long-only limit for the current backend implementation.
 - Runtime cleanup amendment session: `019ee858-16a0-7603-b385-1d7a379e3a94`
 - Amendment date: 2026-06-21
-- Amendment basis: Prior JY request removed the legacy NEAR Intents spot-value
-  runtime skill from current onboarding surfaces so PaperTrade users were not
-  shown spot instructions inside the perps path. This skill-removal part is
-  restored and expanded by the later runtime cleanup correction below.
+- Amendment basis: Prior JY request removed the legacy runtime skill
+  from current onboarding surfaces so PaperTrade users were not shown spot
+  instructions inside the perps path. This skill-removal part is restored and
+  expanded by the later runtime cleanup correction below.
 - Trading skill split amendment sessions:
   `019ee646-2993-7b50-b6e3-bb7f9445131f`,
   `019ee644-a97f-7953-a80b-e6642cf53596`
 - Amendment date: 2026-06-21
 - Amendment basis: JY clarified that spot trading and perps trading should be
   separate runtime skills. Hyperliquid paper remains the perps/margin/liquidation
-  lane; NEAR Intents returns as the spot-only value movement lane. Future venues
+  lane; a separate legacy skill owns value movement. Future venues
   must be added as separate skills. This two-skill runtime split is superseded
   by the runtime cleanup correction below.
 - Runtime cleanup correction session: `019ee84c-2bfb-7ec3-844d-ff6f60412bb2`
 - Amendment date: 2026-06-21
 - Amendment basis: JY corrected the prior two-skill interpretation and
-  instructed removing the NEAR Intents spot runtime/onboarding path completely
+  instructed removing the legacy spot runtime/onboarding path completely
   from current surfaces. Current Season 0 runtime/onboarding exposes only the
-  Hyperliquid paper perps trading skill; future spot or venue trading requires a
-  later verified manifest skill.
+  Hyperliquid paper trading skill. The older narrow wording is superseded
+  by the Hyperliquid spot correction below.
+- Hyperliquid spot correction session: `019ee87b-baf0-75c0-8d92-41c30fefb43b`
+- Amendment date: 2026-06-21
+- Amendment basis: JY confirmed that current paper trading must support
+  Hyperliquid paper perps and Hyperliquid paper spot through the same
+  `hyperliquid-paper-trading` runtime skill, while removing the legacy spot
+  runtime/onboarding path from current documentation.
 
 ## 一句话
 
@@ -146,7 +152,7 @@ Scope V0 preview 使用 split-network 架构：
   Hyperliquid-style paper trading。
 
 这个拆分是强约束。key trading 可以先在 testnet 展示真实合约状态和 holder gate；
-agent trading 不再用 NEAR Intents spot 作为第一条交易主线。ClawHouse backend 接收
+agent trading 不再用 legacy spot value path 作为第一条交易主线。ClawHouse backend 接收
 agent paper orders，用 Hyperliquid market data 做 depth、margin、risk 和 liquidation
 计算，并把 Paper PnL 作为 leaderboard 的 agent-trading 输入。
 
@@ -218,11 +224,13 @@ NEAR Intents 也不负责当前 Hyperliquid paper trading 的：
 - leverage。
 - agent key market execution。
 
-Current onboarding/runtime surfaces must not expose a NEAR Intents spot runtime
-skill. Future spot or venue trading requires a new verified manifest skill and a
-new accepted truth update before onboarding can route agents to it.
+Current onboarding/runtime surfaces must not expose a legacy spot runtime
+skill. Current Hyperliquid paper trading uses `hyperliquid-paper-trading` for
+both `market_type: "perp"` and `market_type: "spot"`. Non-Hyperliquid venues
+require a new verified manifest skill and a new accepted truth update before
+onboarding can route agents to them.
 
-## Hyperliquid Paper Perps Boundary
+## Hyperliquid Paper Trading Boundary
 
 Current agent trading uses a ClawHouse-owned Hyperliquid-style paper engine.
 It is not real-money execution and it must be labeled as paper in product and
@@ -231,10 +239,12 @@ API surfaces.
 The first backend slice must support:
 
 - agent-submitted paper orders over HTTPS;
+- `market_type: "perp"` and `market_type: "spot"` paper orders;
 - Hyperliquid market-data-backed depth checks;
 - deterministic paper fills for IOC and market-like orders;
 - resting paper limit orders with GTC and ALO time-in-force;
-- cross margin and isolated margin position accounting;
+- cross margin and isolated margin position accounting for perps;
+- paper cash and holding checks for spot;
 - funding and fee accounting when the source data is available;
 - timely liquidation from fresh mark/risk data;
 - hash-linked audit/replay proof for orders, fills, risk checks, liquidations,
@@ -330,12 +340,15 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
   deposit instructions in the perps path. Restored by the later runtime cleanup
   correction.
 - 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f`,
-  `019ee644-a97f-7953-a80b-e6642cf53596` - Recorded NEAR Intents as a separate
-  spot-only runtime skill while keeping Hyperliquid paper as the perps/margin/
+  `019ee644-a97f-7953-a80b-e6642cf53596` - Recorded a separate legacy
+  removed legacy runtime skill while keeping Hyperliquid paper as the perps/margin/
   liquidation lane; future venues must be added as separate skills. Superseded
   by the later runtime cleanup correction.
-- 2026-06-21 - `019ee84c-2bfb-7ec3-844d-ff6f60412bb2` - Removed the NEAR
-  Intents spot runtime/onboarding path from current Season 0 scope. Current
-  runtime/onboarding exposes only the Hyperliquid paper perps trading skill;
-  future spot or venue trading requires a new verified manifest skill and truth
-  update.
+- 2026-06-21 - `019ee84c-2bfb-7ec3-844d-ff6f60412bb2` - Removed the legacy
+  spot runtime/onboarding path from current Season 0 scope. Current
+  runtime/onboarding exposes only the Hyperliquid paper trading skill. The
+  older narrow wording is superseded by the Hyperliquid spot correction.
+- 2026-06-21 - `019ee87b-baf0-75c0-8d92-41c30fefb43b` - Confirmed
+  `hyperliquid-paper-trading` as the current paper trading skill for
+  Hyperliquid paper perps and Hyperliquid paper spot, with the legacy spot route
+  removed from current runtime/onboarding documentation.

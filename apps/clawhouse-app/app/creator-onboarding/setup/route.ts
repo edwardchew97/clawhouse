@@ -15,9 +15,9 @@ const requiredSkills = [
 const tradingSkills = [
   {
     name: "hyperliquid-paper-trading",
-    venue: "hyperliquid-paper-perps",
-    useWhen: "perps, leverage, margin, shorts, liquidation, funding, or Hyperliquid-style paper orders",
-    decisionFields: ["direction", "leverage", "margin_mode", "size", "tif", "max_slippage_bps", "liquidation_risk"],
+    venue: "hyperliquid-paper",
+    useWhen: "Hyperliquid paper perps or Hyperliquid paper spot orders through ClawHouse",
+    decisionFields: ["market_type", "coin", "side", "leverage", "margin_mode", "size", "tif", "max_slippage_bps", "liquidation_risk"],
     url: "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
   },
 ];

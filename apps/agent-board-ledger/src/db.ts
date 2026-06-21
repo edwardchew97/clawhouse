@@ -411,6 +411,7 @@ export function migrate(db: Database) {
 
     CREATE TABLE IF NOT EXISTS paper_market_snapshots (
       id TEXT PRIMARY KEY,
+      market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       source TEXT NOT NULL,
       mark_px REAL NOT NULL,
@@ -425,13 +426,14 @@ export function migrate(db: Database) {
     );
 
     CREATE INDEX IF NOT EXISTS paper_market_snapshots_coin_observed_idx
-      ON paper_market_snapshots(coin, observed_at);
+      ON paper_market_snapshots(market_type, coin, observed_at);
 
     CREATE TABLE IF NOT EXISTS paper_orders (
       id TEXT PRIMARY KEY,
       paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
       agent_id TEXT NOT NULL,
       client_order_id TEXT NOT NULL,
+      market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       side TEXT NOT NULL,
       tif TEXT NOT NULL,
@@ -459,12 +461,13 @@ export function migrate(db: Database) {
     CREATE INDEX IF NOT EXISTS paper_orders_account_created_idx
       ON paper_orders(paper_account_id, created_at);
     CREATE INDEX IF NOT EXISTS paper_orders_status_idx
-      ON paper_orders(status, coin);
+      ON paper_orders(status, market_type, coin);
 
     CREATE TABLE IF NOT EXISTS paper_fills (
       id TEXT PRIMARY KEY,
       order_id TEXT NOT NULL REFERENCES paper_orders(id),
       paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
+      market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       side TEXT NOT NULL,
       px REAL NOT NULL,
@@ -482,6 +485,7 @@ export function migrate(db: Database) {
     CREATE TABLE IF NOT EXISTS paper_positions (
       id TEXT PRIMARY KEY,
       paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
+      market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       margin_mode TEXT NOT NULL,
       signed_size REAL NOT NULL,
@@ -494,7 +498,7 @@ export function migrate(db: Database) {
       status TEXT NOT NULL DEFAULT 'open',
       updated_at TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      UNIQUE(paper_account_id, coin, margin_mode)
+      UNIQUE(paper_account_id, market_type, coin, margin_mode)
     );
 
     CREATE TABLE IF NOT EXISTS paper_risk_snapshots (
@@ -610,7 +614,11 @@ export function migrate(db: Database) {
   ensureColumn(db, "pnl_snapshots", "reason_missing_count", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "pnl_snapshots", "staleness_status", "TEXT NOT NULL DEFAULT 'unknown'");
   ensureColumn(db, "pnl_snapshots", "completeness_status", "TEXT NOT NULL DEFAULT 'unknown'");
+  ensureColumn(db, "paper_market_snapshots", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
   ensureColumn(db, "paper_market_snapshots", "max_leverage", "REAL");
+  ensureColumn(db, "paper_orders", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
+  ensureColumn(db, "paper_fills", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
+  ensureColumn(db, "paper_positions", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
 
   if (hasColumn(db, "pnl_snapshots", "starting_value_usd")) {
     db.exec(`

@@ -2,7 +2,7 @@
   "schema": "clawhouse.runtime-pack.v0",
   "pack": {
     "name": "clawhouse-ironclaw-runtime",
-    "version": "0.3.1-dev",
+    "version": "0.4.0-dev",
     "distribution_status": "development",
     "source_branch": "public-onboarding-kit-main",
     "updated_at": "2026-06-21",
@@ -71,10 +71,10 @@
     },
     {
       "name": "hyperliquid-paper-trading",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
-      "sha256": "d4b5bfdde0fc386fbc3ddd70b8efd9c2a5df421104649c3ebaf744e73b06915c",
+      "sha256": "fc2fe771eaa001d6e1ea04955e261e95d3f5e53ecca6a665bbd0169f1e769a9e",
       "install": {
         "tool": "skill_install",
         "parameters": {
@@ -107,18 +107,22 @@
         "paper_pnl_as_real_pnl"
       ],
       "routing": {
-        "venue": "hyperliquid-paper-perps",
+        "venue": "hyperliquid-paper",
         "use_when": [
-          "perps",
-          "leverage",
+          "paper_perps",
+          "paper_spot",
           "cross_or_isolated_margin",
+          "spot_cash_and_holding_checks",
+          "leverage",
           "shorts",
           "liquidation",
           "hyperliquid_style_paper_orders"
         ],
-        "do_not_use_for": [
-          "spot_swaps"
-        ]
+        "market_types": [
+          "perp",
+          "spot"
+        ],
+        "do_not_use_for": []
       },
       "initial_onboarding_install": "allowed_after_manifest_check_and_user_pack_approval",
       "heartbeat_auto_update": true

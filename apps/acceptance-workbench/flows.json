@@ -1677,13 +1677,13 @@
     },
     {
       "id": "papertrade-story",
-      "name": "Hyperliquid Paper Perps",
-      "purpose": "Acceptance story for current Agent Trading perps lane: ClawHouse-hosted Hyperliquid-style paper perps through the implemented /paper/... backend APIs, signed agent paper orders, market-data snapshots, margin/risk, leaderboard, and replay proof.",
+      "name": "Hyperliquid Paper Trading",
+      "purpose": "Acceptance story for current Agent Trading lane: ClawHouse-hosted Hyperliquid-style paper perps and paper spot through the implemented /paper/... backend APIs, signed agent paper orders, market-data snapshots, margin/risk, spot cash/holding checks, leaderboard, and replay proof.",
       "steps": [
         {
           "id": "paperTrade.runtime.inspectManifest",
           "name": "Inspect Trading Runtime Skills",
-          "description": "Runs the real runtime-manifest inspection for the development trading skill: hyperliquid-paper-trading for paper perps.",
+          "description": "Runs the real runtime-manifest inspection for the development trading skill: hyperliquid-paper-trading for paper perps and paper spot.",
           "type": "script",
           "access": "public",
           "command": "bun",
@@ -1712,7 +1712,7 @@
           "url": "{{ledgerBaseUrl}}/health",
           "runningNotes": [
             "Calling the real backend /health endpoint.",
-            "Hyperliquid paper perps currently live in the Agent Board Ledger backend under /paper/..."
+            "Hyperliquid paper perps and spot currently live in the Agent Board Ledger backend under /paper/..."
           ],
           "inputs": {
             "ledgerBaseUrl": "http://127.0.0.1:4321"
@@ -2878,8 +2878,8 @@
         },
         {
           "id": "developerSetup.paperTrading.fullFlow",
-          "name": "Run Hyperliquid Paper Perps Flow",
-          "description": "Runs the script-backed Hyperliquid-style paper trading flow against the real local Ledger backend: paper account, market snapshots, signed agent orders, margin, liquidation, leaderboard, and replay proof.",
+          "name": "Run Hyperliquid Paper Trading Flow",
+          "description": "Runs the script-backed Hyperliquid-style paper trading flow against the real local Ledger backend: paper account, perp and spot market snapshots, signed agent orders, margin, spot cash/holding checks, liquidation, leaderboard, and replay proof.",
           "type": "script",
           "access": "protected",
           "command": "bun",

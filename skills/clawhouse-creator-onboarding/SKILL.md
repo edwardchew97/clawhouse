@@ -1,7 +1,7 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.3.1
-description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard a Season 0 Hyperliquid paper perps agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, run dry checks, or reset/retest onboarding without exposing secrets.
+version: 0.4.0
+description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard a Season 0 Hyperliquid paper trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, run dry checks, or reset/retest onboarding without exposing secrets.
 ---
 
 # ClawHouse Creator Onboarding
@@ -51,7 +51,7 @@ Report the blocker and keep the strategy in draft.
 - Deposits, withdrawals, custody, or funds policy.
 - Trade execution.
 - Agent Board Ledger writes; use `clawhouse-ledger-reporting`.
-- Perps orders; use `hyperliquid-paper-trading`.
+- Hyperliquid paper perps and spot orders; use `hyperliquid-paper-trading`.
 - Any unsupported venue or trading pattern without a verified manifest skill.
 - Product-scope changes; use the repo truth process instead.
 
@@ -125,6 +125,7 @@ clawhouse_agent_profile:
   trading_strategy: ""
   allowed_venues:
     - "hyperliquid-paper-perps"
+    - "hyperliquid-paper-spot"
   runtime_skills:
     required:
       - "clawhouse-ledger-reporting"
@@ -137,6 +138,7 @@ clawhouse_agent_profile:
     paper_pnl_label_required: true
     no_real_hyperliquid_orders: true
     no_unsupported_venue_execution: true
+    hyperliquid_spot_is_paper_only: true
     no_borrowing: true
     no_withdrawals: true
     secrets_stay_in_ironclaw: true

@@ -33,12 +33,19 @@ type HyperliquidAssetMeta = {
   maxLeverage?: number;
 };
 
+type HyperliquidSpotAssetMeta = {
+  name: string;
+  index?: number;
+};
+
 type HyperliquidAssetContext = {
   markPx?: string;
   midPx?: string;
   oraclePx?: string;
   funding?: string;
 };
+
+type MarketType = "perp" | "spot";
 
 export async function refreshHyperliquidPaperMarketSnapshots(
   db: LedgerDb,
@@ -48,10 +55,12 @@ export async function refreshHyperliquidPaperMarketSnapshots(
   createdAt: string,
 ) {
   const data = asRecord(body.json);
+  const marketType = readMarketType(data);
   return await refreshHyperliquidPaperMarketSnapshotsForCoins(
     db,
     fetchLike,
     env,
+    marketType,
     readCoins(data),
     createdAt,
   );
@@ -67,6 +76,7 @@ export async function runPaperLiquidationMonitor(
     `SELECT DISTINCT paper_account_id, coin
        FROM paper_positions
       WHERE status = 'open'
+        AND market_type = 'perp'
         AND ABS(signed_size) > 0
       ORDER BY coin ASC, paper_account_id ASC`,
   );
@@ -84,7 +94,7 @@ export async function runPaperLiquidationMonitor(
   }
 
   const coins = [...new Set(openPositions.map((position) => normalizeCoin(position.coin)))];
-  const refreshed = await refreshHyperliquidPaperMarketSnapshotsForCoins(db, fetchLike, env, coins, createdAt);
+  const refreshed = await refreshHyperliquidPaperMarketSnapshotsForCoins(db, fetchLike, env, "perp", coins, createdAt);
   const accounts = [...new Set(openPositions.map((position) => position.paper_account_id))];
   const riskChecks = [];
   const liquidations = [];
@@ -111,6 +121,7 @@ async function refreshHyperliquidPaperMarketSnapshotsForCoins(
   db: LedgerDb,
   fetchLike: FetchLike,
   env: RuntimeEnv,
+  marketType: MarketType,
   coins: string[],
   createdAt: string,
 ) {
@@ -119,13 +130,23 @@ async function refreshHyperliquidPaperMarketSnapshotsForCoins(
 
   const infoUrl = cleanString(env[HYPERLIQUID_INFO_URL_ENV]) ?? DEFAULT_HYPERLIQUID_INFO_URL;
   const dex = cleanString(env[HYPERLIQUID_DEX_ENV]) ?? undefined;
-  const metaAndContexts = await fetchHyperliquidMetaAndAssetContexts(fetchLike, infoUrl, dex);
+  const metaAndContexts = marketType === "spot"
+    ? await fetchHyperliquidSpotMetaAndAssetContexts(fetchLike, infoUrl)
+    : await fetchHyperliquidMetaAndAssetContexts(fetchLike, infoUrl, dex);
   const snapshots = [];
 
   for (const coin of uniqueCoins) {
-    const market = readHyperliquidAsset(metaAndContexts, coin);
-    const book = await fetchHyperliquidBook(fetchLike, infoUrl, coin, dex);
+    const market = marketType === "spot"
+      ? readHyperliquidSpotAsset(metaAndContexts, coin)
+      : readHyperliquidAsset(metaAndContexts, coin);
+    const book = await fetchHyperliquidBook(
+      fetchLike,
+      infoUrl,
+      marketType === "spot" ? market.bookCoin : coin,
+      marketType === "spot" ? undefined : dex,
+    );
     const bodyJson = {
+      market_type: marketType,
       coin,
       source: "hyperliquid",
       mark_px: market.markPx,
@@ -149,10 +170,25 @@ async function refreshHyperliquidPaperMarketSnapshotsForCoins(
   return {
     ok: true,
     source: "hyperliquid",
+    market_type: marketType,
     info_url: infoUrl,
     coins: uniqueCoins,
     snapshots,
   };
+}
+
+async function fetchHyperliquidSpotMetaAndAssetContexts(fetchLike: FetchLike, infoUrl: string) {
+  const response = await postHyperliquidInfo(fetchLike, infoUrl, { type: "spotMetaAndAssetCtxs" });
+  if (!Array.isArray(response) || response.length < 2) {
+    throw new RequestError("Hyperliquid spotMetaAndAssetCtxs response is invalid", 502);
+  }
+  const meta = asRecord(response[0]);
+  const universe = meta.universe;
+  const contexts = response[1];
+  if (!Array.isArray(universe) || !Array.isArray(contexts)) {
+    throw new RequestError("Hyperliquid spotMetaAndAssetCtxs response is missing universe or contexts", 502);
+  }
+  return { universe, contexts };
 }
 
 async function fetchHyperliquidBook(fetchLike: FetchLike, infoUrl: string, coin: string, dex: string | undefined) {
@@ -221,11 +257,38 @@ function readHyperliquidAsset(metaAndContexts: { universe: unknown[]; contexts: 
   const context = asRecord(metaAndContexts.contexts[index]) as Partial<HyperliquidAssetContext>;
   const markPx = readPositiveNumber(context.markPx ?? context.midPx ?? context.oraclePx, `${coin}.markPx`);
   return {
+    bookCoin: coin,
     markPx,
     oraclePx: readOptionalPositiveNumber(context.oraclePx, `${coin}.oraclePx`),
     fundingRate: readOptionalNumber(context.funding, `${coin}.funding`),
     maxLeverage: readOptionalPositiveNumber(meta.maxLeverage, `${coin}.maxLeverage`),
   };
+}
+
+function readHyperliquidSpotAsset(metaAndContexts: { universe: unknown[]; contexts: unknown[] }, coin: string) {
+  const index = metaAndContexts.universe.findIndex((item) => {
+    const asset = asRecord(item) as Partial<HyperliquidSpotAssetMeta>;
+    return cleanString(asset.name)?.toUpperCase() === coin || readSpotBookCoin(asset)?.toUpperCase() === coin;
+  });
+  if (index < 0) throw new RequestError(`Hyperliquid spot asset not found: ${coin}`, 400);
+
+  const meta = asRecord(metaAndContexts.universe[index]) as Partial<HyperliquidSpotAssetMeta>;
+  const context = asRecord(metaAndContexts.contexts[index]) as Partial<HyperliquidAssetContext>;
+  const markPx = readPositiveNumber(context.markPx ?? context.midPx ?? context.oraclePx, `${coin}.markPx`);
+  return {
+    bookCoin: readSpotBookCoin(meta) ?? coin,
+    markPx,
+    oraclePx: readOptionalPositiveNumber(context.oraclePx, `${coin}.oraclePx`),
+    fundingRate: null,
+    maxLeverage: null,
+  };
+}
+
+function readSpotBookCoin(asset: Partial<HyperliquidSpotAssetMeta>) {
+  const name = cleanString(asset.name)?.toUpperCase();
+  if (name === "PURR/USDC") return "PURR/USDC";
+  if (typeof asset.index === "number" && Number.isInteger(asset.index) && asset.index >= 0) return `@${asset.index}`;
+  return null;
 }
 
 function presentLevel(level: HyperliquidBookLevel) {
@@ -252,6 +315,14 @@ function readCoins(data: JsonRecord) {
   const value = data.coins ?? data.coin;
   if (Array.isArray(value)) return value.map(normalizeCoin);
   return [normalizeCoin(value)];
+}
+
+function readMarketType(data: JsonRecord): MarketType {
+  const value = cleanString(data.marketType ?? data.market_type) ?? "perp";
+  const normalized = value.toLowerCase();
+  if (normalized === "perp" || normalized === "perps" || normalized === "futures") return "perp";
+  if (normalized === "spot") return "spot";
+  throw new RequestError("market_type must be perp or spot", 400);
 }
 
 function normalizeCoin(value: unknown) {

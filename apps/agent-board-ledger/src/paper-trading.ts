@@ -43,16 +43,20 @@ type FillCandidate = {
   notional: number;
 };
 
+type MarketType = "perp" | "spot";
+type MarginMode = "cross" | "isolated" | "spot";
+
 type OrderInput = {
   paperAccountId: string;
   clientOrderId: string;
+  marketType: MarketType;
   coin: string;
   side: "buy" | "sell";
   tif: "Ioc" | "Gtc" | "Alo";
   limitPx: number | null;
   size: number;
   reduceOnly: boolean;
-  marginMode: "cross" | "isolated";
+  marginMode: MarginMode;
   leverage: number;
   maxSlippageBps: number;
   reason: string | null;
@@ -127,6 +131,7 @@ export async function createPaperMarketSnapshot(db: LedgerDb, body: BodyInput, c
   const data = asObject(body.json);
   const snapshot: PaperMarketSnapshotRow = {
     id: cleanString(data.snapshotId ?? data.snapshot_id) ?? newId("paper_mkt"),
+    market_type: normalizeMarketType(data.marketType ?? data.market_type),
     coin: normalizeCoin(data.coin),
     source: cleanString(data.source) ?? "hyperliquid",
     mark_px: requiredPositiveNumber(data.markPx ?? data.mark_px, "mark_px"),
@@ -142,11 +147,12 @@ export async function createPaperMarketSnapshot(db: LedgerDb, body: BodyInput, c
 
   await db.run(
     `INSERT INTO paper_market_snapshots
-      (id, coin, source, mark_px, oracle_px, funding_rate, maintenance_margin_rate,
+      (id, market_type, coin, source, mark_px, oracle_px, funding_rate, maintenance_margin_rate,
        max_leverage, book_json, observed_at, staleness_status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       snapshot.id,
+      snapshot.market_type,
       snapshot.coin,
       snapshot.source,
       snapshot.mark_px,
@@ -186,15 +192,22 @@ export async function submitPaperOrder(
   if (account.status !== "active") {
     return await insertRejectedOrder(db, account, input, "paper_account_not_active", body.raw, createdAt);
   }
-  if (!marketAllowed(account, input.coin)) {
+  if (!marketAllowed(account, input.marketType, input.coin)) {
     return await insertRejectedOrder(db, account, input, "market_not_allowed", body.raw, createdAt);
   }
 
-  const snapshot = await latestMarketSnapshot(db, input.coin);
+  if (input.marketType === "spot") {
+    const spotShapeRejectReason = validateSpotOrderShape(input);
+    if (spotShapeRejectReason) {
+      return await insertRejectedOrder(db, account, input, spotShapeRejectReason, body.raw, createdAt);
+    }
+  }
+
+  const snapshot = await latestMarketSnapshot(db, input.marketType, input.coin);
   if (!snapshot || marketIsStale(snapshot, Date.parse(createdAt))) {
     return await insertRejectedOrder(db, account, input, "stale_market_data", body.raw, createdAt, snapshot?.id ?? null);
   }
-  if (snapshot.max_leverage !== null && input.leverage - snapshot.max_leverage > EPSILON) {
+  if (input.marketType === "perp" && snapshot.max_leverage !== null && input.leverage - snapshot.max_leverage > EPSILON) {
     return await insertRejectedOrder(db, account, input, "leverage_exceeds_hyperliquid_max", body.raw, createdAt, snapshot.id);
   }
 
@@ -218,6 +231,18 @@ export async function submitPaperOrder(
   if (reduceOnlyRejectReason) {
     return await insertRejectedOrder(db, account, input, reduceOnlyRejectReason, body.raw, createdAt, snapshot.id);
   }
+  if (input.marketType === "spot") {
+    const spotBalanceRejectReason = await validateSpotOrderBalances(
+      db,
+      account,
+      input,
+      input.tif === "Ioc" ? notional : input.size * effectiveLimit,
+      fee,
+    );
+    if (spotBalanceRejectReason) {
+      return await insertRejectedOrder(db, account, input, spotBalanceRejectReason, body.raw, createdAt, snapshot.id);
+    }
+  }
 
   if (input.tif === "Ioc" && totalFillSize <= 0) {
     return await insertRejectedOrder(db, account, input, "insufficient_depth", body.raw, createdAt, snapshot.id);
@@ -233,6 +258,7 @@ export async function submitPaperOrder(
     paper_account_id: account.id,
     agent_id: account.agent_id,
     client_order_id: input.clientOrderId,
+    market_type: input.marketType,
     coin: input.coin,
     side: input.side,
     tif: input.tif,
@@ -265,6 +291,7 @@ export async function submitPaperOrder(
         order_id: order.id,
         paper_account_id: account.id,
         coin: order.coin,
+        market_type: order.market_type,
         side: order.side,
         px: fill.px,
         size: fill.size,
@@ -275,7 +302,7 @@ export async function submitPaperOrder(
         created_at: createdAt,
       };
       await insertFill(tx, row);
-      await applyFillToPosition(tx, account.id, row, input.marginMode, input.leverage, createdAt);
+      await applyFillToPosition(tx, account.id, row, input.marketType, input.marginMode, input.leverage, createdAt);
       insertedFills.push(row);
     }
     await appendPaperAuditEvent(tx, account.id, "paper_order", order.id, "paper_order_submitted", { input, order, fills: insertedFills }, createdAt);
@@ -300,7 +327,8 @@ export async function runPaperRiskCheck(db: LedgerDb, paperAccountId: string, cr
   const liquidations: PaperLiquidationEventRow[] = [];
 
   for (const position of positions) {
-    const snapshot = snapshots.get(position.coin);
+    if (position.market_type === "spot") continue;
+    const snapshot = snapshots.get(positionKey(position));
     if (!snapshot || marketIsStale(snapshot, Date.parse(createdAt))) continue;
     const positionRisk = computePositionRisk(position, snapshot);
     const riskSnapshot = risk.risk;
@@ -385,6 +413,7 @@ async function insertRejectedOrder(
     paper_account_id: account.id,
     agent_id: account.agent_id,
     client_order_id: input.clientOrderId,
+    market_type: input.marketType,
     coin: input.coin,
     side: input.side,
     tif: input.tif,
@@ -471,19 +500,23 @@ function requiredHeader(headers: Headers, name: string) {
 
 function parseOrderInput(value: unknown): OrderInput {
   const data = asObject(value);
+  const marketType = normalizeMarketType(data.marketType ?? data.market_type);
   const tif = cleanString(data.tif ?? data.timeInForce ?? data.time_in_force ?? data.orderType ?? data.order_type) ?? "Ioc";
   const normalizedTif = normalizeTif(tif);
   return {
     paperAccountId: requiredString(data.paperAccountId ?? data.paper_account_id, "paper_account_id"),
     clientOrderId: requiredString(data.clientOrderId ?? data.client_order_id, "client_order_id"),
+    marketType,
     coin: normalizeCoin(data.coin),
     side: normalizeSide(data.side),
     tif: normalizedTif,
     limitPx: optionalPositiveNumber(data.limitPx ?? data.limit_px, "limit_px"),
     size: requiredPositiveNumber(data.size, "size"),
     reduceOnly: Boolean(data.reduceOnly ?? data.reduce_only ?? false),
-    marginMode: normalizeMarginMode(data.marginMode ?? data.margin_mode),
-    leverage: requiredPositiveNumber(data.leverage, "leverage"),
+    marginMode: normalizeMarginMode(data.marginMode ?? data.margin_mode, marketType),
+    leverage: marketType === "spot"
+      ? optionalPositiveNumber(data.leverage, "leverage") ?? 1
+      : requiredPositiveNumber(data.leverage, "leverage"),
     maxSlippageBps: optionalNonNegativeNumber(data.maxSlippageBps ?? data.max_slippage_bps, "max_slippage_bps") ?? DEFAULT_MAX_SLIPPAGE_BPS,
     reason: cleanString(data.reason),
     strategyHash: cleanString(data.strategyHash ?? data.strategy_hash),
@@ -499,6 +532,7 @@ async function assertMarginAvailable(
   snapshot: PaperMarketSnapshotRow,
   createdAt: string,
 ) {
+  if (input.marketType === "spot") return;
   if (input.reduceOnly) return;
   const newInitialMargin = notional / input.leverage;
   if (input.marginMode === "isolated") {
@@ -520,15 +554,20 @@ async function applyFillToPosition(
   db: LedgerDb,
   paperAccountId: string,
   fill: PaperFillRow,
-  marginMode: "cross" | "isolated",
+  marketType: MarketType,
+  marginMode: MarginMode,
   leverage: number,
   createdAt: string,
 ) {
   const account = await requirePaperAccount(db, paperAccountId);
   const existing = await db.get<PaperPositionRow>(
-    "SELECT * FROM paper_positions WHERE paper_account_id = ? AND coin = ? AND margin_mode = ?",
-    [paperAccountId, fill.coin, marginMode],
+    "SELECT * FROM paper_positions WHERE paper_account_id = ? AND market_type = ? AND coin = ? AND margin_mode = ?",
+    [paperAccountId, marketType, fill.coin, marginMode],
   );
+  if (marketType === "spot") {
+    await applySpotFillToPosition(db, account, existing, fill, createdAt);
+    return;
+  }
   const fillSignedSize = fill.side === "buy" ? fill.size : -fill.size;
   const openMargin = marginMode === "isolated" ? fill.notional_usd / leverage : 0;
 
@@ -536,6 +575,7 @@ async function applyFillToPosition(
     const position: PaperPositionRow = {
       id: newId("paper_pos"),
       paper_account_id: paperAccountId,
+      market_type: marketType,
       coin: fill.coin,
       margin_mode: marginMode,
       signed_size: fillSignedSize,
@@ -623,6 +663,75 @@ async function applyFillToPosition(
   await updatePaperAccountCash(db, account, cashDelta, createdAt);
 }
 
+async function applySpotFillToPosition(
+  db: LedgerDb,
+  account: PaperAccountRow,
+  existing: PaperPositionRow | undefined,
+  fill: PaperFillRow,
+  createdAt: string,
+) {
+  const cashDelta = fill.side === "buy"
+    ? -(fill.notional_usd + fill.fee_usd)
+    : fill.notional_usd - fill.fee_usd;
+
+  if (!existing || Math.abs(existing.signed_size) <= EPSILON || existing.status !== "open") {
+    if (fill.side === "sell") throw new RequestError("spot_insufficient_position", 400);
+    const position: PaperPositionRow = {
+      id: newId("paper_pos"),
+      paper_account_id: account.id,
+      market_type: "spot",
+      coin: fill.coin,
+      margin_mode: "spot",
+      signed_size: fill.size,
+      entry_px: fill.px,
+      leverage: 1,
+      isolated_margin_usd: 0,
+      realized_pnl_usd: 0,
+      funding_usd: 0,
+      fee_usd: fill.fee_usd,
+      status: "open",
+      updated_at: createdAt,
+      created_at: createdAt,
+    };
+    await insertPosition(db, position);
+    await updatePaperAccountCash(db, account, cashDelta, createdAt);
+    return;
+  }
+
+  if (fill.side === "buy") {
+    const oldSize = existing.signed_size;
+    const newSize = oldSize + fill.size;
+    const entryPx = ((oldSize * existing.entry_px) + (fill.size * fill.px)) / newSize;
+    await db.run(
+      `UPDATE paper_positions
+        SET signed_size = ?, entry_px = ?, fee_usd = ?, status = 'open', updated_at = ?
+        WHERE id = ?`,
+      [newSize, entryPx, existing.fee_usd + fill.fee_usd, createdAt, existing.id],
+    );
+    await updatePaperAccountCash(db, account, cashDelta, createdAt);
+    return;
+  }
+
+  if (fill.size - existing.signed_size > EPSILON) throw new RequestError("spot_insufficient_position", 400);
+  const closingSize = Math.min(existing.signed_size, fill.size);
+  const realizedPnl = existing.realized_pnl_usd + closingSize * (fill.px - existing.entry_px);
+  const signedSize = roundQty(existing.signed_size - closingSize);
+  await db.run(
+    `UPDATE paper_positions
+      SET signed_size = ?, realized_pnl_usd = ?, fee_usd = ?, status = ?, updated_at = ?
+      WHERE id = ?`,
+    [
+      signedSize,
+      realizedPnl,
+      existing.fee_usd + fill.fee_usd,
+      signedSize <= EPSILON ? "closed" : "open",
+      createdAt,
+      existing.id,
+    ],
+  );
+  await updatePaperAccountCash(db, account, cashDelta, createdAt);
+}
+
 async function validateReduceOnlyOrder(
   db: LedgerDb,
   paperAccountId: string,
@@ -630,8 +739,8 @@ async function validateReduceOnlyOrder(
   plannedCloseSize: number,
 ) {
   const position = await db.get<PaperPositionRow>(
-    "SELECT * FROM paper_positions WHERE paper_account_id = ? AND coin = ? AND margin_mode = ?",
-    [paperAccountId, input.coin, input.marginMode],
+    "SELECT * FROM paper_positions WHERE paper_account_id = ? AND market_type = ? AND coin = ? AND margin_mode = ?",
+    [paperAccountId, input.marketType, input.coin, input.marginMode],
   );
   if (!position || position.status !== "open" || Math.abs(position.signed_size) <= EPSILON) {
     return "reduce_only_position_not_open";
@@ -642,6 +751,33 @@ async function validateReduceOnlyOrder(
   }
   if (plannedCloseSize - Math.abs(position.signed_size) > EPSILON) {
     return "reduce_only_exceeds_position";
+  }
+  return null;
+}
+
+function validateSpotOrderShape(input: OrderInput) {
+  if (input.marginMode !== "spot") return "spot_margin_mode_required";
+  if (Math.abs(input.leverage - 1) > EPSILON) return "spot_leverage_must_be_one";
+  if (input.reduceOnly) return "spot_reduce_only_not_supported";
+  return null;
+}
+
+async function validateSpotOrderBalances(
+  db: LedgerDb,
+  account: PaperAccountRow,
+  input: OrderInput,
+  maxNotional: number,
+  fee: number,
+) {
+  if (input.side === "buy") {
+    return account.cash_balance_usd + EPSILON < maxNotional + fee ? "spot_insufficient_cash" : null;
+  }
+  const position = await db.get<PaperPositionRow>(
+    "SELECT * FROM paper_positions WHERE paper_account_id = ? AND market_type = 'spot' AND coin = ? AND margin_mode = 'spot'",
+    [account.id, input.coin],
+  );
+  if (!position || position.status !== "open" || position.signed_size + EPSILON < input.size) {
+    return "spot_insufficient_position";
   }
   return null;
 }
@@ -672,7 +808,7 @@ async function computeAccountRisk(
   let unrealizedPnl = 0;
   let stale = false;
   for (const position of positions) {
-    const snapshot = snapshots.get(position.coin);
+    const snapshot = snapshots.get(positionKey(position));
     if (!snapshot || marketIsStale(snapshot, Date.parse(createdAt))) {
       stale = true;
       continue;
@@ -700,7 +836,7 @@ function computePositionRisk(position: PaperPositionRow, snapshot: PaperMarketSn
   const notional = Math.abs(position.signed_size) * snapshot.mark_px;
   const direction = Math.sign(position.signed_size);
   const unrealizedPnl = Math.abs(position.signed_size) * (snapshot.mark_px - position.entry_px) * direction;
-  const maintenanceMargin = notional * snapshot.maintenance_margin_rate;
+  const maintenanceMargin = position.market_type === "spot" ? 0 : notional * snapshot.maintenance_margin_rate;
   return {
     notional,
     unrealizedPnl,
@@ -848,21 +984,26 @@ function readLevels(value: unknown, name: string, order: "asc" | "desc") {
   }).sort((a, b) => order === "asc" ? a.px - b.px : b.px - a.px);
 }
 
-async function latestMarketSnapshot(db: LedgerDb, coin: string) {
+async function latestMarketSnapshot(db: LedgerDb, marketType: MarketType | string, coin: string) {
   return await db.get<PaperMarketSnapshotRow>(
-    "SELECT * FROM paper_market_snapshots WHERE coin = ? ORDER BY observed_at DESC, created_at DESC, id DESC LIMIT 1",
-    [coin],
+    "SELECT * FROM paper_market_snapshots WHERE market_type = ? AND coin = ? ORDER BY observed_at DESC, created_at DESC, id DESC LIMIT 1",
+    [marketType, coin],
   );
 }
 
 async function latestSnapshotsForPositions(db: LedgerDb, positions: PaperPositionRow[]) {
   const snapshots = new Map<string, PaperMarketSnapshotRow>();
   for (const position of positions) {
-    if (snapshots.has(position.coin)) continue;
-    const snapshot = await latestMarketSnapshot(db, position.coin);
-    if (snapshot) snapshots.set(position.coin, snapshot);
+    const key = positionKey(position);
+    if (snapshots.has(key)) continue;
+    const snapshot = await latestMarketSnapshot(db, position.market_type, position.coin);
+    if (snapshot) snapshots.set(key, snapshot);
   }
   return snapshots;
+}
+
+function positionKey(position: Pick<PaperPositionRow, "market_type" | "coin">) {
+  return `${position.market_type}:${position.coin}`;
 }
 
 function latestSnapshotId(snapshots: Map<string, PaperMarketSnapshotRow>) {
@@ -873,10 +1014,12 @@ function marketIsStale(snapshot: PaperMarketSnapshotRow, nowMs: number) {
   return snapshot.staleness_status !== "fresh" || nowMs - Date.parse(snapshot.observed_at) > MARKET_STALE_MS;
 }
 
-function marketAllowed(account: PaperAccountRow, coin: string) {
+function marketAllowed(account: PaperAccountRow, marketType: MarketType, coin: string) {
   if (!account.allowed_markets_json) return true;
   const markets = parseJson(account.allowed_markets_json);
-  return Array.isArray(markets) && markets.map(String).map((item) => item.toUpperCase()).includes(coin);
+  if (!Array.isArray(markets)) return false;
+  const allowed = markets.map(String).map((item) => item.toUpperCase());
+  return allowed.includes(coin) || allowed.includes(`${marketType}:${coin}`.toUpperCase());
 }
 
 async function requirePaperAccount(db: LedgerDb, id: string) {
@@ -887,7 +1030,7 @@ async function requirePaperAccount(db: LedgerDb, id: string) {
 
 async function listOpenPositions(db: LedgerDb, paperAccountId: string) {
   return await db.all<PaperPositionRow>(
-    "SELECT * FROM paper_positions WHERE paper_account_id = ? AND status = 'open' AND ABS(signed_size) > 0 ORDER BY coin ASC",
+    "SELECT * FROM paper_positions WHERE paper_account_id = ? AND status = 'open' AND ABS(signed_size) > 0 ORDER BY market_type ASC, coin ASC",
     [paperAccountId],
   );
 }
@@ -907,14 +1050,14 @@ async function latestRiskSnapshot(db: LedgerDb, paperAccountId: string) {
 async function insertOrder(db: LedgerDb, order: PaperOrderRow) {
   await db.run(
     `INSERT INTO paper_orders
-      (id, paper_account_id, agent_id, client_order_id, coin, side, tif, limit_px,
+      (id, paper_account_id, agent_id, client_order_id, market_type, coin, side, tif, limit_px,
        size, remaining_size, reduce_only, margin_mode, leverage, max_slippage_bps,
        status, reject_reason, reason, strategy_hash, market_snapshot_id, avg_fill_px,
        notional_usd, fee_usd, body_hash, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       order.id, order.paper_account_id, order.agent_id, order.client_order_id,
-      order.coin, order.side, order.tif, order.limit_px, order.size, order.remaining_size,
+      order.market_type, order.coin, order.side, order.tif, order.limit_px, order.size, order.remaining_size,
       order.reduce_only, order.margin_mode, order.leverage, order.max_slippage_bps,
       order.status, order.reject_reason, order.reason, order.strategy_hash,
       order.market_snapshot_id, order.avg_fill_px, order.notional_usd, order.fee_usd,
@@ -926,11 +1069,11 @@ async function insertOrder(db: LedgerDb, order: PaperOrderRow) {
 async function insertFill(db: LedgerDb, fill: PaperFillRow) {
   await db.run(
     `INSERT INTO paper_fills
-      (id, order_id, paper_account_id, coin, side, px, size, notional_usd, fee_usd,
+      (id, order_id, paper_account_id, market_type, coin, side, px, size, notional_usd, fee_usd,
        liquidity, market_snapshot_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      fill.id, fill.order_id, fill.paper_account_id, fill.coin, fill.side,
+      fill.id, fill.order_id, fill.paper_account_id, fill.market_type, fill.coin, fill.side,
       fill.px, fill.size, fill.notional_usd, fill.fee_usd, fill.liquidity,
       fill.market_snapshot_id, fill.created_at,
     ],
@@ -940,12 +1083,12 @@ async function insertFill(db: LedgerDb, fill: PaperFillRow) {
 async function insertPosition(db: LedgerDb, position: PaperPositionRow) {
   await db.run(
     `INSERT INTO paper_positions
-      (id, paper_account_id, coin, margin_mode, signed_size, entry_px, leverage,
+      (id, paper_account_id, market_type, coin, margin_mode, signed_size, entry_px, leverage,
        isolated_margin_usd, realized_pnl_usd, funding_usd, fee_usd, status,
        updated_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      position.id, position.paper_account_id, position.coin, position.margin_mode,
+      position.id, position.paper_account_id, position.market_type, position.coin, position.margin_mode,
       position.signed_size, position.entry_px, position.leverage,
       position.isolated_margin_usd, position.realized_pnl_usd, position.funding_usd,
       position.fee_usd, position.status, position.updated_at, position.created_at,
@@ -1094,6 +1237,13 @@ function normalizeCoin(value: unknown) {
   return requiredString(value, "coin").toUpperCase();
 }
 
+function normalizeMarketType(value: unknown): MarketType {
+  const type = (cleanString(value) ?? "perp").toLowerCase();
+  if (type === "perp" || type === "perps" || type === "futures") return "perp";
+  if (type === "spot") return "spot";
+  throw new RequestError("market_type must be perp or spot", 400);
+}
+
 function normalizeSide(value: unknown): "buy" | "sell" {
   const side = requiredString(value, "side").toLowerCase();
   if (side !== "buy" && side !== "sell") throw new RequestError("side must be buy or sell", 400);
@@ -1108,7 +1258,12 @@ function normalizeTif(value: string): "Ioc" | "Gtc" | "Alo" {
   throw new RequestError("tif must be Ioc, Gtc, or Alo", 400);
 }
 
-function normalizeMarginMode(value: unknown): "cross" | "isolated" {
+function normalizeMarginMode(value: unknown, marketType: MarketType): MarginMode {
+  if (marketType === "spot") {
+    const mode = (cleanString(value) ?? "spot").toLowerCase();
+    if (mode !== "spot") throw new RequestError("margin_mode must be spot for spot paper orders", 400);
+    return "spot";
+  }
   const mode = (cleanString(value) ?? "cross").toLowerCase();
   if (mode !== "cross" && mode !== "isolated") throw new RequestError("margin_mode must be cross or isolated", 400);
   return mode;

@@ -1,14 +1,17 @@
 ---
 name: hyperliquid-paper-trading
-version: 0.2.0
-description: Use inside IronClaw when a ClawHouse trading agent needs Hyperliquid-style paper perps: signed paper orders, leverage, cross/isolated margin, fills, positions, risk, liquidation, leaderboard, or replay proof. Do not use for spot swaps or real Hyperliquid order submission.
+version: 0.3.0
+description: Use inside IronClaw when a ClawHouse trading agent needs Hyperliquid paper trading: paper perps with leverage/cross/isolated margin, or paper spot with cash/holding checks, fills, positions, risk, leaderboard, and replay proof. Do not submit real Hyperliquid orders.
 ---
 
-# Hyperliquid Paper Perps
+# Hyperliquid Paper Trading
 
 ## Core Rule
 
-Use this skill for Hyperliquid-style paper perps.
+Use this skill for Hyperliquid paper trading, including:
+
+- `market_type: "perp"` for paper perps;
+- `market_type: "spot"` for paper spot.
 
 Submit paper orders to ClawHouse. Do not submit real orders to Hyperliquid.
 
@@ -18,7 +21,8 @@ reference.
 
 Do not submit market snapshots with the order. The backend refreshes Hyperliquid
 market snapshots from public market-data endpoints and uses those snapshots for
-depth checks, leverage caps, margin, liquidation, leaderboard, and replay proof.
+depth checks, leverage caps, spot cash/holding checks, margin, liquidation,
+leaderboard, and replay proof.
 
 ## Required Configuration
 
@@ -56,10 +60,11 @@ Agents may read `/paper/leaderboard` for public Paper PnL context, but local PnL
 math is not authoritative. ClawHouse cron and service-authorized monitor paths
 own liquidation checks from fresh Hyperliquid marks.
 
-## Perps Decision Pattern
+## Decision Patterns
 
 For every open-risk paper perps order, reason about:
 
+- `market_type: "perp"`;
 - direction: long, short, reduce, or flip;
 - leverage;
 - margin mode: `cross` or `isolated`;
@@ -69,8 +74,21 @@ For every open-risk paper perps order, reason about:
 - funding/fee impact when available;
 - whether `reduce_only` is required.
 
-Do not include spot deposit, recipient, refund, or swap quote fields in a paper
-perps order.
+For every paper spot order, reason about:
+
+- `market_type: "spot"`;
+- direction: buy, sell, or reduce paper spot inventory;
+- `margin_mode: "spot"`;
+- `leverage: 1`;
+- size, max slippage, and time-in-force;
+- current paper cash before buying;
+- current paper holding before selling.
+
+Use the Hyperliquid spot pair name known to ClawHouse, such as `PURR/USDC`.
+The backend resolves Hyperliquid spot book symbols from public spot metadata.
+
+Do not include deposit, recipient, refund, swap quote, or real transfer fields in
+any ClawHouse paper order.
 
 ## Paper Order Body
 
@@ -78,12 +96,13 @@ Minimum body fields:
 
 - `paper_account_id`
 - `client_order_id`
+- `market_type`: `perp` or `spot`
 - `coin`
 - `side`: `buy` or `sell`
 - `tif`: `Ioc`, `Gtc`, or `Alo`
 - `size`
-- `margin_mode`: `cross` or `isolated`
-- `leverage`
+- `margin_mode`: `cross` or `isolated` for perps, `spot` for spot
+- `leverage`: required for perps, optional/default `1` for spot
 - `reason`
 
 Optional fields:
@@ -98,6 +117,9 @@ ClawHouse converts them into a bounded IOC paper fill using `max_slippage_bps`.
 
 Use `Gtc` for resting limit orders. Use `Alo` for post-only orders. If `Alo`
 would immediately cross the book, ClawHouse rejects it.
+
+Spot orders must use `margin_mode: "spot"` and `leverage: 1`. ClawHouse rejects
+spot buys that exceed paper cash and spot sells that exceed paper holdings.
 
 ## Signed Request Rule
 
@@ -146,7 +168,10 @@ Do not submit a new open-risk order when:
 
 - ClawHouse returns stale market or risk data;
 - requested market is not allowed for the paper account;
-- requested leverage exceeds the market's Hyperliquid max leverage;
+- requested perps leverage exceeds the market's Hyperliquid max leverage;
+- requested spot leverage is not `1`;
+- requested spot sell exceeds paper holdings;
+- requested spot buy exceeds paper cash;
 - leverage or size is outside strategy limits;
 - `max_slippage_bps` is missing for a market-like IOC order;
 - the order would violate the strategy's drawdown or liquidation rules;

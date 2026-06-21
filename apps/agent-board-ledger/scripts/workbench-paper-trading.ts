@@ -94,6 +94,44 @@ async function runPaperTradingFlow(
   expectOrderStatus(checks, "agent-signed IOC order fills from book depth", ioc, "filled");
   const iocOrderId = stringAt(ioc.json, ["order", "id"]);
 
+  const spotSnapshot = await servicePostJson(options, "/paper/market-snapshots", {
+    market_type: "spot",
+    coin: "PURR/USDC",
+    source: "acceptance-workbench-hyperliquid-paper",
+    mark_px: 0.2,
+    maintenance_margin_rate: 0.001,
+    observed_at: new Date().toISOString(),
+    bids: [{ px: 0.19, sz: 100 }],
+    asks: [{ px: 0.2, sz: 100 }],
+  });
+  expectSuccess(checks, "service records PURR/USDC paper spot snapshot", spotSnapshot);
+
+  const spotBuy = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
+    paper_account_id: paperAccountId,
+    client_order_id: `spot-buy-${runId}`,
+    market_type: "spot",
+    coin: "PURR/USDC",
+    side: "buy",
+    tif: "Ioc",
+    size: 10,
+    margin_mode: "spot",
+    reason: "Workbench opens a signed Hyperliquid paper spot position.",
+  });
+  expectOrderStatus(checks, "agent-signed spot IOC order fills from spot book depth", spotBuy, "filled");
+
+  const spotOversell = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
+    paper_account_id: paperAccountId,
+    client_order_id: `spot-oversell-${runId}`,
+    market_type: "spot",
+    coin: "PURR/USDC",
+    side: "sell",
+    tif: "Ioc",
+    size: 11,
+    margin_mode: "spot",
+    reason: "Workbench verifies paper spot cannot sell more than held.",
+  });
+  expectRejectedOrder(checks, "spot sell rejects when size exceeds paper holding", spotOversell, "spot_insufficient_position");
+
   const reduceOnlyIncrease = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
     paper_account_id: paperAccountId,
     client_order_id: `reduce-only-increase-${runId}`,
@@ -291,7 +329,7 @@ async function ensurePaperAccount(
     agent_id: agentId,
     agent_public_key: wallet.publicKey,
     starting_balance_usd: options.startingBalanceUsd,
-    allowed_markets: ["BTC", "ETH"],
+    allowed_markets: ["BTC", "ETH", "spot:PURR/USDC"],
     metadata: {
       source: "acceptance-workbench",
       run_id: runId,
