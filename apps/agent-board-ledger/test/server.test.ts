@@ -1770,6 +1770,290 @@ describe("Agent Board Ledger local backend", () => {
     expect(body.order.reject_reason).toBe("leverage_exceeds_hyperliquid_max");
   });
 
+  test("rejects malformed paper order intent fields as persisted paper orders or conflicts", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      bids: [{ px: 99, sz: 10 }],
+      asks: [{ px: 100, sz: 10 }],
+    });
+
+    const missingSlippage = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "missing-slippage",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 0.1,
+      margin_mode: "cross",
+      leverage: 2,
+      reason: "Market-like IOC should require explicit slippage.",
+      __omitMaxSlippageBps: true,
+    });
+    const missingSlippageBody = await jsonOf<{ order: { id: string; status: string; reject_reason: string } }>(missingSlippage);
+    expect(missingSlippage.status).toBe(201);
+    expect(missingSlippageBody.order.status).toBe("rejected");
+    expect(missingSlippageBody.order.reject_reason).toBe("max_slippage_bps_required");
+
+    const missingReasonInput = {
+      paper_account_id: "paper-1",
+      client_order_id: "missing-reason",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 0.1,
+      margin_mode: "cross",
+      leverage: 2,
+      max_slippage_bps: 50,
+    };
+    const missingReason = await paperSignedPost("/paper/orders", missingReasonInput);
+    const missingReasonBody = await jsonOf<{ order: { status: string; reject_reason: string } }>(missingReason);
+    expect(missingReason.status).toBe(201);
+    expect(missingReasonBody.order.status).toBe("rejected");
+    expect(missingReasonBody.order.reject_reason).toBe("reason_required");
+
+    const missingReasonReplay = await paperSignedPost("/paper/orders", missingReasonInput);
+    const missingReasonReplayBody = await jsonOf<{ idempotent: boolean; order: { status: string; reject_reason: string } }>(missingReasonReplay);
+    expect(missingReasonReplay.status).toBe(201);
+    expect(missingReasonReplayBody.idempotent).toBe(true);
+    expect(missingReasonReplayBody.order.status).toBe("rejected");
+    expect(missingReasonReplayBody.order.reject_reason).toBe("reason_required");
+
+    const first = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "duplicate-body",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 0.1,
+      margin_mode: "cross",
+      leverage: 2,
+      reason: "First body for idempotency key.",
+    });
+    expect(first.status).toBe(201);
+
+    const changed = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "duplicate-body",
+      coin: "BTC",
+      side: "sell",
+      tif: "Ioc",
+      size: 0.2,
+      margin_mode: "cross",
+      leverage: 2,
+      reason: "Changed body should conflict with the existing idempotency key.",
+    });
+    const changedBody = await jsonOf<{ error: string }>(changed);
+    expect(changed.status).toBe(409);
+    expect(changedBody.error).toBe("client_order_id body mismatch");
+
+    const replay = await jsonOf<{ replay: { order: { id: string; status: string; reject_reason: string }; audit: unknown[] } }>(
+      await app.fetch(new Request(`http://ledger.test/paper/orders/${missingSlippageBody.order.id}/replay`)),
+    );
+    expect(replay.replay.order.status).toBe("rejected");
+    expect(replay.replay.order.reject_reason).toBe("max_slippage_bps_required");
+    expect(replay.replay.audit.length).toBeGreaterThan(0);
+  });
+
+  test("records margin failures as rejected paper orders with replay proof", async () => {
+    await registerPaperAccount({ starting_balance_usd: 10 });
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      bids: [{ px: 99, sz: 10 }],
+      asks: [{ px: 100, sz: 10 }],
+    });
+
+    const isolated = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "isolated-margin-reject",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 5,
+      margin_mode: "isolated",
+      leverage: 2,
+      reason: "Should reject as an auditable paper order instead of HTTP 400.",
+    });
+    const isolatedBody = await jsonOf<{ order: { id: string; status: string; reject_reason: string } }>(isolated);
+    expect(isolated.status).toBe(201);
+    expect(isolatedBody.order.status).toBe("rejected");
+    expect(isolatedBody.order.reject_reason).toBe("insufficient_isolated_paper_margin");
+
+    const cross = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "cross-margin-reject",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 5,
+      margin_mode: "cross",
+      leverage: 2,
+      reason: "Should reject as an auditable paper order instead of HTTP 400.",
+    });
+    const crossBody = await jsonOf<{ order: { id: string; status: string; reject_reason: string } }>(cross);
+    expect(cross.status).toBe(201);
+    expect(crossBody.order.status).toBe("rejected");
+    expect(crossBody.order.reject_reason).toBe("insufficient_cross_paper_margin");
+
+    const replay = await jsonOf<{ replay: { order: { id: string; status: string; reject_reason: string }; audit: unknown[] } }>(
+      await app.fetch(new Request(`http://ledger.test/paper/orders/${crossBody.order.id}/replay`)),
+    );
+    expect(replay.replay.order.status).toBe("rejected");
+    expect(replay.replay.order.reject_reason).toBe("insufficient_cross_paper_margin");
+    expect(replay.replay.audit.length).toBeGreaterThan(0);
+  });
+
+  test("uses each position's own mark price for multi-coin cross-margin checks", async () => {
+    await registerPaperAccount({ allowed_markets: ["BTC", "ETH"] });
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      bids: [{ px: 99, sz: 10 }],
+      asks: [{ px: 100, sz: 10 }],
+    });
+    await createPaperMarketSnapshot({
+      coin: "ETH",
+      mark_px: 2000,
+      bids: [{ px: 1999, sz: 10 }],
+      asks: [{ px: 2000, sz: 10 }],
+    });
+
+    const btc = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "cross-btc",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 1,
+      margin_mode: "cross",
+      leverage: 2,
+      reason: "Open BTC cross position before ETH order.",
+    });
+    expect(btc.status).toBe(201);
+
+    const eth = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "cross-eth",
+      coin: "ETH",
+      side: "buy",
+      tif: "Ioc",
+      size: 0.1,
+      margin_mode: "cross",
+      leverage: 2,
+      reason: "ETH order should not value BTC position at ETH mark.",
+    });
+    const ethBody = await jsonOf<{ order: { status: string; reject_reason: string | null } }>(eth);
+    expect(eth.status).toBe(201);
+    expect(ethBody.order.status).toBe("filled");
+    expect(ethBody.order.reject_reason).toBeNull();
+  });
+
+  test("blocks new cross exposure when existing cross losses consume margin", async () => {
+    await registerPaperAccount({ allowed_markets: ["BTC", "ETH"] });
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      bids: [{ px: 99, sz: 20 }],
+      asks: [{ px: 100, sz: 20 }],
+    });
+    await createPaperMarketSnapshot({
+      coin: "ETH",
+      mark_px: 2000,
+      bids: [{ px: 1999, sz: 10 }],
+      asks: [{ px: 2000, sz: 10 }],
+    });
+
+    const btc = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "loss-btc",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 10,
+      margin_mode: "cross",
+      leverage: 2,
+      reason: "Open BTC cross long before adverse mark.",
+    });
+    expect(btc.status).toBe(201);
+
+    currentNow = new Date("2026-06-19T00:00:02.000Z");
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 10,
+      bids: [{ px: 9, sz: 20 }],
+      asks: [{ px: 10, sz: 20 }],
+    });
+    await createPaperMarketSnapshot({
+      coin: "ETH",
+      mark_px: 2000,
+      bids: [{ px: 1999, sz: 10 }],
+      asks: [{ px: 2000, sz: 10 }],
+    });
+
+    const eth = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "blocked-eth",
+      coin: "ETH",
+      side: "buy",
+      tif: "Ioc",
+      size: 0.1,
+      margin_mode: "cross",
+      leverage: 2,
+      reason: "Existing cross losses should block new exposure.",
+    });
+    const ethBody = await jsonOf<{ order: { status: string; reject_reason: string } }>(eth);
+    expect(eth.status).toBe(201);
+    expect(ethBody.order.status).toBe("rejected");
+    expect(ethBody.order.reject_reason).toBe("insufficient_cross_paper_margin");
+  });
+
+  test("flips a cross paper position when an opposite IOC order exceeds open size", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      bids: [{ px: 99, sz: 5 }],
+      asks: [{ px: 100, sz: 5 }],
+    });
+
+    const openShort = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "flip-open-short",
+      coin: "BTC",
+      side: "sell",
+      tif: "Ioc",
+      size: 0.1,
+      margin_mode: "cross",
+      leverage: 10,
+      reason: "Open short before flip.",
+    });
+    expect(openShort.status).toBe(201);
+
+    const flipLong = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "flip-long",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 0.2,
+      margin_mode: "cross",
+      leverage: 10,
+      reason: "Buy more than the short size to flip long.",
+    });
+    const flipBody = await jsonOf<{ order: { status: string } }>(flipLong);
+    expect(flipLong.status).toBe(201);
+    expect(flipBody.order.status).toBe("filled");
+
+    const position = sqliteDb.raw.query<{ status: string; signed_size: number; entry_px: number }, []>(
+      "SELECT status, signed_size, entry_px FROM paper_positions WHERE paper_account_id = 'paper-1' AND coin = 'BTC' AND margin_mode = 'cross'",
+    ).get();
+    expect(position?.status).toBe("open");
+    expect(position?.signed_size).toBeCloseTo(0.1);
+    expect(position?.entry_px).toBe(100);
+  });
+
   test("liquidates an isolated paper position when mark price breaches maintenance margin", async () => {
     await registerPaperAccount();
     await createPaperMarketSnapshot({
@@ -2144,11 +2428,12 @@ async function signedFetch(
 }
 
 async function paperSignedPost(path: string, body: Record<string, unknown>, signer = wallet) {
-  const rawBody = JSON.stringify(body);
+  const signedBody = paperOrderTestBody(body);
+  const rawBody = JSON.stringify(signedBody);
   const timestamp = currentNow.getTime().toString();
   const nonce = crypto.randomUUID();
   const bodyHash = sha256Hex(rawBody);
-  const paperAccountId = cleanBodyString(body.paper_account_id ?? body.paperAccountId, "paper_account_id");
+  const paperAccountId = cleanBodyString(signedBody.paper_account_id ?? signedBody.paperAccountId, "paper_account_id");
   const payload = canonicalPaperAuthPayload({
     method: "POST",
     path,
@@ -2173,6 +2458,22 @@ async function paperSignedPost(path: string, body: Record<string, unknown>, sign
     },
     body: rawBody,
   }));
+}
+
+function paperOrderTestBody(body: Record<string, unknown>) {
+  const next = { ...body };
+  const omitMaxSlippage = next.__omitMaxSlippageBps === true;
+  delete next.__omitMaxSlippageBps;
+
+  const tif = cleanBodyString(next.tif ?? next.timeInForce ?? next.time_in_force ?? next.orderType ?? next.order_type ?? "Ioc", "tif")
+    .toLowerCase();
+  const hasLimitPx = next.limitPx !== undefined || next.limit_px !== undefined;
+  const hasMaxSlippage = next.maxSlippageBps !== undefined || next.max_slippage_bps !== undefined;
+  if (!omitMaxSlippage && !hasLimitPx && !hasMaxSlippage && (tif === "ioc" || tif === "market")) {
+    next.max_slippage_bps = 50;
+  }
+
+  return next;
 }
 
 function signRequest(

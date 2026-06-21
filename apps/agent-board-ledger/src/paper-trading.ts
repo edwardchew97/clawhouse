@@ -59,6 +59,7 @@ type OrderInput = {
   marginMode: MarginMode;
   leverage: number;
   maxSlippageBps: number;
+  maxSlippageBpsProvided: boolean;
   reason: string | null;
   strategyHash: string | null;
 };
@@ -180,12 +181,16 @@ export async function submitPaperOrder(
   const input = parseOrderInput(body.json);
   const account = await requirePaperAccount(db, input.paperAccountId);
   await assertPaperSignedRequest(db, request, body.raw, path, account, Date.parse(createdAt), createdAt);
+  const bodyHash = sha256Hex(body.raw);
 
   const existing = await db.get<PaperOrderRow>(
     "SELECT * FROM paper_orders WHERE paper_account_id = ? AND client_order_id = ?",
     [account.id, input.clientOrderId],
   );
   if (existing) {
+    if (existing.body_hash !== null && existing.body_hash !== bodyHash) {
+      throw new RequestError("client_order_id body mismatch", 409);
+    }
     return { ok: true, idempotent: true, order: presentOrder(existing), fills: await listFills(db, existing.id) };
   }
 
@@ -202,6 +207,9 @@ export async function submitPaperOrder(
       return await insertRejectedOrder(db, account, input, spotShapeRejectReason, body.raw, createdAt);
     }
   }
+  if (!input.reason) {
+    return await insertRejectedOrder(db, account, input, "reason_required", body.raw, createdAt);
+  }
 
   const snapshot = await latestMarketSnapshot(db, input.marketType, input.coin);
   if (!snapshot || marketIsStale(snapshot, Date.parse(createdAt))) {
@@ -212,6 +220,9 @@ export async function submitPaperOrder(
   }
 
   const book = parseBook(snapshot.book_json);
+  if (input.tif === "Ioc" && input.limitPx === null && !input.maxSlippageBpsProvided) {
+    return await insertRejectedOrder(db, account, input, "max_slippage_bps_required", body.raw, createdAt, snapshot.id);
+  }
   const effectiveLimit = effectiveLimitPx(input, book);
   if (input.tif !== "Ioc" && input.limitPx === null) {
     return await insertRejectedOrder(db, account, input, "limit_px_required_for_resting_order", body.raw, createdAt, snapshot.id);
@@ -248,7 +259,10 @@ export async function submitPaperOrder(
     return await insertRejectedOrder(db, account, input, "insufficient_depth", body.raw, createdAt, snapshot.id);
   }
   if (totalFillSize > 0) {
-    await assertMarginAvailable(db, account, input, notional, fee, snapshot, createdAt);
+    const marginRejectReason = await validateMarginAvailable(db, account, input, notional, fee, snapshot, createdAt);
+    if (marginRejectReason) {
+      return await insertRejectedOrder(db, account, input, marginRejectReason, body.raw, createdAt, snapshot.id);
+    }
   } else if (input.tif !== "Alo" && input.tif !== "Gtc") {
     return await insertRejectedOrder(db, account, input, "insufficient_depth", body.raw, createdAt, snapshot.id);
   }
@@ -503,6 +517,7 @@ function parseOrderInput(value: unknown): OrderInput {
   const marketType = normalizeMarketType(data.marketType ?? data.market_type);
   const tif = cleanString(data.tif ?? data.timeInForce ?? data.time_in_force ?? data.orderType ?? data.order_type) ?? "Ioc";
   const normalizedTif = normalizeTif(tif);
+  const maxSlippageInput = data.maxSlippageBps ?? data.max_slippage_bps;
   return {
     paperAccountId: requiredString(data.paperAccountId ?? data.paper_account_id, "paper_account_id"),
     clientOrderId: requiredString(data.clientOrderId ?? data.client_order_id, "client_order_id"),
@@ -517,13 +532,14 @@ function parseOrderInput(value: unknown): OrderInput {
     leverage: marketType === "spot"
       ? optionalPositiveNumber(data.leverage, "leverage") ?? 1
       : requiredPositiveNumber(data.leverage, "leverage"),
-    maxSlippageBps: optionalNonNegativeNumber(data.maxSlippageBps ?? data.max_slippage_bps, "max_slippage_bps") ?? DEFAULT_MAX_SLIPPAGE_BPS,
+    maxSlippageBps: optionalNonNegativeNumber(maxSlippageInput, "max_slippage_bps") ?? DEFAULT_MAX_SLIPPAGE_BPS,
+    maxSlippageBpsProvided: maxSlippageInput !== undefined && maxSlippageInput !== null && maxSlippageInput !== "",
     reason: cleanString(data.reason),
     strategyHash: cleanString(data.strategyHash ?? data.strategy_hash),
   };
 }
 
-async function assertMarginAvailable(
+async function validateMarginAvailable(
   db: LedgerDb,
   account: PaperAccountRow,
   input: OrderInput,
@@ -532,22 +548,31 @@ async function assertMarginAvailable(
   snapshot: PaperMarketSnapshotRow,
   createdAt: string,
 ) {
-  if (input.marketType === "spot") return;
-  if (input.reduceOnly) return;
+  if (input.marketType === "spot") return null;
+  if (input.reduceOnly) return null;
   const newInitialMargin = notional / input.leverage;
   if (input.marginMode === "isolated") {
     if (account.cash_balance_usd + EPSILON < newInitialMargin + fee) {
-      throw new RequestError("Insufficient isolated paper margin", 400);
+      return "insufficient_isolated_paper_margin";
     }
-    return;
+    return null;
   }
   const risk = await computeAccountRisk(db, account.id, snapshot.id, createdAt);
-  const currentInitial = (await listOpenPositions(db, account.id))
-    .filter((position) => position.margin_mode === "cross")
-    .reduce((sum, position) => sum + Math.abs(position.signed_size) * snapshot.mark_px / position.leverage, 0);
-  if (risk.equity_usd + EPSILON < currentInitial + newInitialMargin + fee) {
-    throw new RequestError("Insufficient cross paper margin", 400);
+  const crossPositions = (await listOpenPositions(db, account.id))
+    .filter((position) => position.margin_mode === "cross");
+  const snapshots = await latestSnapshotsForPositions(db, crossPositions);
+  let currentInitial = 0;
+  for (const position of crossPositions) {
+    const positionSnapshot = snapshots.get(positionKey(position));
+    if (!positionSnapshot || marketIsStale(positionSnapshot, Date.parse(createdAt))) {
+      return "stale_market_data";
+    }
+    currentInitial += Math.abs(position.signed_size) * positionSnapshot.mark_px / position.leverage;
   }
+  if (risk.equity_usd + EPSILON < currentInitial + newInitialMargin + fee) {
+    return "insufficient_cross_paper_margin";
+  }
+  return null;
 }
 
 async function applyFillToPosition(

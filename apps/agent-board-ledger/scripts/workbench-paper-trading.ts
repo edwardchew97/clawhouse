@@ -94,6 +94,33 @@ async function runPaperTradingFlow(
   expectOrderStatus(checks, "agent-signed IOC order fills from book depth", ioc, "filled");
   const iocOrderId = stringAt(ioc.json, ["order", "id"]);
 
+  const missingSlippage = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
+    paper_account_id: paperAccountId,
+    client_order_id: `missing-slippage-${runId}`,
+    coin: "BTC",
+    side: "buy",
+    tif: "Ioc",
+    size: 0.1,
+    margin_mode: "cross",
+    leverage: 10,
+    reason: "Workbench verifies market-like IOC orders carry explicit slippage.",
+  });
+  expectRejectedOrder(checks, "market-like IOC without max_slippage_bps is an auditable reject", missingSlippage, "max_slippage_bps_required");
+
+  const duplicateChangedBody = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
+    paper_account_id: paperAccountId,
+    client_order_id: `ioc-${runId}`,
+    coin: "BTC",
+    side: "sell",
+    tif: "Ioc",
+    size: 0.2,
+    margin_mode: "cross",
+    leverage: 10,
+    max_slippage_bps: 200,
+    reason: "Workbench verifies idempotency keys cannot mask changed order bodies.",
+  });
+  expectHttpError(checks, "duplicate client_order_id with changed body conflicts", duplicateChangedBody, 409, "client_order_id body mismatch");
+
   const spotSnapshot = await servicePostJson(options, "/paper/market-snapshots", {
     market_type: "spot",
     coin: "PURR/USDC",
@@ -115,6 +142,7 @@ async function runPaperTradingFlow(
     tif: "Ioc",
     size: 10,
     margin_mode: "spot",
+    max_slippage_bps: 200,
     reason: "Workbench opens a signed Hyperliquid paper spot position.",
   });
   expectOrderStatus(checks, "agent-signed spot IOC order fills from spot book depth", spotBuy, "filled");
@@ -128,6 +156,7 @@ async function runPaperTradingFlow(
     tif: "Ioc",
     size: 11,
     margin_mode: "spot",
+    max_slippage_bps: 200,
     reason: "Workbench verifies paper spot cannot sell more than held.",
   });
   expectRejectedOrder(checks, "spot sell rejects when size exceeds paper holding", spotOversell, "spot_insufficient_position");
@@ -142,6 +171,7 @@ async function runPaperTradingFlow(
     reduce_only: true,
     margin_mode: "cross",
     leverage: 10,
+    max_slippage_bps: 200,
     reason: "Workbench verifies reduce-only cannot add to a long.",
   });
   expectRejectedOrder(checks, "reduce-only order cannot increase exposure", reduceOnlyIncrease, "reduce_only_would_increase");
@@ -156,6 +186,34 @@ async function runPaperTradingFlow(
     asks: [{ px: 2005, sz: 5 }],
   });
   expectSuccess(checks, "service records ETH market snapshot", ethSnapshot);
+
+  const ethCross = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
+    paper_account_id: paperAccountId,
+    client_order_id: `eth-cross-${runId}`,
+    coin: "ETH",
+    side: "buy",
+    tif: "Ioc",
+    size: 0.05,
+    margin_mode: "cross",
+    leverage: 5,
+    max_slippage_bps: 200,
+    reason: "Workbench verifies cross margin values existing positions with each coin's own mark.",
+  });
+  expectOrderStatus(checks, "multi-coin cross-margin IOC fills with per-coin marks", ethCross, "filled");
+
+  const isolatedMarginReject = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
+    paper_account_id: paperAccountId,
+    client_order_id: `isolated-margin-reject-${runId}`,
+    coin: "ETH",
+    side: "buy",
+    tif: "Ioc",
+    size: 5,
+    margin_mode: "isolated",
+    leverage: 1,
+    max_slippage_bps: 200,
+    reason: "Workbench verifies insufficient margin is persisted as a paper rejection.",
+  });
+  expectRejectedOrder(checks, "insufficient isolated margin is an auditable reject", isolatedMarginReject, "insufficient_isolated_paper_margin");
 
   const gtc = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
     paper_account_id: paperAccountId,
@@ -194,6 +252,7 @@ async function runPaperTradingFlow(
     size: 1,
     margin_mode: "isolated",
     leverage: 10,
+    max_slippage_bps: 200,
     reason: "Workbench opens isolated margin before adverse mark.",
   });
   expectOrderStatus(checks, "isolated IOC paper order fills", isolated, "filled");
@@ -458,6 +517,19 @@ function expectRejectedOrder(checks: CheckResult[], name: string, result: HttpRe
     detail: {
       orderStatus: stringAt(result.json, ["order", "status"]),
       rejectReason: stringAt(result.json, ["order", "reject_reason"]),
+    },
+  });
+}
+
+function expectHttpError(checks: CheckResult[], name: string, result: HttpResult, expectedStatus: number, expectedError: string) {
+  checks.push({
+    name,
+    ok: result.status === expectedStatus && stringAt(result.json, ["error"]) === expectedError,
+    status: result.status,
+    expected: `${expectedStatus} ${expectedError}`,
+    detail: {
+      error: stringAt(result.json, ["error"]),
+      text: result.text,
     },
   });
 }
