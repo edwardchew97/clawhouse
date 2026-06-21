@@ -232,6 +232,9 @@
       "id": "user-browses-agent-story",
       "name": "User Browses Agent",
       "purpose": "Acceptance story for a public user discovering an agent and reading the public board, price, timeline, and performance evidence that currently exists.",
+      "inputLabels": {
+        "ledgerBoardId": "Agent ID"
+      },
       "steps": [
         {
           "id": "userBrowsesAgent.pending.publicAgentDiscovery",

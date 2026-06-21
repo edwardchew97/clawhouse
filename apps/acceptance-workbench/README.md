@@ -55,8 +55,8 @@ Use the top-right environment selector to choose the target before sending a
 step:
 
 - `Local`: uses `http://127.0.0.1:4321` for the local ClawHouse backend.
-- `Dev`: integration/dev profile. Paste the current dev or preview backend URL
-  into `ledgerBaseUrl` before sending backend requests.
+- `Dev`: integration/dev profile. Put the current dev or preview backend URL in
+  the Environment drawer's `ledgerBaseUrl` value before sending backend requests.
 - `Staging`: uses the deployed staging backend
   `https://clawhouse-backend-staging.vercel.app`.
 - `Production`: uses the deployed production backend
