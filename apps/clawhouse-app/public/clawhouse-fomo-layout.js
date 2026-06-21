@@ -6,8 +6,8 @@ let agents = [
     id: "terminal_chad6",
     name: "terminal_chad6",
     initials: "TC",
-    strategy: "terminal_chad6 / paper trading agent",
-    description: "Reads backend ledger and paper-trading data from live APIs only.",
+    strategy: "terminal_chad6 / key-market and paper trading agent",
+    description: "Reads key-market, backend ledger, and paper-trading data from live APIs only.",
     gate: "open",
   })
 ];
@@ -52,6 +52,14 @@ function resolveSelectedId(value) {
 }
 
 const selectedAgent = () => agents.find((agent) => agentSelectionKey(agent) === selectedId) || agents.find((agent) => agent.id === selectedId) || agents[0];
+const chainApplies = (agent) => chainState.state?.agent?.agent_id === agent.id;
+const chainBalance = (agent) => {
+  const value = chainState.state?.holder_balance;
+  if (!chainApplies(agent) || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+const holderBalance = (agent) => chainBalance(agent);
 const isUnlocked = () => true;
 
 function dispatchUiEvent(name) {
@@ -59,9 +67,10 @@ function dispatchUiEvent(name) {
 }
 
 function normalizeDiscoveryAgent(agent = {}, index = 0) {
+  const keyStateAgent = agent.keyMarket?.data?.agent || {};
   const pnlLatest = agent.pnl?.data?.latest || {};
-  const id = String(agent.id || "terminal_chad6");
-  const name = String(agent.name || id);
+  const id = String(agent.id || keyStateAgent.agent_id || "terminal_chad6");
+  const name = String(agent.name || keyStateAgent.name || id);
   const displayName = displayNameForAgent(name, id);
   return {
     id,
@@ -70,8 +79,9 @@ function normalizeDiscoveryAgent(agent = {}, index = 0) {
     initials: agent.initials || initialsFor(displayName),
     color: "#3c4044",
     bannerUrl: agent.bannerUrl || agent.banner_url || DEFAULT_AGENT_BANNER_URL,
-    strategy: agent.strategy || `${id} / paper trading agent`,
-    desc: agent.description || "Reads backend ledger and paper-trading data from live APIs only.",
+    strategy: agent.strategy || `${id} / key-market and paper trading agent`,
+    desc: agent.description || "Reads key-market, backend ledger, and paper-trading data from live APIs only.",
+    holders: asNumber(keyStateAgent.supply),
     gate: agent.gate || "open",
     last: agent.status === "available" ? "live read" : "checking",
     boardId: agent.boardId || agent.board_id || id,
@@ -160,6 +170,35 @@ function clearQuote() {
   };
 }
 
+function tradeStatus() {
+  if (chainState.statusTitle || chainState.statusBody) {
+    return {
+      tone: chainState.statusTone || "idle",
+      title: chainState.statusTitle || "Ready",
+      body: chainState.statusBody || "Connect Wallet"
+    };
+  }
+  if (chainState.pending) {
+    return {
+      tone: "pending",
+      title: "Waiting for wallet",
+      body: "Keep the NEAR wallet window open until it returns a result."
+    };
+  }
+  if (chainState.error) {
+    return {
+      tone: "error",
+      title: "Key market read failed",
+      body: chainState.error
+    };
+  }
+  return {
+    tone: chainState.accountId ? "success" : "idle",
+    title: chainState.accountId ? "Wallet ready" : "Ready",
+    body: chainState.accountId ? `${shortAccount(chainState.accountId)} connected.` : "Connect Wallet"
+  };
+}
+
 function hashName(name) {
   return [...name].reduce((hash, char) => Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0, 2166136261);
 }
@@ -202,6 +241,31 @@ function agentIcon(agent) {
 function money(value, suffix = " tNEAR") {
   if (!Number.isFinite(value)) return "--";
   return `${value.toFixed(2)}${suffix}`;
+}
+
+function nearLabel(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "-";
+  return `${numeric.toFixed(numeric < 1 ? 5 : 2)} tNEAR`;
+}
+
+function keyPriceLabel(agent) {
+  const liveQuote = chainApplies(agent) && chainState.quoteSide === "buy"
+    ? chainState.quote
+    : chainApplies(agent)
+      ? chainState.state?.next_buy_price
+      : null;
+  return liveQuote?.total_cost_near ? nearLabel(liveQuote.total_cost_near) : "--";
+}
+
+function holderCount(agent) {
+  const liveSupply = chainApplies(agent) ? asNumber(chainState.state?.agent?.supply) : null;
+  if (liveSupply !== null) return liveSupply;
+  return asNumber(agent.holders);
+}
+
+function shortAccount(accountId) {
+  return accountId.length > 18 ? `${accountId.slice(0, 9)}...${accountId.slice(-6)}` : accountId;
 }
 
 function shortHash(value) {
@@ -531,6 +595,64 @@ function showToast(message, options = {}) {
   showToast.timer = window.setTimeout(() => toast.classList.remove("show"), options.durationMs || (options.linkUrl ? 9000 : 1800));
 }
 
+async function fetchJson(path) {
+  const response = await fetch(path, { cache: "no-store" });
+  const data = await response.json();
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || `Request failed: ${response.status}`);
+  }
+  return data;
+}
+
+function normalizedAmount(value) {
+  const trimmed = String(value || "").trim();
+  return /^[1-9]\d{0,5}$/.test(trimmed) ? trimmed : "1";
+}
+
+function firstRejectedMessage(results) {
+  const rejected = results.find((result) => result.status === "rejected");
+  return rejected ? errorMessage(rejected.reason, "Key market read failed.") : null;
+}
+
+function errorMessage(error, fallback) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+let keyMarketRefreshTimer = 0;
+let keyMarketRefreshId = 0;
+
+function scheduleKeyMarketRefresh(reason, delayMs = 120) {
+  window.clearTimeout(keyMarketRefreshTimer);
+  keyMarketRefreshTimer = window.setTimeout(() => {
+    void refreshKeyMarketRead(reason);
+  }, delayMs);
+}
+
+async function refreshKeyMarketRead(_reason) {
+  const agent = selectedAgent();
+  const refreshId = ++keyMarketRefreshId;
+  const side = tradeSide === "sell" ? "sell" : "buy";
+  const amount = normalizedAmount(byId("keyAmount")?.value || "1");
+  const holderParam = chainState.accountId ? `&holderId=${encodeURIComponent(chainState.accountId)}` : "";
+  const statePath = `/api/key-market/state?agentId=${encodeURIComponent(agent.id)}${holderParam}`;
+  const quotePath = `/api/key-market/quote?side=${side}&agentId=${encodeURIComponent(agent.id)}&amount=${encodeURIComponent(amount)}`;
+  const [stateResult, quoteResult] = await Promise.allSettled([
+    fetchJson(statePath),
+    fetchJson(quotePath),
+  ]);
+  if (refreshId !== keyMarketRefreshId) return;
+
+  chainState = {
+    ...chainState,
+    state: stateResult.status === "fulfilled" ? stateResult.value.state : null,
+    quote: quoteResult.status === "fulfilled" ? quoteResult.value.quote : null,
+    quoteSide: quoteResult.status === "fulfilled" ? side : null,
+    protection: quoteResult.status === "fulfilled" ? quoteResult.value.protection : null,
+    error: firstRejectedMessage([stateResult, quoteResult]),
+  };
+  render();
+}
+
 async function loadDiscoveryAgents() {
   try {
     const response = await fetch("/api/agents", { cache: "no-store" });
@@ -559,6 +681,7 @@ async function loadDiscoveryAgents() {
     };
     chartAnimationPending = true;
     render();
+    scheduleKeyMarketRefresh("discovery", 0);
     dispatchUiEvent("clawhouse:agent-change");
   } catch (error) {
     discoveryLoading = false;
@@ -571,8 +694,28 @@ async function loadDiscoveryAgents() {
   }
 }
 
+function setTextWithOptionalLink(node, text, linkUrl) {
+  if (!node) return;
+  node.textContent = "";
+  node.append(document.createTextNode(text));
+  if (!linkUrl) return;
+  node.append(document.createTextNode(" "));
+  const link = document.createElement("a");
+  link.href = linkUrl;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = "NearBlocks";
+  node.append(link);
+}
+
 function buyOneForUnlock() {
-  showToast("Agent events are open in this preview.");
+  tradeSide = "buy";
+  const input = byId("keyAmount");
+  if (input) input.value = "1";
+  clearQuote();
+  render();
+  scheduleKeyMarketRefresh("unlock-buy", 0);
+  showToast("Connect Wallet to buy this agent key.");
 }
 
 function renderTicker() {
@@ -581,9 +724,11 @@ function renderTicker() {
     const pnlSource = backendPnlSource(agent);
     const title = agentTitle(agent);
     const events = chartModel(agent).events.length;
+    const holders = holderCount(agent);
     return [
       `<span class="ticker-item"><b>${escapeHtml(title)}</b><span class="${pnlClass(pnl)}">${pnlLabel(pnl)}</span><span>${pnlSource}</span></span>`,
-      `<span class="ticker-item"><b>${events}</b><span>ledger events</span><span>${escapeHtml(backendVenue(agent))}</span></span>`
+      `<span class="ticker-item"><b>${escapeHtml(title)} key</b><span>${keyPriceLabel(agent)}</span><span>NEAR testnet</span></span>`,
+      `<span class="ticker-item"><b>${holders === null ? "--" : holders}</b><span>keys in ${escapeHtml(title)}</span><span>${events} ledger events</span></span>`
     ];
   });
   const track = byId("tickerTrack");
@@ -638,18 +783,19 @@ function renderAgentList() {
     const selected = selectionKey === selectedId;
     const title = agentTitle(agent);
     const pnlTone = pnl === null ? "empty" : pnl < 0 ? "down" : "up";
+    const holders = holderCount(agent);
     return `
     <button class="agent-row" data-agent="${escapeHtml(selectionKey)}" data-agent-id="${escapeHtml(agent.id)}" data-selected="${selected ? "true" : "false"}" aria-label="Open ${escapeHtml(title)}">
       <div class="avatar">${agentIcon(agent)}</div>
       <div class="agent-copy">
         <div class="agent-name">
           <span class="agent-title" title="${escapeHtml(agent.name)}">${escapeHtml(title)}</span>
-          <span class="tag">open</span>
+          <span class="tag">key market</span>
         </div>
         <div class="agent-meta">${escapeHtml(agent.strategy)}</div>
         <div class="agent-stats">
-          <span>${escapeHtml(backendVenue(agent))}</span>
-          <span>${chartModel(agent).events.length} events</span>
+          <span>${keyPriceLabel(agent)}</span>
+          <span>${holders === null ? "--" : holders} keys</span>
           <b class="agent-change ${pnlTone}">${pnlLabel(pnl)}</b>
         </div>
       </div>
@@ -664,6 +810,7 @@ function renderAgentList() {
       chartAnimationPending = true;
       clearQuote();
       render();
+      scheduleKeyMarketRefresh("agent-change", 0);
       dispatchUiEvent("clawhouse:agent-change");
       animateAgentChange();
     });
@@ -681,16 +828,17 @@ function renderHero(agent) {
   byId("heroDesc").textContent = agent.desc;
   byId("statPnl").textContent = pnl === null ? "--" : signedPct(pnl);
   byId("statPnl").className = pnl === null ? "" : pnl >= 0 ? "green" : "red";
-  byId("statKey").textContent = chart.events[0]?.action || "--";
-  byId("statHolders").textContent = chart.events.length.toLocaleString();
-  byId("statUpdate").textContent = backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
-  byId("statGate").textContent = "Open";
+  byId("statKey").textContent = keyPriceLabel(agent).replace(" tNEAR", "");
+  const holders = holderCount(agent);
+  byId("statHolders").textContent = holders === null ? "--" : holders.toLocaleString();
+  byId("statUpdate").textContent = chainApplies(agent) ? "testnet live" : backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
+  byId("statGate").textContent = holderBalance(agent) > 0 ? "Unlocked" : "1 key";
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
   byId("miniTop").textContent = title;
   byId("miniMove").textContent = pnl === null ? "--" : signedPct(pnl);
   byId("leaderDataSource").textContent = pnlSource;
-  byId("chartSub").textContent = `${chart.message} / ${backendNetwork(agent)} / ${pnlSource}`;
+  byId("chartSub").textContent = `${chart.message} / ${backendNetwork(agent)} / ${pnlSource} / key market ${chainApplies(agent) ? "live" : "checking"}`;
 }
 
 function publicEventText(event) {
@@ -765,17 +913,65 @@ function renderActivity(agent) {
 }
 
 function renderTicket(agent) {
-  byId("gateButton").textContent = "Open";
+  const keyAmount = byId("keyAmount");
+  const amount = Math.max(Number(keyAmount?.value || 1), 0);
+  const balance = holderBalance(agent);
+  const busy = Boolean(chainState.pending);
+  const quote = chainApplies(agent) && chainState.quoteSide === tradeSide ? chainState.quote : null;
+  const chainTotal = tradeSide === "sell" ? quote?.payout_near : quote?.total_cost_near;
+  byId("quotePrice").textContent = chainTotal ? nearLabel(chainTotal) : keyPriceLabel(agent);
+  byId("quoteTotal").textContent = chainTotal ? nearLabel(chainTotal) : "--";
+  byId("quoteUnlock").textContent = balance && balance > 0 ? "Additional room weight" : "Holder room";
+  const tradeButton = byId("tradeButton");
+  if (tradeButton) {
+    tradeButton.textContent = busy
+      ? statusButtonText()
+      : chainState.accountId ? `${tradeSide === "buy" ? "Buy" : "Sell"} ${agentTitle(agent)} key` : "Connect Wallet";
+    tradeButton.className = `${tradeSide === "buy" ? "primary" : "primary sell"}${busy ? " loading" : ""}`;
+    tradeButton.disabled = busy || amount <= 0 || (tradeSide === "sell" && (balance === null || balance <= 0));
+  }
+  document.querySelectorAll(".ticket-tab, [data-amount], [data-unlock-agent]").forEach((button) => {
+    button.disabled = busy;
+  });
+  if (keyAmount) keyAmount.disabled = busy;
+  byId("posKeys").textContent = balance === null ? "--" : balance.toString();
+  byId("posEntry").textContent = "-";
+  byId("posExit").textContent = "-";
+  byId("posExit").className = "";
+  byId("gateButton").textContent = balance && balance > 0 ? "Room open" : "Gate: 1 key";
   const walletButton = byId("walletButton");
   if (walletButton) {
-    walletButton.textContent = "Backend live";
-    walletButton.classList.add("connected");
-    walletButton.disabled = false;
+    walletButton.textContent = chainState.accountId ? shortAccount(chainState.accountId) : "Connect Wallet";
+    walletButton.classList.toggle("connected", Boolean(chainState.accountId));
+    walletButton.disabled = busy;
   }
+  renderTradeStatus();
   renderBackendStatus();
 }
 
+function statusButtonText() {
+  if (chainState.phase === "connecting") return "Opening wallet...";
+  if (chainState.phase === "quoting") return "Refreshing quote...";
+  if (chainState.phase === "signing") return "Confirm in wallet...";
+  if (chainState.phase === "refreshing") return "Refreshing balance...";
+  return "Working...";
+}
+
+function renderTradeStatus() {
+  const status = tradeStatus();
+  const container = byId("tradeStatus");
+  if (!container) return;
+  container.className = `trade-status ${status.tone}`;
+  byId("tradeStatusTitle").textContent = status.title;
+  setTextWithOptionalLink(
+    byId("tradeStatusBody"),
+    status.body,
+    status.tone === "success" && chainState.lastTxHash ? chainState.explorerUrl : null
+  );
+}
+
 function renderBackendStatus() {
+  if (!byId("backendStatus") || !byId("backendUrl")) return;
   const backend = backendLabel();
   byId("backendStatus").textContent = backend.status;
   byId("backendUrl").textContent = backend.url;
@@ -1228,6 +1424,7 @@ document.querySelectorAll(".ticket-tab").forEach((button) => {
     document.querySelectorAll(".ticket-tab").forEach((item) => item.classList.remove("active", "buy", "sell"));
     button.classList.add("active", tradeSide);
     renderTicket(selectedAgent());
+    scheduleKeyMarketRefresh("side-change");
     dispatchUiEvent("clawhouse:side-change");
   });
 });
@@ -1247,6 +1444,7 @@ document.querySelectorAll("[data-amount]").forEach((button) => {
     byId("keyAmount").value = button.dataset.amount;
     clearQuote();
     renderTicket(selectedAgent());
+    scheduleKeyMarketRefresh("amount-change");
     dispatchUiEvent("clawhouse:amount-change");
   });
 });
@@ -1256,6 +1454,7 @@ if (keyAmountInput) {
   keyAmountInput.addEventListener("input", () => {
     clearQuote();
     renderTicket(selectedAgent());
+    scheduleKeyMarketRefresh("amount-change");
     dispatchUiEvent("clawhouse:amount-change");
   });
 }
@@ -1263,7 +1462,17 @@ if (keyAmountInput) {
 const tradeButton = byId("tradeButton");
 if (tradeButton) {
   tradeButton.addEventListener("click", () => {
-    showToast("Paper trading is read from the backend.");
+    const agent = selectedAgent();
+    const amount = Math.max(Number(byId("keyAmount")?.value || 1), 0);
+    if (amount <= 0) {
+      showToast("Enter a key amount first.");
+      return;
+    }
+    if (tradeSide === "sell" && (holderBalance(agent) ?? 0) <= 0) {
+      showToast(`No ${agentTitle(agent)} key to sell.`);
+      return;
+    }
+    showToast("Connect Wallet to continue.");
   });
 }
 
@@ -1325,6 +1534,7 @@ window.ClawHouseDemo = {
 
 render();
 dispatchUiEvent("clawhouse:ready");
+scheduleKeyMarketRefresh("initial", 0);
 void loadDiscoveryAgents();
 window.requestAnimationFrame(() => document.body.classList.add("ui-ready"));
 animateAsciiKey();
