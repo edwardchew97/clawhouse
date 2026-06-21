@@ -48,7 +48,10 @@ export type MarketState = {
 export function getKeyMarketConfig() {
   const networkId = firstEnv(["CLAWHOUSE_KEY_NEAR_NETWORK_ID", "KEY_NEAR_NETWORK_ID", "NEAR_NETWORK_ID"])
     ?? defaultNetworkId;
-  const nodeUrl = firstEnv(["CLAWHOUSE_KEY_NEAR_RPC_URL", "KEY_NEAR_RPC_URL", "NEAR_NODE_URL"])
+  const nodeUrl = rpcUrlForNetwork(
+    firstEnv(["CLAWHOUSE_KEY_NEAR_RPC_URL", "KEY_NEAR_RPC_URL", "NEAR_NODE_URL"]),
+    networkId,
+  )
     ?? defaultRpcUrls[networkId]
     ?? `https://rpc.${networkId}.near.org`;
   const contractId = firstEnv([
@@ -175,6 +178,14 @@ function firstEnv(names: string[]) {
     if (value) return value;
   }
   return undefined;
+}
+
+function rpcUrlForNetwork(value: string | undefined, networkId: string) {
+  if (!value) return undefined;
+  if (value === `https://rpc.${networkId}.near.org`) {
+    return defaultRpcUrls[networkId];
+  }
+  return value;
 }
 
 function parseNearAmount(value: string) {

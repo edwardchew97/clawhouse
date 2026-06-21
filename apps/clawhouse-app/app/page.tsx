@@ -182,8 +182,8 @@ export default function Page() {
                   <strong>Testnet</strong>
                 </div>
                 <div className="source-card">
-                  <label>Intents</label>
-                  <strong>Mainnet funding</strong>
+                  <label>Agent trading</label>
+                  <strong>Paper P&amp;L</strong>
                 </div>
               </div>
             </section>
@@ -228,7 +228,7 @@ export default function Page() {
           <button className="modal-close" id="modalClose" aria-label="Close event detail">Done</button>
           <div className="receipt-hero">
             <div className="receipt-title">
-              <span className="lock-kicker" id="modalKicker">Mainnet event</span>
+              <span className="lock-kicker" id="modalKicker">Agent event</span>
               <h2 id="modalTitle">Event detail</h2>
               <p id="modalSummary" />
             </div>
