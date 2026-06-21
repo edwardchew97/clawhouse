@@ -58,6 +58,95 @@
           }
         },
         {
+          "id": "agentRegistration.ledger.createBoard",
+          "name": "Register Agent Board",
+          "description": "Registers the approved agent in Agent Board Ledger with a wallet-signed board registration proof.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "scripts/register-board.ts",
+            "--base-url",
+            "{{ledgerBaseUrl}}",
+            "--key-file",
+            "{{ledgerWalletFile}}",
+            "--board-id",
+            "{{ledgerBoardId}}",
+            "--agent-id",
+            "{{ledgerAgentId}}",
+            "--starting-balance-usd",
+            "{{paperTradingStartingBalanceUsd}}",
+            "--visibility-mode",
+            "{{ledgerVisibilityMode}}"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Calling the real POST /boards backend API with both service authorization and wallet signature headers.",
+            "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN configured in the local runtime environment.",
+            "Reusing the local Workbench wallet artifact from Generate Agent Ledger Key Pair; if that step was skipped, this script creates one locally.",
+            "Leave ledgerBoardId empty if you want the backend to generate an id.",
+            "The returned board id is stored as ledgerBoardId for the later API calls."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
+            "ledgerBoardId": "",
+            "ledgerAgentId": "ironclaw-api-workbench",
+            "paperTradingStartingBalanceUsd": "10000",
+            "ledgerVisibilityMode": "public"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerWalletFile",
+            "ledgerAgentId",
+            "paperTradingStartingBalanceUsd",
+            "ledgerVisibilityMode"
+          ],
+          "setVars": {
+            "ledgerBoardId": "response.json.boardId",
+            "ledgerAgentId": "response.json.agentId",
+            "ledgerWalletAddress": "response.json.wallet.walletAddress",
+            "ledgerPublicKey": "response.json.wallet.publicKey",
+            "paperTradingAccountId": "response.json.paperAccountId"
+          }
+        },
+        {
+          "id": "agentRegistration.ledger.getBoard",
+          "name": "Verify Agent Board",
+          "description": "Reads the registered board back by id to confirm the user-facing agent board record exists.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}",
+          "headers": {
+            "x-clawhouse-read-token": "{{ledgerReadToken}}"
+          },
+          "runningNotes": [
+            "Reading a board through the real GET /boards/:id API.",
+            "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerBoardId": "",
+            "ledgerReadToken": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "ledgerBoardId": "response.json.json.id",
+            "ledgerWalletAddress": "response.json.json.wallet_address"
+          }
+        },
+        {
           "id": "agentRegistration.pending.ironclawCreatorOnboarding",
           "name": "IronClaw Creator Onboarding",
           "description": "The creator should start from the official IronClaw onboarding and produce a ClawHouse-approved agent package. 未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
@@ -183,97 +272,6 @@
           ],
           "setVars": {
             "ledgerHealthDb": "response.json.json.db"
-          }
-        },
-        {
-          "id": "agentRegistration.ledger.createBoard",
-          "name": "Register Agent Board",
-          "description": "Registers the approved agent in Agent Board Ledger with a wallet-signed board registration proof.",
-          "type": "script",
-          "access": "protected",
-          "command": "bun",
-          "args": [
-            "scripts/register-board.ts",
-            "--base-url",
-            "{{ledgerBaseUrl}}",
-            "--key-file",
-            "{{ledgerWalletFile}}",
-            "--board-id",
-            "{{ledgerBoardId}}",
-            "--agent-id",
-            "{{ledgerAgentId}}",
-            "--starting-balance-usd",
-            "{{paperTradingStartingBalanceUsd}}",
-            "--visibility-mode",
-            "{{ledgerVisibilityMode}}"
-          ],
-          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
-          "redactPrivateKeyOutput": true,
-          "forbiddenOutputIncludes": [
-            "privateKey",
-            "private_key",
-            "secretKey",
-            "secret_key",
-            "mnemonic"
-          ],
-          "runningNotes": [
-            "Calling the real POST /boards backend API with both service authorization and wallet signature headers.",
-            "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAdminToken.",
-            "Reusing the local Workbench wallet artifact from Generate Agent Ledger Key Pair; if that step was skipped, this script creates one locally.",
-            "Leave ledgerBoardId empty if you want the backend to generate an id.",
-            "The returned board id is stored as ledgerBoardId for the later API calls."
-          ],
-          "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
-            "ledgerAdminToken": "local-ledger-admin-token",
-            "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
-            "ledgerBoardId": "",
-            "ledgerAgentId": "ironclaw-api-workbench",
-            "paperTradingStartingBalanceUsd": "10000",
-            "ledgerVisibilityMode": "public"
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl",
-            "ledgerAdminToken",
-            "ledgerWalletFile",
-            "ledgerAgentId",
-            "paperTradingStartingBalanceUsd",
-            "ledgerVisibilityMode"
-          ],
-          "setVars": {
-            "ledgerBoardId": "response.json.boardId",
-            "ledgerAgentId": "response.json.agentId",
-            "ledgerWalletAddress": "response.json.wallet.walletAddress",
-            "ledgerPublicKey": "response.json.wallet.publicKey",
-            "paperTradingAccountId": "response.json.paperAccountId"
-          }
-        },
-        {
-          "id": "agentRegistration.ledger.getBoard",
-          "name": "Verify Agent Board",
-          "description": "Reads the registered board back by id to confirm the user-facing agent board record exists.",
-          "type": "http",
-          "access": "public",
-          "method": "GET",
-          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}",
-          "headers": {
-            "x-clawhouse-read-token": "{{ledgerReadToken}}"
-          },
-          "runningNotes": [
-            "Reading a board through the real GET /boards/:id API.",
-            "Public boards do not need a read token; holder-gated boards need ledgerReadToken."
-          ],
-          "inputs": {
-            "ledgerBaseUrl": "http://127.0.0.1:4321",
-            "ledgerBoardId": "",
-            "ledgerReadToken": ""
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBaseUrl"
-          ],
-          "setVars": {
-            "ledgerBoardId": "response.json.json.id",
-            "ledgerWalletAddress": "response.json.json.wallet_address"
           }
         },
         {
