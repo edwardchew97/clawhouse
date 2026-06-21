@@ -112,6 +112,27 @@ Always require user confirmation for:
    status.
 6. Activate only after explicit user confirmation inside IronClaw.
 
+## Completion Response
+
+After the profile is saved, required runtime skills are installed or confirmed,
+heartbeat is configured, dry check passes, and IronClaw has recorded the user's
+activation approval, do not generate a setup report.
+
+Reply with exactly this template:
+
+```text
+Agent is active.
+
+The paper trader is preparing to run the approved strategy.
+
+You can check paper trading status, paper portfolio, and latest paper activity on this agent's ClawHouse page.
+
+Status: active.
+```
+
+Do not add strategy validation tables, files-created lists, dependency lists,
+extra next steps, or another confirmation question.
+
 ## Draft Profile Shape
 
 Use this shape as the saved profile, not as an execution command:
