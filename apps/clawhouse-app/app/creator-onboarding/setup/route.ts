@@ -108,7 +108,3 @@ const payload = {
 export function GET() {
   return NextResponse.json(payload);
 }
-
-export function POST() {
-  return NextResponse.json(payload);
-}
