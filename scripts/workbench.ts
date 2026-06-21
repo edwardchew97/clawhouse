@@ -50,13 +50,22 @@ function stop() {
 
 async function isHealthy() {
   try {
-    const response = await fetch(healthUrl, { signal: AbortSignal.timeout(700) });
+    const headers = await workbenchHealthHeaders();
+    const response = await fetch(healthUrl, { headers, signal: AbortSignal.timeout(700) });
     if (!response.ok) return false;
     const body = await response.json();
     return body?.ok === true;
   } catch {
     return false;
   }
+}
+
+async function workbenchHealthHeaders() {
+  const response = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(700) });
+  if (!response.ok) return {};
+  const html = await response.text();
+  const token = html.match(/name="clawhouse-workbench-token" content="([^"]+)"/)?.[1] ?? "";
+  return token ? { "x-clawhouse-workbench-token": token } : {};
 }
 
 function sleep(ms: number) {

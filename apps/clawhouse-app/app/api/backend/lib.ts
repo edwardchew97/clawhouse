@@ -66,8 +66,8 @@ export function backendError(error: unknown) {
     return NextResponse.json({ ok: false, error: error.message, status: error.status }, { status: error.status });
   }
 
-  const message = error instanceof Error ? error.message : "Unknown backend error";
-  return NextResponse.json({ ok: false, error: message }, { status: 502 });
+  console.error(error);
+  return NextResponse.json({ ok: false, error: "Backend proxy failed" }, { status: 502 });
 }
 
 class BackendInputError extends Error {}

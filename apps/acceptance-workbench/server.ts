@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
@@ -9,10 +9,24 @@ type JsonRecord = Record<string, unknown>;
 const appDir = import.meta.dir;
 const repoRoot = normalize(join(appDir, "../.."));
 const port = Number(Bun.argv.find((arg) => arg.startsWith("--port="))?.split("=")[1] ?? "4317");
+const hostname = "127.0.0.1";
 const flowsPath = join(appDir, "flows.json");
 const envPath = join(repoRoot, ".env");
 const encryptedPrefix = "enc:v1:";
 const runnerTimeoutMs = 180_000;
+const workbenchToken = process.env.ACCEPTANCE_WORKBENCH_RUNNER_TOKEN?.trim() || randomBytes(32).toString("base64url");
+const defaultAllowedHttpOrigins = new Set([
+  "http://127.0.0.1:4320",
+  "http://127.0.0.1:4321",
+  "http://localhost:4320",
+  "http://localhost:4321",
+  "https://clawhouse-backend-staging.vercel.app",
+  "https://clawhouse-backend-prod.vercel.app",
+  "https://rpc.testnet.fastnear.com",
+  "https://rpc.mainnet.fastnear.com",
+  "https://rpc.testnet.near.org",
+  "https://rpc.mainnet.near.org",
+]);
 
 loadDotEnv(envPath);
 
@@ -85,6 +99,22 @@ function interpolate(value: unknown, variables: JsonRecord): unknown {
 
 async function loadFlows() {
   return JSON.parse(await readFile(flowsPath, "utf8")) as JsonRecord;
+}
+
+async function loadWorkbenchHtml() {
+  const html = await readFile(join(appDir, "index.html"), "utf8");
+  return html.replace(
+    "</head>",
+    `<meta name="clawhouse-workbench-token" content="${escapeHtmlAttr(workbenchToken)}">\n</head>`
+  );
+}
+
+function escapeHtmlAttr(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function getEncryptionKey() {
@@ -222,6 +252,7 @@ async function scriptEnvUpdatesFromStep(step: JsonRecord, variables: JsonRecord)
 }
 
 async function runHttp(payload: JsonRecord) {
+  assertAllowedHttpUrl(payload.url);
   const headers = Object.fromEntries(
     Object.entries(asObject(payload.headers)).filter(([, value]) => value !== "")
   ) as Record<string, string>;
@@ -236,7 +267,10 @@ async function runHttp(payload: JsonRecord) {
   const timeout = timeoutSignal();
   let response: Response;
   try {
-    response = await fetch(String(payload.url), { ...init, signal: timeout.signal });
+    response = await fetch(String(payload.url), { ...init, redirect: "error", signal: timeout.signal });
+  } catch (error) {
+    if (isRedirectError(error)) throw new HttpError("Outbound URL redirected", 400);
+    throw error;
   } finally {
     timeout.clear();
   }
@@ -257,7 +291,46 @@ async function runHttp(payload: JsonRecord) {
   };
 }
 
+function assertWorkbenchAuth(request: Request) {
+  const actual = request.headers.get("x-clawhouse-workbench-token")?.trim();
+  if (!actual || !tokensMatch(actual, workbenchToken)) {
+    throw new HttpError("Unauthorized workbench runner request", 401);
+  }
+}
+
+function tokensMatch(actual: string, expected: string) {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function assertAllowedHttpUrl(value: unknown) {
+  let url: URL;
+  try {
+    url = new URL(String(value));
+  } catch {
+    throw new HttpError("Invalid outbound URL", 400);
+  }
+  if (!allowedHttpOrigins().has(url.origin)) {
+    throw new HttpError(`Outbound URL origin is not allowlisted: ${url.origin}`, 400);
+  }
+}
+
+function allowedHttpOrigins() {
+  const origins = new Set(defaultAllowedHttpOrigins);
+  for (const value of String(process.env.ACCEPTANCE_WORKBENCH_ALLOWED_HTTP_ORIGINS || "").split(",")) {
+    const origin = value.trim();
+    if (origin) origins.add(origin);
+  }
+  return origins;
+}
+
+function isRedirectError(error: unknown) {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "UnexpectedRedirect";
+}
+
 async function runNearView(payload: JsonRecord) {
+  assertAllowedHttpUrl(payload.rpcUrl);
   const args = JSON.stringify(payload.args ?? {});
   const argsBase64 = Buffer.from(args).toString("base64");
   const rpcBody = {
@@ -279,8 +352,12 @@ async function runNearView(payload: JsonRecord) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(rpcBody),
+      redirect: "error",
       signal: timeout.signal
     });
+  } catch (error) {
+    if (isRedirectError(error)) throw new HttpError("Outbound URL redirected", 400);
+    throw error;
   } finally {
     timeout.clear();
   }
@@ -457,17 +534,20 @@ function timeoutSignal() {
 }
 
 Bun.serve({
+  hostname,
   port,
   async fetch(request) {
     const url = new URL(request.url);
     try {
       if (request.method === "GET" && url.pathname === "/") {
-        return text(await readFile(join(appDir, "index.html"), "utf8"), "text/html; charset=utf-8");
+        return text(await loadWorkbenchHtml(), "text/html; charset=utf-8");
       }
       if (request.method === "GET" && url.pathname === "/flows.json") {
+        assertWorkbenchAuth(request);
         return text(await readFile(flowsPath, "utf8"), "application/json; charset=utf-8");
       }
       if (request.method === "GET" && url.pathname === "/health") {
+        assertWorkbenchAuth(request);
         return json({
           ok: true,
           repoRoot,
@@ -476,6 +556,7 @@ Bun.serve({
         });
       }
       if (request.method === "POST" && url.pathname === "/crypto/encrypt") {
+        assertWorkbenchAuth(request);
         const payload = await readJson<JsonRecord>(request);
         return json({
           ok: true,
@@ -483,6 +564,7 @@ Bun.serve({
         });
       }
       if (request.method === "POST" && url.pathname === "/crypto/decrypt") {
+        assertWorkbenchAuth(request);
         const payload = await readJson<JsonRecord>(request);
         return json({
           ok: true,
@@ -490,22 +572,35 @@ Bun.serve({
         });
       }
       if (request.method === "POST" && url.pathname === "/run/http") {
+        assertWorkbenchAuth(request);
         return json(await runHttp(await readJson<JsonRecord>(request)));
       }
       if (request.method === "POST" && url.pathname === "/run/near-view") {
+        assertWorkbenchAuth(request);
         return json(await runNearView(await readJson<JsonRecord>(request)));
       }
       if (request.method === "POST" && url.pathname === "/run/script") {
+        assertWorkbenchAuth(request);
         return json(await runScript(await readJson<JsonRecord>(request)));
       }
       return json({ ok: false, error: "Not found" }, 404);
     } catch (error) {
+      if (!(error instanceof HttpError)) console.error(error);
       return json({
         ok: false,
-        error: error instanceof Error ? error.message : String(error)
-      }, 500);
+        error: error instanceof HttpError ? error.message : "Internal workbench error"
+      }, error instanceof HttpError ? error.status : 500);
     }
   }
 });
+
+class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
 
 console.log(`ClawHouse Acceptance Workbench: http://127.0.0.1:${port}`);
