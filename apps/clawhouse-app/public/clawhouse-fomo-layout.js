@@ -1099,10 +1099,12 @@ function drawChart(agent, progress = 1) {
   const values = model.values;
   if (values.length < 2) {
     drawEmptyChart(ctx, rect, model.message);
+    setChartEmptyState(true, model.message);
     byId("chartEvents").innerHTML = "";
     hidePriceMarker();
     return;
   }
+  setChartEmptyState(false);
 
   const geo = chartGeometry(values, rect);
   const zeroY = geo.yFor(0);
@@ -1190,12 +1192,17 @@ function drawChart(agent, progress = 1) {
 function drawEmptyChart(ctx, rect, message) {
   const geo = chartGeometry([-10, 0, 10], rect);
   drawChartAxes(ctx, geo, [-10, 0, 10]);
-  ctx.fillStyle = "rgba(255,255,255,0.72)";
-  ctx.font = "700 12px system-ui, sans-serif";
-  ctx.fillText("Backend chart data unavailable", geo.left + 8, geo.top + 12);
-  ctx.fillStyle = "rgba(255,255,255,0.44)";
-  ctx.font = "500 11px system-ui, sans-serif";
-  wrapCanvasText(ctx, message || "No backend time series has been recorded for this agent.", geo.left + 8, geo.top + 32, rect.width - geo.left - geo.right - 16, 16);
+}
+
+function setChartEmptyState(isEmpty, message = "") {
+  const panel = byId("chartPanel");
+  const overlay = byId("chartEmptyOverlay");
+  if (!panel || !overlay) return;
+  panel.classList.toggle("is-empty", isEmpty);
+  overlay.hidden = !isEmpty;
+  if (!isEmpty) return;
+  byId("chartEmptyTitle").textContent = "Backend chart data unavailable";
+  byId("chartEmptyDetail").textContent = message || "No backend time series has been recorded for this agent.";
 }
 
 function axisPctLabel(value) {
@@ -1269,22 +1276,6 @@ function updatePriceMarker(canvas, model, geo) {
   marker.style.color = latest >= 0 ? "#03140b" : "#230702";
   marker.style.boxShadow = latest >= 0 ? "0 0 24px rgba(32, 239, 131, 0.28)" : "0 0 24px rgba(255, 106, 74, 0.26)";
   marker.style.top = `${canvas.offsetTop + geo.yFor(latest)}px`;
-}
-
-function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight) {
-  const words = String(text).split(/\s+/);
-  let line = "";
-  for (const word of words) {
-    const test = line ? `${line} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      ctx.fillText(line, x, y);
-      y += lineHeight;
-      line = word;
-    } else {
-      line = test;
-    }
-  }
-  if (line) ctx.fillText(line, x, y);
 }
 
 let chartAnimationFrame = 0;

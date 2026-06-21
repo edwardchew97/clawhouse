@@ -113,6 +113,10 @@ export default function Page() {
               <canvas id="pnlChart" />
               <div className="chart-events" id="chartEvents" />
               <div className="price-marker" id="priceMarker">backend</div>
+              <div className="chart-empty-overlay" id="chartEmptyOverlay" hidden>
+                <strong id="chartEmptyTitle">Backend chart data unavailable</strong>
+                <span id="chartEmptyDetail">Reading staging backend for this agent.</span>
+              </div>
             </section>
 
             <section className="center-bottom">
