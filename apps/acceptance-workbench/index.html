@@ -288,7 +288,7 @@
 
     .step-button {
       display: grid;
-      grid-template-columns: 34px 52px minmax(0, 1fr) auto;
+      grid-template-columns: minmax(34px, max-content) 52px minmax(0, 1fr) auto;
       align-items: center;
       gap: 8px;
       width: 100%;
@@ -2741,6 +2741,7 @@
     }
 
     function stepSequenceLabel(flow, flowIndex, stepIndex) {
+      if (flow?.steps?.[stepIndex]?.optional) return "Optional";
       if (isExtraFlow(flow)) return `E.${stepIndex + 1}`;
       return `${flowStepNumber(flowIndex)}.${stepIndex + 1}`;
     }

@@ -5,7 +5,7 @@
     {
       "id": "agent-registration-story",
       "name": "Agent Registration",
-      "purpose": "Acceptance story for the minimum required agent registration path: generate keypack, register the board, create the key market, then verify board, price, and discovery readbacks.",
+      "purpose": "Acceptance story for the agent registration path: generate keypack, register the board, create the key market, verify board, price, and discovery readbacks, with optional helper steps for onboarding setup, funding, and health checks.",
       "steps": [
         {
           "id": "agentRegistration.ledger.generateWallet",
@@ -562,16 +562,9 @@
             "Only active public boards are returned; holder-gated and draft boards stay out of the public discovery list.",
             "The ClawHouse App /api/agents route reads this endpoint before falling back to configured curated agents."
           ]
-        }
-      ]
-    },
-    {
-      "id": "agent-registration-extra",
-      "name": "Optional Helpers",
-      "kind": "extra",
-      "purpose": "Optional Agent Registration helpers that are not part of the required 1.1-1.6 registration path.",
-      "steps": [
+        },
         {
+          "optional": true,
           "id": "agentRegistration.pending.ironclawCreatorOnboarding",
           "name": "IronClaw Creator Onboarding",
           "description": "The creator should start from the official IronClaw onboarding and produce a ClawHouse-approved agent package. 未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
@@ -591,6 +584,7 @@
           ]
         },
         {
+          "optional": true,
           "id": "agentRegistration.creatorOnboarding.setupReadback",
           "name": "GET /creator-onboarding/setup",
           "description": "Calls the ClawHouse App compatibility readback for IronClaw-side onboarding. It returns active agent status, the manifest, required skill_install parameters, and the agent-side key-market action; it does not store secrets or create wallets.",
@@ -614,6 +608,7 @@
           }
         },
         {
+          "optional": true,
           "id": "agentRegistration.key.fundCreator",
           "name": "Fund Creator Account",
           "description": "Manual funding gate before key-market creation. Send 0.02 testnet NEAR to the IronClaw-managed creator public account; never paste private keys into Workbench or chat.",
@@ -639,6 +634,7 @@
           ]
         },
         {
+          "optional": true,
           "id": "agentRegistration.ledger.health",
           "name": "GET /health",
           "description": "Checks that the local Agent Board Ledger backend is reachable before registering the agent board.",
