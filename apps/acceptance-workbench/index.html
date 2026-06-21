@@ -561,6 +561,9 @@
     .request-target {
       font-family: var(--mono);
       font-size: 12px;
+      position: relative;
+      z-index: 2;
+      background: transparent;
     }
 
     .request-target.pending {
@@ -579,6 +582,79 @@
     .env-select:focus {
       border-color: var(--strong);
       box-shadow: 0 0 0 2px rgba(41, 41, 41, 0.08);
+    }
+
+    .template-input {
+      position: relative;
+      min-width: 0;
+      height: 36px;
+    }
+
+    .template-overlay {
+      position: absolute;
+      inset: 1px;
+      z-index: 1;
+      overflow: hidden;
+      padding: 8px 10px;
+      color: transparent;
+      font-family: var(--mono);
+      font-size: 12px;
+      white-space: pre;
+      pointer-events: none;
+    }
+
+    .template-overlay-content {
+      display: inline-block;
+      transform: translateX(calc(var(--template-scroll-left, 0px) * -1));
+    }
+
+    .template-var {
+      border: 1px solid rgba(47, 95, 143, 0.24);
+      border-radius: 5px;
+      background: rgba(47, 95, 143, 0.12);
+      color: transparent;
+    }
+
+    .template-var.missing {
+      border-color: rgba(162, 58, 53, 0.28);
+      background: rgba(162, 58, 53, 0.1);
+    }
+
+    .variable-tooltip {
+      position: fixed;
+      z-index: 30;
+      max-width: min(420px, calc(100vw - 16px));
+      padding: 8px 9px;
+      border: 1px solid var(--border-strong);
+      border-radius: 7px;
+      background: #ffffff;
+      box-shadow: 0 10px 28px rgba(41, 41, 41, 0.14);
+      pointer-events: none;
+    }
+
+    .variable-tooltip[hidden] {
+      display: none;
+    }
+
+    .variable-tooltip-key {
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .variable-tooltip-value {
+      margin-top: 3px;
+      color: var(--strong);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    .variable-tooltip.missing .variable-tooltip-value {
+      color: var(--red);
     }
 
     .tabs {
@@ -1149,7 +1225,10 @@
 
           <div class="request-line">
             <select id="methodSelect" class="select"></select>
-            <input id="requestTarget" class="input request-target" />
+            <div class="template-input">
+              <div id="requestTargetOverlay" class="template-overlay" aria-hidden="true"></div>
+              <input id="requestTarget" class="input request-target" />
+            </div>
             <button id="fireStep" class="button primary">Send</button>
           </div>
 
@@ -1177,6 +1256,7 @@
       </section>
     </main>
   </div>
+  <div id="variableTooltip" class="variable-tooltip" hidden></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script>
@@ -1347,6 +1427,7 @@
     const $ = (id) => document.getElementById(id);
     const autoFillInFlight = new Map();
     let autoFillTimer = null;
+    let textMeasureCanvas = null;
 
     function loadState() {
       try {
@@ -1687,6 +1768,140 @@
       };
       visit(value);
       return keys;
+    }
+
+    function templateTokens(value) {
+      return [...String(value ?? "").matchAll(/\{\{([^}]+)\}\}/g)]
+        .map((match) => {
+          const raw = match[0];
+          const start = match.index ?? 0;
+          return {
+            raw,
+            key: match[1]?.trim() || "",
+            start,
+            end: start + raw.length
+          };
+        })
+        .filter((token) => token.key);
+    }
+
+    function templateVarDisplay(key, step = activeStep()) {
+      const vars = allVars(step);
+      if (!(key in vars) || vars[key] === undefined || vars[key] === null) {
+        return { status: "missing", value: "Missing value" };
+      }
+      if (String(vars[key]) === "") {
+        return { status: "missing", value: "Empty value" };
+      }
+      if (isSensitiveKey(key)) {
+        return { status: "redacted", value: "[redacted]" };
+      }
+      const value = typeof vars[key] === "object"
+        ? JSON.stringify(vars[key], null, 2)
+        : String(vars[key]);
+      return { status: "set", value };
+    }
+
+    function renderTemplateHighlight(value, step = activeStep()) {
+      const text = String(value ?? "");
+      const tokens = templateTokens(text);
+      if (!tokens.length) {
+        return `<span class="template-overlay-content">${escapeHtml(text) || "&nbsp;"}</span>`;
+      }
+      let cursor = 0;
+      let html = "";
+      for (const token of tokens) {
+        html += escapeHtml(text.slice(cursor, token.start));
+        const display = templateVarDisplay(token.key, step);
+        const classes = display.status === "missing" ? "template-var missing" : "template-var";
+        html += `<span class="${classes}">${escapeHtml(token.raw)}</span>`;
+        cursor = token.end;
+      }
+      html += escapeHtml(text.slice(cursor));
+      return `<span class="template-overlay-content">${html}</span>`;
+    }
+
+    function syncRequestTargetOverlayScroll() {
+      const input = $("requestTarget");
+      const overlay = $("requestTargetOverlay");
+      if (!input || !overlay) return;
+      overlay.style.setProperty("--template-scroll-left", `${input.scrollLeft}px`);
+    }
+
+    function renderRequestTargetOverlay(step = activeStep()) {
+      const input = $("requestTarget");
+      const overlay = $("requestTargetOverlay");
+      if (!input || !overlay) return;
+      overlay.innerHTML = renderTemplateHighlight(input.value, step);
+      syncRequestTargetOverlayScroll();
+    }
+
+    function parseCssPixel(value) {
+      const parsed = Number.parseFloat(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function requestTargetCharWidth(input) {
+      if (!textMeasureCanvas) textMeasureCanvas = document.createElement("canvas");
+      const context = textMeasureCanvas.getContext("2d");
+      if (!context) return 7.2;
+      const style = window.getComputedStyle(input);
+      context.font = style.font || `${style.fontSize} ${style.fontFamily}`;
+      return context.measureText("0").width || 7.2;
+    }
+
+    function requestTargetTokenAtPoint(event) {
+      const input = $("requestTarget");
+      if (!input) return null;
+      const text = input.value || "";
+      const tokens = templateTokens(text);
+      if (!tokens.length) return null;
+      const rect = input.getBoundingClientRect();
+      const style = window.getComputedStyle(input);
+      const x = event.clientX
+        - rect.left
+        - parseCssPixel(style.borderLeftWidth)
+        - parseCssPixel(style.paddingLeft)
+        + input.scrollLeft;
+      if (x < 0) return null;
+      const index = Math.floor(x / requestTargetCharWidth(input));
+      return tokens.find((token) => index >= token.start && index < token.end) || null;
+    }
+
+    function showVariableTooltip(token, event, step = activeStep()) {
+      const tooltip = $("variableTooltip");
+      if (!tooltip) return;
+      const display = templateVarDisplay(token.key, step);
+      tooltip.classList.toggle("missing", display.status === "missing");
+      tooltip.innerHTML = `
+        <div class="variable-tooltip-key">${escapeHtml(token.raw)}</div>
+        <div class="variable-tooltip-value">${escapeHtml(display.value)}</div>
+      `;
+      tooltip.hidden = false;
+      const rect = tooltip.getBoundingClientRect();
+      const margin = 8;
+      let left = event.clientX + 12;
+      const preferAbove = window.innerWidth <= 680;
+      let top = preferAbove ? event.clientY - rect.height - 10 : event.clientY + 14;
+      if (left + rect.width > window.innerWidth - margin) left = window.innerWidth - rect.width - margin;
+      if (top < margin) top = event.clientY + 14;
+      if (top + rect.height > window.innerHeight - margin) top = event.clientY - rect.height - 10;
+      tooltip.style.left = `${Math.max(margin, left)}px`;
+      tooltip.style.top = `${Math.max(margin, top)}px`;
+    }
+
+    function hideVariableTooltip() {
+      const tooltip = $("variableTooltip");
+      if (tooltip) tooltip.hidden = true;
+    }
+
+    function handleRequestTargetVariableHover(event) {
+      const token = requestTargetTokenAtPoint(event);
+      if (!token) {
+        hideVariableTooltip();
+        return;
+      }
+      showVariableTooltip(token, event);
     }
 
     function stepInputKeys(inputs) {
@@ -2068,6 +2283,7 @@
       $("requestTarget").value = requestTemplate(step);
       $("requestTarget").readOnly = pending || step.type !== "http";
       $("requestTarget").classList.toggle("pending", pending);
+      renderRequestTargetOverlay(step);
       $("fireStep").disabled = pending;
       $("fireStep").textContent = pending ? "未完成" : "Send";
       $("requestPills").innerHTML = pending
@@ -2701,16 +2917,19 @@
       };
     }
 
+    function isSensitiveKey(key) {
+      const normalized = String(key).toLowerCase().replace(/[_-]/g, "");
+      return normalized.includes("privatekey")
+        || normalized.includes("secret")
+        || normalized.includes("token")
+        || normalized.includes("apikey");
+    }
+
     function sanitizeSecrets(value) {
       if (Array.isArray(value)) return value.map((item) => sanitizeSecrets(item));
       if (value && typeof value === "object") {
         return Object.fromEntries(Object.entries(value).map(([key, item]) => {
-          const normalized = key.toLowerCase().replace(/[_-]/g, "");
-          const sensitive = normalized.includes("privatekey")
-            || normalized.includes("secret")
-            || normalized.includes("token")
-            || normalized.includes("apikey");
-          return [key, sensitive ? "[redacted]" : sanitizeSecrets(item)];
+          return [key, isSensitiveKey(key) ? "[redacted]" : sanitizeSecrets(item)];
         }));
       }
       return value;
@@ -2842,6 +3061,10 @@
       if (state.activeTab === "preview") renderPreview(step);
       persist();
     });
+    $("requestTarget").addEventListener("scroll", syncRequestTargetOverlayScroll);
+    $("requestTarget").addEventListener("mousemove", handleRequestTargetVariableHover);
+    $("requestTarget").addEventListener("mouseleave", hideVariableTooltip);
+    $("requestTarget").addEventListener("blur", hideVariableTooltip);
 
     $("fireStep").addEventListener("click", fireStep);
     $("copyDebugContext").addEventListener("click", copyDebugContext);
