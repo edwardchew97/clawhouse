@@ -49,8 +49,9 @@ function completionTemplate(creatorPublicAccount: string) {
     "",
     "Next: create the ClawHouse key market so users can trade your key.",
     "",
-    `1. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
-    "2. Tell this agent: create keymarket.",
+    "1. Back up the NEAR private key using IronClaw's secure backup or recovery flow.",
+    `2. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
+    "3. Tell this agent: create keymarket.",
     "",
     "The agent can already submit paper orders and reasoning. It will create the key market through the local ClawHouse skill once the account is funded.",
     "",
@@ -74,6 +75,10 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
     userRunsCommand: false,
     backendRunsCommand: false,
     executor: "clawhouse-creator-onboarding skill inside the target IronClaw agent",
+    signerReuse:
+      "Use the same IronClaw-managed NEAR key/account for ClawHouse wallet-signed backend requests and key-market creation when that signer already exists.",
+    backupReminder:
+      "Back up the NEAR private key using IronClaw's secure backup or recovery flow before funding. Do not paste it into chat, Workbench, tool output, or logs.",
     localAction: {
       runner: "agent-key-market create",
       cwd: "agent-key-market",
@@ -89,12 +94,14 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
       args: ["<agent_id>", "<agent_name>", "<metadata_uri>"],
     },
     userFacingSteps: [
+      "Back up the NEAR private key using IronClaw's secure backup or recovery flow.",
       `Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
       "Tell this agent: create keymarket.",
     ],
     forbidden: [
       "Do not show the creator a bun run command as the normal path.",
       "Do not paste NEAR private keys or seed phrases into chat.",
+      "Do not paste NEAR private keys or seed phrases into Workbench, tool output, or logs.",
       "Do not send mainnet NEAR for this testnet key market.",
     ],
   };
@@ -109,7 +116,7 @@ function payloadFor(request: Request) {
     mode: "ironclaw-side-onboarding",
     status: "active",
     message:
-      "Agent is active. Use the manifest and skill_install inside IronClaw; the remaining creator action is key-market funding and the create keymarket skill action.",
+      "Agent is active. Use the manifest and skill_install inside IronClaw; the remaining creator actions are secure NEAR private-key backup, key-market funding, and the create keymarket skill action.",
     intake: [
       "agent_name",
       "agent_description",
