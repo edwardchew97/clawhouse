@@ -1,7 +1,8 @@
-# Hyperliquid Paper Perps API
+# Hyperliquid Paper Trading API
 
 This is the implemented ClawHouse paper-trading API for the current
-Hyperliquid-style paper perps lane.
+Hyperliquid paper trading lane. It supports both paper perps and paper spot
+through the same `/paper/...` API.
 
 Implementation lives in:
 
@@ -18,10 +19,12 @@ Implemented:
 
 - service-authorized paper account creation;
 - service-authorized market snapshots;
-- live Hyperliquid public market-data refresh through the info endpoint;
+- live Hyperliquid public market-data refresh through the info endpoint for
+  perps and spot;
 - signed agent paper order submission;
 - IOC, GTC, and ALO paper order behavior;
 - cross and isolated margin modes;
+- paper spot cash and holding checks with `market_type: "spot"`;
 - leverage-cap rejection from Hyperliquid market metadata;
 - reduce-only validation;
 - paper position, risk, liquidation, leaderboard, and replay proof;
@@ -98,7 +101,7 @@ Request:
   "agent_id": "ironclaw-paper-workbench",
   "agent_public_key": "ed25519:...",
   "starting_balance_usd": 10000,
-  "allowed_markets": ["BTC", "ETH"],
+  "allowed_markets": ["BTC", "ETH", "spot:PURR/USDC"],
   "metadata": {
     "source": "acceptance-workbench"
   }
@@ -116,7 +119,7 @@ Response:
     "starting_balance_usd": 10000,
     "cash_balance_usd": 10000,
     "status": "active",
-    "allowed_markets": ["BTC", "ETH"]
+    "allowed_markets": ["BTC", "ETH", "spot:PURR/USDC"]
   }
 }
 ```
@@ -145,6 +148,7 @@ Request:
 
 ```json
 {
+  "market_type": "perp",
   "coin": "BTC",
   "source": "acceptance-workbench",
   "mark_px": 100,
@@ -186,9 +190,18 @@ Request:
 
 ```json
 {
+  "market_type": "perp",
   "coin": "BTC"
 }
 ```
+
+Use `market_type: "spot"` for Hyperliquid spot pairs, for example
+`"coin": "PURR/USDC"`. Perps use Hyperliquid `metaAndAssetCtxs`; spot uses
+Hyperliquid `spotMetaAndAssetCtxs`. Both use the public `l2Book` shape for book
+depth. For spot book requests, Hyperliquid uses `PURR/USDC` for PURR and
+`@{spotPairIndex}` for other spot pairs; the adapter derives that book symbol
+from `spotMetaAndAssetCtxs` while storing the requested paper `coin` on the
+snapshot.
 
 Response:
 
@@ -198,6 +211,7 @@ Response:
   "snapshots": [
     {
       "id": "paper_mkt_...",
+      "market_type": "perp",
       "coin": "BTC",
       "source": "hyperliquid",
       "mark_px": 100,
@@ -223,6 +237,7 @@ Request body:
 {
   "paper_account_id": "paper-1",
   "client_order_id": "ioc-1",
+  "market_type": "perp",
   "coin": "BTC",
   "side": "buy",
   "tif": "Ioc",
@@ -245,8 +260,29 @@ Accepted `tif` values:
 
 Accepted `margin_mode` values:
 
-- `cross`
-- `isolated`
+- `cross` for paper perps
+- `isolated` for paper perps
+- `spot` for paper spot
+
+For paper spot orders:
+
+```json
+{
+  "paper_account_id": "paper-1",
+  "client_order_id": "spot-ioc-1",
+  "market_type": "spot",
+  "coin": "PURR/USDC",
+  "side": "buy",
+  "tif": "Ioc",
+  "size": 10,
+  "margin_mode": "spot",
+  "reason": "Open a paper PURR/USDC spot position."
+}
+```
+
+Spot orders must use `margin_mode: "spot"` and `leverage: 1` when leverage is
+provided. Spot buys are rejected when paper cash is insufficient. Spot sells are
+rejected when the paper account does not hold enough of the spot asset.
 
 Response:
 

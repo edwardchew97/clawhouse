@@ -195,6 +195,7 @@ export type PaperAccountRow = {
 
 export type PaperMarketSnapshotRow = {
   id: string;
+  market_type: string;
   coin: string;
   source: string;
   mark_px: number;
@@ -213,6 +214,7 @@ export type PaperOrderRow = {
   paper_account_id: string;
   agent_id: string;
   client_order_id: string;
+  market_type: string;
   coin: string;
   side: string;
   tif: string;
@@ -240,6 +242,7 @@ export type PaperFillRow = {
   id: string;
   order_id: string;
   paper_account_id: string;
+  market_type: string;
   coin: string;
   side: string;
   px: number;
@@ -254,6 +257,7 @@ export type PaperFillRow = {
 export type PaperPositionRow = {
   id: string;
   paper_account_id: string;
+  market_type: string;
   coin: string;
   margin_mode: string;
   signed_size: number;

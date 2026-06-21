@@ -8,9 +8,8 @@ replace Scope V0 key trading.
 - Producing session: `019ede4f-865f-7fc2-8e9e-7a2e2f82b5d9`
 - Date: 2026-06-19
 - Basis: JY asked to scope Agent Trading separately from user key trading,
-  using the prior conversation's NEAR Intents spot-first decision, real-trading
-  requirement, $100 minimum board funding direction, and current Season 0 truth
-  files.
+  using the prior conversation's spot-first decision, real-trading requirement,
+  $100 minimum board funding direction, and current Season 0 truth files.
 - Amendment session: `019ede10-c43f-76f1-ab2d-68b0fabf9802`
 - Amendment date: 2026-06-19
 - Amendment basis: JY clarified that current V0 removes OutLayer and does not
@@ -28,15 +27,15 @@ replace Scope V0 key trading.
 - Amendment basis: JY clarified that ClawHouse does not need a pre-trade Order
   Intent as the backend contract. V0 needs IronClaw-side onboarding with a
   manifest-verified runtime skill pack: one skill for Agent Board Ledger
-  reporting, one skill for NEAR Intents spot value, and future trading value
-  skills added through the same checked manifest/heartbeat update path.
+  reporting, one removed legacy trading skill, and future trading value skills added
+  through the same checked manifest/heartbeat update path.
 - Amendment session: `019ede0e-a276-7bc2-a6da-ded485719308`
 - Amendment date: 2026-06-19
 - Amendment basis: The IronClaw runtime skill pack was materialized in the repo
   as development artifacts under `skills/ironclaw-runtime/`: manifest,
-  reporting skill, NEAR Intents spot value skill, heartbeat template, and
-  reset/retest guide. Production hosting, signatures, and exact IronClaw
-  installer mechanics remain unverified.
+  reporting skill, removed legacy trading skill, heartbeat template, and reset/retest
+  guide. Production hosting, signatures, and exact IronClaw installer mechanics
+  remain unverified.
 - Hyperliquid paper trading amendment session:
   `019ee644-a97f-7953-a80b-e6642cf53596`
 - Amendment date: 2026-06-21
@@ -58,11 +57,11 @@ replace Scope V0 key trading.
 - Runtime and funding amendment session:
   `019ee858-16a0-7603-b385-1d7a379e3a94`
 - Amendment date: 2026-06-21
-- Amendment basis: Prior JY request removed the legacy
-  `near-intents-spot-value` optional skill from current runtime/onboarding
-  surfaces and set the current PaperTrade starting balance default to 10,000
-  USD. The starting balance remains current; the skill-removal part is restored
-  and expanded by the later runtime cleanup correction below.
+- Amendment basis: Prior JY request removed the legacy optional trading
+  skill from current runtime/onboarding surfaces and set the current PaperTrade
+  starting balance default to 10,000 USD. The starting balance remains current;
+  the skill-removal part is restored and expanded by the later runtime cleanup
+  correction below.
 - Trading skill split amendment sessions:
   `019ee646-2993-7b50-b6e3-bb7f9445131f`,
   `019ee644-a97f-7953-a80b-e6642cf53596`
@@ -70,8 +69,8 @@ replace Scope V0 key trading.
 - Amendment basis: JY clarified that spot trading and perps trading should be
   exposed as separate runtime skills. Agents must use
   `hyperliquid-paper-trading` for perps-style paper orders with leverage,
-  cross/isolated margin, and liquidation, and `near-intents-spot-value` for
-  spot-only swaps/value movement. Future venues must be added as separate
+  cross/isolated margin, and liquidation, and a separate removed legacy trading
+  skill for value movement. Future venues must be added as separate
   manifest skills instead of overloading either skill. This two-skill runtime
   split is superseded by the runtime cleanup correction below.
 - Single-source balance amendment session:
@@ -84,10 +83,16 @@ replace Scope V0 key trading.
 - Runtime cleanup correction session: `019ee84c-2bfb-7ec3-844d-ff6f60412bb2`
 - Amendment date: 2026-06-21
 - Amendment basis: JY corrected the prior two-skill interpretation and
-  instructed removing the NEAR Intents spot runtime/onboarding path completely
+  instructed removing the legacy spot runtime/onboarding path completely
   from current surfaces. Current V0 exposes `hyperliquid-paper-trading` as the
-  only trading runtime skill; future spot or venue skills must be added later as
-  separate manifest entries before onboarding can route to them.
+  only trading runtime skill. The older narrow wording is superseded by the
+  Hyperliquid spot correction below.
+- Hyperliquid spot correction session: `019ee87b-baf0-75c0-8d92-41c30fefb43b`
+- Amendment date: 2026-06-21
+- Amendment basis: JY confirmed that current paper trading must support
+  Hyperliquid paper perps and Hyperliquid paper spot through the same
+  `hyperliquid-paper-trading` runtime skill, while removing the legacy spot
+  runtime/onboarding path from current documentation.
 
 ## One Sentence
 
@@ -113,18 +118,24 @@ Trading must not require changes to the bonding-curve key-market contract.
 
 Current V0 uses a ClawHouse-hosted Hyperliquid-style paper trading engine.
 OutLayer is deferred. NEAR Intents is no longer the first agent-trading/PnL
-lane, and no NEAR Intents spot runtime skill is exposed in current onboarding.
+lane, and no legacy spot runtime skill is exposed in current onboarding.
+The current runtime skill supports both Hyperliquid paper perps and Hyperliquid
+paper spot through `market_type`.
 
 In V0:
 
 - agents submit paper orders to ClawHouse over HTTPS;
-- ClawHouse validates market, size, time-in-force, depth, slippage, leverage,
-  margin mode, reduce-only behavior, and staleness before accepting an order;
+- ClawHouse validates market type, market, size, time-in-force, depth,
+  slippage, margin mode, reduce-only behavior, and staleness before accepting
+  an order;
+- ClawHouse validates leverage and margin for perps, and paper cash/holding
+  availability for spot;
 - ClawHouse simulates fills against Hyperliquid market data instead of sending
   real orders to Hyperliquid;
 - ClawHouse tracks paper accounts, open orders, fills, positions, margin,
   funding, PnL, drawdown, and liquidation events;
-- cross margin and isolated margin are both first-version requirements;
+- cross margin and isolated margin are first-version perps requirements;
+- paper spot orders must use `margin_mode: "spot"` and `leverage: 1`;
 - liquidation must be driven by fresh mark/risk data and written promptly;
 - every accepted/rejected order, fill, risk check, liquidation, and leaderboard
   snapshot must have enough recorded inputs to replay or audit the result;
@@ -193,13 +204,12 @@ ClawHouse provides a runtime skill pack for IronClaw:
   pattern through the same manifest verification path before onboarding can
   route agents to that pattern.
 
-Current agents may route only perps, leverage, cross/isolated margin, shorts,
-liquidation, and Hyperliquid-style paper orders to `hyperliquid-paper-trading`.
-Do not route unsupported spot/value movement strategies to a missing skill.
-Future spot or venue routes require a new verified manifest entry first.
+Current agents may route Hyperliquid paper perps and Hyperliquid paper spot to
+`hyperliquid-paper-trading`. Do not route real value movement or unsupported
+venues to that skill.
 
-Do not mix spot deposit, recipient, refund, or swap quote fields into paper
-perps orders.
+Do not mix deposit, recipient, refund, swap quote, or real transfer fields into
+ClawHouse paper orders.
 
 The ClawHouse onboarding skill runs inside the target IronClaw agent. It should:
 
@@ -398,14 +408,15 @@ its own interpretation as wrong, retracted, suspicious, or not part of strategy.
 Agent Board Ledger is no longer the V0 paper matching, margin, or liquidation
 engine. It remains useful for historical event timelines and read surfaces.
 
-The Hyperliquid Paper Perps service owns:
+The Hyperliquid Paper Trading service owns:
 
 - paper account registration;
 - agent paper order inbox;
 - order validation and idempotency;
-- Hyperliquid market data snapshots;
+- Hyperliquid perps and spot market data snapshots;
 - paper IOC fills and GTC/ALO resting orders;
 - cross and isolated margin accounting;
+- paper spot cash and holding checks;
 - open position accounting;
 - funding and fee accounting;
 - liquidation worker and liquidation events;
@@ -609,14 +620,14 @@ The first Agent Trading slice is done only when:
 - 2026-06-19 - `019ede0e-a276-7bc2-a6da-ded485719308` - Superseded the manual
   strategy-package / pre-trade Order Intent boundary with IronClaw-side
   onboarding and a manifest-verified runtime skill pack: reporting to Agent
-  Board Ledger, NEAR Intents spot value, heartbeat update checks, and future
+  Board Ledger, a removed legacy trading skill, heartbeat update checks, and future
   trading value skills.
 - 2026-06-19 - `019ede0e-a276-7bc2-a6da-ded485719308` - Added concrete
   development runtime-pack artifacts under `skills/ironclaw-runtime/` and kept
   production hosting, signatures, and exact IronClaw install mechanics as open
   verification items.
-- 2026-06-21 - `019ee644-a97f-7953-a80b-e6642cf53596` - Replaced the NEAR
-  Intents spot-first observation lane with ClawHouse-hosted Hyperliquid-style
+- 2026-06-21 - `019ee644-a97f-7953-a80b-e6642cf53596` - Replaced the prior
+  spot-first observation lane with ClawHouse-hosted Hyperliquid-style
   paper trading: agents submit signed paper orders to ClawHouse; ClawHouse
   validates depth, margin, risk, and staleness; supports IOC/GTC/ALO, cross and
   isolated margin, timely liquidation, Paper PnL leaderboard snapshots, audit
@@ -627,22 +638,27 @@ The first Agent Trading slice is done only when:
   later Hyperliquid-style paper trading scope from
   `019ee644-a97f-7953-a80b-e6642cf53596`, which requires cross/isolated margin
   and liquidation in paper mode.
-- 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Removed
-  `near-intents-spot-value` from the current runtime/onboarding contract and
-  set the current PaperTrade starting balance default to 10,000 USD per
-  approved agent paper account. The skill-removal part is restored by the later
-  runtime cleanup correction.
+- 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Removed the legacy
+  trading skill from the current runtime/onboarding contract and set the
+  current PaperTrade starting balance default to 10,000 USD per approved agent
+  paper account. The skill-removal part is restored by the later runtime
+  cleanup correction.
 - 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f`,
   `019ee644-a97f-7953-a80b-e6642cf53596` - Recorded the two-skill trading
   split: `hyperliquid-paper-trading` owns paper perps with leverage,
-  cross/isolated margin, and liquidation, while `near-intents-spot-value` owns
-  spot-only swaps/value movement; future venues must be separate manifest
-  skills. Superseded by the later runtime cleanup correction.
+  cross/isolated margin, and liquidation, while a separate removed legacy
+  trading skill owns value movement; future venues must be separate
+  manifest skills. Superseded by the later runtime cleanup correction.
 - 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Confirmed
   `paper_accounts.starting_balance_usd` as the only stored starting bankroll for
   current agent paper PnL; Agent Board Ledger board rows and PnL snapshot rows
   must not store duplicate baseline values.
-- 2026-06-21 - `019ee84c-2bfb-7ec3-844d-ff6f60412bb2` - Removed the NEAR
-  Intents spot runtime/onboarding path from current Agent Trading truth. Current
+- 2026-06-21 - `019ee84c-2bfb-7ec3-844d-ff6f60412bb2` - Removed the legacy
+  spot runtime/onboarding path from current Agent Trading truth. Current
   runtime/onboarding exposes `hyperliquid-paper-trading` as the only trading
-  skill; future spot or venue trading requires a new verified manifest entry.
+  skill. The older narrow wording is superseded by the Hyperliquid spot
+  correction.
+- 2026-06-21 - `019ee87b-baf0-75c0-8d92-41c30fefb43b` - Confirmed
+  `hyperliquid-paper-trading` as the current paper trading skill for
+  Hyperliquid paper perps and Hyperliquid paper spot, with the legacy spot
+  route removed from current runtime/onboarding documentation.

@@ -40,6 +40,13 @@ replaces the previous Trade Engine direction for current V0 work.
   bankroll values. The accepted model is one stored starting bankroll per agent
   paper account: `paper_accounts.starting_balance_usd`. Agent Board Ledger board
   rows and PnL snapshot rows must not store a duplicate starting-value field.
+- Hyperliquid spot documentation cleanup session:
+  `019ee87b-baf0-75c0-8d92-41c30fefb43b`
+- Amendment date: 2026-06-21
+- Amendment basis: JY requested removing the legacy spot route from current
+  documentation and supporting Hyperliquid paper spot through the current paper
+  trading engine. Agent Board Ledger remains a read/accounting surface rather
+  than the spot or perps execution engine.
 
 ## One Sentence
 
@@ -344,7 +351,8 @@ PnL = current portfolio value - linked paper account starting_balance_usd - net 
 
 PnL must account for:
 
-- NEAR-side spot trading activity visible to the ledger;
+- external spot trading activity visible to the ledger when a separately
+  accepted venue exists;
 - fees when observable;
 - refunds;
 - failed or incomplete trades;
@@ -435,7 +443,7 @@ Boundary:
 
 ## Confidential Activity Boundary
 
-NEAR Intents confidential activity may hide some trade details.
+Confidential external activity may hide some trade details.
 
 Agent Board Ledger should handle this conservatively:
 
@@ -588,3 +596,6 @@ The first Agent Board Ledger slice is complete when:
   Agent Board Ledger starting-value storage contract. The only stored starting
   bankroll for current agent PnL is `paper_accounts.starting_balance_usd`;
   Board and PnL snapshot rows must not store a second baseline value.
+- 2026-06-21 - `019ee87b-baf0-75c0-8d92-41c30fefb43b` - Removed NEAR
+  Intents-specific spot wording from current Board Ledger documentation and
+  kept Hyperliquid paper spot under the separate Paper Trading engine boundary.
