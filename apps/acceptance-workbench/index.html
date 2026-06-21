@@ -1657,6 +1657,16 @@
       return String(value ?? "");
     }
 
+    function inputLabel(step, key) {
+      const flowLabels = activeFlow()?.inputLabels || {};
+      const stepLabels = step.inputLabels || {};
+      return String(stepLabels[key] || flowLabels[key] || key);
+    }
+
+    function inputLabelList(step, keys) {
+      return keys.map((key) => inputLabel(step, key)).join(", ");
+    }
+
     function templateVars(value) {
       const keys = new Set();
       const visit = (item) => {
@@ -1679,17 +1689,20 @@
       return keys;
     }
 
+    function stepInputKeys(inputs) {
+      return Object.keys(inputs).filter((key) => !environmentOwnedKeys.has(key));
+    }
+
     function inputKeysFrom(step, keys) {
       const inputs = currentInputs(step);
-      return Object.keys(inputs).filter((key) => keys.has(key));
+      return stepInputKeys(inputs).filter((key) => keys.has(key));
     }
 
     function headerInputKeys(step) {
       return inputKeysFrom(step, templateVars(step.headers || {}));
     }
 
-    function targetInputKeys(step) {
-      const inputs = currentInputs(step);
+    function targetTemplateKeys(step) {
       const keys = new Set();
       if (step.type === "http") {
         templateVars(requestTemplate(step)).forEach((key) => keys.add(key));
@@ -1702,7 +1715,11 @@
         templateVars(step.command || "").forEach((key) => keys.add(key));
         templateVars(step.cwd || "").forEach((key) => keys.add(key));
       }
-      return Object.keys(inputs).filter((key) => keys.has(key));
+      return keys;
+    }
+
+    function targetInputKeys(step) {
+      return inputKeysFrom(step, targetTemplateKeys(step));
     }
 
     function bodyInputKeys(step) {
@@ -1711,7 +1728,7 @@
       if (step.type === "script") {
         const inputs = currentInputs(step);
         const targetVars = new Set(targetInputKeys(step));
-        return Object.keys(inputs).filter((key) => !targetVars.has(key));
+        return stepInputKeys(inputs).filter((key) => !targetVars.has(key));
       }
       return [];
     }
@@ -1721,7 +1738,7 @@
       const targetVars = new Set(targetInputKeys(step));
       const headerVars = new Set(headerInputKeys(step));
       const bodyVars = new Set(bodyInputKeys(step));
-      return Object.keys(inputs).filter((key) => {
+      return stepInputKeys(inputs).filter((key) => {
         if (targetVars.has(key)) return true;
         return !headerVars.has(key) && !bodyVars.has(key);
       });
@@ -1750,6 +1767,32 @@
 
     function hasValue(value) {
       return value !== undefined && value !== null && String(value).trim() !== "";
+    }
+
+    function missingTargetValues(step) {
+      const vars = allVars(step);
+      const inputs = currentInputs(step);
+      const missingEnv = [];
+      const missingInputs = [];
+      for (const key of targetTemplateKeys(step)) {
+        if (hasValue(vars[key])) continue;
+        if (environmentOwnedKeys.has(key)) {
+          missingEnv.push(key);
+        } else if (key in inputs) {
+          missingInputs.push(key);
+        }
+      }
+      return { missingEnv, missingInputs };
+    }
+
+    function ensureTargetValues(step) {
+      const missing = missingTargetValues(step);
+      if (missing.missingEnv.length) {
+        throw new Error(`Missing environment value: ${missing.missingEnv.join(", ")}. Open Environment and fill it for this target.`);
+      }
+      if (missing.missingInputs.length) {
+        throw new Error(`Missing URL/path input: ${inputLabelList(step, missing.missingInputs)}. Fill the field or run the upstream step that extracts it.`);
+      }
     }
 
     function autoFillRules(step = activeStep()) {
@@ -2065,7 +2108,7 @@
         <div class="fields params-fields">
           ${keys.map((key) => `
             <div class="kv-row">
-              <input class="input" value="${escapeAttr(key)}" readonly />
+              <input class="input" value="${escapeAttr(inputLabel(step, key))}" title="${escapeAttr(key)}" readonly />
               <input class="input" data-input="${escapeAttr(key)}" value="${escapeAttr(inputDisplayValue(key, inputs[key]))}" />
             </div>
           `).join("")}
@@ -2565,6 +2608,7 @@
 
       try {
         await ensureAutoFillForStep(step);
+        ensureTargetValues(step);
         const preview = previewPayload(step);
         targetLabel = `${methodLabel(step)} ${resolvedTarget(step)}`;
         payload = target === "/run/script"
