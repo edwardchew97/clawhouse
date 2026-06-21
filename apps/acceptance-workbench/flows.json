@@ -202,20 +202,6 @@
           }
         },
         {
-          "id": "agentRegistration.pending.ironclawWalletBinding",
-          "name": "Bind Agent Wallet Metadata",
-          "description": "The approved agent should expose public wallet metadata that ClawHouse can store without private key material. 未完成: Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet.",
-          "type": "pending",
-          "status": "未完成",
-          "access": "protected",
-          "pendingReason": "Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet.",
-          "inputs": {},
-          "setVars": {},
-          "runningNotes": [
-            "未完成: Only the local developer wallet tool exists here. The official IronClaw wallet binding and production metadata handoff are not implemented yet."
-          ]
-        },
-        {
           "id": "agentRegistration.key.fundCreator",
           "name": "Fund Creator Account",
           "description": "Manual funding gate before key-market creation. Send 0.1 testnet NEAR to the IronClaw-managed creator public account; never paste private keys into Workbench or chat.",
