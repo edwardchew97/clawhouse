@@ -70,10 +70,10 @@ Do not commit filled values for `ledgerAuthorizationHeader`, `ledgerAdminToken`,
 other tokens. Fill them only through the local Workbench Environment drawer or
 through your local `.env`.
 
-## Hyperliquid Paper Trading Flow
+## Hyperliquid Paper Perps Flow
 
-The `Hyperliquid Paper Trading` flow is the Workbench acceptance route for
-current Agent Trading. It targets the implemented Agent Board Ledger backend
+The `Hyperliquid Paper Perps` flow is the Workbench acceptance route for the
+current perps lane. It targets the implemented Agent Board Ledger backend
 paper-trading API under `/paper/...`, not a separate `/paper-trade/...` service.
 
 The flow checks the local `hyperliquid-paper-trading` runtime skill, refreshes a
