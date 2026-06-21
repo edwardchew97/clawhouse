@@ -858,7 +858,7 @@ function renderRoom(agent) {
   const events = chartModel(agent).events;
   if (!events.length) {
     byId("roomFeed").innerHTML = `
-      <div class="blur-status feed-unavailable" aria-label="Agent feed unavailable">
+      <div class="blur-status feed-unavailable" aria-label="Agent chat room unavailable">
         <div class="blur-status-content" aria-hidden="true">
           <span></span>
           <span></span>
@@ -877,7 +877,7 @@ function renderRoom(agent) {
           <div class="update-copy">
         <div class="update-title">
           <span>${escapeHtml(event.title)}</span>
-          <span class="tag">agent-only</span>
+          <span class="tag">agent event</span>
         </div>
         <div class="update-text">${escapeHtml(event.summary)}</div>
       </div>
@@ -890,26 +890,90 @@ function renderRoom(agent) {
   });
 }
 
-function renderActivity(agent) {
-  const liveEvents = chartModel(agent).events;
-  if (!liveEvents.length) {
+function renderKeyActivity(agent) {
+  const rows = keyActivityRows(agent);
+  if (!rows.length) {
     renderBackendEmpty(
-      "activityList",
-      chainState.backend?.ok ? "No backend tape yet" : "Backend tape unavailable",
-      chainState.backend?.ok ? "No Agent Board Ledger event rows were returned." : backendErrorMessage()
+      "keyActivityList",
+      chainState.error ? "Key activity unavailable" : "Reading key market",
+      chainState.error || "Waiting for NEAR testnet key-market state."
     );
     return;
   }
-  const rows = liveEvents.slice(0, 6).map((event) => [
-    event.raw?.tx_hash || event.raw?.intent_id || event.raw?.client_event_id || event.id,
-    event.raw?.status_claim || event.raw?.event_type || "event"
-  ]);
-  byId("activityList").innerHTML = rows.map((item) => `
-    <div class="activity-row">
-      <span><b>${escapeHtml(shortHash(String(item[0])))}</b> ${escapeHtml(titleCase(item[1]))}</span>
-      <span class="side">${escapeHtml(item[1])}</span>
+
+  byId("keyActivityList").innerHTML = rows.slice(0, 7).map((row) => `
+    <div class="activity-row key-activity-row">
+      <span><b>${escapeHtml(row.title)}</b> ${escapeHtml(row.detail)}</span>
+      <span class="side">${row.linkUrl ? `<a href="${escapeHtml(row.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.side)}</a>` : escapeHtml(row.side)}</span>
     </div>
   `).join("");
+}
+
+function keyActivityRows(agent) {
+  const rows = [];
+  const state = chainApplies(agent) ? chainState.state : null;
+  const activeQuote = chainApplies(agent) && chainState.quoteSide === tradeSide ? chainState.quote : null;
+  const balance = holderBalance(agent);
+  const amount = normalizedAmount(byId("keyAmount")?.value || "1");
+
+  if (chainState.lastTxHash) {
+    rows.push({
+      title: chainState.statusTitle || "Key trade complete",
+      detail: `Tx ${shortHash(chainState.lastTxHash)}`,
+      side: "NearBlocks",
+      linkUrl: chainState.explorerUrl,
+    });
+  }
+
+  if (activeQuote) {
+    rows.push({
+      title: `${titleCase(tradeSide)} quote`,
+      detail: `${amount} key${amount === "1" ? "" : "s"}`,
+      side: nearLabel(tradeSide === "sell" ? activeQuote.payout_near : activeQuote.total_cost_near),
+    });
+  }
+
+  if (state?.next_buy_price?.total_cost_near) {
+    rows.push({
+      title: "Next buy",
+      detail: "1 key",
+      side: nearLabel(state.next_buy_price.total_cost_near),
+    });
+  }
+
+  if (state?.next_sell_price?.payout_near) {
+    rows.push({
+      title: "Next sell",
+      detail: "1 key",
+      side: nearLabel(state.next_sell_price.payout_near),
+    });
+  }
+
+  if (state?.agent?.supply !== undefined) {
+    rows.push({
+      title: "Supply",
+      detail: `${agentTitle(agent)} keys`,
+      side: `${state.agent.supply} keys`,
+    });
+  }
+
+  if (state?.agent?.reserve_near) {
+    rows.push({
+      title: "Reserve",
+      detail: "Contract reserve",
+      side: nearLabel(state.agent.reserve_near),
+    });
+  }
+
+  if (balance !== null) {
+    rows.push({
+      title: "Your keys",
+      detail: chainState.accountId ? shortAccount(chainState.accountId) : "Wallet not connected",
+      side: `${balance} keys`,
+    });
+  }
+
+  return rows;
 }
 
 function renderTicket(agent) {
@@ -1411,7 +1475,7 @@ function render() {
   renderAgentList();
   renderHero(agent);
   renderRoom(agent);
-  renderActivity(agent);
+  renderKeyActivity(agent);
   renderTicket(agent);
   bindUnlockButtons();
   syncContentColumns();
