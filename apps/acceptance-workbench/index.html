@@ -1528,7 +1528,8 @@
       inputs: persisted.inputs || {},
       requestTemplates: persisted.requestTemplates || {},
       lastResult: null,
-      lastDebugPacket: null
+      lastDebugPacket: null,
+      stepResponses: {}
     };
 
     const tabs = [
@@ -1764,6 +1765,29 @@
     function activeStepId() {
       const step = state.spec?.flows?.[state.activeFlow]?.steps?.[state.activeStep];
       return step?.id || "";
+    }
+
+    function stepResponseKey(step = activeStep()) {
+      return step?.id || "";
+    }
+
+    function activeStepResponse() {
+      return state.stepResponses[stepResponseKey(activeStep())] || null;
+    }
+
+    function setStepResponse(step, response) {
+      const key = stepResponseKey(step);
+      if (!key) return null;
+      state.stepResponses[key] = response;
+      return response;
+    }
+
+    function isActiveResponseStep(step) {
+      return stepResponseKey(step) === stepResponseKey(activeStep());
+    }
+
+    function snapshotRuntimeVars() {
+      return JSON.parse(JSON.stringify(state.vars || {}));
     }
 
     function requestStepIdFromUrl() {
@@ -2493,9 +2517,7 @@
       renderRequest();
       renderTabs();
       renderVars();
-      if (isPendingStep(activeStep())) {
-        renderPendingStepResponse(activeFlow(), activeStep());
-      }
+      renderActiveStepResponse();
       persist();
       updateRequestUrl("replace");
       queueAutoFill();
@@ -2808,8 +2830,8 @@
       `).join("") : `<div class="empty">No runtime variables extracted yet.</div>`;
     }
 
-    function renderRuntimeVarsPanel() {
-      const entries = Object.entries(state.vars);
+    function renderRuntimeVarsPanel(vars = state.vars) {
+      const entries = Object.entries(vars);
       return `
         <div class="response-panel-block">
           <div class="result-panel-head">
@@ -2819,6 +2841,39 @@
           <div id="vars" class="vars-grid response-vars-grid">${renderRuntimeVarCards(entries)}</div>
         </div>
       `;
+    }
+
+    function renderActiveStepResponse() {
+      const flow = activeFlow();
+      const step = activeStep();
+      if (isPendingStep(step)) {
+        renderPendingStepResponse(flow, step);
+        return;
+      }
+      const response = activeStepResponse();
+      if (!response) {
+        renderEmptyStepResponse();
+        return;
+      }
+      state.responseTab = response.responseTab || "body";
+      state.lastResult = response.result || null;
+      state.lastDebugPacket = response.debugPacket || null;
+      if (response.running) {
+        $("resultMeta").innerHTML = `<span class="pill warn">running</span><span class="pill">started ${escapeHtml(response.startedAt)}</span>`;
+        $("resultBox").innerHTML = renderRunningResult(step, response.targetLabel);
+        $("responseTarget").textContent = response.targetLabel;
+        $("copyDebugContext").disabled = true;
+        return;
+      }
+      renderResult(response.result, response.startedAt, response.targetLabel, response.vars);
+    }
+
+    function renderEmptyStepResponse() {
+      state.lastResult = null;
+      state.lastDebugPacket = null;
+      $("resultMeta").innerHTML = "";
+      $("resultBox").innerHTML = `<div class="result-empty">No response yet.</div>`;
+      $("copyDebugContext").disabled = true;
     }
 
     function syncEditors() {
@@ -2916,7 +2971,7 @@
       };
     }
 
-    function renderResult(result, startedAt, targetLabel) {
+    function renderResult(result, startedAt, targetLabel, vars = state.vars) {
       const ok = Boolean(result.ok);
       const pending = result.pending === true || result.status === "未完成";
       $("resultMeta").innerHTML = `
@@ -2926,12 +2981,12 @@
         ${result.status ? `<span class="pill">status ${result.status}</span>` : ""}
         ${result.exitCode !== undefined ? `<span class="pill">exit ${result.exitCode}</span>` : ""}
       `;
-      $("resultBox").innerHTML = renderReadableResult(result, targetLabel);
+      $("resultBox").innerHTML = renderReadableResult(result, targetLabel, vars);
       $("responseTarget").textContent = targetLabel;
       $("copyDebugContext").disabled = !state.lastDebugPacket;
     }
 
-    function renderReadableResult(result, targetLabel) {
+    function renderReadableResult(result, targetLabel, vars = state.vars) {
       const ok = Boolean(result.ok);
       const parsedJson = result.json ?? parseJsonText(result.stdout);
       const parsedRecord = parsedJson && typeof parsedJson === "object" && !Array.isArray(parsedJson)
@@ -2992,7 +3047,7 @@
         ? streamBlocks.join("")
         : `<div class="stream-empty">No stdout, stderr, or raw response stream returned.</div>`;
       const fullPanel = resultPanelBlock("Full runner response", JSON.stringify(result, null, 2), "Runner JSON");
-      const varsPanel = renderRuntimeVarsPanel();
+      const varsPanel = renderRuntimeVarsPanel(vars);
 
       return `
         <div class="response-console ${summaryClass}">
@@ -3295,6 +3350,13 @@
           : preview;
 
         state.responseTab = "body";
+        setStepResponse(step, {
+          running: true,
+          startedAt,
+          targetLabel,
+          responseTab: state.responseTab,
+          vars: snapshotRuntimeVars()
+        });
         $("resultMeta").innerHTML = `<span class="pill warn">running</span><span class="pill">started ${startedAt}</span>`;
         $("resultBox").innerHTML = renderRunningResult(step, targetLabel);
         $("responseTarget").textContent = targetLabel;
@@ -3312,16 +3374,24 @@
         if (rawResult.ok) applyClears(step);
         applySetVars(step, rawResult);
         const result = resultForDisplay(rawResult);
-        state.lastResult = result;
-        state.lastDebugPacket = buildDebugPacket(flow, step, startedAt, targetLabel, payload, result);
+        const debugPacket = buildDebugPacket(flow, step, startedAt, targetLabel, payload, result);
+        setStepResponse(step, {
+          result,
+          startedAt,
+          targetLabel,
+          debugPacket,
+          responseTab: "body",
+          vars: snapshotRuntimeVars()
+        });
         renderTopbar();
-        renderResult(result, startedAt, targetLabel);
+        if (isActiveResponseStep(step)) {
+          renderActiveStepResponse();
+        }
         renderVars();
         renderTabs();
       } catch (error) {
         const result = { ok: false, error: error.message, durationMs: Math.round(performance.now() - startedMs) };
-        state.lastResult = result;
-        state.lastDebugPacket = buildDebugPacket(
+        const debugPacket = buildDebugPacket(
           flow,
           step,
           startedAt,
@@ -3331,7 +3401,17 @@
             : previewPayload(step)),
           result
         );
-        renderResult(result, startedAt, targetLabel);
+        setStepResponse(step, {
+          result,
+          startedAt,
+          targetLabel,
+          debugPacket,
+          responseTab: "body",
+          vars: snapshotRuntimeVars()
+        });
+        if (isActiveResponseStep(step)) {
+          renderActiveStepResponse();
+        }
       } finally {
         $("fireStep").disabled = isPendingStep(activeStep());
         persist();
@@ -3343,9 +3423,19 @@
       const result = pendingStepResult(step);
       state.responseTab = "body";
       state.lastResult = result;
-      state.lastDebugPacket = buildDebugPacket(flow, step, "pending-preview", targetLabel, previewPayload(step), result);
+      const debugPacket = buildDebugPacket(flow, step, "pending-preview", targetLabel, previewPayload(step), result);
+      state.lastDebugPacket = debugPacket;
+      const vars = snapshotRuntimeVars();
+      setStepResponse(step, {
+        result,
+        startedAt: "",
+        targetLabel,
+        debugPacket,
+        responseTab: state.responseTab,
+        vars
+      });
       renderTopbar();
-      renderResult(result, "", targetLabel);
+      renderResult(result, "", targetLabel, vars);
       renderVars();
     }
 
@@ -3552,6 +3642,8 @@
       const button = event.target.closest?.("[data-response-tab]");
       if (!button) return;
       state.responseTab = button.dataset.responseTab || "body";
+      const response = activeStepResponse();
+      if (response) response.responseTab = state.responseTab;
       applyResponseTabState();
       persist();
     });
