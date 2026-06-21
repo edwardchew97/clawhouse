@@ -52,6 +52,18 @@
             "ledgerPublicKey": "response.json.publicKey",
             "ledgerKeyId": "response.json.keyId"
           },
+          "clearVars": [
+            "ledgerBoardId",
+            "paperTradingAccountId"
+          ],
+          "clearInputs": {
+            "agentRegistration.ledger.createBoard": [
+              "ledgerBoardId"
+            ],
+            "agentRegistration.ledger.getBoard": [
+              "ledgerBoardId"
+            ]
+          },
           "setEnv": {
             "ledgerWalletFile": "inputs.ledgerWalletFile",
             "ledgerWalletPrivateKey": "response.envUpdates.ledgerWalletPrivateKey"
@@ -116,6 +128,11 @@
             "ledgerWalletAddress": "response.json.wallet.walletAddress",
             "ledgerPublicKey": "response.json.wallet.publicKey",
             "paperTradingAccountId": "response.json.paperAccountId"
+          },
+          "clearInputs": {
+            "agentRegistration.ledger.getBoard": [
+              "ledgerBoardId"
+            ]
           }
         },
         {

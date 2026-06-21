@@ -2848,6 +2848,18 @@
       }
     }
 
+    function applyClears(step) {
+      for (const name of step.clearVars || []) {
+        delete state.vars[name];
+      }
+      for (const [stepId, keys] of Object.entries(step.clearInputs || {})) {
+        if (!Array.isArray(keys) || !state.inputs[stepId]) continue;
+        for (const key of keys) {
+          delete state.inputs[stepId][key];
+        }
+      }
+    }
+
     function applySetVars(step, result) {
       const source = {
         response: result,
@@ -3270,6 +3282,7 @@
           rawResult.durationMs = Math.round(performance.now() - startedMs);
         }
         applySetEnv(step, rawResult);
+        if (rawResult.ok) applyClears(step);
         applySetVars(step, rawResult);
         const result = resultForDisplay(rawResult);
         state.lastResult = result;
