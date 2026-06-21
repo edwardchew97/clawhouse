@@ -210,12 +210,13 @@
     }
 
     .ticker-track {
+      --ticker-duration: 72s;
       display: flex;
       align-items: center;
       gap: 18px;
       min-width: max-content;
       padding-left: 12px;
-      animation: ticker 28s linear infinite;
+      animation: ticker var(--ticker-duration) linear infinite;
     }
 
     @keyframes ticker {
@@ -315,27 +316,41 @@
       font-size: 11px;
     }
 
-    .tabs {
+    .agent-sort-control {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 4px;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
       padding: 8px;
       border-bottom: 1px solid var(--line);
     }
 
-    .tab {
-      height: 26px;
-      border-radius: 4px;
-      background: transparent;
-      color: var(--muted);
+    .agent-sort-control span {
+      color: var(--faint);
       font-size: 11px;
-      transition: background 160ms ease, color 160ms ease;
     }
 
-    .tab.active {
-      background: rgba(66, 70, 74, 0.12);
+    .agent-sort-control select {
+      width: 100%;
+      height: 28px;
+      padding: 0 28px 0 9px;
+      border-radius: 4px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(45deg, transparent 50%, var(--muted) 50%) calc(100% - 13px) 11px / 5px 5px no-repeat,
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%) calc(100% - 8px) 11px / 5px 5px no-repeat,
+        #131518;
       color: #ededed;
-      box-shadow: inset 0 0 0 1px rgba(100, 104, 108, 0.19);
+      font: inherit;
+      font-size: 11px;
+      outline: none;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .agent-sort-control select:focus {
+      border-color: rgba(145, 151, 157, 0.28);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035);
     }
 
     .agent-list {
@@ -376,6 +391,82 @@
       box-shadow: inset 2px 0 0 #9ba1a7, inset 0 0 0 1px rgba(255, 255, 255, 0.025);
     }
 
+    .agent-row-skeleton {
+      pointer-events: none;
+      background: rgba(255, 255, 255, 0.015);
+      border-color: rgba(255, 255, 255, 0.035);
+    }
+
+    .agent-row.agent-row-skeleton:hover {
+      transform: none;
+      background: rgba(255, 255, 255, 0.015);
+      border-color: rgba(255, 255, 255, 0.035);
+      box-shadow: none;
+    }
+
+    .agent-skeleton-line,
+    .avatar.agent-skeleton-avatar {
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.045));
+      background-size: 180% 100%;
+      animation: agent-skeleton-shimmer 1200ms ease-in-out infinite;
+    }
+
+    .agent-skeleton-line {
+      display: inline-block;
+      height: 10px;
+      border-radius: 999px;
+    }
+
+    .avatar.agent-skeleton-avatar {
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 8px 22px rgba(0, 0, 0, 0.32);
+    }
+
+    .agent-skeleton-name {
+      width: min(142px, 58%);
+      height: 13px;
+    }
+
+    .agent-skeleton-tag {
+      width: 42px;
+      height: 15px;
+      border-radius: 3px;
+    }
+
+    .agent-skeleton-meta {
+      display: block;
+      width: 78%;
+      margin-top: 5px;
+    }
+
+    .agent-skeleton-stat {
+      width: 54px;
+    }
+
+    .agent-skeleton-stat.short {
+      width: 44px;
+    }
+
+    .agent-skeleton-change {
+      width: 42px;
+      margin-left: auto;
+    }
+
+    @keyframes agent-skeleton-shimmer {
+      0% {
+        background-position: 120% 0;
+      }
+
+      100% {
+        background-position: -80% 0;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .agent-skeleton-line,
+      .avatar.agent-skeleton-avatar {
+        animation: none;
+      }
+    }
 
     .avatar {
       width: 34px;
@@ -1926,7 +2017,6 @@
     }
 
     .mini-button:hover,
-    .tab:hover,
     .ticket-tab:hover,
     .quick button:hover,
     .secondary:hover,
