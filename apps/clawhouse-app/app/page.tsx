@@ -18,7 +18,7 @@ export default function Page() {
           </div>
           <div className="top-actions">
             <div className="net-pill"><span className="dot" /> Key Market: NEAR testnet</div>
-            <div className="net-pill"><span className="dot" /> Agent Trading: NEAR mainnet</div>
+            <div className="net-pill"><span className="dot" /> Agent Trading: Paper</div>
             <button className="wallet" id="walletButton">Connect Wallet</button>
           </div>
         </header>
