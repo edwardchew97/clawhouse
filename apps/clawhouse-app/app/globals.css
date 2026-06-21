@@ -812,6 +812,61 @@
       background-size: 100% 22%, 8.33% 100%, auto;
     }
 
+    .chart-panel.is-empty #pnlChart,
+    .chart-panel.is-empty .chart-events {
+      filter: blur(5px);
+      opacity: 0.58;
+    }
+
+    .chart-empty-overlay {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      top: 40px;
+      bottom: 8px;
+      z-index: 6;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+
+    .chart-empty-overlay[hidden] {
+      display: none;
+    }
+
+    .chart-empty-overlay::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 4px;
+      background: rgba(2, 3, 4, 0.28);
+    }
+
+    .chart-empty-overlay > strong,
+    .chart-empty-overlay > span {
+      position: relative;
+      z-index: 1;
+      max-width: min(360px, 82%);
+      text-align: center;
+    }
+
+    .chart-empty-overlay > strong {
+      display: block;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 18px;
+    }
+
+    .chart-empty-overlay > span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 16px;
+    }
+
     .chart-events {
       position: absolute;
       left: 10px;
