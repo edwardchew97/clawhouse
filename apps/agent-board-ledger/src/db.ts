@@ -177,7 +177,6 @@ export function migrate(db: Database) {
       chain TEXT DEFAULT 'near',
       venue_namespace TEXT DEFAULT 'near-intents',
       tracking_started_at TEXT,
-      starting_value_usd REAL NOT NULL,
       base_currency TEXT NOT NULL,
       public_status TEXT NOT NULL,
       visibility_mode TEXT NOT NULL,
@@ -332,7 +331,6 @@ export function migrate(db: Database) {
       board_id TEXT NOT NULL REFERENCES boards(id),
       agent_id TEXT,
       observed_at TEXT NOT NULL,
-      starting_value_usd REAL NOT NULL,
       current_value_usd REAL NOT NULL,
       net_topups_usd REAL NOT NULL,
       net_withdrawals_usd REAL NOT NULL,
@@ -396,6 +394,10 @@ export function migrate(db: Database) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS paper_accounts_board_unique_idx
+      ON paper_accounts(board_id)
+      WHERE board_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS paper_auth_nonces (
       id TEXT PRIMARY KEY,
@@ -610,6 +612,20 @@ export function migrate(db: Database) {
   ensureColumn(db, "pnl_snapshots", "completeness_status", "TEXT NOT NULL DEFAULT 'unknown'");
   ensureColumn(db, "paper_market_snapshots", "max_leverage", "REAL");
 
+  if (hasColumn(db, "pnl_snapshots", "starting_value_usd")) {
+    db.exec(`
+      UPDATE pnl_snapshots
+        SET total_pnl_pct = CASE
+          WHEN starting_value_usd = 0 THEN NULL
+          ELSE pnl_usd / starting_value_usd
+        END
+        WHERE total_pnl_pct IS NULL;
+    `);
+  }
+
+  dropColumnIfExists(db, "pnl_snapshots", "starting_value_usd");
+  dropColumnIfExists(db, "boards", "starting_value_usd");
+
   db.exec(`
     UPDATE boards
       SET chain = 'near'
@@ -648,12 +664,6 @@ export function migrate(db: Database) {
       )
       WHERE agent_id IS NULL;
     UPDATE pnl_snapshots
-      SET total_pnl_pct = CASE
-        WHEN starting_value_usd = 0 THEN NULL
-        ELSE pnl_usd / starting_value_usd
-      END
-      WHERE total_pnl_pct IS NULL;
-    UPDATE pnl_snapshots
       SET high_water_mark_usd = (
         SELECT MAX(prior.current_value_usd)
         FROM pnl_snapshots AS prior
@@ -680,6 +690,16 @@ function ensureColumn(db: Database, table: string, column: string, definition: s
   const columns = db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all();
   if (columns.some((existing) => existing.name === column)) return;
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+function hasColumn(db: Database, table: string, column: string) {
+  const columns = db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all();
+  return columns.some((existing) => existing.name === column);
+}
+
+function dropColumnIfExists(db: Database, table: string, column: string) {
+  if (!hasColumn(db, table, column)) return;
+  db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
 }
 
 export async function getBoard(db: LedgerDb, boardId: string) {

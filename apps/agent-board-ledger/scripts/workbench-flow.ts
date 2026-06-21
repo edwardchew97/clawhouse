@@ -15,7 +15,7 @@ type Options = {
   serviceToken?: string;
   boardId?: string;
   agentId: string;
-  startingValueUsd: number;
+  startingBalanceUsd: number;
   currentValueUsd: number;
   clientEventId?: string;
   txHash?: string;
@@ -52,12 +52,24 @@ async function runLedgerFlow(options: Options, wallet: NearWalletPublicInfo, run
     agent_id: agentId,
     wallet_address: wallet.walletAddress,
     public_key: wallet.publicKey,
-    starting_value_usd: options.startingValueUsd,
     base_currency: "USD",
     public_status: "active",
     visibility_mode: "public",
   };
   const board = await signedServicePostJson(scopedOptions, "/boards", boardId, boardBody);
+  const paperAccountId = `paper-${runId}`;
+  const paperAccount = await servicePostJson(scopedOptions, "/paper/accounts", {
+    paper_account_id: paperAccountId,
+    board_id: boardId,
+    agent_id: agentId,
+    agent_public_key: wallet.publicKey,
+    starting_balance_usd: options.startingBalanceUsd,
+    allowed_markets: ["BTC", "ETH"],
+    metadata: {
+      source: "acceptance-workbench",
+      run_id: runId,
+    },
+  });
 
   const eventBody = {
     client_event_id: clientEventId,
@@ -159,6 +171,7 @@ async function runLedgerFlow(options: Options, wallet: NearWalletPublicInfo, run
     txHash,
     intentId,
     board: board.board,
+    paperAccount: paperAccount.account,
     event: event.event,
     attachment: attachment.attachment,
     observation: observation.observation,
@@ -303,8 +316,8 @@ function parseArgs(args: string[]): Options {
       ?? optionalString(process.env.ledgerAdminToken),
     boardId: optionalString(values["board-id"]),
     agentId: optionalString(values["agent-id"]) ?? "ironclaw-workbench",
-    startingValueUsd: numberOption(values["starting-value-usd"], 100, "starting-value-usd"),
-    currentValueUsd: numberOption(values["current-value-usd"], 112, "current-value-usd"),
+    startingBalanceUsd: numberOption(values["starting-balance-usd"], 10000, "starting-balance-usd"),
+    currentValueUsd: numberOption(values["current-value-usd"], 10012, "current-value-usd"),
     clientEventId: optionalString(values["client-event-id"]),
     txHash: optionalString(values["tx-hash"]),
     intentId: optionalString(values["intent-id"]),
@@ -320,7 +333,7 @@ Options:
   --admin-token <token>
   --board-id <id>
   --agent-id <id>
-  --starting-value-usd <number>
+  --starting-balance-usd <number>
   --current-value-usd <number>
   --client-event-id <id>
   --tx-hash <hash>

@@ -15,7 +15,7 @@ type Options = {
   serviceToken?: string;
   boardId?: string;
   agentId: string;
-  startingValueUsd: number;
+  startingBalanceUsd: number;
   currentValueUsd: number;
 };
 
@@ -43,7 +43,7 @@ async function main() {
   if (process.argv.includes("--help")) {
     return {
       ok: true,
-      usage: "bun scripts/workbench-edge-cases.ts [--base-url <url>] [--key-file <path>] [--admin-token <token>]",
+      usage: "bun scripts/workbench-edge-cases.ts [--base-url <url>] [--key-file <path>] [--starting-balance-usd <number>] [--admin-token <token>]",
       env: ["AGENT_BOARD_LEDGER_ADMIN_TOKEN", "ledgerAdminToken"],
     };
   }
@@ -92,6 +92,9 @@ async function main() {
 
   const flowBoard = await signedServicePostJson(options, wallet, "/boards", flowBoardId, boardBody(options, wallet, flowBoardId));
   expectSuccess(checks, "service-authenticated flow board registration", flowBoard);
+  if (isSuccess(flowBoard)) {
+    expectSuccess(checks, "flow board linked paper account is created", await createLinkedPaperAccount(options, wallet, flowBoardId, `${flowBoardId}-paper`));
+  }
 
   const holderBoard = await signedServicePostJson(options, wallet, "/boards", holderBoardId, {
     ...boardBody(options, wallet, holderBoardId),
@@ -137,6 +140,9 @@ async function main() {
 
   const ftBoard = await signedServicePostJson(options, wallet, "/boards", ftBoardId, boardBody(options, wallet, ftBoardId));
   expectSuccess(checks, "service-authenticated FT watcher board registration", ftBoard);
+  if (isSuccess(ftBoard)) {
+    expectSuccess(checks, "FT watcher linked paper account is created", await createLinkedPaperAccount(options, wallet, ftBoardId, `${ftBoardId}-paper`));
+  }
 
   if (isSuccess(ftBoard)) {
     const ftWatch = await servicePostJson(options, `/boards/${ftBoardId}/watch/near-ft`, {
@@ -159,7 +165,7 @@ async function main() {
         && numberEquals(numberAt(ftPnl.json, ["latest", "pnl_usd"]), 12)
         && stringAt(ftPnl.json, ["latest", "price_snapshot_id"]) === ftPriceId,
       status: ftPnl.status,
-      expected: "FT balance of 112 mock USDC produces $12 P&L and links its price snapshot",
+      expected: "FT balance of 10012 mock USDC produces $12 P&L and links its price snapshot",
       detail: {
         pnlUsd: numberAt(ftPnl.json, ["latest", "pnl_usd"]),
         priceSnapshotId: stringAt(ftPnl.json, ["latest", "price_snapshot_id"]),
@@ -282,10 +288,10 @@ async function main() {
       name: "P&L readback still works",
       ok: isSuccess(portfolio) && isSuccess(pnl) && numberEquals(
         numberAt(pnl.json, ["latest", "pnl_usd"]) ?? numberAt(pnl.json, ["latest", "total_pnl_usd"]),
-        options.currentValueUsd - options.startingValueUsd,
+        options.currentValueUsd - options.startingBalanceUsd,
       ) && stringAt(pnl.json, ["latest", "price_snapshot_id"]) === priceId,
       status: pnl.status,
-      expected: `pnl ${options.currentValueUsd - options.startingValueUsd} with linked price snapshot`,
+      expected: `pnl ${options.currentValueUsd - options.startingBalanceUsd} with linked price snapshot`,
       detail: {
         portfolioLatestId: firstPortfolioId,
         pnlLatestId: firstPnlId,
@@ -378,11 +384,29 @@ function boardBody(options: Options, wallet: NearWalletPublicInfo, boardId: stri
     agent_id: options.agentId,
     wallet_address: wallet.walletAddress,
     public_key: wallet.publicKey,
-    starting_value_usd: options.startingValueUsd,
     base_currency: "USD",
     public_status: "active",
     visibility_mode: "public",
   };
+}
+
+async function createLinkedPaperAccount(
+  options: Options,
+  wallet: NearWalletPublicInfo,
+  boardId: string,
+  paperAccountId: string,
+) {
+  return await servicePostJson(options, "/paper/accounts", {
+    paper_account_id: paperAccountId,
+    board_id: boardId,
+    agent_id: options.agentId,
+    agent_public_key: wallet.publicKey,
+    starting_balance_usd: options.startingBalanceUsd,
+    allowed_markets: ["BTC", "ETH"],
+    metadata: {
+      source: "acceptance-workbench-edge",
+    },
+  });
 }
 
 async function loadOrCreateWallet(keyFile: string): Promise<NearWalletPublicInfo> {
@@ -514,8 +538,8 @@ function parseArgs(args: string[]): Options {
       ?? optionalString(process.env.ledgerAdminToken),
     boardId: optionalString(values["board-id"]),
     agentId: values["agent-id"] || "ironclaw-workbench",
-    startingValueUsd: numberOption(values["starting-value-usd"], 100, "starting-value-usd"),
-    currentValueUsd: numberOption(values["current-value-usd"], 112, "current-value-usd"),
+    startingBalanceUsd: numberOption(values["starting-balance-usd"], 10000, "starting-balance-usd"),
+    currentValueUsd: numberOption(values["current-value-usd"], 10012, "current-value-usd"),
   };
 }
 
@@ -659,7 +683,7 @@ function startMockNearRpc() {
           },
         });
       }
-      if (methodName === "ft_balance_of") return nearRpcResponse({ result: "112000000" });
+      if (methodName === "ft_balance_of") return nearRpcResponse({ result: "10012000000" });
       return nearRpcResponse({ error: { message: `Unsupported mock method: ${methodName}` } });
     },
   });

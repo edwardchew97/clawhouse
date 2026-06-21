@@ -14,6 +14,7 @@ type Options = {
   baseUrl: string;
   keyFile: string;
   serviceToken?: string;
+  boardId?: string;
   paperAccountId?: string;
   agentId: string;
   startingBalanceUsd: number;
@@ -42,7 +43,7 @@ async function main() {
   if (process.argv.includes("--help") || process.argv.includes("-h")) {
     return {
       ok: true,
-      usage: "bun scripts/workbench-paper-trading.ts [--base-url <url>] [--key-file <path>] [--admin-token <token>]",
+      usage: "bun scripts/workbench-paper-trading.ts [--base-url <url>] [--key-file <path>] [--board-id <id>] [--admin-token <token>]",
       env: ["AGENT_BOARD_LEDGER_ADMIN_TOKEN", "ledgerAdminToken"],
     };
   }
@@ -61,21 +62,11 @@ async function runPaperTradingFlow(
   runId: string,
 ) {
   const checks: CheckResult[] = [];
-  const paperAccountId = options.paperAccountId || `paper-workbench-${runId}`;
+  const paperAccountId = options.paperAccountId || (options.boardId ? `${options.boardId}-paper` : `paper-workbench-${runId}`);
   const agentId = options.agentId || "ironclaw-paper-workbench";
 
-  const account = await servicePostJson(options, "/paper/accounts", {
-    paper_account_id: paperAccountId,
-    agent_id: agentId,
-    agent_public_key: wallet.publicKey,
-    starting_balance_usd: options.startingBalanceUsd,
-    allowed_markets: ["BTC", "ETH"],
-    metadata: {
-      source: "acceptance-workbench",
-      run_id: runId,
-    },
-  });
-  expectSuccess(checks, "service creates paper account", account);
+  const account = await ensurePaperAccount(options, wallet, paperAccountId, agentId, runId);
+  expectSuccess(checks, "service creates or reuses paper account", account);
 
   const btcSnapshot = await servicePostJson(options, "/paper/market-snapshots", {
     coin: "BTC",
@@ -221,6 +212,7 @@ async function runPaperTradingFlow(
   return {
     ok: failed.length === 0,
     baseUrl: options.baseUrl,
+    boardId: options.boardId ?? null,
     paperAccountId,
     agentId,
     wallet: {
@@ -269,6 +261,30 @@ async function servicePostJson(options: Options, path: string, body: JsonRecord)
       authorization: `Bearer ${options.serviceToken}`,
     },
     body: JSON.stringify(body),
+  });
+}
+
+async function ensurePaperAccount(
+  options: Options,
+  wallet: NearWalletPublicInfo,
+  paperAccountId: string,
+  agentId: string,
+  runId: string,
+) {
+  const existing = await getJson(options.baseUrl, `/paper/accounts/${paperAccountId}`);
+  if (existing.responseOk) return existing;
+
+  return await servicePostJson(options, "/paper/accounts", {
+    paper_account_id: paperAccountId,
+    board_id: options.boardId,
+    agent_id: agentId,
+    agent_public_key: wallet.publicKey,
+    starting_balance_usd: options.startingBalanceUsd,
+    allowed_markets: ["BTC", "ETH"],
+    metadata: {
+      source: "acceptance-workbench",
+      run_id: runId,
+    },
   });
 }
 
@@ -352,6 +368,7 @@ function parseArgs(args: string[]): Options {
     serviceToken: optionalString(values["admin-token"])
       ?? optionalString(process.env.AGENT_BOARD_LEDGER_ADMIN_TOKEN)
       ?? optionalString(process.env.ledgerAdminToken),
+    boardId: optionalString(values["board-id"]),
     paperAccountId: optionalString(values["paper-account-id"]),
     agentId: optionalString(values["agent-id"]) ?? "ironclaw-paper-workbench",
     startingBalanceUsd: numberOption(values["starting-balance-usd"], 10000, "starting-balance-usd"),

@@ -14,7 +14,7 @@ type Options = {
   serviceToken?: string;
   boardId?: string;
   agentId: string;
-  startingValueUsd: number;
+  startingBalanceUsd: number;
   visibilityMode: string;
 };
 
@@ -26,6 +26,7 @@ async function main() {
   if (process.argv.includes("--help")) {
     printJson({
       usage: "bun scripts/register-board.ts --base-url <url> --key-file <path> --agent-id <id>",
+      options: ["--starting-balance-usd <number>"],
       env: ["AGENT_BOARD_LEDGER_ADMIN_TOKEN", "ledgerAdminToken"],
     });
     return;
@@ -42,7 +43,6 @@ async function main() {
     agent_id: options.agentId,
     wallet_address: wallet.walletAddress,
     public_key: wallet.publicKey,
-    starting_value_usd: options.startingValueUsd,
     base_currency: "USD",
     public_status: "active",
     visibility_mode: options.visibilityMode,
@@ -69,6 +69,25 @@ async function main() {
     },
     body: rawBody,
   });
+  const paperAccountId = `${boardId}-paper`;
+  const paperAccount = await requestJson(options.baseUrl, "/paper/accounts", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${options.serviceToken}`,
+    },
+    body: JSON.stringify({
+      paper_account_id: paperAccountId,
+      board_id: boardId,
+      agent_id: options.agentId,
+      agent_public_key: wallet.publicKey,
+      starting_balance_usd: options.startingBalanceUsd,
+      allowed_markets: ["BTC", "ETH"],
+      metadata: {
+        source: "acceptance-workbench",
+      },
+    }),
+  });
 
   printJson({
     ok: true,
@@ -76,7 +95,9 @@ async function main() {
     wallet,
     boardId,
     agentId: options.agentId,
+    paperAccountId,
     board: response.board,
+    paperAccount: paperAccount.account,
   });
 }
 
@@ -116,7 +137,7 @@ function parseArgs(args: string[]): Options {
       ?? optionalString(process.env.ledgerAdminToken),
     boardId: optionalString(values["board-id"]),
     agentId: values["agent-id"] || "ironclaw-workbench",
-    startingValueUsd: numberOption(values["starting-value-usd"], 100, "starting-value-usd"),
+    startingBalanceUsd: numberOption(values["starting-balance-usd"], 10000, "starting-balance-usd"),
     visibilityMode: values["visibility-mode"] || "public",
   };
 }

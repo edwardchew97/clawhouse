@@ -8,7 +8,6 @@ export type Board = {
   chain: string | null;
   venue_namespace: string | null;
   tracking_started_at: string | null;
-  starting_value_usd: number;
   base_currency: string;
   public_status: string;
   visibility_mode: string;
@@ -85,7 +84,6 @@ export type PnlSnapshot = {
   board_id: string;
   agent_id: string | null;
   observed_at: string;
-  starting_value_usd: number;
   current_value_usd: number;
   net_topups_usd: number;
   net_withdrawals_usd: number;
