@@ -1551,297 +1551,250 @@
     },
     {
       "id": "papertrade-story",
-      "name": "PaperTrade",
-      "purpose": "Acceptance story for current Agent Trading: public paper plus board paper, Hyperliquid Spot long-only rules, paper-order submit/readback, and a public paper leaderboard.",
+      "name": "Hyperliquid Paper Trading",
+      "purpose": "Acceptance story for current Agent Trading: ClawHouse-hosted Hyperliquid-style paper trading through the implemented /paper/... backend APIs, signed agent paper orders, market-data snapshots, margin/risk, leaderboard, and replay proof.",
       "steps": [
         {
-          "id": "paperTrade.pending.runtimeSkill",
-          "name": "Package PaperTrade Runtime Skill",
-          "description": "The agent runtime must provide an installable PaperTrade skill so an agent can submit paper orders and read accepted, rejected, filled, or partial results. 未完成: the installable PaperTrade runtime skill is not implemented in this repo yet.",
-          "type": "pending",
-          "status": "未完成",
-          "access": "protected",
-          "pendingReason": "The installable PaperTrade runtime skill, expected as hyperliquid-spot-paper or a manifest-approved successor, is not implemented yet.",
-          "inputs": {},
-          "setVars": {},
+          "id": "paperTrade.runtime.inspectManifest",
+          "name": "Inspect Hyperliquid Paper Runtime Skill",
+          "description": "Runs the real runtime-manifest inspection for the installed development hyperliquid-paper-trading skill.",
+          "type": "script",
+          "access": "public",
+          "command": "bun",
+          "args": [
+            "scripts/inspect-ironclaw-runtime.ts"
+          ],
+          "cwd": "{{repoRoot}}",
           "runningNotes": [
-            "未完成: This step is the required agent-install packaging path, not a local mock."
-          ]
+            "Reading skills/ironclaw-runtime/manifest.json and local SKILL.md files.",
+            "Verifying the hyperliquid-paper-trading runtime skill exists in the repo manifest.",
+            "Computing SHA-256 for local runtime skill files and comparing them with manifest hashes."
+          ],
+          "inputs": {},
+          "setVars": {
+            "runtimePackVersion": "response.json.pack.version",
+            "runtimeManifestStatus": "response.json.ok"
+          }
         },
         {
           "id": "paperTrade.service.health",
-          "name": "Check PaperTrade Service",
-          "description": "Calls the real PaperTrade health endpoint before paper board setup or order submission.",
+          "name": "Check Backend Service",
+          "description": "Calls the real Agent Board Ledger backend health endpoint before paper account setup or order submission.",
           "type": "http",
           "access": "public",
           "method": "GET",
-          "url": "{{paperTradeBaseUrl}}/paper-trade/health",
+          "url": "{{ledgerBaseUrl}}/health",
           "runningNotes": [
-            "Calling the real PaperTrade service health endpoint.",
-            "Until this backend route exists, this step should fail honestly instead of returning simulated readiness."
+            "Calling the real backend /health endpoint.",
+            "Hyperliquid paper trading currently lives in the Agent Board Ledger backend under /paper/..."
           ],
           "inputs": {
-            "paperTradeBaseUrl": "http://127.0.0.1:4321"
+            "ledgerBaseUrl": "http://127.0.0.1:4321"
           },
           "fillDefaultsWhenEmpty": [
-            "paperTradeBaseUrl"
+            "ledgerBaseUrl"
           ],
           "setVars": {
-            "paperTradeHealthStatus": "response.json.json.status",
-            "paperTradeHealthDataFreshness": "response.json.json.data_freshness"
+            "paperTradingService": "response.json.json.service",
+            "paperTradingHealthDb": "response.json.json.db"
           }
         },
         {
-          "id": "paperTrade.venue.hyperliquidSpot",
-          "name": "Read Hyperliquid Spot Venue",
-          "description": "Reads the accepted Hyperliquid Spot venue metadata and rule limits for board paper.",
+          "id": "paperTrade.market.liveHyperliquidSnapshot",
+          "name": "Refresh Live Hyperliquid Snapshot",
+          "description": "Calls the implemented backend adapter to fetch Hyperliquid public market data and store a paper market snapshot.",
+          "type": "http",
+          "access": "protected",
+          "method": "POST",
+          "url": "{{ledgerBaseUrl}}/paper/market-snapshots/hyperliquid",
+          "headers": {
+            "content-type": "application/json",
+            "authorization": "{{ledgerAuthorizationHeader}}"
+          },
+          "body": {
+            "coin": "{{paperTradingCoin}}"
+          },
+          "runningNotes": [
+            "Calling the implemented POST /paper/market-snapshots/hyperliquid endpoint.",
+            "The backend calls Hyperliquid public info endpoints and stores mark, oracle, funding, max leverage, and book levels.",
+            "ledgerAuthorizationHeader must be formatted as Bearer <AGENT_BOARD_LEDGER_ADMIN_TOKEN>."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "paperTradingCoin": "BTC"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "paperTradingCoin"
+          ],
+          "setVars": {
+            "paperTradingLiveSnapshotId": "response.json.json.snapshots.0.id",
+            "paperTradingLiveSnapshotCoin": "response.json.json.snapshots.0.coin",
+            "paperTradingLiveSnapshotSource": "response.json.json.snapshots.0.source"
+          }
+        },
+        {
+          "id": "paperTrade.flow.signedOrders",
+          "name": "Run Signed Paper Trading Flow",
+          "description": "Runs the implemented script-backed flow against the real local backend: account creation, market snapshots, signed IOC/GTC/ALO/reduce-only orders, isolated-margin liquidation, leaderboard, and replay proof.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "scripts/workbench-paper-trading.ts",
+            "--base-url",
+            "{{ledgerBaseUrl}}",
+            "--key-file",
+            "{{paperTradingWalletFile}}",
+            "--paper-account-id",
+            "{{paperTradingAccountId}}",
+            "--agent-id",
+            "{{ledgerAgentId}}",
+            "--starting-balance-usd",
+            "{{paperTradingStartingBalanceUsd}}"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Calling the real local backend; the step fails if the service is not running.",
+            "The backend must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAdminToken.",
+            "Creating or reusing a local Workbench signing wallet and sending signed /paper/orders requests.",
+            "Creating a service-authorized paper account and market snapshots.",
+            "Submitting IOC, GTC, ALO, reduce-only, and isolated-margin paper orders.",
+            "Verifying liquidation, paper leaderboard, and replay proof from backend state."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAdminToken": "local-ledger-admin-token",
+            "paperTradingWalletFile": "work/acceptance-workbench/agent-board-ledger/paper-wallet.json",
+            "paperTradingAccountId": "",
+            "ledgerAgentId": "ironclaw-paper-workbench",
+            "paperTradingStartingBalanceUsd": "1000"
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl",
+            "ledgerAdminToken",
+            "paperTradingWalletFile",
+            "ledgerAgentId",
+            "paperTradingStartingBalanceUsd"
+          ],
+          "setVars": {
+            "paperTradingAccountId": "response.json.paperAccountId",
+            "paperTradingIocOrderId": "response.json.ids.iocOrderId",
+            "paperTradingIsolatedOrderId": "response.json.ids.isolatedOrderId",
+            "paperTradingPassedChecks": "response.json.summary.passed",
+            "paperTradingFailedChecks": "response.json.summary.failed"
+          }
+        },
+        {
+          "id": "paperTrade.account.read",
+          "name": "Read Paper Account",
+          "description": "Reads the implemented paper account endpoint after signed order flow to verify account, positions, and latest risk snapshot.",
           "type": "http",
           "access": "public",
           "method": "GET",
-          "url": "{{paperTradeBaseUrl}}/paper-trade/venues/hyperliquid-spot",
+          "url": "{{ledgerBaseUrl}}/paper/accounts/{{paperTradingAccountId}}",
           "runningNotes": [
-            "Reading the real venue metadata used for PaperTrade validation.",
-            "The response should make long-only spot, allowed markets, depth/slippage rules, and data freshness visible."
+            "Reading the real GET /paper/accounts/:id endpoint.",
+            "The response includes the paper account, open positions, and latest risk snapshot."
           ],
           "inputs": {
-            "paperTradeBaseUrl": "http://127.0.0.1:4321"
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "paperTradingAccountId": ""
           },
           "fillDefaultsWhenEmpty": [
-            "paperTradeBaseUrl"
+            "ledgerBaseUrl"
           ],
           "setVars": {
-            "paperTradeVenue": "response.json.json.venue",
-            "paperTradeAllowedMarket": "response.json.json.allowed_markets.0",
-            "paperTradeMarketDataFreshness": "response.json.json.data_freshness"
+            "paperTradingAccountStatus": "response.json.json.account.status",
+            "paperTradingPositionCoin": "response.json.json.positions.0.coin",
+            "paperTradingRiskEquityUsd": "response.json.json.latest_risk.equity_usd"
           }
         },
         {
-          "id": "paperTrade.board.create",
-          "name": "Create Paper Board",
-          "description": "Registers one paper board/account for a curated agent and records its starting paper balance.",
+          "id": "paperTrade.riskCheck",
+          "name": "Run Paper Risk Check",
+          "description": "Runs the implemented service-authorized paper risk check and liquidation path for one paper account.",
           "type": "http",
           "access": "protected",
           "method": "POST",
-          "url": "{{paperTradeBaseUrl}}/paper-trade/boards",
+          "url": "{{ledgerBaseUrl}}/paper/accounts/{{paperTradingAccountId}}/risk-check",
           "headers": {
             "content-type": "application/json",
-            "authorization": "{{paperTradeAuthorizationHeader}}"
+            "authorization": "{{ledgerAuthorizationHeader}}"
           },
-          "body": {
-            "board_id": "{{paperTradeBoardId}}",
-            "agent_id": "{{paperTradeAgentId}}",
-            "surface": "board_paper",
-            "venue": "hyperliquid-spot",
-            "starting_balance_usd": "{{paperTradeStartingBalanceUsd}}",
-            "quote_asset": "USDC",
-            "status": "active",
-            "paper_label": "paper"
-          },
+          "body": {},
           "runningNotes": [
-            "Calling the real PaperTrade board registration endpoint.",
-            "This should record a paper starting balance and must not create or require a real trading wallet.",
-            "paperTradeAuthorizationHeader must be formatted as Bearer <token> once the service defines auth."
+            "Calling the real POST /paper/accounts/:id/risk-check endpoint.",
+            "The backend computes margin/risk and liquidates breached positions from stored paper market snapshots."
           ],
           "inputs": {
-            "paperTradeBaseUrl": "http://127.0.0.1:4321",
-            "paperTradeAuthorizationHeader": "",
-            "paperTradeBoardId": "",
-            "paperTradeAgentId": "ironclaw-paper-workbench",
-            "paperTradeStartingBalanceUsd": "10000"
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "ledgerAuthorizationHeader": "",
+            "paperTradingAccountId": ""
           },
           "fillDefaultsWhenEmpty": [
-            "paperTradeBaseUrl",
-            "paperTradeAgentId",
-            "paperTradeStartingBalanceUsd"
+            "ledgerBaseUrl"
           ],
           "setVars": {
-            "paperTradeBoardId": "response.json.json.board.id",
-            "paperTradeAgentId": "response.json.json.board.agent_id",
-            "paperTradeStartingBalanceUsd": "response.json.json.board.starting_balance_usd",
-            "paperTradeBoardStatus": "response.json.json.board.status"
-          }
-        },
-        {
-          "id": "paperTrade.order.submitValid",
-          "name": "Submit Valid Paper Order",
-          "description": "Submits one long-only Hyperliquid Spot paper order through the real PaperTrade API.",
-          "type": "http",
-          "access": "protected",
-          "method": "POST",
-          "url": "{{paperTradeBaseUrl}}/paper-trade/orders",
-          "headers": {
-            "content-type": "application/json",
-            "authorization": "{{paperTradeAuthorizationHeader}}"
-          },
-          "body": {
-            "client_order_id": "{{paperTradeClientOrderId}}",
-            "agent_id": "{{paperTradeAgentId}}",
-            "board_id": "{{paperTradeBoardId}}",
-            "venue": "hyperliquid-spot",
-            "surface": "board_paper",
-            "market": "{{paperTradeMarket}}",
-            "side": "buy",
-            "order_type": "limit",
-            "time_in_force": "ioc",
-            "quantity": "{{paperTradeQuantity}}",
-            "limit_price": "{{paperTradeLimitPrice}}",
-            "max_slippage_bps": "{{paperTradeMaxSlippageBps}}",
-            "reason": "{{paperTradeReason}}",
-            "submitted_at": "{{paperTradeSubmittedAt}}",
-            "metadata": {
-              "source": "acceptance-workbench",
-              "strategy": "{{paperTradeStrategy}}"
-            }
-          },
-          "runningNotes": [
-            "Calling the real paper-order submission endpoint.",
-            "The service should validate policy, balance, market data freshness, depth, and slippage before simulating any paper fill.",
-            "The response should include accepted or rejected state, fill status, paper cash/holding changes, market data snapshot reference, and audit id."
-          ],
-          "inputs": {
-            "paperTradeBaseUrl": "http://127.0.0.1:4321",
-            "paperTradeAuthorizationHeader": "",
-            "paperTradeClientOrderId": "",
-            "paperTradeAgentId": "ironclaw-paper-workbench",
-            "paperTradeBoardId": "",
-            "paperTradeMarket": "HYPE/USDC",
-            "paperTradeQuantity": "1",
-            "paperTradeLimitPrice": "30",
-            "paperTradeMaxSlippageBps": "50",
-            "paperTradeReason": "Workbench acceptance: valid long-only Hyperliquid Spot paper order.",
-            "paperTradeSubmittedAt": "",
-            "paperTradeStrategy": "paper-long-spot"
-          },
-          "fillDefaultsWhenEmpty": [
-            "paperTradeBaseUrl",
-            "paperTradeAgentId",
-            "paperTradeMarket",
-            "paperTradeQuantity",
-            "paperTradeLimitPrice",
-            "paperTradeMaxSlippageBps",
-            "paperTradeReason",
-            "paperTradeStrategy"
-          ],
-          "setVars": {
-            "paperTradeClientOrderId": "response.json.json.order.client_order_id",
-            "paperTradeOrderId": "response.json.json.order.id",
-            "paperTradeOrderState": "response.json.json.order.state",
-            "paperTradeFillStatus": "response.json.json.order.fill_status",
-            "paperTradeAuditId": "response.json.json.audit_id"
-          }
-        },
-        {
-          "id": "paperTrade.order.rejectInvalid",
-          "name": "Reject Invalid Paper Order",
-          "description": "Submits an invalid paper order that should be rejected deterministically by current long-only spot rules.",
-          "type": "http",
-          "access": "protected",
-          "method": "POST",
-          "url": "{{paperTradeBaseUrl}}/paper-trade/orders",
-          "headers": {
-            "content-type": "application/json",
-            "authorization": "{{paperTradeAuthorizationHeader}}"
-          },
-          "body": {
-            "client_order_id": "{{paperTradeInvalidClientOrderId}}",
-            "agent_id": "{{paperTradeAgentId}}",
-            "board_id": "{{paperTradeBoardId}}",
-            "venue": "hyperliquid-spot",
-            "surface": "board_paper",
-            "market": "{{paperTradeInvalidMarket}}",
-            "side": "buy",
-            "order_type": "market",
-            "quantity": "{{paperTradeInvalidQuantity}}",
-            "max_slippage_bps": "{{paperTradeMaxSlippageBps}}",
-            "reason": "Workbench acceptance: invalid PaperTrade order should reject without creating a paper fill.",
-            "submitted_at": "{{paperTradeSubmittedAt}}",
-            "metadata": {
-              "source": "acceptance-workbench",
-              "expected_result": "reject"
-            }
-          },
-          "runningNotes": [
-            "Calling the same real order endpoint with a deliberately invalid market.",
-            "This should return a deterministic rejection reason and must not write a fake fill, fake PnL, or real venue order."
-          ],
-          "inputs": {
-            "paperTradeBaseUrl": "http://127.0.0.1:4321",
-            "paperTradeAuthorizationHeader": "",
-            "paperTradeInvalidClientOrderId": "",
-            "paperTradeAgentId": "ironclaw-paper-workbench",
-            "paperTradeBoardId": "",
-            "paperTradeInvalidMarket": "BTC-PERP",
-            "paperTradeInvalidQuantity": "1",
-            "paperTradeMaxSlippageBps": "50",
-            "paperTradeSubmittedAt": ""
-          },
-          "fillDefaultsWhenEmpty": [
-            "paperTradeBaseUrl",
-            "paperTradeAgentId",
-            "paperTradeInvalidMarket",
-            "paperTradeInvalidQuantity",
-            "paperTradeMaxSlippageBps"
-          ],
-          "setVars": {
-            "paperTradeRejectedOrderId": "response.json.json.order.id",
-            "paperTradeRejectState": "response.json.json.order.state",
-            "paperTradeRejectReason": "response.json.json.order.rejection_reason",
-            "paperTradeRejectAuditId": "response.json.json.audit_id"
-          }
-        },
-        {
-          "id": "paperTrade.board.read",
-          "name": "Read Paper Board",
-          "description": "Reads board paper detail after order submission to verify paper cash, holdings, PnL, drawdown, and latest paper event shape.",
-          "type": "http",
-          "access": "public",
-          "method": "GET",
-          "url": "{{paperTradeBaseUrl}}/paper-trade/boards/{{paperTradeBoardId}}",
-          "headers": {
-            "x-clawhouse-read-token": "{{paperTradeReadToken}}"
-          },
-          "runningNotes": [
-            "Reading the real board paper detail endpoint.",
-            "The response should label all performance values as paper and keep key-market PnL separate from paper PnL."
-          ],
-          "inputs": {
-            "paperTradeBaseUrl": "http://127.0.0.1:4321",
-            "paperTradeBoardId": "",
-            "paperTradeReadToken": ""
-          },
-          "fillDefaultsWhenEmpty": [
-            "paperTradeBaseUrl"
-          ],
-          "setVars": {
-            "paperTradeBoardStatus": "response.json.json.board.status",
-            "paperTradeCurrentValueUsd": "response.json.json.board.current_value_usd",
-            "paperTradePnlUsd": "response.json.json.board.paper_pnl_usd",
-            "paperTradePaperLabel": "response.json.json.board.paper_label"
+            "paperTradingRiskEquityUsd": "response.json.json.risk.risk.equity_usd",
+            "paperTradingLiquidationCount": "response.json.json.liquidations.length"
           }
         },
         {
           "id": "paperTrade.leaderboard.public",
           "name": "Read Public Paper Leaderboard",
-          "description": "Reads the public paper leaderboard row for the paper board without requiring a key-holder token.",
+          "description": "Reads the implemented public paper leaderboard.",
           "type": "http",
           "access": "public",
           "method": "GET",
-          "url": "{{paperTradeBaseUrl}}/paper-trade/leaderboard?surface=public_paper",
+          "url": "{{ledgerBaseUrl}}/paper/leaderboard",
           "runningNotes": [
-            "Reading the real public paper leaderboard endpoint.",
-            "The leaderboard must be public, clearly labeled as paper, and backed by PaperTrade service records instead of seed rows."
+            "Reading the real GET /paper/leaderboard endpoint.",
+            "The response label must be paper and rows come from backend leaderboard snapshots."
           ],
           "inputs": {
-            "paperTradeBaseUrl": "http://127.0.0.1:4321"
+            "ledgerBaseUrl": "http://127.0.0.1:4321"
           },
           "fillDefaultsWhenEmpty": [
-            "paperTradeBaseUrl"
+            "ledgerBaseUrl"
           ],
           "setVars": {
-            "paperTradeLeaderboardBoardId": "response.json.json.rows.0.board_id",
-            "paperTradeLeaderboardPnlUsd": "response.json.json.rows.0.paper_pnl_usd",
-            "paperTradeLeaderboardPaperLabel": "response.json.json.rows.0.paper_label",
-            "paperTradeLeaderboardDataFreshness": "response.json.json.data_freshness"
+            "paperTradingLeaderboardLabel": "response.json.json.label",
+            "paperTradingLeaderboardAccountId": "response.json.json.leaderboard.0.paper_account_id",
+            "paperTradingLeaderboardPnlUsd": "response.json.json.leaderboard.0.paper_pnl_usd"
+          }
+        },
+        {
+          "id": "paperTrade.replayProof",
+          "name": "Read Paper Order Replay Proof",
+          "description": "Reads the implemented replay proof for a paper order.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/paper/orders/{{paperTradingIocOrderId}}/replay",
+          "runningNotes": [
+            "Reading the real GET /paper/orders/:id/replay endpoint.",
+            "The response includes order, market snapshot, fills, and audit events."
+          ],
+          "inputs": {
+            "ledgerBaseUrl": "http://127.0.0.1:4321",
+            "paperTradingIocOrderId": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerBaseUrl"
+          ],
+          "setVars": {
+            "paperTradingReplayOrderId": "response.json.json.replay.order.id",
+            "paperTradingReplayCoin": "response.json.json.replay.market_snapshot.coin"
           }
         }
       ]
