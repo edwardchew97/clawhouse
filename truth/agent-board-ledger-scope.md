@@ -28,6 +28,12 @@ replaces the previous Trade Engine direction for current V0 work.
   historical read surface, and possible consumer of paper trading summaries, but
   it no longer owns the new paper order, matching, margin, risk, liquidation, or
   Paper leaderboard calculation lane.
+- Prior PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
+- Amendment date: 2026-06-21
+- Amendment basis: That parallel edit also moved current Agent Trading toward
+  PaperTrade and away from the previous real-wallet observation/accounting lane.
+  It is retained as provenance while the newer Hyperliquid paper trading
+  amendment defines the current implementation boundary.
 
 ## One Sentence
 
@@ -566,3 +572,6 @@ The first Agent Board Ledger slice is complete when:
   Paper Trading owns order intake, matching, cross/isolated margin, liquidation,
   and Paper leaderboard calculation; Agent Board Ledger remains an event
   timeline/read surface and possible consumer of paper summaries.
+- 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f` - Preserved the parallel
+  PaperTrade provenance while keeping Agent Board Ledger outside the current
+  paper matching, margin, liquidation, and leaderboard truth lane.

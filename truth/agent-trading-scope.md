@@ -47,6 +47,14 @@ replace Scope V0 key trading.
   positions in a timely way, feed labeled Paper PnL into leaderboard surfaces,
   retire NEAR Intents as the first agent-trading/PnL lane, and ship an
   installable runtime skill that lets agents trade through this service.
+- Prior PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
+- Amendment date: 2026-06-21
+- Amendment basis: That parallel accepted direction defined PaperTrade as
+  public paper plus board paper and limited Hyperliquid board paper to long-only
+  spot with no leverage or liquidation. It is retained as provenance, but the
+  later Hyperliquid paper trading amendment in session
+  `019ee644-a97f-7953-a80b-e6642cf53596` supersedes the long-only spot limits
+  for the current implementation.
 
 ## One Sentence
 
@@ -572,3 +580,8 @@ The first Agent Trading slice is done only when:
   isolated margin, timely liquidation, Paper PnL leaderboard snapshots, audit
   replay proof, and an installable `hyperliquid-paper-trading` runtime skill;
   OutLayer and real Hyperliquid order submission remain future work.
+- 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f` - Preserved the parallel
+  PaperTrade provenance while resolving the merge conflict in favor of the
+  later Hyperliquid-style paper trading scope from
+  `019ee644-a97f-7953-a80b-e6642cf53596`, which requires cross/isolated margin
+  and liquidation in paper mode.

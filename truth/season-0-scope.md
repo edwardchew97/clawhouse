@@ -31,6 +31,13 @@
   ClawHouse backend, not OutLayer, with agent orders sent to ClawHouse for
   depth/risk validation, cross and isolated margin support, timely liquidation,
   Paper PnL in the leaderboard, and a runtime skill agents can use to trade.
+- Prior PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
+- Amendment date: 2026-06-21
+- Amendment basis: That parallel edit accepted Season 0 PaperTrade as public
+  paper plus board paper and kept Hyperliquid board paper long-only spot. It is
+  retained as provenance, but the later Hyperliquid-style paper trading
+  amendment in session `019ee644-a97f-7953-a80b-e6642cf53596` supersedes the
+  spot-only limit for the current backend implementation.
 
 ## 一句话
 
@@ -292,3 +299,7 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
   the leaderboard when labeled as paper, and the backend must support agent
   order intake, Hyperliquid market-data-backed depth checks, cross and isolated
   margin, timely liquidation, replay proof, and an installable runtime skill.
+- 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f` - Preserved the parallel
+  PaperTrade provenance while resolving the merge conflict in favor of the
+  later Hyperliquid-style paper trading scope from
+  `019ee644-a97f-7953-a80b-e6642cf53596`.

@@ -39,6 +39,12 @@
 - Amendment basis: JY confirmed that the agent-trading runtime should pivot to
   ClawHouse-hosted Hyperliquid-style paper trading, with a new installable
   runtime skill and NEAR Intents demoted from the first agent-trading/PnL lane.
+- Prior PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
+- Amendment date: 2026-06-21
+- Amendment basis: That parallel accepted direction made PaperTrade the current
+  trading path and required runtime skill packaging for paper orders/results.
+  It is retained as provenance, while the exact current required skill is
+  `hyperliquid-paper-trading`.
 
 ## 核心决定
 
@@ -221,3 +227,6 @@ Season 0 不做：
   ClawHouse backend owns signed paper order intake, margin, liquidation,
   leaderboard, and replay proof, and Agent Board Ledger is no longer the paper
   matching or risk engine.
+- 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f` - Preserved the parallel
+  PaperTrade runtime-skill provenance while resolving the required current skill
+  name to `hyperliquid-paper-trading`.
