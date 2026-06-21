@@ -10,11 +10,13 @@ let agents = [
     gate: "1 key",
   })
 ];
+let discoveryLoading = true;
 document.body.classList.add("motion-prep");
 
 let selectedId = requestedAgentId || agents[0].id;
 if (!agents.some((agent) => agent.id === selectedId)) selectedId = agents[0].id;
 let tradeSide = "buy";
+let agentSort = "pnl";
 let activeEventId = null;
 let chainState = {
   accountId: null,
@@ -31,6 +33,8 @@ let chainState = {
   backend: null,
   error: null
 };
+
+const TICKER_PX_PER_SECOND = 18;
 
 const byId = (id) => document.getElementById(id);
 const selectedAgent = () => agents.find((agent) => agent.id === selectedId) || agents[0];
@@ -60,7 +64,7 @@ function normalizeDiscoveryAgent(agent = {}, index = 0) {
     strategy: agent.strategy || `${id} / configured key-market agent`,
     desc: agent.description || "Reads key-market and backend ledger data from live APIs only.",
     key: null,
-    holders: null,
+    holders: asNumber(keyStateAgent.supply),
     gate: agent.gate || "1 key",
     last: agent.status === "available" ? "live read" : "checking",
     entry: null,
@@ -180,8 +184,9 @@ function keyPriceLabel(agent) {
 }
 
 function holderCount(agent) {
-  const supply = chainApplies(agent) ? Number(chainState.state?.agent?.supply) : NaN;
-  return Number.isFinite(supply) ? supply : null;
+  const liveSupply = chainApplies(agent) ? asNumber(chainState.state?.agent?.supply) : null;
+  if (liveSupply !== null) return liveSupply;
+  return asNumber(agent.holders);
 }
 
 function shortAccount(accountId) {
@@ -284,6 +289,19 @@ function backendPnl(agent) {
 
 function backendPnlSource(agent) {
   return paperLeaderboardRow(agent) ? "Paper P&L" : "Backend P&L";
+}
+
+function sortedAgents() {
+  const sorted = [...agents];
+  sorted.sort((a, b) => {
+    const aValue = agentSort === "holders" ? holderCount(a) : backendPnl(a);
+    const bValue = agentSort === "holders" ? holderCount(b) : backendPnl(b);
+    if (aValue === null && bValue !== null) return 1;
+    if (aValue !== null && bValue === null) return -1;
+    if (aValue !== null && bValue !== null && aValue !== bValue) return bValue - aValue;
+    return (a.discoveryIndex ?? 0) - (b.discoveryIndex ?? 0);
+  });
+  return sorted;
 }
 
 function formatBackendTime(value) {
@@ -502,6 +520,7 @@ async function loadDiscoveryAgents() {
       ? requestedAgentId
       : selectedId;
     selectedId = agents.some((agent) => agent.id === preferredId) ? preferredId : agents[0].id;
+    discoveryLoading = false;
     chainState = {
       ...chainState,
       discovery: data,
@@ -511,6 +530,7 @@ async function loadDiscoveryAgents() {
     render();
     dispatchUiEvent("clawhouse:agent-change");
   } catch (error) {
+    discoveryLoading = false;
     chainState = {
       ...chainState,
       discoveryError: error instanceof Error ? error.message : "Discovery unavailable.",
@@ -552,11 +572,53 @@ function renderTicker() {
       `<span class="ticker-item"><b>${holders === null ? "--" : holders}</b><span>keys in ${agent.name}</span></span>`
     ];
   });
-  byId("tickerTrack").innerHTML = items.concat(items).join("");
+  const track = byId("tickerTrack");
+  track.innerHTML = items.concat(items).join("");
+  window.requestAnimationFrame(syncTickerSpeed);
+}
+
+function syncTickerSpeed() {
+  const track = byId("tickerTrack");
+  const loopWidth = track.scrollWidth / 2;
+  if (!Number.isFinite(loopWidth) || loopWidth <= 0) {
+    track.style.removeProperty("--ticker-duration");
+    return;
+  }
+
+  const duration = loopWidth / TICKER_PX_PER_SECOND;
+  track.style.setProperty("--ticker-duration", `${duration.toFixed(2)}s`);
+}
+
+function agentListSkeletonRows() {
+  return Array.from({ length: 8 }, () => `
+    <div class="agent-row agent-row-skeleton" aria-hidden="true">
+      <div class="avatar agent-skeleton-avatar"></div>
+      <div class="agent-copy">
+        <div class="agent-name">
+          <span class="agent-skeleton-line agent-skeleton-name"></span>
+          <span class="agent-skeleton-line agent-skeleton-tag"></span>
+        </div>
+        <div class="agent-skeleton-line agent-skeleton-meta"></div>
+        <div class="agent-stats">
+          <span class="agent-skeleton-line agent-skeleton-stat"></span>
+          <span class="agent-skeleton-line agent-skeleton-stat short"></span>
+          <b class="agent-skeleton-line agent-skeleton-change"></b>
+        </div>
+      </div>
+    </div>
+  `).join("");
 }
 
 function renderAgentList() {
-  byId("agentList").innerHTML = agents.map((agent, index) => {
+  const list = byId("agentList");
+  if (discoveryLoading) {
+    list.setAttribute("aria-busy", "true");
+    list.innerHTML = agentListSkeletonRows();
+    return;
+  }
+
+  list.removeAttribute("aria-busy");
+  list.innerHTML = sortedAgents().map((agent) => {
     const pnl = backendPnl(agent);
     return `
     <button class="agent-row ${agent.id === selectedId ? "active" : ""}" data-agent="${agent.id}">
@@ -577,7 +639,7 @@ function renderAgentList() {
   `;
   }).join("");
 
-  document.querySelectorAll("[data-agent]").forEach((button) => {
+  list.querySelectorAll("[data-agent]").forEach((button) => {
     button.addEventListener("click", () => {
       selectedId = button.dataset.agent;
       activeEventId = null;
@@ -1120,6 +1182,16 @@ document.querySelectorAll(".ticket-tab").forEach((button) => {
   });
 });
 
+const agentSortControl = byId("agentSort");
+if (agentSortControl) {
+  agentSortControl.value = agentSort;
+  agentSortControl.addEventListener("change", () => {
+    agentSort = agentSortControl.value === "holders" ? "holders" : "pnl";
+    renderAgentList();
+    dispatchUiEvent("clawhouse:agent-sort-change");
+  });
+}
+
 document.querySelectorAll("[data-amount]").forEach((button) => {
   button.addEventListener("click", () => {
     byId("keyAmount").value = button.dataset.amount;
@@ -1163,6 +1235,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeModal();
 });
 window.addEventListener("resize", syncContentColumns);
+window.addEventListener("resize", () => window.requestAnimationFrame(syncTickerSpeed));
 
 function animateAsciiKey() {
   const key = document.querySelector(".ascii-key");

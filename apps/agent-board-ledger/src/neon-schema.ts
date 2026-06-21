@@ -256,6 +256,8 @@ export const neonSchemaStatements = [
       created_at TEXT NOT NULL
     )
   `,
+  "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
+  "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS max_leverage DOUBLE PRECISION",
   "CREATE INDEX IF NOT EXISTS paper_market_snapshots_coin_observed_idx ON paper_market_snapshots(market_type, coin, observed_at)",
   `
     CREATE TABLE IF NOT EXISTS paper_orders (
@@ -288,6 +290,7 @@ export const neonSchemaStatements = [
       UNIQUE(paper_account_id, client_order_id)
     )
   `,
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
   "CREATE INDEX IF NOT EXISTS paper_orders_account_created_idx ON paper_orders(paper_account_id, created_at)",
   "CREATE INDEX IF NOT EXISTS paper_orders_status_idx ON paper_orders(status, market_type, coin)",
   `
@@ -307,6 +310,7 @@ export const neonSchemaStatements = [
       created_at TEXT NOT NULL
     )
   `,
+  "ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
   "CREATE INDEX IF NOT EXISTS paper_fills_account_created_idx ON paper_fills(paper_account_id, created_at)",
   `
     CREATE TABLE IF NOT EXISTS paper_positions (
@@ -328,6 +332,7 @@ export const neonSchemaStatements = [
       UNIQUE(paper_account_id, market_type, coin, margin_mode)
     )
   `,
+  "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
   `
     CREATE TABLE IF NOT EXISTS paper_risk_snapshots (
       id TEXT PRIMARY KEY,
@@ -409,11 +414,6 @@ export const neonSchemaStatements = [
   "ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS reason_missing_count INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS staleness_status TEXT NOT NULL DEFAULT 'unknown'",
   "ALTER TABLE pnl_snapshots ADD COLUMN IF NOT EXISTS completeness_status TEXT NOT NULL DEFAULT 'unknown'",
-  "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
-  "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS max_leverage DOUBLE PRECISION",
-  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
-  "ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
-  "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
   `
     DO $$
     BEGIN
