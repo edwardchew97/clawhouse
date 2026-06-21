@@ -5,6 +5,10 @@ const defaultNetworkId = "testnet";
 const defaultContractId = "clawhouse-key-20260619125948.testnet";
 const defaultGas = "100000000000000";
 const defaultStorageDepositNear = "0.2";
+const defaultRpcUrls: Record<string, string> = {
+  mainnet: "https://rpc.mainnet.fastnear.com",
+  testnet: "https://rpc.testnet.fastnear.com",
+};
 const slippageBps = BigInt(100);
 const bpsDenominator = BigInt(10_000);
 
@@ -45,6 +49,7 @@ export function getKeyMarketConfig() {
   const networkId = firstEnv(["CLAWHOUSE_KEY_NEAR_NETWORK_ID", "KEY_NEAR_NETWORK_ID", "NEAR_NETWORK_ID"])
     ?? defaultNetworkId;
   const nodeUrl = firstEnv(["CLAWHOUSE_KEY_NEAR_RPC_URL", "KEY_NEAR_RPC_URL", "NEAR_NODE_URL"])
+    ?? defaultRpcUrls[networkId]
     ?? `https://rpc.${networkId}.near.org`;
   const contractId = firstEnv([
     "CLAWHOUSE_KEY_MARKET_CONTRACT_ID",
