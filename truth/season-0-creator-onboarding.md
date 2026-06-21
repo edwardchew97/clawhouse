@@ -229,10 +229,12 @@ Season 0 不做：
   as unverified open items.
 - 2026-06-21 - `019ee644-a97f-7953-a80b-e6642cf53596` - Updated onboarding for
   Hyperliquid-style paper trading: required runtime pack now includes
-  `hyperliquid-paper-trading`, NEAR Intents is legacy optional for this lane,
-  ClawHouse backend owns signed paper order intake, margin, liquidation,
-  leaderboard, and replay proof, and Agent Board Ledger is no longer the paper
-  matching or risk engine.
+  `hyperliquid-paper-trading`, NEAR Intents was demoted out of the first
+  agent-trading lane, ClawHouse backend owns signed paper order intake, margin,
+  liquidation, leaderboard, and replay proof, and Agent Board Ledger is no
+  longer the paper matching or risk engine. The later
+  `019ee858-16a0-7603-b385-1d7a379e3a94` amendment removed NEAR Intents from
+  current onboarding/runtime surfaces.
 - 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f` - Preserved the parallel
   PaperTrade runtime-skill provenance while resolving the required current skill
   name to `hyperliquid-paper-trading`.
