@@ -55,6 +55,12 @@ replace Scope V0 key trading.
   later Hyperliquid paper trading amendment in session
   `019ee644-a97f-7953-a80b-e6642cf53596` supersedes the long-only spot limits
   for the current implementation.
+- Runtime and funding amendment session:
+  `019ee858-16a0-7603-b385-1d7a379e3a94`
+- Amendment date: 2026-06-21
+- Amendment basis: JY requested removing the legacy `near-intents-spot-value`
+  optional skill from current runtime/onboarding surfaces and setting the
+  current PaperTrade starting balance default to 10,000 USD.
 
 ## One Sentence
 
@@ -156,11 +162,14 @@ ClawHouse provides a runtime skill pack for IronClaw:
   Hyperliquid-style paper orders, submit them to ClawHouse, read fills,
   positions, risk, liquidation, and replay proof, and stop when market/risk data
   is stale.
-- `near-intents-spot-value`: legacy spot-value skill retained for manual or
-  historical testing; it is not the first agent-trading/PnL lane after the
-  Hyperliquid paper trading amendment.
 - future trading value skills: separate venue/value adapters added through the
   same manifest verification path.
+
+The current Agent Trading runtime pack must not expose
+`near-intents-spot-value` as a default or optional onboarding skill. NEAR
+Intents deposit-oriented spot swap instructions are outside the PaperTrade
+path. A future NEAR Intents adapter requires a new truth amendment and manifest
+update.
 
 The ClawHouse onboarding skill runs inside the target IronClaw agent. It should:
 
@@ -285,6 +294,8 @@ An Agent Trading board is a paper account assigned to one approved agent.
 For the first scope, the conservative default is:
 
 - ClawHouse grants the paper starting balance for each approved agent account;
+- the current default paper starting balance is 10,000 USD per approved agent
+  paper account;
 - normal users do not deposit funds into autonomous agent-controlled wallets;
 - users participate first as watchers, key holders, followers, and later
   constrained copiers;
@@ -527,7 +538,6 @@ The first Agent Trading slice is done only when:
 
 ## Open Decisions
 
-- What exact paper starting balance should each first public agent receive?
 - Which exact stablecoin should be the base asset?
 - Which asset universe is safe to display publicly when agents can technically
   trade unknown assets?
@@ -585,3 +595,7 @@ The first Agent Trading slice is done only when:
   later Hyperliquid-style paper trading scope from
   `019ee644-a97f-7953-a80b-e6642cf53596`, which requires cross/isolated margin
   and liquidation in paper mode.
+- 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Removed
+  `near-intents-spot-value` from the current runtime/onboarding contract and
+  set the current PaperTrade starting balance default to 10,000 USD per
+  approved agent paper account.

@@ -354,7 +354,7 @@ function parseArgs(args: string[]): Options {
       ?? optionalString(process.env.ledgerAdminToken),
     paperAccountId: optionalString(values["paper-account-id"]),
     agentId: optionalString(values["agent-id"]) ?? "ironclaw-paper-workbench",
-    startingBalanceUsd: numberOption(values["starting-balance-usd"], 1000, "starting-balance-usd"),
+    startingBalanceUsd: numberOption(values["starting-balance-usd"], 10000, "starting-balance-usd"),
   };
 }
 

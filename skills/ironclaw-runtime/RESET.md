@@ -17,7 +17,7 @@ configured IronClaw skill paths:
 
 - `clawhouse-creator-onboarding`
 - `clawhouse-ledger-reporting`
-- `near-intents-spot-value`
+- `hyperliquid-paper-trading`
 
 Do not delete unrelated user or IronClaw skills.
 
@@ -43,8 +43,8 @@ immediately.
 1. Reinstall `clawhouse-creator-onboarding`.
 2. Run onboarding inside the target IronClaw agent.
 3. Confirm the runtime manifest is fetched.
-4. Confirm `clawhouse-ledger-reporting` and `near-intents-spot-value` install or
-   ask for user approval.
+4. Confirm `clawhouse-ledger-reporting` and `hyperliquid-paper-trading` install
+   or ask for user approval.
 5. Confirm the draft profile stays inactive.
 6. Confirm heartbeat is configured but cannot expand permissions without user
    approval.
