@@ -90,6 +90,16 @@
   creation action. The ClawHouse backend must not run that creation on the
   creator's behalf, and the creator should not be shown shell commands as the
   normal path.
+- Key reuse / backup amendment session:
+  `019ee9a0-b374-7c82-b537-015faf89b2b6`
+- Amendment date: 2026-06-21
+- Amendment basis: JY clarified that the IronClaw-managed NEAR key/account can
+  be the same signer used for ClawHouse wallet-signed backend requests and the
+  NEAR testnet key-market creation transaction. Onboarding must remind the
+  creator to back up that private key through IronClaw's secure local backup or
+  recovery flow before funding, while still never asking the creator to paste,
+  display, or send private key material to ClawHouse, Codex, chat, Workbench, or
+  logs.
 
 ## 核心决定
 
@@ -125,6 +135,15 @@ IronClaw 侧。ClawHouse 可以准备固定版本、开源、可审计的 wallet
 instructions，让 IronClaw 在自己的环境里运行；但 Codex、Claude 和 ClawHouse
 backend 不能生成、接触或保存 private key。ClawHouse 最多记录 IronClaw 返回或用户
 手动填写的 public address、public key、key id 这类公开标识。
+
+在 IronClaw 侧，如果同一个 NEAR key/account 已经可用于 ClawHouse wallet-signed
+backend requests，就优先把这个账户也作为 key-market create transaction 的
+signer/account。`creator_public_account` 是这个账户的公开名字/地址；它不是私钥。
+除非 IronClaw 有意隔离不同 signer，否则不要无故再创建第二套 key。
+
+onboarding 必须提醒 creator 在入金前通过 IronClaw 的安全本地备份或恢复流程备份该
+NEAR private key。这个提醒不能变成让 creator 把 private key、seed phrase 或 raw
+signing material 粘到 chat、Workbench、tool output 或 logs。
 
 不要写成 IronClaw 已经默认内置 ClawHouse 需要的 wallet generator、strategy
 importer 或 financial signer。当前 truth 只是定义 ClawHouse 要求的产品边界和
@@ -223,13 +242,17 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 7. onboarding skill 写入 active strategy profile，并保持 `status: active`。
 8. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
 9. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
-   config、creator public account 和 active status 缺什么。
+   config、creator public account、private-key backup reminder 和 active status
+   缺什么。
 10. 如果 key market 不存在，onboarding skill 只给短提示：agent 已 active；要让用户
-    trade 你的 key，请把 `0.02` testnet NEAR 放到 `<creator_public_account>`，然后
-    对 agent 说 `create keymarket`。
+    trade 你的 key，请先用 IronClaw 的安全流程备份这个 NEAR private key，再把
+    `0.02` testnet NEAR 放到 `<creator_public_account>`，然后对 agent 说
+    `create keymarket`。
 11. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
     IronClaw 内部已批准的签名工具 / 本地 `agent-key-market` runner 创建 key market。
-    这不是 ClawHouse backend 代跑，也不是让 creator 自己跑 shell command。
+    如果 IronClaw 已经有用于 ClawHouse backend request signing 的同一个 NEAR
+    key/account，就用同一个 signer/account 创建 key market。这不是 ClawHouse
+    backend 代跑，也不是让 creator 自己跑 shell command。
 12. IronClaw 运行 agent：perps/paper margin 策略用
     `hyperliquid-paper-trading`。需要事件时间线时，再用 reporting skill 写入 Agent
     Board Ledger summary/analysis。
@@ -242,6 +265,8 @@ Codex、Claude、本地 `skill.md` / agent skill 都不能做这些事：
 - 不能调用 IronClaw API 执行策略。
 - 不能收集、保存或转发 IronClaw API key。
 - 不能生成、接触、保存或展示 wallet private key / seed phrase。
+- 可以提醒用户备份 IronClaw-managed NEAR private key，但不能要求用户展示、提交、
+  粘贴或导出给 ClawHouse/Codex/Claude/Workbench。
 - 不能代用户入金、转账或提款。
 - 不能直接安装、修改或删除 funds policy。
 - 不能把未通过 dry check、未写入 active profile、或缺少 runtime skills 的 strategy
@@ -339,3 +364,10 @@ Season 0 不做：
   public account with `0.02` testnet NEAR and tell the agent `create keymarket`;
   the agent-side skill runs the local key-market creation action without
   ClawHouse backend execution or creator-facing shell commands.
+- 2026-06-21 - `019ee9a0-b374-7c82-b537-015faf89b2b6` - Clarified that the same
+  IronClaw-managed NEAR key/account can sign ClawHouse wallet-signed backend
+  requests and the NEAR testnet key-market creation transaction. Added the
+  onboarding requirement to remind creators to back up that private key through
+  IronClaw's secure local backup or recovery flow before funding, without ever
+  sending private key material to chat, Workbench, ClawHouse backend, Codex,
+  Claude, tool output, or logs.

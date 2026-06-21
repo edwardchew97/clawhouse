@@ -586,14 +586,14 @@
           "optional": true,
           "id": "agentRegistration.creatorOnboarding.setupReadback",
           "name": "GET /creator-onboarding/setup",
-          "description": "Calls the ClawHouse App compatibility readback for IronClaw-side onboarding. It returns active agent status, the manifest, required skill_install parameters, and the agent-side key-market action; it does not store secrets or create wallets.",
+          "description": "Calls the ClawHouse App compatibility readback for IronClaw-side onboarding. It returns active agent status, the manifest, required skill_install parameters, the secure private-key backup reminder, and the agent-side key-market action; it does not store secrets or create wallets.",
           "type": "http",
           "access": "public",
           "method": "GET",
           "url": "{{clawhouseAppBaseUrl}}/creator-onboarding/setup?creatorPublicAccount={{testUserAccountId}}",
           "runningNotes": [
             "Calling the real ClawHouse App /creator-onboarding/setup route.",
-            "This step should return active status plus manifest, skill_install parameters, the funding address field, and the create keymarket action."
+            "This step should return active status plus manifest, skill_install parameters, the secure backup reminder, the funding address field, and the create keymarket action."
           ],
           "setVars": {
             "creatorOnboardingMode": "response.json.mode",
@@ -610,11 +610,11 @@
           "optional": true,
           "id": "agentRegistration.key.fundCreator",
           "name": "Fund Creator Account",
-          "description": "Manual funding gate before key-market creation. Send 0.02 testnet NEAR to the IronClaw-managed creator public account; never paste private keys into Workbench or chat.",
+          "description": "Manual funding gate before key-market creation. Back up the IronClaw-managed NEAR private key through IronClaw's secure backup or recovery flow, then send 0.02 testnet NEAR to the creator public account; never paste private keys into Workbench or chat.",
           "type": "pending",
           "status": "manual",
           "access": "protected",
-          "pendingReason": "Funding must happen in the user's NEAR testnet wallet or IronClaw-managed signing environment. Workbench records the instruction; it does not custody funds.",
+          "pendingReason": "Private-key backup and funding must happen in the user's NEAR testnet wallet or IronClaw-managed signing environment. Workbench records the instruction; it does not custody funds or secrets.",
           "inputs": {
             "keyMarketFundingAmountNear": "0.02",
             "creatorPublicAccount": "{{testUserAccountId}}"
@@ -623,12 +623,13 @@
             "keyMarketFundingAmountNear"
           ],
           "responseLines": [
+            "Back up the NEAR private key using IronClaw's secure backup or recovery flow before funding.",
             "Send 0.02 testnet NEAR to the creator public account.",
-            "Use the account that will sign Create Agent Key Market.",
+            "Use the same IronClaw-managed account that signs ClawHouse backend requests when it is available.",
             "Do not paste a NEAR private key or seed phrase into chat."
           ],
           "runningNotes": [
-            "This is a manual funding gate before the real NEAR create transaction.",
+            "This is a manual backup and funding gate before the real NEAR create transaction.",
             "The following Create Agent Key Market step signs with the configured test user account or local NEAR credentials."
           ]
         },
