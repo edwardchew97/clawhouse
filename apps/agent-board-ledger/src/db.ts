@@ -623,6 +623,32 @@ export function migrate(db: Database) {
     `);
   }
 
+  if (hasColumn(db, "boards", "starting_value_usd")) {
+    db.exec(`
+      INSERT OR IGNORE INTO paper_accounts
+        (id, board_id, agent_id, agent_public_key, base_currency, starting_balance_usd,
+         cash_balance_usd, status, allowed_markets_json, metadata_json, created_at, updated_at)
+        SELECT
+          'paper_legacy_' || id,
+          id,
+          agent_id,
+          public_key,
+          COALESCE(NULLIF(base_currency, ''), 'USD'),
+          starting_value_usd,
+          starting_value_usd,
+          'active',
+          NULL,
+          '{"source":"migration","reason":"legacy_board_starting_value"}',
+          created_at,
+          created_at
+        FROM boards
+        WHERE starting_value_usd > 0
+          AND NOT EXISTS (
+            SELECT 1 FROM paper_accounts WHERE paper_accounts.board_id = boards.id
+          );
+    `);
+  }
+
   dropColumnIfExists(db, "pnl_snapshots", "starting_value_usd");
   dropColumnIfExists(db, "boards", "starting_value_usd");
 
