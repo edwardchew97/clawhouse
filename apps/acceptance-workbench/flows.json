@@ -39,7 +39,8 @@
             "Running the allowlisted local NEAR wallet generator.",
             "Overwriting the local Workbench ledger wallet artifact with a fresh random key pair.",
             "Returning only public wallet metadata in the visible response.",
-            "Storing ledgerWalletPrivateKey in the active Workbench environment for later local scripts."
+            "Storing ledgerWalletPrivateKey in the active Workbench environment for later local scripts.",
+            "Deriving a fresh Workbench test agent id from the generated wallet for the registration step."
           ],
           "inputs": {
             "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json"
@@ -58,11 +59,18 @@
           ],
           "clearInputs": {
             "agentRegistration.ledger.createBoard": [
-              "ledgerBoardId"
+              "ledgerBoardId",
+              "ledgerAgentId"
             ],
             "agentRegistration.ledger.getBoard": [
               "ledgerBoardId"
             ]
+          },
+          "setDerivedVars": {
+            "ledgerAgentId": {
+              "kind": "workbenchAgentIdFromWalletAddress",
+              "source": "response.json.walletAddress"
+            }
           },
           "setEnv": {
             "ledgerWalletFile": "inputs.ledgerWalletFile",
@@ -105,20 +113,20 @@
             "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN configured in the local runtime environment.",
             "Reusing the local Workbench wallet artifact from Generate Agent Ledger Key Pair; if that step was skipped, this script creates one locally.",
             "Leave ledgerBoardId empty if you want the backend to generate an id.",
+            "Run Generate Agent Ledger Key Pair first to auto-fill a fresh test ledgerAgentId, or edit ledgerAgentId to intentionally reuse an agent id.",
             "The returned board id is stored as ledgerBoardId for the later API calls."
           ],
           "inputs": {
             "ledgerBaseUrl": "http://127.0.0.1:4321",
             "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
             "ledgerBoardId": "",
-            "ledgerAgentId": "ironclaw-api-workbench",
+            "ledgerAgentId": "",
             "paperTradingStartingBalanceUsd": "10000",
             "ledgerVisibilityMode": "public"
           },
           "fillDefaultsWhenEmpty": [
             "ledgerBaseUrl",
             "ledgerWalletFile",
-            "ledgerAgentId",
             "paperTradingStartingBalanceUsd",
             "ledgerVisibilityMode"
           ],

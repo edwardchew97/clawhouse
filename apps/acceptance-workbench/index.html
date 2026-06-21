@@ -2930,6 +2930,23 @@
       }
     }
 
+    function workbenchAgentIdFromWalletAddress(value) {
+      const suffix = String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 16);
+      return suffix ? `workbench-agent-${suffix}` : "";
+    }
+
+    function applyDerivedMappings(mappings, source, target) {
+      for (const [name, rule] of Object.entries(mappings)) {
+        if (!rule || typeof rule !== "object") continue;
+        const sourceValue = getPath(source, rule.source || "");
+        let value = "";
+        if (rule.kind === "workbenchAgentIdFromWalletAddress") {
+          value = workbenchAgentIdFromWalletAddress(sourceValue);
+        }
+        if (hasValue(value)) target[name] = value;
+      }
+    }
+
     function applyClears(step) {
       for (const name of step.clearVars || []) {
         delete state.vars[name];
@@ -2950,6 +2967,7 @@
         vars: state.vars
       };
       applyMappings(step.setVars || {}, source, state.vars);
+      applyDerivedMappings(step.setDerivedVars || {}, source, state.vars);
     }
 
     function applySetEnv(step, result) {
