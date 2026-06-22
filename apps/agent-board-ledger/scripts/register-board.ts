@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import {
   generateNearWallet,
   inspectNearWallet,
+  signAgentBoardLedgerAgentRequest,
   signAgentBoardLedgerRequest,
   type NearWalletPublicInfo,
 } from "../../../tools/near-wallet/src/wallet";
@@ -38,9 +39,37 @@ async function main() {
 
   const wallet = await loadOrCreateWallet(options.keyFile);
   const boardId = options.boardId || `ledger-board-${crypto.randomUUID().slice(0, 8)}`;
+  const agentBody = {
+    agent_id: options.agentId,
+    agent_public_key: wallet.publicKey,
+    metadata: {
+      source: "acceptance-workbench",
+    },
+  };
+  const rawAgentBody = JSON.stringify(agentBody);
+  const signedAgentRegistration = await signAgentBoardLedgerAgentRequest({
+    keyFile: options.keyFile,
+    method: "POST",
+    path: "/agents",
+    body: rawAgentBody,
+    purpose: "agent_registration",
+    boardId: null,
+    agentId: options.agentId,
+    agentPublicKey: wallet.publicKey,
+  });
+  const agentRegistration = await requestJson(options.baseUrl, "/agents", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${options.serviceToken}`,
+      ...signedAgentRegistration.headers,
+    },
+    body: rawAgentBody,
+  });
   const body = {
     board_id: boardId,
     agent_id: options.agentId,
+    agent_public_key: wallet.publicKey,
     wallet_address: wallet.walletAddress,
     public_key: wallet.publicKey,
     base_currency: "USD",
@@ -60,33 +89,57 @@ async function main() {
     boardId,
     agentId: options.agentId,
   });
+  const signedAgentBoard = await signAgentBoardLedgerAgentRequest({
+    keyFile: options.keyFile,
+    method: "POST",
+    path: "/boards",
+    body: rawBody,
+    purpose: "board_registration",
+    boardId,
+    agentId: options.agentId,
+    agentPublicKey: wallet.publicKey,
+  });
   const response = await requestJson(options.baseUrl, "/boards", {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${options.serviceToken}`,
       ...signed.headers,
+      ...signedAgentBoard.headers,
     },
     body: rawBody,
   });
   const paperAccountId = `${boardId}-paper`;
+  const paperBody = {
+    paper_account_id: paperAccountId,
+    board_id: boardId,
+    agent_id: options.agentId,
+    agent_public_key: wallet.publicKey,
+    starting_balance_usd: options.startingBalanceUsd,
+    allowed_markets: ["BTC", "ETH"],
+    metadata: {
+      source: "acceptance-workbench",
+    },
+  };
+  const rawPaperBody = JSON.stringify(paperBody);
+  const signedAgentPaperAccount = await signAgentBoardLedgerAgentRequest({
+    keyFile: options.keyFile,
+    method: "POST",
+    path: "/paper/accounts",
+    body: rawPaperBody,
+    purpose: "paper_account_registration",
+    boardId,
+    agentId: options.agentId,
+    agentPublicKey: wallet.publicKey,
+  });
   const paperAccount = await requestJson(options.baseUrl, "/paper/accounts", {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${options.serviceToken}`,
+      ...signedAgentPaperAccount.headers,
     },
-    body: JSON.stringify({
-      paper_account_id: paperAccountId,
-      board_id: boardId,
-      agent_id: options.agentId,
-      agent_public_key: wallet.publicKey,
-      starting_balance_usd: options.startingBalanceUsd,
-      allowed_markets: ["BTC", "ETH"],
-      metadata: {
-        source: "acceptance-workbench",
-      },
-    }),
+    body: rawPaperBody,
   });
 
   printJson({
@@ -95,6 +148,7 @@ async function main() {
     wallet,
     boardId,
     agentId: options.agentId,
+    agentRegistration: agentRegistration.agent,
     paperAccountId,
     board: response.board,
     paperAccount: paperAccount.account,

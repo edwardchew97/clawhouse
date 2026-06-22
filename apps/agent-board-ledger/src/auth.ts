@@ -19,8 +19,30 @@ export type CanonicalAuthPayload = {
   walletAddress: string;
 };
 
+export type CanonicalAgentAuthPayload = {
+  domain: typeof AUTH_DOMAIN;
+  version: typeof AUTH_VERSION;
+  purpose: "agent_registration" | "board_registration" | "paper_account_registration";
+  method: string;
+  path: string;
+  bodyHash: string;
+  timestamp: string;
+  nonce: string;
+  agentId: string;
+  agentPublicKey: string;
+  boardId: string | null;
+};
+
 export type SignedHeaders = {
   walletAddress: string;
+  publicKey: string;
+  timestamp: string;
+  nonce: string;
+  bodyHash: string;
+  signature: string;
+};
+
+export type AgentSignedHeaders = {
   publicKey: string;
   timestamp: string;
   nonce: string;
@@ -43,6 +65,16 @@ export function readSignedHeaders(headers: Headers): SignedHeaders {
   return { walletAddress, publicKey, timestamp, nonce, bodyHash, signature };
 }
 
+export function readAgentSignedHeaders(headers: Headers): AgentSignedHeaders {
+  const publicKey = requiredHeader(headers, "x-clawhouse-agent-public-key");
+  const timestamp = requiredHeader(headers, "x-clawhouse-agent-timestamp");
+  const nonce = requiredHeader(headers, "x-clawhouse-agent-nonce");
+  const bodyHash = requiredHeader(headers, "x-clawhouse-agent-body-sha256").toLowerCase();
+  const signature = requiredHeader(headers, "x-clawhouse-agent-signature");
+
+  return { publicKey, timestamp, nonce, bodyHash, signature };
+}
+
 export function canonicalAuthPayload(input: Omit<CanonicalAuthPayload, "domain" | "version">) {
   return JSON.stringify({
     domain: AUTH_DOMAIN,
@@ -56,6 +88,22 @@ export function canonicalAuthPayload(input: Omit<CanonicalAuthPayload, "domain" 
     agentId: input.agentId,
     walletAddress: input.walletAddress,
   } satisfies CanonicalAuthPayload);
+}
+
+export function canonicalAgentAuthPayload(input: Omit<CanonicalAgentAuthPayload, "domain" | "version">) {
+  return JSON.stringify({
+    domain: AUTH_DOMAIN,
+    version: AUTH_VERSION,
+    purpose: input.purpose,
+    method: input.method.toUpperCase(),
+    path: input.path,
+    bodyHash: input.bodyHash,
+    timestamp: input.timestamp,
+    nonce: input.nonce,
+    agentId: input.agentId,
+    agentPublicKey: input.agentPublicKey,
+    boardId: input.boardId,
+  } satisfies CanonicalAgentAuthPayload);
 }
 
 export function verifySignature(

@@ -10,7 +10,9 @@ import {
   inspectNearWallet,
   inspectNearWalletPrivateInfo,
   publicInfoFromPublicKey,
+  signAgentBoardLedgerAgentRequest,
   signAgentBoardLedgerRequest,
+  serializeAgentBoardLedgerAgentPayload,
   serializeAgentBoardLedgerRequestPayload,
   verifyAgentBoardLedgerRequestSignature,
 } from "./wallet";
@@ -346,6 +348,48 @@ describe("Agent Board Ledger request signatures", () => {
     );
   });
 
+  test("signs a canonical Agent registration payload", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+    const wallet = await generateNearWallet({ keyFile });
+    const agentBody = JSON.stringify({ agent_id: "agent-1", agent_public_key: wallet.publicKey });
+
+    const signed = await signAgentBoardLedgerAgentRequest({
+      keyFile,
+      method: "post",
+      path: "/agents",
+      body: agentBody,
+      timestamp: "2026-06-22T00:00:00.000Z",
+      nonce: "agent-nonce-1",
+      purpose: "agent_registration",
+      boardId: null,
+      agentId: "agent-1",
+      agentPublicKey: wallet.publicKey,
+    });
+
+    expect(signed.bodyHash).toBe(hashRequestBody(agentBody));
+    expect(signed.headers).toMatchObject({
+      "x-clawhouse-agent-public-key": wallet.publicKey,
+      "x-clawhouse-agent-timestamp": "2026-06-22T00:00:00.000Z",
+      "x-clawhouse-agent-nonce": "agent-nonce-1",
+      "x-clawhouse-agent-body-sha256": hashRequestBody(agentBody),
+      "x-clawhouse-agent-signature": signed.signature,
+    });
+    expect(serializeAgentBoardLedgerAgentPayload(signed)).toBe(JSON.stringify({
+      domain: "clawhouse.agent-board-ledger.v0",
+      version: 1,
+      purpose: "agent_registration",
+      method: "POST",
+      path: "/agents",
+      bodyHash: hashRequestBody(agentBody),
+      timestamp: "2026-06-22T00:00:00.000Z",
+      nonce: "agent-nonce-1",
+      agentId: "agent-1",
+      agentPublicKey: wallet.publicKey,
+      boardId: null,
+    }));
+  });
+
   test("sign-request and verify-request commands never print private material", async () => {
     const root = await tempRoot();
     const keyFile = join(root, "wallet.json");
@@ -429,6 +473,62 @@ describe("Agent Board Ledger request signatures", () => {
       verifyStdout.join(""),
       verifyStderr.join(""),
     ].join("");
+    expect(combinedOutput).not.toContain(keyStore.private_key);
+    expect(combinedOutput).not.toContain(
+      keyStore.private_key.replace("ed25519:", ""),
+    );
+  });
+
+  test("sign-agent-request command never prints private material", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+    const wallet = await generateNearWallet({ keyFile });
+    const body = JSON.stringify({
+      paper_account_id: "paper-1",
+      board_id: "board-1",
+      agent_id: "agent-1",
+      agent_public_key: wallet.publicKey,
+    });
+    const keyStore = JSON.parse(await readFile(keyFile, "utf8"));
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const exitCode = await runCli(
+      [
+        "sign-agent-request",
+        "--key-file",
+        keyFile,
+        "--method",
+        "POST",
+        "--path",
+        "/paper/accounts",
+        "--body",
+        body,
+        "--agent-id",
+        "agent-1",
+        "--agent-public-key",
+        wallet.publicKey,
+        "--purpose",
+        "paper_account_registration",
+        "--board-id",
+        "board-1",
+        "--timestamp",
+        "2026-06-22T00:00:00.000Z",
+        "--nonce",
+        "agent-nonce-1",
+      ],
+      {
+        stdout: (message) => stdout.push(message),
+        stderr: (message) => stderr.push(message),
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr.join("")).toBe("");
+    const signed = JSON.parse(stdout.join(""));
+    expect(signed.headers["x-clawhouse-agent-signature"]).toBe(signed.signature);
+    expect(signed.headers["x-clawhouse-agent-public-key"]).toBe(wallet.publicKey);
+
+    const combinedOutput = `${stdout.join("")}${stderr.join("")}`;
     expect(combinedOutput).not.toContain(keyStore.private_key);
     expect(combinedOutput).not.toContain(
       keyStore.private_key.replace("ed25519:", ""),

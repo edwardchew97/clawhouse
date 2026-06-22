@@ -93,7 +93,8 @@ Run these once for every route family where they apply:
   signatures return `401`, except an unconfigured admin token returns `500`.
 - Read-gated routes reject missing, invalid, expired, or insufficient
   `x-clawhouse-read-token`.
-- Public boards bypass read-token checks.
+- Public boards bypass read-token checks only for public-summary reads; holder
+  detail reads still require service bearer or a valid read token.
 - Service bearer bypasses read-token checks.
 - Nonexistent ids return the explicit route error, usually `404`.
 - Duplicate primary-key inserts return `409` via `Duplicate record` unless the
@@ -108,7 +109,8 @@ Run these once for every route family where they apply:
 | ID | Method and path | Auth | Handler |
 | --- | --- | --- | --- |
 | L01 | `GET /health` | none | `readHealth` |
-| L02 | `POST /boards` | service bearer plus board-wallet signature | `createBoard` |
+| L01A | `POST /agents` | service bearer plus Agent signature | `registerAgent` |
+| L02 | `POST /boards` | service bearer plus board-wallet signature and registered-Agent signature | `createBoard` |
 | L03 | `GET /boards/:boardId` | public, service bearer, or read token | `requireBoard` plus `assertBoardRead` |
 | L04 | `POST /boards/:boardId/events` | board-wallet signature | `createEvent` |
 | L05 | `GET /boards/:boardId/events` | public, service bearer, or read token | `listEventTimeline` |
@@ -130,7 +132,7 @@ Run these once for every route family where they apply:
 
 | ID | Method and path | Auth | Handler |
 | --- | --- | --- | --- |
-| P01 | `POST /paper/accounts` | service bearer | `createPaperAccount` |
+| P01 | `POST /paper/accounts` | service bearer plus Agent-signed `paper_account_registration` | `createPaperAccount` |
 | P02 | `GET /paper/accounts/:paperAccountId` | none | `readPaperAccount` |
 | P03 | `POST /paper/market-snapshots` | service bearer | `createPaperMarketSnapshot` |
 | P04 | `POST /paper/market-snapshots/hyperliquid` | service bearer | `refreshHyperliquidPaperMarketSnapshots` |
@@ -198,6 +200,7 @@ Inputs:
 
 - `boardId` or `board_id`: optional, generated when absent.
 - `agentId` or `agent_id`: required non-empty string.
+- `agentPublicKey` or `agent_public_key`: required registered Agent public key.
 - `walletAddress` or `wallet_address`: required non-empty string.
 - `publicKey` or `public_key`: required non-empty string.
 - `chain`: optional string, defaults to `near`.
@@ -205,7 +208,6 @@ Inputs:
   `near-intents`.
 - `trackingStartedAt` or `tracking_started_at`: optional timestamp, defaults to
   request time.
-- `startingValueUsd` or `starting_value_usd`: required number greater than `0`.
 - `baseCurrency` or `base_currency`: optional string, defaults to `USD`.
 - `publicStatus` or `public_status`: optional string, defaults to `draft`.
 - `visibilityMode` or `visibility_mode`: optional string, defaults to `private`.
@@ -213,8 +215,8 @@ Inputs:
 
 Happy path:
 
-- Service bearer plus valid board-wallet signature creates board and tracked
-  wallet, returns `201`, and stores nonce.
+- Service bearer plus valid board-wallet signature and valid registered-Agent
+  signature creates board and tracked wallet, returns `201`, and stores nonces.
 - Omit `board_id` to verify generated `board_*` id.
 - Omit optional defaults and verify defaults are written.
 
@@ -223,15 +225,15 @@ Edge cases:
 - Missing service bearer, wrong scheme, wrong token, or missing configured admin
   token.
 - Missing or invalid wallet-signed headers.
+- Missing or invalid Agent-signed headers.
+- Unregistered Agent public key, Agent public key mismatch, or Agent signature
+  made by a different key.
 - Header wallet address differs from body wallet address.
 - Header public key differs from body public key.
 - Body hash mismatch after signing.
 - Stale timestamp, timestamp beyond accepted skew, invalid signature, or nonce
   replay.
-- Missing `agent_id`, `wallet_address`, `public_key`, or
-  `starting_value_usd`.
-- `starting_value_usd` is `0`, negative, non-numeric, `NaN`, `Infinity`, empty
-  string, `null`, object, or array.
+- Missing `agent_id`, `agent_public_key`, `wallet_address`, or `public_key`.
 - Invalid `tracking_started_at` timestamp.
 - `tracking_started_at` more than 60 seconds in the future.
 - Duplicate explicit `board_id`: expect `409`.
@@ -503,7 +505,8 @@ Inputs:
 - `keyContractId` or `key_contract_id`: required.
 - `holderAccountId`, `holder_account_id`, `requesterWalletAddress`, or
   `requester_wallet_address`: required.
-- `agentId` or `agent_id`: optional, defaults to board agent.
+- `agentId` or `agent_id`: optional compatibility field; when supplied it must
+  match the registered board Agent. Prefer omitting it.
 - `readToken` or `read_token`: required only when live key balance grants
   non-public access.
 - `accessLevel`, `checkedAt`, `expiresAt`, `metadata`: optional.
@@ -520,6 +523,7 @@ Edge cases:
 - Nonexistent board.
 - Missing RPC URL, key contract id, or holder account id.
 - Invalid access level.
+- Supplied body `agent_id` differs from the board Agent: `400`.
 - Positive holder balance plus missing read token for non-public access:
   `400`.
 - Invalid or too-long expiry.
@@ -652,8 +656,9 @@ Inputs:
 
 - `paperAccountId` or `paper_account_id`: optional, generated when absent.
 - `boardId` or `board_id`: optional.
-- `agentId` or `agent_id`: required.
-- `agentPublicKey` or `agent_public_key`: required.
+- `agentId` or `agent_id`: required only when `board_id` is omitted.
+- `agentPublicKey` or `agent_public_key`: required only when `board_id` is
+  omitted.
 - `baseCurrency` or `base_currency`: optional, defaults to `USD`.
 - `startingBalanceUsd` or `starting_balance_usd`: required number greater than
   `0`.
@@ -663,13 +668,20 @@ Inputs:
 
 Happy path:
 
-- Service bearer creates account and audit event.
+- Service bearer plus Agent-signed `paper_account_registration` creates account
+  and audit event.
+- With `board_id`, account identity is derived from the registered board and
+  supplied Agent fields must match when present.
+- Without `board_id`, supplied Agent fields must match an active Agent
+  registration.
 - Generated account id when omitted.
 - `allowed_markets` restricts later order markets.
 
 Edge cases:
 
 - Missing service bearer.
+- Missing Agent signature, Agent body hash mismatch, Agent nonce replay, stale
+  Agent signature, unregistered Agent public key, or Agent public key mismatch.
 - Missing agent id, agent public key, or starting balance.
 - Starting balance is `0`, negative, non-numeric, object, array, empty string,
   `null`, `NaN`, or `Infinity`.
@@ -1016,7 +1028,9 @@ Edge cases:
 - Backend non-OK JSON error returns same status and message.
 - Backend non-JSON error text is exposed as error text.
 - Network failure returns `502`.
-- Config read token is sent only as header to backend and never returned.
+- The app proxy must not inject a global config read token. It only forwards a
+  request-scoped `x-clawhouse-read-token` produced by wallet-proof read-token
+  exchange.
 
 ### A06: `GET /api/backend/board`
 
