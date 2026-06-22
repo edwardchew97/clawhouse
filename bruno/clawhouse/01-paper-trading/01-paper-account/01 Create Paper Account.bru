@@ -1,0 +1,155 @@
+meta {
+  name: 01 Create Paper Account
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/paper/accounts
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "paper_account_id": "{{paper_account_id}}",
+    "agent_id": "{{agent_id}}",
+    "agent_public_key": "{{paper_agent_public_key}}",
+    "starting_balance_usd": "{{starting_balance_usd}}",
+    "allowed_markets": ["{{coin}}"],
+    "metadata": {
+      "source": "bruno-local-mode",
+      "signer_id": "{{paper_signer_id}}",
+      "live_market_data_required": true
+    }
+  }
+}
+
+script:pre-request {
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  function unresolved(value) {
+    return value === undefined || value === null || value === "" || String(value).includes("{{");
+  }
+
+  function requestBody() {
+    const current = req.getBody();
+    if (!current) return {};
+    if (typeof current === "string") return JSON.parse(current);
+    return current;
+  }
+
+  function localEnvValue(name) {
+    const explicit = value("admin_token", "") || bru.getProcessEnv(name);
+    if (explicit) return explicit;
+
+    const fs = require("fs");
+    const path = require("path");
+    const roots = [
+      bru.cwd(),
+      path.resolve(bru.cwd(), "../.."),
+      path.resolve(bru.cwd(), "../../.."),
+      path.resolve(bru.cwd(), "../../../..")
+    ];
+    const suffixes = [
+      ".env.local",
+      ".env",
+      "apps/agent-board-ledger/.env.local",
+      "apps/agent-board-ledger/.env"
+    ];
+    const seen = {};
+
+    for (const root of roots) {
+      for (const suffix of suffixes) {
+        const file = path.join(root, suffix);
+        if (seen[file]) continue;
+        seen[file] = true;
+        if (!fs.existsSync(file)) continue;
+        const found = parseEnvValue(fs.readFileSync(file, "utf8"), name);
+        if (found) return found;
+      }
+    }
+
+    return "";
+  }
+
+  function parseEnvValue(text, name) {
+    const prefix = `${name}=`;
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || !trimmed.startsWith(prefix)) continue;
+      let value = trimmed.slice(prefix.length).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      return value;
+    }
+    return "";
+  }
+
+  function requireAdminToken() {
+    const token = localEnvValue("AGENT_BOARD_LEDGER_ADMIN_TOKEN");
+    if (!token) throw new Error("Missing AGENT_BOARD_LEDGER_ADMIN_TOKEN in process env or local repo .env.local.");
+    return token;
+  }
+
+  requireLocalDev();
+  const body = requestBody();
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const accountPrefix = String(value("paper_account_prefix", "local-paper"));
+  const publicKey = value("paper_agent_public_key", "");
+  if (!publicKey) throw new Error("Missing paper_agent_public_key. Run Create Local Paper Signer first.");
+
+  if (unresolved(body.paper_account_id)) body.paper_account_id = `${accountPrefix}-${runId}`;
+  if (unresolved(body.agent_id)) body.agent_id = String(value("agent_id", "regdgen.testnet"));
+  if (unresolved(body.agent_public_key)) body.agent_public_key = publicKey;
+  if (unresolved(body.starting_balance_usd)) body.starting_balance_usd = Number(value("starting_balance_usd", 10000));
+  if (!Array.isArray(body.allowed_markets) || body.allowed_markets.some(unresolved)) {
+    body.allowed_markets = [String(value("coin", "BTC")).toUpperCase()];
+  }
+  body.metadata = body.metadata || {};
+  if (unresolved(body.metadata.signer_id)) body.metadata.signer_id = String(value("paper_signer_id", "bruno-gold-local-signer"));
+
+  bru.setVar("paper_account_id", body.paper_account_id);
+  bru.setVar("agent_id", body.agent_id);
+  bru.setVar("paper_agent_public_key", body.agent_public_key);
+
+  req.setHeader("authorization", `Bearer ${requireAdminToken()}`);
+  req.setBody(body);
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body && body.account && body.account.id) {
+    bru.setVar("paper_account_id", body.account.id);
+    bru.setVar("agent_id", body.account.agent_id);
+    bru.setVar("paper_agent_public_key", body.account.agent_public_key);
+  }
+}
+
+tests {
+  test("paper account is created with wallet public key", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(201);
+    expect(body.ok).to.equal(true);
+    expect(body.account.id).to.equal(bru.getVar("paper_account_id"));
+    expect(body.account.agent_id).to.equal(bru.getVar("agent_id"));
+    expect(body.account.agent_public_key).to.equal(bru.getVar("paper_agent_public_key"));
+  });
+}

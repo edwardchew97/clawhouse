@@ -1,6 +1,7 @@
 import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openRuntimeLedgerDb, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAuthPayload, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
 import { refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
+import { listKeyMarketTrades, reportKeyMarketTrade } from "./key-market.js";
 import { PaperAuthError, createPaperAccount, createPaperMarketSnapshot, readPaperAccount, readPaperLeaderboard, replayPaperOrder, runPaperRiskCheck, submitPaperOrder } from "./paper-trading.js";
 import type { AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
 
@@ -72,6 +73,7 @@ export function createApp(options: AppOptions) {
         const nearFtWatchMatch = path.match(/^\/boards\/([^/]+)\/watch\/near-ft$/);
         const portfolioMatch = path.match(/^\/boards\/([^/]+)\/portfolio$/);
         const pnlMatch = path.match(/^\/boards\/([^/]+)\/pnl$/);
+        const keyMarketTradesMatch = path.match(/^\/key-market\/trades$/);
         const paperAccountMatch = path.match(/^\/paper\/accounts\/([^/]+)$/);
         const paperRiskCheckMatch = path.match(/^\/paper\/accounts\/([^/]+)\/risk-check$/);
         const paperOrderReplayMatch = path.match(/^\/paper\/orders\/([^/]+)\/replay$/);
@@ -159,6 +161,12 @@ export function createApp(options: AppOptions) {
           const board = await requireBoard(db, pnlMatch[1]);
           await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail", rpcFetch);
           return json(await readPnl(db, board.id));
+        }
+        if (method === "GET" && keyMarketTradesMatch) {
+          return json(await listKeyMarketTrades(db, env, url.searchParams));
+        }
+        if (method === "POST" && path === "/key-market/trades/report") {
+          return json(await reportKeyMarketTrade(db, rpcFetch, env, await readBody(request), now()), 201);
         }
         if (method === "POST" && path === "/paper/accounts") {
           assertServiceBearer(request.headers, adminToken);

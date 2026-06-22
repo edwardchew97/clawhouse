@@ -1,0 +1,177 @@
+meta {
+  name: 01 Submit Signed IOC Paper Order
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/paper/orders
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "paper_account_id": "{{paper_account_id}}",
+    "client_order_id": "{{client_order_id}}",
+    "market_type": "{{market_type}}",
+    "coin": "{{coin}}",
+    "side": "{{order_side}}",
+    "tif": "Ioc",
+    "size": "{{order_size}}",
+    "margin_mode": "{{margin_mode}}",
+    "leverage": "{{leverage}}",
+    "max_slippage_bps": "{{max_slippage_bps}}",
+    "reason": "{{paper_order_reason}}"
+  }
+}
+
+script:pre-request {
+  const { KeyPair } = require("@near-js/crypto");
+  const CryptoJS = require("crypto-js");
+
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  function unresolved(item) {
+    return item === undefined || item === null || item === "" || String(item).includes("{{");
+  }
+
+  function numberValue(bodyValue, name, fallback) {
+    const selected = unresolved(bodyValue) ? value(name, fallback) : bodyValue;
+    const parsed = Number(selected);
+    if (!Number.isFinite(parsed)) throw new Error(`Invalid ${name}.`);
+    return parsed;
+  }
+
+  function requestBody() {
+    const current = req.getBody();
+    if (!current) return {};
+    if (typeof current === "string") return JSON.parse(current);
+    return current;
+  }
+
+  function sha256Hex(value) {
+    return CryptoJS.SHA256(value).toString(CryptoJS.enc.Hex);
+  }
+
+  function base64Url(bytes) {
+    if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64url");
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function canonicalPaperAuthPayload(input) {
+    return JSON.stringify({
+      domain: "clawhouse.paper-trading.v0",
+      version: 1,
+      method: String(input.method).toUpperCase(),
+      path: input.path,
+      bodyHash: input.bodyHash,
+      timestamp: input.timestamp,
+      nonce: input.nonce,
+      paperAccountId: input.paperAccountId,
+      agentId: input.agentId
+    });
+  }
+
+  function uuid() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return `bruno-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+
+  requireLocalDev();
+  const signerSecretKey = String(value("paper_signer_secret_key", ""));
+  const paperAccountId = value("paper_account_id", "");
+  const agentId = String(value("agent_id", "regdgen.testnet"));
+  const body = requestBody();
+
+  if (!signerSecretKey) throw new Error("Missing paper_signer_secret_key. Run Prepare Local Paper Signer first.");
+  if (!paperAccountId) throw new Error("Missing paper_account_id. Run Create Paper Account first.");
+
+  if (unresolved(body.paper_account_id)) body.paper_account_id = String(paperAccountId);
+  if (unresolved(body.client_order_id)) {
+    body.client_order_id = `bruno-ioc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+  if (unresolved(body.market_type)) body.market_type = String(value("market_type", "perp"));
+  if (unresolved(body.coin)) body.coin = String(value("coin", "BTC")).toUpperCase();
+  if (unresolved(body.side)) body.side = String(value("order_side", "buy")).toLowerCase();
+  if (unresolved(body.tif)) body.tif = "Ioc";
+  body.size = numberValue(body.size, "order_size", 0.0001);
+  if (unresolved(body.margin_mode)) {
+    body.margin_mode = String(body.market_type).toLowerCase() === "spot" ? "spot" : String(value("margin_mode", "cross"));
+  }
+  body.leverage = String(body.market_type).toLowerCase() === "spot" ? 1 : numberValue(body.leverage, "leverage", 2);
+  body.max_slippage_bps = numberValue(body.max_slippage_bps, "max_slippage_bps", 100);
+  if (unresolved(body.reason)) body.reason = String(value("paper_order_reason", "Bruno gold mode signed paper order."));
+
+  const referencePx = String(body.side).toLowerCase() === "sell"
+    ? value("current_best_bid_px", "")
+    : value("current_best_ask_px", "");
+  if (!referencePx) {
+    throw new Error("Missing current Hyperliquid price. Run Get Hyperliquid Current Price first.");
+  }
+  bru.setVar("paper_order_reference_px", referencePx);
+
+  const rawBody = JSON.stringify(body);
+  const timestamp = Date.now().toString();
+  const nonce = uuid();
+  const bodyHash = sha256Hex(rawBody);
+  const payload = canonicalPaperAuthPayload({
+    method: "POST",
+    path: "/paper/orders",
+    bodyHash,
+    timestamp,
+    nonce,
+    paperAccountId: String(paperAccountId),
+    agentId
+  });
+  const signature = KeyPair.fromString(signerSecretKey).sign(new TextEncoder().encode(payload)).signature;
+
+  bru.setVar("last_client_order_id", body.client_order_id);
+  req.setBody(body);
+  req.setHeader("content-type", "application/json");
+  req.setHeader("x-clawhouse-paper-account-id", String(paperAccountId));
+  req.setHeader("x-clawhouse-agent-id", agentId);
+  req.setHeader("x-clawhouse-paper-timestamp", timestamp);
+  req.setHeader("x-clawhouse-paper-nonce", nonce);
+  req.setHeader("x-clawhouse-paper-body-sha256", bodyHash);
+  req.setHeader("x-clawhouse-paper-signature", base64Url(signature));
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body && body.order && body.order.id) {
+    bru.setVar("last_order_id", body.order.id);
+  }
+}
+
+tests {
+  test("signed IOC order is accepted or deterministically rejected", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(201);
+    expect(body.ok).to.equal(true);
+    expect(body.order.paper_account_id).to.equal(bru.getVar("paper_account_id"));
+    expect(body.order.client_order_id).to.equal(bru.getVar("last_client_order_id"));
+    expect(["filled", "partially_filled", "rejected"]).to.include(body.order.status);
+    if (body.order.status === "rejected") {
+      expect(body.order.reject_reason).to.be.a("string");
+    }
+  });
+}

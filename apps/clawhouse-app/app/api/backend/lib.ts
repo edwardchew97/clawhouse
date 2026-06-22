@@ -5,6 +5,8 @@ const defaultBoardId = "terminal_chad6";
 
 type BackendFetchOptions = {
   headers?: HeadersInit;
+  method?: "GET" | "POST";
+  body?: unknown;
 };
 
 export function getBackendConfig() {
@@ -42,12 +44,17 @@ export function requireBoardId(value: string | null) {
 export async function fetchBackendJson<T>(path: string, options: BackendFetchOptions = {}) {
   const { baseUrl, readToken } = getBackendConfig();
   const headers = new Headers(options.headers);
+  if (options.body !== undefined && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
   if (readToken && !headers.has("x-clawhouse-read-token")) {
     headers.set("x-clawhouse-read-token", readToken);
   }
 
   const response = await fetch(`${baseUrl}${path}`, {
+    method: options.method ?? "GET",
     headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
     cache: "no-store",
   });
   const body = await readJson(response);

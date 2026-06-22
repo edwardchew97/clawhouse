@@ -11,9 +11,13 @@ get {
 }
 
 script:pre-request {
-  const accountId = bru.getVar("paper_account_id") || bru.getEnvVar("paper_account_id");
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  const accountId = value("paper_account_id", "");
   if (!accountId) throw new Error("Missing paper_account_id. Run Create Paper Account first.");
-  req.setUrl(`${bru.getEnvVar("base_url")}/paper/accounts/${accountId}`);
+  req.setUrl(`${value("base_url", "http://127.0.0.1:4321")}/paper/accounts/${accountId}`);
 }
 
 tests {

@@ -1,0 +1,28 @@
+vars {
+  base_url: http://127.0.0.1:4321
+  local_runtime_only: true
+  admin_token: {{process.env.AGENT_BOARD_LEDGER_ADMIN_TOKEN}}
+  agent_id: regdgen.testnet
+  paper_signer_id: bruno-gold-local-signer
+  paper_account_prefix: regdgen-local-paper
+  starting_balance_usd: 10000
+  market_type: perp
+  coin: BTC
+  order_side: buy
+  order_size: 0.0001
+  margin_mode: cross
+  leverage: 2
+  max_slippage_bps: 100
+  paper_order_reason: Bruno gold mode signed paper order using live Hyperliquid data.
+  ledger_agent_id: regdgen.testnet
+  ledger_board_prefix: bruno-holder-board
+  holder_account_id: holder.testnet
+  holder_read_access_mode: manual
+  near_rpc_url: https://rpc.testnet.near.org
+  key_contract_id: clawhouse-key.testnet
+  ledger_event_reason: Bruno holder-gated reasoning event.
+}
+
+vars:secret [
+  admin_token
+]

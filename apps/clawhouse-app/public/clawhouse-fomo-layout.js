@@ -31,6 +31,8 @@ let chainState = {
   quote: null,
   quoteSide: null,
   protection: null,
+  activity: null,
+  activityError: null,
   backend: null,
   error: null
 };
@@ -167,35 +169,6 @@ function clearQuote() {
     quoteSide: null,
     protection: null,
     error: null
-  };
-}
-
-function tradeStatus() {
-  if (chainState.statusTitle || chainState.statusBody) {
-    return {
-      tone: chainState.statusTone || "idle",
-      title: chainState.statusTitle || "Ready",
-      body: chainState.statusBody || "Connect Wallet"
-    };
-  }
-  if (chainState.pending) {
-    return {
-      tone: "pending",
-      title: "Waiting for wallet",
-      body: "Keep the NEAR wallet window open until it returns a result."
-    };
-  }
-  if (chainState.error) {
-    return {
-      tone: "error",
-      title: "Key market read failed",
-      body: chainState.error
-    };
-  }
-  return {
-    tone: chainState.accountId ? "success" : "idle",
-    title: chainState.accountId ? "Wallet ready" : "Ready",
-    body: chainState.accountId ? `${shortAccount(chainState.accountId)} connected.` : "Connect Wallet"
   };
 }
 
@@ -636,9 +609,11 @@ async function refreshKeyMarketRead(_reason) {
   const holderParam = chainState.accountId ? `&holderId=${encodeURIComponent(chainState.accountId)}` : "";
   const statePath = `/api/key-market/state?agentId=${encodeURIComponent(agent.id)}${holderParam}`;
   const quotePath = `/api/key-market/quote?side=${side}&agentId=${encodeURIComponent(agent.id)}&amount=${encodeURIComponent(amount)}`;
-  const [stateResult, quoteResult] = await Promise.allSettled([
+  const activityPath = `/api/key-market/activity?agentId=${encodeURIComponent(agent.id)}&limit=7`;
+  const [stateResult, quoteResult, activityResult] = await Promise.allSettled([
     fetchJson(statePath),
     fetchJson(quotePath),
+    fetchJson(activityPath),
   ]);
   if (refreshId !== keyMarketRefreshId) return;
 
@@ -648,6 +623,8 @@ async function refreshKeyMarketRead(_reason) {
     quote: quoteResult.status === "fulfilled" ? quoteResult.value.quote : null,
     quoteSide: quoteResult.status === "fulfilled" ? side : null,
     protection: quoteResult.status === "fulfilled" ? quoteResult.value.protection : null,
+    activity: activityResult.status === "fulfilled" ? activityResult.value : null,
+    activityError: firstRejectedMessage([activityResult]),
     error: firstRejectedMessage([stateResult, quoteResult]),
   };
   render();
@@ -895,8 +872,8 @@ function renderKeyActivity(agent) {
   if (!rows.length) {
     renderBackendEmpty(
       "keyActivityList",
-      chainState.error ? "Key activity unavailable" : "Reading key market",
-      chainState.error || "Waiting for NEAR testnet key-market state."
+      chainState.activityError ? "Key activity unavailable" : "No verified key trades yet",
+      chainState.activityError || "Verified ClawHouse key buy/sell reports will appear here."
     );
     return;
   }
@@ -911,69 +888,51 @@ function renderKeyActivity(agent) {
 
 function keyActivityRows(agent) {
   const rows = [];
-  const state = chainApplies(agent) ? chainState.state : null;
-  const activeQuote = chainApplies(agent) && chainState.quoteSide === tradeSide ? chainState.quote : null;
-  const balance = holderBalance(agent);
-  const amount = normalizedAmount(byId("keyAmount")?.value || "1");
+  const trades = keyActivityTrades(agent);
+  const latestTxHash = chainState.lastTxHash;
 
-  if (chainState.lastTxHash) {
+  if (latestTxHash && !trades.some((trade) => trade.tx_hash === latestTxHash)) {
     rows.push({
       title: chainState.statusTitle || "Key trade complete",
-      detail: `Tx ${shortHash(chainState.lastTxHash)}`,
+      detail: `Tx ${shortHash(latestTxHash)}`,
       side: "NearBlocks",
       linkUrl: chainState.explorerUrl,
     });
   }
 
-  if (activeQuote) {
+  for (const trade of trades) {
     rows.push({
-      title: `${titleCase(tradeSide)} quote`,
-      detail: `${amount} key${amount === "1" ? "" : "s"}`,
-      side: nearLabel(tradeSide === "sell" ? activeQuote.payout_near : activeQuote.total_cost_near),
-    });
-  }
-
-  if (state?.next_buy_price?.total_cost_near) {
-    rows.push({
-      title: "Next buy",
-      detail: "1 key",
-      side: nearLabel(state.next_buy_price.total_cost_near),
-    });
-  }
-
-  if (state?.next_sell_price?.payout_near) {
-    rows.push({
-      title: "Next sell",
-      detail: "1 key",
-      side: nearLabel(state.next_sell_price.payout_near),
-    });
-  }
-
-  if (state?.agent?.supply !== undefined) {
-    rows.push({
-      title: "Supply",
-      detail: `${agentTitle(agent)} keys`,
-      side: `${state.agent.supply} keys`,
-    });
-  }
-
-  if (state?.agent?.reserve_near) {
-    rows.push({
-      title: "Reserve",
-      detail: "Contract reserve",
-      side: nearLabel(state.agent.reserve_near),
-    });
-  }
-
-  if (balance !== null) {
-    rows.push({
-      title: "Your keys",
-      detail: chainState.accountId ? shortAccount(chainState.accountId) : "Wallet not connected",
-      side: `${balance} keys`,
+      title: titleCase(trade.side),
+      detail: `${trade.amount} key${trade.amount === "1" ? "" : "s"} by ${shortAccount(trade.trader_id)}`,
+      side: keyTradeValueLabel(trade),
+      linkUrl: keyTradeExplorerUrl(trade),
     });
   }
 
   return rows;
+}
+
+function keyActivityTrades(agent) {
+  const activity = chainState.activity;
+  if (!activity || activity.agent_id !== agent.id) return [];
+  return Array.isArray(activity.trades) ? activity.trades : [];
+}
+
+function keyTradeValueLabel(trade) {
+  const rawValue = trade.side === "sell" ? trade.payout : trade.total_cost;
+  return yoctoNearLabel(rawValue || trade.price);
+}
+
+function keyTradeExplorerUrl(trade) {
+  if (!trade.tx_hash) return null;
+  const host = trade.network_id === "mainnet" ? "nearblocks.io" : "testnet.nearblocks.io";
+  return `https://${host}/txns/${encodeURIComponent(trade.tx_hash)}`;
+}
+
+function yoctoNearLabel(value) {
+  const text = String(value ?? "");
+  if (!/^\d+$/.test(text)) return "-";
+  return nearLabel(Number(text) / 1e24);
 }
 
 function renderTicket(agent) {
@@ -1009,7 +968,6 @@ function renderTicket(agent) {
     walletButton.classList.toggle("connected", Boolean(chainState.accountId));
     walletButton.disabled = busy;
   }
-  renderTradeStatus();
   renderBackendStatus();
 }
 
@@ -1019,19 +977,6 @@ function statusButtonText() {
   if (chainState.phase === "signing") return "Confirm in wallet...";
   if (chainState.phase === "refreshing") return "Refreshing balance...";
   return "Working...";
-}
-
-function renderTradeStatus() {
-  const status = tradeStatus();
-  const container = byId("tradeStatus");
-  if (!container) return;
-  container.className = `trade-status ${status.tone}`;
-  byId("tradeStatusTitle").textContent = status.title;
-  setTextWithOptionalLink(
-    byId("tradeStatusBody"),
-    status.body,
-    status.tone === "success" && chainState.lastTxHash ? chainState.explorerUrl : null
-  );
 }
 
 function renderBackendStatus() {

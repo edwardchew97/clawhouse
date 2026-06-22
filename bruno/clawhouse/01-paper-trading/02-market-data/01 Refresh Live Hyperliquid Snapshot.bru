@@ -1,0 +1,146 @@
+meta {
+  name: 01 Get Hyperliquid Current Price
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/paper/market-snapshots/hyperliquid
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "market_type": "{{market_type}}",
+    "coins": ["{{coin}}"]
+  }
+}
+
+script:pre-request {
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  function unresolved(item) {
+    return item === undefined || item === null || item === "" || String(item).includes("{{");
+  }
+
+  function requestBody() {
+    const current = req.getBody();
+    if (!current) return {};
+    if (typeof current === "string") return JSON.parse(current);
+    return current;
+  }
+
+  function localEnvValue(name) {
+    const explicit = value("admin_token", "") || bru.getProcessEnv(name);
+    if (explicit) return explicit;
+
+    const fs = require("fs");
+    const path = require("path");
+    const roots = [
+      bru.cwd(),
+      path.resolve(bru.cwd(), "../.."),
+      path.resolve(bru.cwd(), "../../.."),
+      path.resolve(bru.cwd(), "../../../..")
+    ];
+    const suffixes = [
+      ".env.local",
+      ".env",
+      "apps/agent-board-ledger/.env.local",
+      "apps/agent-board-ledger/.env"
+    ];
+    const seen = {};
+
+    for (const root of roots) {
+      for (const suffix of suffixes) {
+        const file = path.join(root, suffix);
+        if (seen[file]) continue;
+        seen[file] = true;
+        if (!fs.existsSync(file)) continue;
+        const found = parseEnvValue(fs.readFileSync(file, "utf8"), name);
+        if (found) return found;
+      }
+    }
+
+    return "";
+  }
+
+  function parseEnvValue(text, name) {
+    const prefix = `${name}=`;
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || !trimmed.startsWith(prefix)) continue;
+      let value = trimmed.slice(prefix.length).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      return value;
+    }
+    return "";
+  }
+
+  function requireAdminToken() {
+    const token = localEnvValue("AGENT_BOARD_LEDGER_ADMIN_TOKEN");
+    if (!token) throw new Error("Missing AGENT_BOARD_LEDGER_ADMIN_TOKEN in process env or local repo .env.local.");
+    return token;
+  }
+
+  requireLocalDev();
+  const body = requestBody();
+  if (unresolved(body.market_type)) body.market_type = String(value("market_type", "perp"));
+  if (!Array.isArray(body.coins) || body.coins.some(unresolved)) {
+    body.coins = [String(value("coin", "BTC")).toUpperCase()];
+  }
+
+  req.setHeader("authorization", `Bearer ${requireAdminToken()}`);
+  req.setBody(body);
+}
+
+script:post-response {
+  const body = res.getBody();
+  const snapshot = body && Array.isArray(body.snapshots) ? body.snapshots[0] : null;
+  if (snapshot && snapshot.id) {
+    bru.setVar("last_snapshot_id", snapshot.id);
+    bru.setVar("snapshot_coin", snapshot.coin);
+    bru.setVar("snapshot_source", snapshot.source);
+    bru.setVar("current_mark_px", snapshot.mark_px);
+    if (snapshot.book && Array.isArray(snapshot.book.asks) && snapshot.book.asks[0]) {
+      bru.setVar("current_best_ask_px", snapshot.book.asks[0].px);
+      bru.setVar("current_ask_size", snapshot.book.asks[0].sz);
+    }
+    if (snapshot.book && Array.isArray(snapshot.book.bids) && snapshot.book.bids[0]) {
+      bru.setVar("current_best_bid_px", snapshot.book.bids[0].px);
+      bru.setVar("current_bid_size", snapshot.book.bids[0].sz);
+    }
+  }
+}
+
+tests {
+  test("live Hyperliquid snapshot is stored", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(201);
+    expect(body.ok).to.equal(true);
+    expect(body.source).to.equal("hyperliquid");
+    expect(body.snapshots[0].coin).to.equal(String(bru.getVar("snapshot_coin")));
+    expect(body.snapshots[0].book.asks.length).to.be.greaterThan(0);
+    expect(body.snapshots[0].book.bids.length).to.be.greaterThan(0);
+    expect(bru.getVar("current_best_ask_px")).to.not.equal(undefined);
+    expect(bru.getVar("current_best_bid_px")).to.not.equal(undefined);
+  });
+}

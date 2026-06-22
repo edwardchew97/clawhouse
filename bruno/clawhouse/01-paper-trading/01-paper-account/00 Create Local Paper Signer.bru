@@ -1,0 +1,51 @@
+meta {
+  name: 00 Prepare Local Paper Signer
+  type: http
+  seq: 0
+}
+
+get {
+  url: {{base_url}}/health
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const { KeyPair } = require("@near-js/crypto");
+
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  requireLocalDev();
+
+  const signerId = String(value("paper_signer_id", "bruno-local-signer"));
+  const agentId = String(value("agent_id", "regdgen.testnet"));
+  const keyPair = KeyPair.fromRandom("ed25519");
+
+  bru.setVar("paper_signer_id", signerId);
+  bru.setVar("agent_id", agentId);
+  bru.setVar("paper_signer_secret_key", keyPair.toString());
+  bru.setVar("paper_agent_public_key", keyPair.getPublicKey().toString());
+}
+
+tests {
+  test("local signer is generated inside Bruno", function() {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.ok).to.equal(true);
+    expect(bru.getVar("paper_signer_id")).to.be.a("string");
+    expect(bru.getVar("paper_signer_secret_key")).to.match(/^ed25519:/);
+    expect(bru.getVar("paper_agent_public_key")).to.match(/^ed25519:/);
+  });
+}

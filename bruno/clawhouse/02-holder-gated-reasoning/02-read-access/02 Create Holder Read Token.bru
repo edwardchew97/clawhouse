@@ -1,0 +1,189 @@
+meta {
+  name: 02 Create Holder Read Token
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/boards/{{ledger_board_id}}/read-access/checks
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "requester_wallet_address": "{{holder_account_id}}",
+    "access_level": "key_holder_detail",
+    "access_result": "granted",
+    "read_token": "{{ledger_read_token}}",
+    "expires_at": "{{ledger_read_token_expires_at}}",
+    "reason": "bruno-manual-holder-gate",
+    "metadata": {
+      "source": "bruno-local-mode",
+      "mode": "{{holder_read_access_mode}}"
+    }
+  }
+}
+
+script:pre-request {
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  function unresolved(item) {
+    return item === undefined || item === null || item === "" || String(item).includes("{{");
+  }
+
+  function requestBody() {
+    const current = req.getBody();
+    if (!current) return {};
+    if (typeof current === "string") return JSON.parse(current);
+    return current;
+  }
+
+  function localEnvValue(name) {
+    const explicit = value("admin_token", "") || bru.getProcessEnv(name);
+    if (explicit) return explicit;
+
+    const fs = require("fs");
+    const path = require("path");
+    const roots = [
+      bru.cwd(),
+      path.resolve(bru.cwd(), "../.."),
+      path.resolve(bru.cwd(), "../../.."),
+      path.resolve(bru.cwd(), "../../../..")
+    ];
+    const suffixes = [
+      ".env.local",
+      ".env",
+      "apps/agent-board-ledger/.env.local",
+      "apps/agent-board-ledger/.env"
+    ];
+    const seen = {};
+
+    for (const root of roots) {
+      for (const suffix of suffixes) {
+        const file = path.join(root, suffix);
+        if (seen[file]) continue;
+        seen[file] = true;
+        if (!fs.existsSync(file)) continue;
+        const found = parseEnvValue(fs.readFileSync(file, "utf8"), name);
+        if (found) return found;
+      }
+    }
+
+    return "";
+  }
+
+  function parseEnvValue(text, name) {
+    const prefix = `${name}=`;
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || !trimmed.startsWith(prefix)) continue;
+      let value = trimmed.slice(prefix.length).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      return value;
+    }
+    return "";
+  }
+
+  function requireAdminToken() {
+    const token = localEnvValue("AGENT_BOARD_LEDGER_ADMIN_TOKEN");
+    if (!token) throw new Error("Missing AGENT_BOARD_LEDGER_ADMIN_TOKEN in process env or local repo .env.local.");
+    return token;
+  }
+
+  requireLocalDev();
+
+  const boardId = String(value("ledger_board_id", ""));
+  const mode = String(value("holder_read_access_mode", "manual")).trim().toLowerCase();
+  const holderAccountId = String(value("holder_account_id", "holder.testnet"));
+  const readToken = String(value("ledger_read_token", `bruno-read-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`));
+  const expiresAt = String(value("ledger_read_token_expires_at", new Date(Date.now() + 10 * 60 * 1000).toISOString()));
+
+  if (!boardId) throw new Error("Missing ledger_board_id. Run Register Holder-Gated Board first.");
+
+  let path = `/boards/${boardId}/read-access/checks`;
+  const body = requestBody();
+
+  if (mode === "live-key-market") {
+    const keyContractId = String(value("key_contract_id", ""));
+    const rpcUrl = String(value("near_rpc_url", ""));
+    const agentId = String(value("ledger_agent_id", value("agent_id", "regdgen.testnet")));
+    if (!keyContractId || !rpcUrl) {
+      throw new Error("live-key-market mode requires key_contract_id and near_rpc_url.");
+    }
+    path = `/boards/${boardId}/read-access/near-key-market`;
+    body.rpc_url = rpcUrl;
+    body.key_contract_id = keyContractId;
+    body.holder_account_id = holderAccountId;
+    body.agent_id = agentId;
+    body.access_level = "key_holder_detail";
+    body.read_token = readToken;
+    body.expires_at = expiresAt;
+    body.metadata = {
+      source: "bruno-local-mode",
+      mode
+    };
+    delete body.requester_wallet_address;
+    delete body.access_result;
+    delete body.reason;
+  } else {
+    if (unresolved(body.requester_wallet_address)) body.requester_wallet_address = holderAccountId;
+    if (unresolved(body.access_level)) body.access_level = "key_holder_detail";
+    if (unresolved(body.access_result)) body.access_result = "granted";
+    if (unresolved(body.read_token)) body.read_token = readToken;
+    if (unresolved(body.expires_at)) body.expires_at = expiresAt;
+    if (unresolved(body.reason)) body.reason = "bruno-manual-holder-gate";
+    body.metadata = body.metadata || {};
+    body.metadata.source = "bruno-local-mode";
+    body.metadata.mode = mode;
+  }
+
+  bru.setVar("holder_read_access_mode", mode);
+  bru.setVar("holder_account_id", holderAccountId);
+  bru.setVar("ledger_read_token", readToken);
+  bru.setVar("ledger_read_token_expires_at", expiresAt);
+  req.setUrl(`${value("base_url", "http://127.0.0.1:4321")}${path}`);
+  req.setHeader("authorization", `Bearer ${requireAdminToken()}`);
+  req.setBody(body);
+}
+
+script:post-response {
+  const body = res.getBody();
+  const mode = bru.getVar("holder_read_access_mode");
+  if (mode === "live-key-market" && body && body.access_result) {
+    bru.setVar("ledger_live_access_result", body.access_result);
+  }
+}
+
+tests {
+  test("holder read token check is created", function() {
+    const body = res.getBody();
+    const mode = bru.getVar("holder_read_access_mode");
+    expect(res.getStatus()).to.equal(201);
+    expect(body.ok).to.equal(true);
+    if (mode === "live-key-market") {
+      expect(["granted", "denied"]).to.include(body.access_result);
+    } else {
+      expect(body.check.access_level).to.equal("key_holder_detail");
+      expect(body.check.access_result).to.equal("granted");
+    }
+  });
+}

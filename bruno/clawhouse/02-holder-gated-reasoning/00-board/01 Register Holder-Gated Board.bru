@@ -1,0 +1,220 @@
+meta {
+  name: 01 Register Holder-Gated Board
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/boards
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "board_id": "{{ledger_board_id}}",
+    "agent_id": "{{ledger_agent_id}}",
+    "wallet_address": "{{ledger_wallet_address}}",
+    "public_key": "{{ledger_wallet_public_key}}",
+    "chain": "near",
+    "venue_namespace": "near-intents",
+    "base_currency": "USD",
+    "public_status": "active",
+    "visibility_mode": "holder_gated",
+    "metadata": {
+      "source": "bruno-local-mode",
+      "flow": "holder-gated-reasoning"
+    }
+  }
+}
+
+script:pre-request {
+  const { KeyPair } = require("@near-js/crypto");
+  const CryptoJS = require("crypto-js");
+
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  function unresolved(item) {
+    return item === undefined || item === null || item === "" || String(item).includes("{{");
+  }
+
+  function requestBody() {
+    const current = req.getBody();
+    if (!current) return {};
+    if (typeof current === "string") return JSON.parse(current);
+    return current;
+  }
+
+  function localEnvValue(name) {
+    const explicit = value("admin_token", "") || bru.getProcessEnv(name);
+    if (explicit) return explicit;
+
+    const fs = require("fs");
+    const path = require("path");
+    const roots = [
+      bru.cwd(),
+      path.resolve(bru.cwd(), "../.."),
+      path.resolve(bru.cwd(), "../../.."),
+      path.resolve(bru.cwd(), "../../../..")
+    ];
+    const suffixes = [
+      ".env.local",
+      ".env",
+      "apps/agent-board-ledger/.env.local",
+      "apps/agent-board-ledger/.env"
+    ];
+    const seen = {};
+
+    for (const root of roots) {
+      for (const suffix of suffixes) {
+        const file = path.join(root, suffix);
+        if (seen[file]) continue;
+        seen[file] = true;
+        if (!fs.existsSync(file)) continue;
+        const found = parseEnvValue(fs.readFileSync(file, "utf8"), name);
+        if (found) return found;
+      }
+    }
+
+    return "";
+  }
+
+  function parseEnvValue(text, name) {
+    const prefix = `${name}=`;
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || !trimmed.startsWith(prefix)) continue;
+      let value = trimmed.slice(prefix.length).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      return value;
+    }
+    return "";
+  }
+
+  function requireAdminToken() {
+    const token = localEnvValue("AGENT_BOARD_LEDGER_ADMIN_TOKEN");
+    if (!token) throw new Error("Missing AGENT_BOARD_LEDGER_ADMIN_TOKEN in process env or local repo .env.local.");
+    return token;
+  }
+
+  function sha256Hex(value) {
+    return CryptoJS.SHA256(value).toString(CryptoJS.enc.Hex);
+  }
+
+  function base64Url(bytes) {
+    if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64url");
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function canonicalLedgerAuthPayload(input) {
+    return JSON.stringify({
+      domain: "clawhouse.agent-board-ledger.v0",
+      version: 1,
+      method: String(input.method).toUpperCase(),
+      path: input.path,
+      bodyHash: input.bodyHash,
+      timestamp: input.timestamp,
+      nonce: input.nonce,
+      boardId: input.boardId,
+      agentId: input.agentId,
+      walletAddress: input.walletAddress
+    });
+  }
+
+  function uuid() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return `bruno-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+
+  requireLocalDev();
+
+  const body = requestBody();
+  const boardId = String(value("ledger_board_id", ""));
+  const agentId = String(value("ledger_agent_id", value("agent_id", "regdgen.testnet")));
+  const walletAddress = String(value("ledger_wallet_address", ""));
+  const publicKey = String(value("ledger_wallet_public_key", ""));
+  const secretKey = String(value("ledger_wallet_secret_key", ""));
+
+  if (!boardId || !walletAddress || !publicKey || !secretKey) {
+    throw new Error("Missing local board signer vars. Run Prepare Local Board Signer first.");
+  }
+
+  if (unresolved(body.board_id)) body.board_id = boardId;
+  if (unresolved(body.agent_id)) body.agent_id = agentId;
+  if (unresolved(body.wallet_address)) body.wallet_address = walletAddress;
+  if (unresolved(body.public_key)) body.public_key = publicKey;
+  if (unresolved(body.chain)) body.chain = "near";
+  if (unresolved(body.venue_namespace)) body.venue_namespace = "near-intents";
+  if (unresolved(body.base_currency)) body.base_currency = "USD";
+  if (unresolved(body.public_status)) body.public_status = "active";
+  if (unresolved(body.visibility_mode)) body.visibility_mode = "holder_gated";
+  body.metadata = body.metadata || {};
+
+  const rawBody = JSON.stringify(body);
+  const timestamp = Date.now().toString();
+  const nonce = uuid();
+  const bodyHash = sha256Hex(rawBody);
+  const payload = canonicalLedgerAuthPayload({
+    method: "POST",
+    path: "/boards",
+    bodyHash,
+    timestamp,
+    nonce,
+    boardId,
+    agentId,
+    walletAddress
+  });
+  const signature = KeyPair.fromString(secretKey).sign(new TextEncoder().encode(payload)).signature;
+
+  req.setBody(body);
+  req.setHeader("content-type", "application/json");
+  req.setHeader("authorization", `Bearer ${requireAdminToken()}`);
+  req.setHeader("x-clawhouse-wallet-address", walletAddress);
+  req.setHeader("x-clawhouse-public-key", publicKey);
+  req.setHeader("x-clawhouse-timestamp", timestamp);
+  req.setHeader("x-clawhouse-nonce", nonce);
+  req.setHeader("x-clawhouse-body-sha256", bodyHash);
+  req.setHeader("x-clawhouse-signature", base64Url(signature));
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body && body.board && body.board.id) {
+    bru.setVar("ledger_board_id", body.board.id);
+    bru.setVar("ledger_agent_id", body.board.agent_id);
+    bru.setVar("ledger_wallet_address", body.board.wallet_address);
+    bru.setVar("ledger_wallet_public_key", body.board.public_key);
+  }
+}
+
+tests {
+  test("holder-gated board is registered with a wallet signature", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(201);
+    expect(body.ok).to.equal(true);
+    expect(body.board.id).to.equal(bru.getVar("ledger_board_id"));
+    expect(body.board.visibility_mode).to.equal("holder_gated");
+    expect(body.board.public_status).to.equal("active");
+    expect(body.board.wallet_address).to.equal(bru.getVar("ledger_wallet_address"));
+  });
+}

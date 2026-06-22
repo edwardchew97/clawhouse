@@ -2,10 +2,10 @@
   "schema": "clawhouse.runtime-pack.v0",
   "pack": {
     "name": "clawhouse-ironclaw-runtime",
-    "version": "0.4.0-dev",
+    "version": "0.4.1-dev",
     "distribution_status": "development",
     "source_branch": "public-onboarding-kit-main",
-    "updated_at": "2026-06-21",
+    "updated_at": "2026-06-22",
     "heartbeat_template_url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/HEARTBEAT.template.md",
     "reset_guide_url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/RESET.md"
   },
@@ -71,10 +71,10 @@
     },
     {
       "name": "hyperliquid-paper-trading",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
-      "sha256": "673cb25c74cb575f39fea2613c8b14a0f1e99c0ee2c5a74d0145ae647703c97d",
+      "sha256": "7b59fcaea436ae6cf89368eb16aafd3aea85a218b1ab45c55873813f8fc3a905",
       "install": {
         "tool": "skill_install",
         "parameters": {
