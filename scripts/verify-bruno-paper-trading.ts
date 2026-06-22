@@ -75,8 +75,24 @@ if (!joined.includes("/read-access/checks") || !joined.includes("/read-access/ne
 if (!joined.includes("x-clawhouse-read-token")) {
   fail("Holder-gated reasoning readback must use x-clawhouse-read-token.");
 }
-if (exists("bruno/clawhouse-paper-trading")) {
-  fail("Old top-level bruno/clawhouse-paper-trading collection must not remain.");
+const oldCollectionFiles = [
+  "collection.bru",
+  "bruno.json",
+  "package.json",
+  "README.md",
+  "01-health/01 Health.bru",
+  "02-paper-account/00 Create Local Paper Signer.bru",
+  "02-paper-account/01 Create Paper Account.bru",
+  "03-market-data/01 Refresh Live Hyperliquid Snapshot.bru",
+  "04-orders/01 Submit Signed IOC Paper Order.bru",
+  "05-readback/01 Read Paper Account.bru",
+  "05-readback/02 Read Paper Leaderboard.bru",
+  "05-readback/03 Replay Last Paper Order.bru",
+  "05-readback/04 Run Paper Risk Check.bru",
+  "05-readback/05 Run Liquidation Monitor Tick.bru",
+].filter((file) => exists(join("bruno/clawhouse-paper-trading", file)));
+if (oldCollectionFiles.length > 0) {
+  fail(`Old top-level bruno/clawhouse-paper-trading collection files must not remain: ${oldCollectionFiles.join(", ")}`);
 }
 if (exists("apps/agent-board-ledger/src/bruno-gold-mode.ts")) {
   fail("Deployable backend must not contain Bruno signer helper code.");
