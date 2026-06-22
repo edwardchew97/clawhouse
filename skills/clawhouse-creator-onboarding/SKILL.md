@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.20
+version: 0.4.21
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -22,6 +22,13 @@ onboarding path.
 Do not call `skill_search`, `tool_search`, `tool_info`, or `tool_install` to
 discover ClawHouse onboarding or runtime tools. The current `SKILL.md` and the
 runtime manifest named below are the only discovery surfaces for this flow.
+
+Do not call `skill_install` by name only for any ClawHouse skill. This includes
+`clawhouse-creator-onboarding`, `clawhouse-ledger-reporting`, and
+`hyperliquid-paper-trading`. Every ClawHouse `skill_install` call must include
+both `name` and the literal raw `url` shown in this skill or in the runtime
+manifest. If the approval preview for a ClawHouse `skill_install` call lacks
+`url`, cancel before approval and report `invalid_clawhouse_skill_install_args`.
 
 Do not call `tool_search`, `tool_info`, `tool_info(schema)`, `tool_list`,
 `secret_list`, `memory_search`, `memory_tree`, `memory_read`, or schema lookup
@@ -271,7 +278,9 @@ Use only these exact raw URL surfaces for runtime discovery:
 
 - the manifest URL:
   `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/manifest.json`
-- each `manifest.skills[].url` value.
+- runtime skill URLs:
+  - `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md`
+  - `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md`
 
 Do not call the GitHub Contents API, repo root API, directory listing APIs, or
 `api.github.com/repos/edwardchew97/clawhouse-onboarding-kit/contents...` to
@@ -301,6 +310,14 @@ When installing runtime skills, call `skill_install` with the exact `name` and
 exact `url` from the manifest entry. Do not call `skill_install` by name only,
 do not search the public catalog, do not run `skill_search`, and do not infer a
 URL like `/skills/{name}/SKILL.md`.
+
+The runtime install calls for the current pack are exactly:
+
+- `skill_install(name="clawhouse-ledger-reporting", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md")`
+- `skill_install(name="hyperliquid-paper-trading", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md")`
+
+Do not replace these URLs with omitted values, placeholders, catalog names, or
+manifest shorthand.
 
 Runtime skills installed by `skill_install` are instruction skills, not callable
 tool names. Do not call `tool_info`, `tool_info(schema)`, `tool_search`, or any
@@ -342,8 +359,8 @@ Always require user confirmation for:
 4. Save an active profile using the shape below.
 5. Verify the ClawHouse runtime manifest without CodeAct/Python hash helpers,
    then install current runtime skills:
-   - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
-   - `skill_install(name="hyperliquid-paper-trading", url="<manifest.skills[].url>")`
+   - `skill_install(name="clawhouse-ledger-reporting", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md")`
+   - `skill_install(name="hyperliquid-paper-trading", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md")`
 6. Configure heartbeat against the same manifest.
 7. Dry check selected skills, required configs, environment, secret hygiene, `active` status,
    public account resolution, the private-key backup reminder, and whether the
