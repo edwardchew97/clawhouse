@@ -165,6 +165,11 @@ function payloadFor(request: Request) {
       source,
       resolution:
         "Resolve or create/bind the IronClaw-managed NEAR testnet public account inside IronClaw before funding.",
+      helperDiscovery: {
+        toolSearchAllowed: false,
+        toolInfoSchemaAllowed: false,
+        stopIfMissing: "Missing approved IronClaw NEAR wallet helper",
+      },
       fallbackPrompt:
         "Ask the creator for a public account id only if IronClaw cannot resolve or create/bind one.",
       privateKeyHandling:

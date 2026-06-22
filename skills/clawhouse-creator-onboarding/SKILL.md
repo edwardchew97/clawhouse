@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.15
+version: 0.4.16
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -22,6 +22,11 @@ onboarding path.
 Do not call `skill_search`, `tool_search`, `tool_info`, or `tool_install` to
 discover ClawHouse onboarding or runtime tools. The current `SKILL.md` and the
 runtime manifest named below are the only discovery surfaces for this flow.
+
+Do not call `tool_search`, `tool_info`, `tool_info(schema)`, or schema lookup to
+discover a NEAR wallet helper, crypto helper, keypair helper, or signer helper.
+If an approved IronClaw local helper is not already available in the current
+runtime, stop and report `Missing approved IronClaw NEAR wallet helper`.
 
 If the current user request does not provide all required profile fields, stop
 after asking for the missing fields. Before those current-run fields are present,
@@ -191,6 +196,12 @@ create transaction unless IronClaw explicitly separates those signers.
 Use this helper only inside a trusted IronClaw local execution context. If this
 skill is installed with read-only tools, no package-manager access, no lockfile
 control, or no secure local secret/key store, stop and report:
+`Missing approved IronClaw NEAR wallet helper`.
+
+Do not search for a helper. Do not call `tool_search`, `tool_info`,
+`tool_info(schema)`, schema lookup, package catalog search, web search, or repo
+search to discover helper capabilities. Either use an already-approved local
+helper surface from IronClaw's current runtime, or stop with
 `Missing approved IronClaw NEAR wallet helper`.
 
 Do not clone Meteor Wallet or `near-api-js` during onboarding. Do not let the
