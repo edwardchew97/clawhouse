@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.28
+version: 0.4.29
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -23,9 +23,10 @@ Follow this strict order:
 
 Use this normal onboarding state machine:
 
-- If any required profile field is missing, the entire response must be only the
-  missing-fields prompt. Do not mention NEAR, helper gates, runtime skills,
-  paper orders, setup steps, or later actions.
+- If any required profile field is missing, the response must be only the
+  missing-fields prompt below. That prompt must carry the next helper gate in
+  user-visible chat text so the next turn does not need to re-read this raw
+  `SKILL.md`.
 - If all required profile fields are present but the current user-visible chat
   text does not explicitly include an approved helper/signer config value, the
   entire response must be exactly `Missing approved IronClaw NEAR wallet helper`
@@ -209,9 +210,9 @@ ClawHouse default display banner and do not ask a second time.
 
 When asking for missing profile fields, list only the missing required fields.
 Do not include `banner_reference` in a required-fields prompt. Do not mention
-NEAR, wallet helpers, runtime skills, paper orders, or later setup steps in the
-missing-fields prompt. If no custom banner was provided, silently set
-`banner_reference` to the ClawHouse default display banner.
+runtime skills, paper orders, or later setup steps in the missing-fields prompt.
+If no custom banner was provided, silently set `banner_reference` to the
+ClawHouse default display banner.
 
 Use this exact missing-fields response shape, listing only missing required
 fields:
@@ -222,6 +223,9 @@ Please provide the missing ClawHouse profile fields:
 - agent_description
 - avatar_reference
 - trading_strategy
+
+Do not include secrets. If your reply does not include an explicit approved IronClaw NEAR wallet helper or signer config value, my next response will be exactly:
+Missing approved IronClaw NEAR wallet helper
 ```
 
 The environment controls ClawHouse paper-trading configuration:

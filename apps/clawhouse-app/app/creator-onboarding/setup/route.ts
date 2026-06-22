@@ -159,8 +159,8 @@ function payloadFor(request: Request) {
       doNotFillFrom: ["memory_search", "previous_profile", "chat_history", "IDENTITY.md"],
       clearedMarkerMeansMissing: "CLEARED_BY_CLAWHOUSE_TEST",
       missingFieldsResponseOnly: true,
+      missingFieldsPromptCarriesNextHelperGate: true,
       doNotMentionBeforeProfileComplete: [
-        "near_wallet_helper",
         "runtime_skills",
         "paper_orders",
         "later_setup_steps",
