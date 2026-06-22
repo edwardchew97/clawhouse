@@ -5,6 +5,8 @@ const collectionDir = "bruno/clawhouse-paper-trading";
 const requiredFiles = [
   "bruno.json",
   "collection.bru",
+  "package.json",
+  "bun.lock",
   "environments/local-dev.bru",
   "01-health/01 Health.bru",
   "02-paper-account/00 Create Local Paper Signer.bru",
@@ -45,8 +47,14 @@ if (joined.includes("require(\"crypto\")") || joined.includes("require('crypto')
 if (joined.includes("paper_signer_private_key")) {
   fail("Collection must not require a pasted paper signer private key.");
 }
-if (!joined.includes("/paper/bruno/local-signer") || !joined.includes("/paper/bruno/sign-order")) {
-  fail("Collection must use local-only Bruno gold mode signer helpers.");
+if (joined.includes("/paper/bruno/") || joined.includes("x-clawhouse-bruno-gold-mode")) {
+  fail("Collection must not call deployable backend Bruno helper routes.");
+}
+if (!joined.includes("require(\"@near-js/crypto\")") || !joined.includes("paper_signer_secret_key")) {
+  fail("Collection must generate and use the paper signer locally inside Bruno.");
+}
+if (exists("apps/agent-board-ledger/src/bruno-gold-mode.ts")) {
+  fail("Deployable backend must not contain Bruno signer helper code.");
 }
 
 const forbiddenBodyHints = [
@@ -71,8 +79,10 @@ console.log(JSON.stringify({
   checks: [
     "required files exist",
     "defines collection-level defaults for no-environment Bruno runs",
+    "defines local Bruno signing dependencies",
     "uses live Hyperliquid snapshot endpoint",
-    "uses local-only Bruno gold mode signer helpers",
+    "generates and uses the paper signer inside Bruno",
+    "does not call deployable backend Bruno helper routes",
     "does not call manual market snapshot endpoint",
     "paper order request has wallet signature headers",
     "does not require Node crypto in Bruno scripts",

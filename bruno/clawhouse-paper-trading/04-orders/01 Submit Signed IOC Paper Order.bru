@@ -31,6 +31,9 @@ body:json {
 }
 
 script:pre-request {
+  const { KeyPair } = require("@near-js/crypto");
+  const CryptoJS = require("crypto-js");
+
   function value(name, fallback) {
     return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
   }
@@ -63,14 +66,43 @@ script:pre-request {
     return current;
   }
 
+  function sha256Hex(value) {
+    return CryptoJS.SHA256(value).toString(CryptoJS.enc.Hex);
+  }
+
+  function base64Url(bytes) {
+    if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64url");
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function canonicalPaperAuthPayload(input) {
+    return JSON.stringify({
+      domain: "clawhouse.paper-trading.v0",
+      version: 1,
+      method: String(input.method).toUpperCase(),
+      path: input.path,
+      bodyHash: input.bodyHash,
+      timestamp: input.timestamp,
+      nonce: input.nonce,
+      paperAccountId: input.paperAccountId,
+      agentId: input.agentId
+    });
+  }
+
+  function uuid() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return `bruno-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+
   requireLocalDev();
-  const baseUrl = String(value("base_url", ""));
-  const signerId = String(value("paper_signer_id", ""));
+  const signerSecretKey = String(value("paper_signer_secret_key", ""));
   const paperAccountId = value("paper_account_id", "");
   const agentId = String(value("agent_id", "regdgen.testnet"));
   const body = requestBody();
 
-  if (!signerId) throw new Error("Missing paper_signer_id. Run Create Local Paper Signer first.");
+  if (!signerSecretKey) throw new Error("Missing paper_signer_secret_key. Run Prepare Local Paper Signer first.");
   if (!paperAccountId) throw new Error("Missing paper_account_id. Run Create Paper Account first.");
 
   if (unresolved(body.paper_account_id)) body.paper_account_id = String(paperAccountId);
@@ -97,32 +129,30 @@ script:pre-request {
   }
   bru.setVar("paper_order_reference_px", referencePx);
 
-  const signedResponse = await bru.sendRequest({
+  const rawBody = JSON.stringify(body);
+  const timestamp = Date.now().toString();
+  const nonce = uuid();
+  const bodyHash = sha256Hex(rawBody);
+  const payload = canonicalPaperAuthPayload({
     method: "POST",
-    url: `${baseUrl}/paper/bruno/sign-order`,
-    headers: {
-      "content-type": "application/json",
-      "x-clawhouse-bruno-gold-mode": "true"
-    },
-    data: {
-      signer_id: signerId,
-      agent_id: agentId,
-      path: "/paper/orders",
-      order: body
-    }
+    path: "/paper/orders",
+    bodyHash,
+    timestamp,
+    nonce,
+    paperAccountId: String(paperAccountId),
+    agentId
   });
-  const signed = signedResponse.data || signedResponse.body;
-  if (!signed || signed.ok !== true) {
-    throw new Error(`Unable to sign paper order: ${JSON.stringify(signed || signedResponse)}`);
-  }
-  if (!signed.headers || !signed.headers["x-clawhouse-paper-signature"]) {
-    throw new Error("Local signer did not return x-clawhouse-paper-signature.");
-  }
+  const signature = KeyPair.fromString(signerSecretKey).sign(new TextEncoder().encode(payload)).signature;
 
   bru.setVar("last_client_order_id", body.client_order_id);
-  req.setBody(signed.body);
+  req.setBody(body);
   req.setHeader("content-type", "application/json");
-  Object.keys(signed.headers).forEach((key) => req.setHeader(key, signed.headers[key]));
+  req.setHeader("x-clawhouse-paper-account-id", String(paperAccountId));
+  req.setHeader("x-clawhouse-agent-id", agentId);
+  req.setHeader("x-clawhouse-paper-timestamp", timestamp);
+  req.setHeader("x-clawhouse-paper-nonce", nonce);
+  req.setHeader("x-clawhouse-paper-body-sha256", bodyHash);
+  req.setHeader("x-clawhouse-paper-signature", base64Url(signature));
 }
 
 script:post-response {

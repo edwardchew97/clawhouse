@@ -1,28 +1,18 @@
 meta {
-  name: 00 Create Local Paper Signer
+  name: 00 Prepare Local Paper Signer
   type: http
   seq: 0
 }
 
-post {
-  url: {{base_url}}/paper/bruno/local-signer
-  body: json
+get {
+  url: {{base_url}}/health
+  body: none
   auth: none
 }
 
-headers {
-  content-type: application/json
-  x-clawhouse-bruno-gold-mode: true
-}
-
-body:json {
-  {
-    "signer_id": "{{paper_signer_id}}",
-    "agent_id": "{{agent_id}}"
-  }
-}
-
 script:pre-request {
+  const { KeyPair } = require("@near-js/crypto");
+
   function value(name, fallback) {
     return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
   }
@@ -37,44 +27,25 @@ script:pre-request {
     }
   }
 
-  function requestBody() {
-    const current = req.getBody();
-    if (!current) return {};
-    if (typeof current === "string") return JSON.parse(current);
-    return current;
-  }
-
   requireLocalDev();
 
-  const body = requestBody();
-  if (!body.signer_id || String(body.signer_id).includes("{{")) {
-    body.signer_id = String(value("paper_signer_id", "bruno-gold-local-signer"));
-  }
-  if (!body.agent_id || String(body.agent_id).includes("{{")) {
-    body.agent_id = String(value("agent_id", "regdgen.testnet"));
-  }
+  const signerId = String(value("paper_signer_id", "bruno-local-signer"));
+  const agentId = String(value("agent_id", "regdgen.testnet"));
+  const keyPair = KeyPair.fromRandom("ed25519");
 
-  req.setBody(body);
-  req.setHeader("x-clawhouse-bruno-gold-mode", "true");
-}
-
-script:post-response {
-  const body = res.getBody();
-  if (body && body.signer) {
-    bru.setVar("paper_signer_id", body.signer.signer_id);
-    bru.setVar("agent_id", body.signer.agent_id);
-    bru.setVar("paper_agent_public_key", body.signer.agent_public_key);
-  }
+  bru.setVar("paper_signer_id", signerId);
+  bru.setVar("agent_id", agentId);
+  bru.setVar("paper_signer_secret_key", keyPair.toString());
+  bru.setVar("paper_agent_public_key", keyPair.getPublicKey().toString());
 }
 
 tests {
-  test("local signer returns public key only", function() {
+  test("local signer is generated inside Bruno", function() {
+    expect(res.getStatus()).to.equal(200);
     const body = res.getBody();
-    expect(res.getStatus()).to.equal(201);
     expect(body.ok).to.equal(true);
-    expect(body.signer.signer_id).to.equal(bru.getVar("paper_signer_id"));
-    expect(body.signer.agent_public_key).to.equal(bru.getVar("paper_agent_public_key"));
-    expect(body.signer.local_only).to.equal(true);
-    expect(body.signer.private_key).to.equal(undefined);
+    expect(bru.getVar("paper_signer_id")).to.be.a("string");
+    expect(bru.getVar("paper_signer_secret_key")).to.match(/^ed25519:/);
+    expect(bru.getVar("paper_agent_public_key")).to.match(/^ed25519:/);
   });
 }
