@@ -23,12 +23,63 @@ script:pre-request {
     return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
   }
 
-  const adminToken = value("admin_token", bru.getProcessEnv("AGENT_BOARD_LEDGER_ADMIN_TOKEN"));
+  function localEnvValue(name) {
+    const explicit = value("admin_token", "") || bru.getProcessEnv(name);
+    if (explicit) return explicit;
+
+    const fs = require("fs");
+    const path = require("path");
+    const roots = [
+      bru.cwd(),
+      path.resolve(bru.cwd(), "../.."),
+      path.resolve(bru.cwd(), "../../..")
+    ];
+    const suffixes = [
+      ".env.local",
+      ".env",
+      "apps/agent-board-ledger/.env.local",
+      "apps/agent-board-ledger/.env"
+    ];
+    const seen = {};
+
+    for (const root of roots) {
+      for (const suffix of suffixes) {
+        const file = path.join(root, suffix);
+        if (seen[file]) continue;
+        seen[file] = true;
+        if (!fs.existsSync(file)) continue;
+        const found = parseEnvValue(fs.readFileSync(file, "utf8"), name);
+        if (found) return found;
+      }
+    }
+
+    return "";
+  }
+
+  function parseEnvValue(text, name) {
+    const prefix = `${name}=`;
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || !trimmed.startsWith(prefix)) continue;
+      let value = trimmed.slice(prefix.length).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      return value;
+    }
+    return "";
+  }
+
+  function requireAdminToken() {
+    const token = localEnvValue("AGENT_BOARD_LEDGER_ADMIN_TOKEN");
+    if (!token) throw new Error("Missing AGENT_BOARD_LEDGER_ADMIN_TOKEN in process env or local repo .env.local.");
+    return token;
+  }
+
   const accountId = value("paper_account_id", "");
   if (!accountId) throw new Error("Missing paper_account_id. Run Create Paper Account first.");
   req.setUrl(`${value("base_url", "http://127.0.0.1:4321")}/paper/accounts/${accountId}/risk-check`);
-  if (adminToken) req.setHeader("authorization", `Bearer ${adminToken}`);
-  req.setHeader("x-clawhouse-bruno-gold-mode", "true");
+  req.setHeader("authorization", `Bearer ${requireAdminToken()}`);
 }
 
 tests {

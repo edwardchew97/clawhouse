@@ -1582,114 +1582,6 @@ describe("Agent Board Ledger local backend", () => {
     expect(replay.replay.audit.length).toBeGreaterThan(0);
   });
 
-  test("Bruno gold mode can create a local signer and submit a paper order without service bearer", async () => {
-    const signerResponse = await localGoldPost("/paper/bruno/local-signer", {
-      signer_id: "bruno-test-signer",
-      agent_id: "ironclaw",
-    });
-    const signer = await jsonOf<{
-      signer: { signer_id: string; agent_id: string; agent_public_key: string; local_only: boolean };
-    }>(signerResponse);
-
-    expect(signerResponse.status).toBe(201);
-    expect(signer.signer.agent_public_key.startsWith("ed25519:")).toBe(true);
-    expect(signer.signer.local_only).toBe(true);
-
-    const accountResponse = await localGoldPost("/paper/accounts", {
-      paper_account_id: "bruno-paper-1",
-      agent_id: "ironclaw",
-      agent_public_key: signer.signer.agent_public_key,
-      starting_balance_usd: 1000,
-      allowed_markets: ["BTC"],
-      metadata: { source: "bruno-gold-mode-test" },
-    });
-    expect(accountResponse.status).toBe(201);
-
-    const snapshotResponse = await localGoldPost("/paper/market-snapshots", {
-      market_type: "perp",
-      coin: "BTC",
-      source: "bruno-gold-mode-test",
-      mark_px: 100,
-      maintenance_margin_rate: 0.005,
-      book: {
-        bids: [{ px: 99, sz: 1 }],
-        asks: [{ px: 100, sz: 1 }],
-      },
-    });
-    expect(snapshotResponse.status).toBe(201);
-
-    const order = {
-      paper_account_id: "bruno-paper-1",
-      client_order_id: "bruno-ioc-1",
-      market_type: "perp",
-      coin: "BTC",
-      side: "buy",
-      tif: "Ioc",
-      size: 0.1,
-      margin_mode: "cross",
-      leverage: 2,
-      max_slippage_bps: 100,
-      reason: "Bruno gold mode submits a visible-body signed paper order.",
-    };
-    const signatureResponse = await localGoldPost("/paper/bruno/sign-order", {
-      signer_id: signer.signer.signer_id,
-      agent_id: "ironclaw",
-      path: "/paper/orders",
-      order,
-    });
-    const signed = await jsonOf<{ raw_body: string; headers: Record<string, string> }>(signatureResponse);
-
-    expect(signatureResponse.status).toBe(200);
-    expect(JSON.parse(signed.raw_body)).toEqual(order);
-    expect(signed.headers["x-clawhouse-paper-signature"]).toBeTruthy();
-
-    const orderResponse = await app.fetch(new Request("http://127.0.0.1/paper/orders", {
-      method: "POST",
-      headers: signed.headers,
-      body: signed.raw_body,
-    }));
-    const body = await jsonOf<{ order: { status: string }; fills: unknown[] }>(orderResponse);
-
-    expect(orderResponse.status).toBe(201);
-    expect(body.order.status).toBe("filled");
-    expect(body.fills).toHaveLength(1);
-
-    const blockedHelper = await app.fetch(new Request("http://ledger.test/paper/bruno/local-signer", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-clawhouse-bruno-gold-mode": "true" },
-      body: JSON.stringify({ signer_id: "blocked" }),
-    }));
-    expect(blockedHelper.status).toBe(403);
-
-    const blockedPaperWrite = await app.fetch(new Request("http://ledger.test/paper/accounts", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-clawhouse-bruno-gold-mode": "true" },
-      body: JSON.stringify({ paper_account_id: "blocked" }),
-    }));
-    expect(blockedPaperWrite.status).toBe(401);
-
-    const deployedApp = createApp({
-      db: sqliteDb,
-      now: () => currentNow,
-      adminToken,
-      rpcFetch: (...args) => currentRpcFetch(...args),
-      env: { VERCEL: "1" },
-    });
-    const deployedLocalHelper = await deployedApp.fetch(new Request("http://127.0.0.1/paper/bruno/local-signer", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-clawhouse-bruno-gold-mode": "true" },
-      body: JSON.stringify({ signer_id: "blocked-deployment" }),
-    }));
-    expect(deployedLocalHelper.status).toBe(403);
-
-    const deployedPaperWrite = await deployedApp.fetch(new Request("http://127.0.0.1/paper/accounts", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-clawhouse-bruno-gold-mode": "true" },
-      body: JSON.stringify({ paper_account_id: "blocked-deployment" }),
-    }));
-    expect(deployedPaperWrite.status).toBe(401);
-  });
-
   test("supports GTC resting paper orders and rejects crossing ALO post-only orders", async () => {
     await registerPaperAccount();
     await createPaperMarketSnapshot({
@@ -2534,17 +2426,6 @@ async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
   });
   expect(response.status).toBe(201);
   return (await jsonOf<{ snapshot: Record<string, any> }>(response)).snapshot;
-}
-
-async function localGoldPost(path: string, body: Record<string, unknown>) {
-  return await app.fetch(new Request(`http://127.0.0.1${path}`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-clawhouse-bruno-gold-mode": "true",
-    },
-    body: JSON.stringify(body),
-  }));
 }
 
 async function postJson(

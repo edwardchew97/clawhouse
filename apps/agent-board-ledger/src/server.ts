@@ -1,6 +1,5 @@
 import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openRuntimeLedgerDb, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAuthPayload, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
-import { assertBrunoGoldModeRequest, createBrunoGoldModeSigner, isBrunoGoldModeRequest, signBrunoGoldModePaperOrder } from "./bruno-gold-mode.js";
 import { refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
 import { PaperAuthError, createPaperAccount, createPaperMarketSnapshot, readPaperAccount, readPaperLeaderboard, replayPaperOrder, runPaperRiskCheck, submitPaperOrder } from "./paper-trading.js";
 import type { AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
@@ -77,14 +76,6 @@ export function createApp(options: AppOptions) {
         const paperRiskCheckMatch = path.match(/^\/paper\/accounts\/([^/]+)\/risk-check$/);
         const paperOrderReplayMatch = path.match(/^\/paper\/orders\/([^/]+)\/replay$/);
 
-        if (method === "POST" && path === "/paper/bruno/local-signer") {
-          assertBrunoGoldModeRequest(request, url, env);
-          return json(createBrunoGoldModeSigner(await readBody(request), now()), 201);
-        }
-        if (method === "POST" && path === "/paper/bruno/sign-order") {
-          assertBrunoGoldModeRequest(request, url, env);
-          return json(signBrunoGoldModePaperOrder(await readBody(request), now()));
-        }
         if (method === "POST" && path === "/boards") {
           assertServiceBearer(request.headers, adminToken);
           return json(await createBoard(db, request, await readBody(request), now()), 201);
@@ -170,29 +161,29 @@ export function createApp(options: AppOptions) {
           return json(await readPnl(db, board.id));
         }
         if (method === "POST" && path === "/paper/accounts") {
-          assertPaperServiceAccess(request, url, adminToken, env);
+          assertServiceBearer(request.headers, adminToken);
           return json(await createPaperAccount(db, await readBody(request), now()), 201);
         }
         if (method === "GET" && paperAccountMatch) {
           return json(await readPaperAccount(db, paperAccountMatch[1]));
         }
         if (method === "POST" && path === "/paper/market-snapshots") {
-          assertPaperServiceAccess(request, url, adminToken, env);
+          assertServiceBearer(request.headers, adminToken);
           return json(await createPaperMarketSnapshot(db, await readBody(request), now()), 201);
         }
         if (method === "POST" && path === "/paper/market-snapshots/hyperliquid") {
-          assertPaperServiceAccess(request, url, adminToken, env);
+          assertServiceBearer(request.headers, adminToken);
           return json(await refreshHyperliquidPaperMarketSnapshots(db, rpcFetch, env, await readBody(request), now()), 201);
         }
         if (method === "POST" && path === "/paper/orders") {
           return json(await submitPaperOrder(db, request, await readBody(request), path, now()), 201);
         }
         if (method === "POST" && path === "/paper/liquidation-monitor/tick") {
-          assertPaperServiceAccess(request, url, adminToken, env);
+          assertServiceBearer(request.headers, adminToken);
           return json(await runPaperLiquidationMonitor(db, rpcFetch, env, now()));
         }
         if (method === "POST" && paperRiskCheckMatch) {
-          assertPaperServiceAccess(request, url, adminToken, env);
+          assertServiceBearer(request.headers, adminToken);
           return json(await runPaperRiskCheck(db, paperRiskCheckMatch[1], now()));
         }
         if (method === "GET" && path === "/paper/leaderboard") {
@@ -208,16 +199,6 @@ export function createApp(options: AppOptions) {
       }
     },
   };
-}
-
-function assertPaperServiceAccess(
-  request: Request,
-  url: URL,
-  adminToken: string | null | undefined,
-  env: RuntimeEnv,
-) {
-  if (isBrunoGoldModeRequest(request, url, env)) return;
-  assertServiceBearer(request.headers, adminToken);
 }
 
 async function readHealth(db: LedgerDb) {
