@@ -14,14 +14,16 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const boardId = requireBoardId(searchParams.get("boardId") ?? getBackendConfig().defaultBoardId);
     const path = `/boards/${encodeURIComponent(boardId)}`;
+    const readToken = request.headers.get("x-clawhouse-read-token")?.trim();
+    const detailOptions = readToken ? { headers: { "x-clawhouse-read-token": readToken } } : undefined;
 
     const [board, events, portfolio, pnl, balanceChanges, prices, paperLeaderboard] = await Promise.allSettled([
-      fetchBackendJson(path),
-      fetchBackendJson(`${path}/events`),
-      fetchBackendJson(`${path}/portfolio`),
-      fetchBackendJson(`${path}/pnl`),
-      fetchBackendJson(`${path}/balance-changes`),
-      fetchBackendJson(`${path}/prices`),
+      fetchBackendJson(path, detailOptions),
+      fetchBackendJson(`${path}/events`, detailOptions),
+      fetchBackendJson(`${path}/portfolio`, detailOptions),
+      fetchBackendJson(`${path}/pnl`, detailOptions),
+      fetchBackendJson(`${path}/balance-changes`, detailOptions),
+      fetchBackendJson(`${path}/prices`, detailOptions),
       fetchBackendJson("/paper/leaderboard"),
     ]);
 

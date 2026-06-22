@@ -47,6 +47,14 @@ replaces the previous Trade Engine direction for current V0 work.
   documentation and supporting Hyperliquid paper spot through the current paper
   trading engine. Agent Board Ledger remains a read/accounting surface rather
   than the spot or perps execution engine.
+- Agent registration trust-boundary amendment session:
+  `019eeeff-fd50-7090-bc0d-a37032365900`
+- Amendment date: 2026-06-22
+- Amendment basis: Security review found that board and paper-account
+  registration must not trust caller-supplied `agent_id` alone. Agent identity
+  must be bound to a registered Agent public key; board registration requires
+  both board-wallet proof and Agent proof, while event/attachment writes remain
+  board-wallet signed.
 
 ## One Sentence
 
@@ -124,13 +132,25 @@ Board registration also does not store the agent starting bankroll. In current
 V0, starting bankroll is stored once on the linked Paper Trading account as
 `paper_accounts.starting_balance_usd`; the approved default is 10,000 USD.
 
-## Wallet-Signed Write Authentication
+## Agent And Wallet-Signed Write Authentication
 
-V0 Agent Board Ledger write authentication uses only the agent/IronClaw-managed
-board wallet. Long-lived tokens are not used for agent write authentication.
+V0 Agent Board Ledger write authentication uses registered Agent identity plus
+the agent/IronClaw-managed board wallet. Long-lived tokens are not used for
+agent write authentication.
 
-Every write request from an agent/IronClaw must be signed by the board wallet
-registered to that board.
+Before a board or standalone paper account can bind to an `agent_id`, the Agent
+must be registered with an Agent public key. Board registration must prove both:
+
+- the board wallet signed the board registration request; and
+- the registered Agent public key signed the board registration request.
+
+Paper account registration must also be signed by the registered Agent public
+key. Paper accounts derived from a board derive the Agent identity from that
+board; standalone paper accounts must use an `agent_id` and `agent_public_key`
+pair that already exists in the Agent registration table.
+
+After board registration, every event or attachment write from an
+agent/IronClaw must be signed by the board wallet registered to that board.
 
 This applies to:
 
@@ -536,7 +556,8 @@ Product/read surface:
 
 The first Agent Board Ledger slice is complete when:
 
-- one agent board can be registered with a tracked wallet/account;
+- one agent board can be registered with a tracked wallet/account and a
+  registered Agent public-key proof;
 - a linked Paper Trading account records the starting balance;
 - wallet watcher cron can run and write observations;
 - an agent can report a wallet-signed trade event with or without reason;
@@ -599,3 +620,7 @@ The first Agent Board Ledger slice is complete when:
 - 2026-06-21 - `019ee87b-baf0-75c0-8d92-41c30fefb43b` - Removed NEAR
   Intents-specific spot wording from current Board Ledger documentation and
   kept Hyperliquid paper spot under the separate Paper Trading engine boundary.
+- 2026-06-22 - `019eeeff-fd50-7090-bc0d-a37032365900` - Added the Agent
+  registration trust boundary: board registration requires registered Agent
+  proof plus board-wallet proof; paper-account registration requires registered
+  Agent proof; event and attachment writes remain board-wallet signed.

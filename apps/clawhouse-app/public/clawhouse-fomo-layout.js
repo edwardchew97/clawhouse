@@ -34,6 +34,9 @@ let chainState = {
   activity: null,
   activityError: null,
   backend: null,
+  readToken: null,
+  readAccess: null,
+  readAccessError: null,
   error: null
 };
 
@@ -62,7 +65,20 @@ const chainBalance = (agent) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 const holderBalance = (agent) => chainBalance(agent);
-const isUnlocked = () => true;
+const readAccessApplies = (agent) => {
+  const access = chainState.readAccess;
+  if (!access || !chainState.readToken) return false;
+  const boardId = agent.boardId || agent.id;
+  const expiresAt = Date.parse(access.expiresAt || "");
+  return access.boardId === boardId
+    && access.holderAccountId === chainState.accountId
+    && Number.isFinite(expiresAt)
+    && expiresAt > Date.now();
+};
+const isUnlocked = (agent) => {
+  const balance = holderBalance(agent);
+  return Boolean(chainState.accountId && balance !== null && balance > 0 && readAccessApplies(agent));
+};
 
 function dispatchUiEvent(name) {
   window.dispatchEvent(new CustomEvent(name));
@@ -822,7 +838,7 @@ function renderHero(agent) {
   const holders = holderCount(agent);
   byId("statHolders").textContent = holders === null ? "--" : holders.toLocaleString();
   byId("statUpdate").textContent = chainApplies(agent) ? "testnet live" : backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
-  byId("statGate").textContent = holderBalance(agent) > 0 ? "Unlocked" : "1 key";
+  byId("statGate").textContent = isUnlocked(agent) ? "Unlocked" : holderBalance(agent) > 0 ? "Sign proof" : "1 key";
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
   byId("miniTop").textContent = title;
@@ -971,7 +987,11 @@ function renderTicket(agent) {
   byId("posEntry").textContent = "-";
   byId("posExit").textContent = "-";
   byId("posExit").className = "";
-  byId("gateButton").textContent = balance && balance > 0 ? "Room open" : "Gate: 1 key";
+  byId("gateButton").textContent = isUnlocked(agent)
+    ? "Room open"
+    : balance && balance > 0
+      ? "Sign proof"
+      : "Gate: 1 key";
   const walletButton = byId("walletButton");
   if (walletButton) {
     walletButton.textContent = chainState.accountId ? shortAccount(chainState.accountId) : "Connect Wallet";
@@ -985,6 +1005,7 @@ function statusButtonText() {
   if (chainState.phase === "connecting") return "Opening wallet...";
   if (chainState.phase === "quoting") return "Refreshing quote...";
   if (chainState.phase === "signing") return "Confirm in wallet...";
+  if (chainState.phase === "unlocking") return "Confirm access...";
   if (chainState.phase === "refreshing") return "Refreshing balance...";
   return "Working...";
 }
@@ -1281,7 +1302,7 @@ function renderChartEvents(agent, rect, model = chartModel(agent)) {
   document.querySelectorAll("[data-chart-event]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!isUnlocked(selectedAgent())) {
-        showToast("Agent event details are open in this preview.");
+        showToast("Buy 1 key and sign wallet proof to unlock Agent reasoning.");
         return;
       }
       openEvent(button.dataset.chartEvent);
@@ -1292,7 +1313,7 @@ function renderChartEvents(agent, rect, model = chartModel(agent)) {
 function openEvent(eventId) {
   const agent = selectedAgent();
   if (!isUnlocked(agent)) {
-    showToast("Agent event details are open in this preview.");
+    showToast("Buy 1 key and sign wallet proof to unlock Agent reasoning.");
     return;
   }
   const event = chartModel(agent).events.find((item) => item.id === eventId);
@@ -1363,8 +1384,9 @@ function bindUnlockButtons() {
 }
 
 function renderGateState(agent) {
-  byId("chartPanel").classList.add("unlocked");
-  document.body.classList.add("is-unlocked");
+  const unlocked = isUnlocked(agent);
+  byId("chartPanel").classList.toggle("unlocked", unlocked);
+  document.body.classList.toggle("is-unlocked", unlocked);
 }
 
 let columnSyncFrame = 0;

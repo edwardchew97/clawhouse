@@ -41,7 +41,10 @@ Set these in the Vercel project Production environment for each project:
 - `CLAWHOUSE_KEY_STORAGE_DEPOSIT_NEAR`
 - `CLAWHOUSE_AGENT_API_BASE_URL`
 - `CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID`
-- `CLAWHOUSE_LEDGER_READ_TOKEN` if holder-detail ledger reads require a token
+- `CLAWHOUSE_LEDGER_ADMIN_TOKEN` or `AGENT_BOARD_LEDGER_ADMIN_TOKEN` as a
+  server-only secret for wallet-proof read-token exchange
+- `CLAWHOUSE_READ_ACCESS_SIGNING_RECIPIENT` if the NEP-413 recipient should be
+  fixed instead of derived from the request host
 
 Optional app runtime variables:
 
@@ -66,6 +69,11 @@ selected backend database. If the board does not exist, the app should still
 build and boot, but `/api/backend/board` will return the backend 404 and the UI
 will show backend data as unavailable.
 
+Do not configure a global holder read token in the app. Holder-detail reads must
+come from the browser flow: the wallet signs a NEP-413 read-access challenge,
+the App verifies that proof, and then the App asks Ledger for a short-lived
+holder read token.
+
 Do not commit `.vercel/project.json`, `.env.local`, or real token values.
 
 ## Smoke Checks
@@ -80,3 +88,5 @@ After each Vercel deployment, verify:
   data or an explicit backend error.
 - In the browser, connect a NEAR testnet wallet, buy or sell a key, and confirm
   the transaction toast includes a clickable NearBlocks link.
+- After buying a key, sign the room-access message and confirm holder-gated
+  Agent reasoning unlocks with a short-lived read token.

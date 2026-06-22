@@ -1,9 +1,9 @@
 import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openRuntimeLedgerDb, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
-import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAuthPayload, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
+import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAgentAuthPayload, canonicalAuthPayload, readAgentSignedHeaders, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
 import { refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
 import { listKeyMarketTrades, reportKeyMarketTrade } from "./key-market.js";
 import { PaperAuthError, createPaperAccount, createPaperMarketSnapshot, readPaperAccount, readPaperLeaderboard, replayPaperOrder, runPaperRiskCheck, submitPaperOrder } from "./paper-trading.js";
-import type { AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
+import type { AgentRegistrationRow, AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
 
 type AppOptions = {
   db: LedgerDb;
@@ -59,6 +59,11 @@ export function createApp(options: AppOptions) {
 
         if (method === "GET" && path === "/boards") {
           return json(await listDiscoverableBoards(db));
+        }
+
+        if (method === "POST" && path === "/agents") {
+          assertServiceBearer(request.headers, adminToken);
+          return json(await registerAgent(db, request, await readBody(request), now()), 201);
         }
 
         const boardMatch = path.match(/^\/boards\/([^/]+)$/);
@@ -170,7 +175,10 @@ export function createApp(options: AppOptions) {
         }
         if (method === "POST" && path === "/paper/accounts") {
           assertServiceBearer(request.headers, adminToken);
-          return json(await createPaperAccount(db, await readBody(request), now()), 201);
+          const createdAt = now();
+          const body = await readBody(request);
+          await assertPaperAccountRegistrationSignature(db, request, body, createdAt);
+          return json(await createPaperAccount(db, body, createdAt), 201);
         }
         if (method === "GET" && paperAccountMatch) {
           return json(await readPaperAccount(db, paperAccountMatch[1]));
@@ -232,12 +240,54 @@ async function listDiscoverableBoards(db: LedgerDb) {
   };
 }
 
+async function registerAgent(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
+  const data = asObject(body.json);
+  const agentId = requiredString(data.agentId ?? data.agent_id, "agent_id");
+  const agentPublicKey = requiredString(data.agentPublicKey ?? data.agent_public_key, "agent_public_key");
+  const status = cleanString(data.status) ?? "active";
+  const metadataJson = stringifyOptional(data.metadata);
+
+  await assertAgentSignature(db, request, body.raw, {
+    purpose: "agent_registration",
+    agentId,
+    agentPublicKey,
+    boardId: null,
+    createdAt,
+  });
+
+  const existing = await db.get<AgentRegistrationRow>(
+    "SELECT * FROM agent_registrations WHERE agent_id = ?",
+    [agentId],
+  );
+  if (existing && existing.agent_public_key !== agentPublicKey) {
+    throw new RequestError("Agent ID is already registered to a different public key", 409);
+  }
+
+  if (existing) {
+    await db.run(
+      "UPDATE agent_registrations SET status = ?, metadata_json = ?, updated_at = ? WHERE agent_id = ?",
+      [status, metadataJson, createdAt, agentId],
+    );
+  } else {
+    await db.run(
+      `INSERT INTO agent_registrations
+        (agent_id, agent_public_key, status, metadata_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)`,
+      [agentId, agentPublicKey, status, metadataJson, createdAt, createdAt],
+    );
+  }
+
+  const agent = await requireActiveAgentRegistration(db, agentId, agentPublicKey);
+  return { ok: true, agent: presentAgentRegistration(agent) };
+}
+
 async function createBoard(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
   const data = asObject(body.json);
   const id = cleanString(data.boardId) ?? cleanString(data.board_id) ?? newId("board");
   const board: Board = {
     id,
     agent_id: requiredString(data.agentId ?? data.agent_id, "agent_id"),
+    agent_public_key: requiredString(data.agentPublicKey ?? data.agent_public_key, "agent_public_key"),
     wallet_address: requiredString(data.walletAddress ?? data.wallet_address, "wallet_address"),
     public_key: requiredString(data.publicKey ?? data.public_key, "public_key"),
     chain: cleanString(data.chain) ?? "near",
@@ -255,15 +305,24 @@ async function createBoard(db: LedgerDb, request: Request, body: BodyResult, cre
 
   await db.transaction(async (tx) => {
     await assertBoardRegistrationSignature(tx, request, body.raw, board, Date.parse(createdAt), createdAt);
+    await assertAgentSignature(tx, request, body.raw, {
+      purpose: "board_registration",
+      agentId: board.agent_id,
+      agentPublicKey: requiredBoardAgentPublicKey(board),
+      boardId: board.id,
+      createdAt,
+    });
+    await requireActiveAgentRegistration(tx, board.agent_id, requiredBoardAgentPublicKey(board));
     await tx.run(
       `INSERT INTO boards
-        (id, agent_id, wallet_address, public_key, chain, venue_namespace, tracking_started_at,
+        (id, agent_id, agent_public_key, wallet_address, public_key, chain, venue_namespace, tracking_started_at,
          base_currency, public_status, visibility_mode, owner_wallet_address,
          funding_source, funding_tx_hash, metadata_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         board.id,
         board.agent_id,
+        board.agent_public_key,
         board.wallet_address,
         board.public_key,
         board.chain,
@@ -355,6 +414,102 @@ async function assertBoardRegistrationSignature(
     }
     throw new AuthError("Nonce replay rejected");
   }
+}
+
+async function assertAgentSignature(
+  db: LedgerDb,
+  request: Request,
+  rawBody: string,
+  input: {
+    purpose: "agent_registration" | "board_registration" | "paper_account_registration";
+    agentId: string;
+    agentPublicKey: string;
+    boardId: string | null;
+    createdAt: string;
+  },
+) {
+  const headers = readAgentSignedHeaders(request.headers);
+
+  if (headers.publicKey !== input.agentPublicKey) {
+    throw new AuthError("Agent public key does not match signed agent");
+  }
+
+  const actualBodyHash = sha256Hex(rawBody);
+  if (headers.bodyHash !== actualBodyHash) {
+    throw new AuthError("Agent body hash mismatch");
+  }
+  if (!timestampIsFresh(headers.timestamp, Date.parse(input.createdAt))) {
+    throw new AuthError("Agent signature timestamp is stale");
+  }
+
+  const payload = canonicalAgentAuthPayload({
+    purpose: input.purpose,
+    method: request.method,
+    path: new URL(request.url).pathname,
+    bodyHash: actualBodyHash,
+    timestamp: headers.timestamp,
+    nonce: headers.nonce,
+    agentId: input.agentId,
+    agentPublicKey: input.agentPublicKey,
+    boardId: input.boardId,
+  });
+
+  if (!verifySignature(headers.publicKey, payload, headers.signature)) {
+    throw new AuthError("Invalid agent signature");
+  }
+
+  try {
+    await db.run(
+      `INSERT INTO agent_auth_nonces
+        (id, agent_id, agent_public_key, purpose, nonce, timestamp, body_hash, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [newId("agent_nonce"), input.agentId, input.agentPublicKey, input.purpose, headers.nonce, headers.timestamp, actualBodyHash, input.createdAt],
+    );
+  } catch (error) {
+    if (!isUniqueViolation(error)) {
+      throw error;
+    }
+    throw new AuthError("Agent nonce replay rejected");
+  }
+}
+
+async function assertPaperAccountRegistrationSignature(
+  db: LedgerDb,
+  request: Request,
+  body: BodyResult,
+  createdAt: string,
+) {
+  const data = asObject(body.json);
+  const boardId = cleanString(data.boardId ?? data.board_id);
+  let agentId: string;
+  let agentPublicKey: string;
+
+  if (boardId) {
+    const board = await requireBoard(db, boardId);
+    agentId = board.agent_id;
+    agentPublicKey = requiredBoardAgentPublicKey(board);
+
+    const suppliedAgentId = cleanString(data.agentId ?? data.agent_id);
+    if (suppliedAgentId && suppliedAgentId !== agentId) {
+      throw new RequestError("paper account agent_id must match board agent_id", 400);
+    }
+    const suppliedAgentPublicKey = cleanString(data.agentPublicKey ?? data.agent_public_key);
+    if (suppliedAgentPublicKey && suppliedAgentPublicKey !== agentPublicKey) {
+      throw new RequestError("paper account agent_public_key must match board agent_public_key", 400);
+    }
+  } else {
+    agentId = requiredString(data.agentId ?? data.agent_id, "agent_id");
+    agentPublicKey = requiredString(data.agentPublicKey ?? data.agent_public_key, "agent_public_key");
+  }
+
+  await assertAgentSignature(db, request, body.raw, {
+    purpose: "paper_account_registration",
+    agentId,
+    agentPublicKey,
+    boardId,
+    createdAt,
+  });
+  await requireActiveAgentRegistration(db, agentId, agentPublicKey);
 }
 
 async function createEvent(
@@ -616,7 +771,11 @@ async function checkNearKeyMarketReadAccess(
   const rpcUrl = requiredString(data.rpcUrl ?? data.rpc_url ?? env[NEAR_RPC_URL_ENV], "rpc_url");
   const keyContractId = requiredString(data.keyContractId ?? data.key_contract_id, "key_contract_id");
   const holderAccountId = requiredString(data.holderAccountId ?? data.holder_account_id ?? data.requesterWalletAddress ?? data.requester_wallet_address, "holder_account_id");
-  const agentId = cleanString(data.agentId ?? data.agent_id) ?? board.agent_id;
+  const suppliedAgentId = cleanString(data.agentId ?? data.agent_id);
+  if (suppliedAgentId && suppliedAgentId !== board.agent_id) {
+    throw new RequestError("agent_id must match board agent_id", 400);
+  }
+  const agentId = board.agent_id;
   const readToken = cleanString(data.readToken ?? data.read_token);
   const accessLevel = normalizeAccessLevel(data.accessLevel ?? data.access_level);
   const checkedAt = normalizedTimestampField(data.checkedAt ?? data.checked_at, createdAt, "checked_at");
@@ -1543,10 +1702,38 @@ function presentBoardDiscovery(board: Board) {
   };
 }
 
+function presentAgentRegistration(agent: AgentRegistrationRow) {
+  return {
+    ...agent,
+    metadata: parseJson(agent.metadata_json),
+    metadata_json: undefined,
+  };
+}
+
+async function requireActiveAgentRegistration(db: LedgerDb, agentId: string, agentPublicKey: string) {
+  const agent = await db.get<AgentRegistrationRow>(
+    "SELECT * FROM agent_registrations WHERE agent_id = ?",
+    [agentId],
+  );
+  if (!agent || agent.status !== "active") {
+    throw new RequestError("Agent registration not found", 403);
+  }
+  if (agent.agent_public_key !== agentPublicKey) {
+    throw new RequestError("Agent public key is not registered for agent_id", 403);
+  }
+  return agent;
+}
+
 async function requireBoard(db: LedgerDb, boardId: string) {
   const board = await getBoard(db, boardId);
   if (!board) throw new RequestError("Board not found", 404);
   return board;
+}
+
+function requiredBoardAgentPublicKey(board: Board) {
+  const agentPublicKey = cleanString(board.agent_public_key);
+  if (!agentPublicKey) throw new RequestError("Board is missing agent_public_key", 500);
+  return agentPublicKey;
 }
 
 async function assertBoardRead(
@@ -1559,7 +1746,7 @@ async function assertBoardRead(
   requiredLevel: AccessLevel,
   rpcFetch: FetchLike,
 ) {
-  if (board.visibility_mode === "public") return;
+  if (board.visibility_mode === "public" && requiredLevel === "public_summary") return;
   if (hasServiceBearer(request.headers, adminToken)) return;
 
   const readToken = cleanString(request.headers.get("x-clawhouse-read-token")) ?? cleanString(url.searchParams.get("read_token"));

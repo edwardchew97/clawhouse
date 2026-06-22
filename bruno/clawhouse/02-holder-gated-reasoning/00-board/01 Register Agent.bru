@@ -1,0 +1,201 @@
+meta {
+  name: 01 Register Agent
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/agents
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "agent_id": "{{ledger_agent_id}}",
+    "agent_public_key": "{{ledger_agent_public_key}}",
+    "metadata": {
+      "source": "bruno-local-mode",
+      "flow": "holder-gated-reasoning"
+    }
+  }
+}
+
+script:pre-request {
+  const { KeyPair } = require("@near-js/crypto");
+  const CryptoJS = require("crypto-js");
+
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  function unresolved(item) {
+    return item === undefined || item === null || item === "" || String(item).includes("{{");
+  }
+
+  function requestBody() {
+    const current = req.getBody();
+    if (!current) return {};
+    if (typeof current === "string") return JSON.parse(current);
+    return current;
+  }
+
+  function localEnvValue(name) {
+    const explicit = value("admin_token", "") || bru.getProcessEnv(name);
+    if (explicit) return explicit;
+
+    const fs = require("fs");
+    const path = require("path");
+    const roots = [
+      bru.cwd(),
+      path.resolve(bru.cwd(), "../.."),
+      path.resolve(bru.cwd(), "../../.."),
+      path.resolve(bru.cwd(), "../../../..")
+    ];
+    const suffixes = [
+      ".env.local",
+      ".env",
+      "apps/agent-board-ledger/.env.local",
+      "apps/agent-board-ledger/.env"
+    ];
+    const seen = {};
+
+    for (const root of roots) {
+      for (const suffix of suffixes) {
+        const file = path.join(root, suffix);
+        if (seen[file]) continue;
+        seen[file] = true;
+        if (!fs.existsSync(file)) continue;
+        const found = parseEnvValue(fs.readFileSync(file, "utf8"), name);
+        if (found) return found;
+      }
+    }
+
+    return "";
+  }
+
+  function parseEnvValue(text, name) {
+    const prefix = `${name}=`;
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || !trimmed.startsWith(prefix)) continue;
+      let value = trimmed.slice(prefix.length).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      return value;
+    }
+    return "";
+  }
+
+  function requireAdminToken() {
+    const token = localEnvValue("AGENT_BOARD_LEDGER_ADMIN_TOKEN");
+    if (!token) throw new Error("Missing AGENT_BOARD_LEDGER_ADMIN_TOKEN in process env or local repo .env.local.");
+    return token;
+  }
+
+  function sha256Hex(value) {
+    return CryptoJS.SHA256(value).toString(CryptoJS.enc.Hex);
+  }
+
+  function base64Url(bytes) {
+    if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64url");
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function canonicalAgentAuthPayload(input) {
+    return JSON.stringify({
+      domain: "clawhouse.agent-board-ledger.v0",
+      version: 1,
+      purpose: input.purpose,
+      method: String(input.method).toUpperCase(),
+      path: input.path,
+      bodyHash: input.bodyHash,
+      timestamp: input.timestamp,
+      nonce: input.nonce,
+      agentId: input.agentId,
+      agentPublicKey: input.agentPublicKey,
+      boardId: input.boardId
+    });
+  }
+
+  function uuid() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return `bruno-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+
+  requireLocalDev();
+
+  const body = requestBody();
+  const agentId = String(value("ledger_agent_id", value("agent_id", "regdgen.testnet")));
+  const agentPublicKey = String(value("ledger_agent_public_key", value("ledger_wallet_public_key", "")));
+  const secretKey = String(value("ledger_wallet_secret_key", ""));
+
+  if (!agentPublicKey || !secretKey) {
+    throw new Error("Missing local Agent signer vars. Run Prepare Local Board Signer first.");
+  }
+
+  if (unresolved(body.agent_id)) body.agent_id = agentId;
+  if (unresolved(body.agent_public_key)) body.agent_public_key = agentPublicKey;
+  body.metadata = body.metadata || {};
+
+  const rawBody = JSON.stringify(body);
+  const timestamp = Date.now().toString();
+  const nonce = uuid();
+  const bodyHash = sha256Hex(rawBody);
+  const payload = canonicalAgentAuthPayload({
+    purpose: "agent_registration",
+    method: "POST",
+    path: "/agents",
+    bodyHash,
+    timestamp,
+    nonce,
+    agentId,
+    agentPublicKey,
+    boardId: null
+  });
+  const signature = KeyPair.fromString(secretKey).sign(new TextEncoder().encode(payload)).signature;
+
+  req.setBody(body);
+  req.setHeader("content-type", "application/json");
+  req.setHeader("authorization", `Bearer ${requireAdminToken()}`);
+  req.setHeader("x-clawhouse-agent-public-key", agentPublicKey);
+  req.setHeader("x-clawhouse-agent-timestamp", timestamp);
+  req.setHeader("x-clawhouse-agent-nonce", nonce);
+  req.setHeader("x-clawhouse-agent-body-sha256", bodyHash);
+  req.setHeader("x-clawhouse-agent-signature", base64Url(signature));
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body && body.agent && body.agent.agent_public_key) {
+    bru.setVar("ledger_agent_id", body.agent.agent_id);
+    bru.setVar("ledger_agent_public_key", body.agent.agent_public_key);
+  }
+}
+
+tests {
+  test("agent is registered with an Agent signature", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(201);
+    expect(body.ok).to.equal(true);
+    expect(body.agent.agent_id).to.equal(bru.getVar("ledger_agent_id"));
+    expect(body.agent.agent_public_key).to.equal(bru.getVar("ledger_agent_public_key"));
+  });
+}
