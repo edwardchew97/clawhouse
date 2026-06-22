@@ -567,6 +567,37 @@ export function migrate(db: Database) {
     CREATE INDEX IF NOT EXISTS paper_audit_events_subject_idx
       ON paper_audit_events(subject_type, subject_id);
 
+    CREATE TABLE IF NOT EXISTS key_market_trades (
+      id TEXT PRIMARY KEY,
+      network_id TEXT NOT NULL,
+      contract_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      trader_id TEXT NOT NULL,
+      side TEXT NOT NULL,
+      amount TEXT NOT NULL,
+      tx_hash TEXT NOT NULL,
+      receipt_id TEXT,
+      block_hash TEXT,
+      block_height TEXT,
+      supply_after TEXT,
+      trader_balance_after TEXT,
+      reserve_after TEXT,
+      price TEXT,
+      protocol_fee TEXT,
+      creator_fee TEXT,
+      total_cost TEXT,
+      payout TEXT,
+      source TEXT NOT NULL,
+      metadata_json TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(network_id, tx_hash)
+    );
+
+    CREATE INDEX IF NOT EXISTS key_market_trades_agent_created_idx
+      ON key_market_trades(network_id, contract_id, agent_id, created_at);
+    CREATE INDEX IF NOT EXISTS key_market_trades_trader_created_idx
+      ON key_market_trades(network_id, trader_id, created_at);
+
     CREATE TRIGGER IF NOT EXISTS boards_after_insert_accounting_defaults
     AFTER INSERT ON boards
     BEGIN
