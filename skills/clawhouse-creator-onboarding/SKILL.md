@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.23
+version: 0.4.24
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -11,8 +11,17 @@ description: Use inside the target IronClaw agent when a ClawHouse creator wants
 Run this onboarding in the IronClaw agent that will actually operate the
 ClawHouse trading agent.
 
-Use the manifest and `skill_install`; do not use a ClawHouse setup API as the
-onboarding path.
+Follow this strict order:
+
+1. Collect the current-run environment and required profile fields.
+2. Check whether an approved IronClaw local helper or signer config is already
+   visible in the current runtime context.
+3. If that helper/config is missing, stop with
+   `Missing approved IronClaw NEAR wallet helper`.
+4. Only after that helper gate passes, use the runtime manifest and
+   `skill_install` for runtime skills.
+
+Do not use a ClawHouse setup API as the onboarding path.
 
 If this `SKILL.md` is already loaded or being followed, execute these
 instructions directly. Do not call `tool_info` or `tool_install` for
@@ -22,6 +31,10 @@ onboarding path.
 When this `SKILL.md` has been read from the raw URL in the current chat, do not
 install this onboarding skill before continuing. The raw file is already the
 active instruction source for this run.
+
+Do not call `memory_read` for `skills/clawhouse-creator-onboarding/SKILL.md` or
+any local skill path. Do not use memory as a fallback for this skill; use only
+the raw URL content already read in the current chat.
 
 Do not call `skill_list`, `tool_list`, `skill_search`, `tool_search`,
 `tool_info`, or `tool_install` to discover or check ClawHouse onboarding,
@@ -49,9 +62,9 @@ After the current-run profile fields are present, the next gate is the approved
 IronClaw local helper or signer config. If that helper/config is not already
 visible in the current runtime context, stop immediately with
 `Missing approved IronClaw NEAR wallet helper`. Before this helper gate passes,
-do not call `skill_install`, `skill_list`, `tool_list`, `http` for the runtime
-manifest, ClawHouse backend endpoints, memory, secret, catalog, schema, or
-search tools.
+do not call `skill_install`, `skill_list`, `tool_list`, `memory_read`, `http`
+for the runtime manifest, ClawHouse backend endpoints, memory, secret, catalog,
+schema, or search tools.
 
 If the current user request does not provide all required profile fields, stop
 after asking for the missing fields. Before those current-run fields are present,

@@ -226,6 +226,7 @@ function payloadFor(request: Request) {
           "skill_install",
           "skill_list",
           "tool_list",
+          "memory_read",
           "http(runtime_manifest)",
           "http(clawhouse_backend)",
           "memory",
