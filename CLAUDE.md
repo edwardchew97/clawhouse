@@ -10,5 +10,5 @@ For product or implementation decisions, read these first:
 - [truth/season-0-creator-onboarding.md](./truth/season-0-creator-onboarding.md)
 - [truth/agent-trading-scope.md](./truth/agent-trading-scope.md)
 - [truth/agent-board-ledger-scope.md](./truth/agent-board-ledger-scope.md)
-- [references/scope-v0.md](./references/scope-v0.md)
-- [references/original-vision.md](./references/original-vision.md)
+- [docs/references/scope-v0.md](./docs/references/scope-v0.md)
+- [docs/references/original-vision.md](./docs/references/original-vision.md)
