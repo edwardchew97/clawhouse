@@ -71,10 +71,10 @@
     },
     {
       "name": "hyperliquid-paper-trading",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
-      "sha256": "fc2fe771eaa001d6e1ea04955e261e95d3f5e53ecca6a665bbd0169f1e769a9e",
+      "sha256": "673cb25c74cb575f39fea2613c8b14a0f1e99c0ee2c5a74d0145ae647703c97d",
       "install": {
         "tool": "skill_install",
         "parameters": {
