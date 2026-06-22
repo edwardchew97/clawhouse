@@ -1,0 +1,80 @@
+meta {
+  name: 00 Create Local Paper Signer
+  type: http
+  seq: 0
+}
+
+post {
+  url: {{base_url}}/paper/bruno/local-signer
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+  x-clawhouse-bruno-gold-mode: true
+}
+
+body:json {
+  {
+    "signer_id": "{{paper_signer_id}}",
+    "agent_id": "{{agent_id}}"
+  }
+}
+
+script:pre-request {
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  function requestBody() {
+    const current = req.getBody();
+    if (!current) return {};
+    if (typeof current === "string") return JSON.parse(current);
+    return current;
+  }
+
+  requireLocalDev();
+
+  const body = requestBody();
+  if (!body.signer_id || String(body.signer_id).includes("{{")) {
+    body.signer_id = String(value("paper_signer_id", "bruno-gold-local-signer"));
+  }
+  if (!body.agent_id || String(body.agent_id).includes("{{")) {
+    body.agent_id = String(value("agent_id", "regdgen.testnet"));
+  }
+
+  req.setBody(body);
+  req.setHeader("x-clawhouse-bruno-gold-mode", "true");
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body && body.signer) {
+    bru.setVar("paper_signer_id", body.signer.signer_id);
+    bru.setVar("agent_id", body.signer.agent_id);
+    bru.setVar("paper_agent_public_key", body.signer.agent_public_key);
+  }
+}
+
+tests {
+  test("local signer returns public key only", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(201);
+    expect(body.ok).to.equal(true);
+    expect(body.signer.signer_id).to.equal(bru.getVar("paper_signer_id"));
+    expect(body.signer.agent_public_key).to.equal(bru.getVar("paper_agent_public_key"));
+    expect(body.signer.local_only).to.equal(true);
+    expect(body.signer.private_key).to.equal(undefined);
+  });
+}

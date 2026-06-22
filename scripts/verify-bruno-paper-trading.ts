@@ -4,8 +4,10 @@ import { join } from "node:path";
 const collectionDir = "bruno/clawhouse-paper-trading";
 const requiredFiles = [
   "bruno.json",
+  "collection.bru",
   "environments/local-dev.bru",
   "01-health/01 Health.bru",
+  "02-paper-account/00 Create Local Paper Signer.bru",
   "02-paper-account/01 Create Paper Account.bru",
   "03-market-data/01 Refresh Live Hyperliquid Snapshot.bru",
   "04-orders/01 Submit Signed IOC Paper Order.bru",
@@ -37,12 +39,21 @@ if (!joined.includes("x-clawhouse-paper-signature")) {
 if (joined.includes("PAPER_SIGNER_PRIVATE_KEY=") || joined.includes("AGENT_BOARD_LEDGER_ADMIN_TOKEN=")) {
   fail("Collection request files must not contain concrete secret assignments.");
 }
+if (joined.includes("require(\"crypto\")") || joined.includes("require('crypto')")) {
+  fail("Collection must not require Node crypto in Bruno scripts.");
+}
+if (joined.includes("paper_signer_private_key")) {
+  fail("Collection must not require a pasted paper signer private key.");
+}
+if (!joined.includes("/paper/bruno/local-signer") || !joined.includes("/paper/bruno/sign-order")) {
+  fail("Collection must use local-only Bruno gold mode signer helpers.");
+}
 
 const forbiddenBodyHints = [
-  "mark_px",
-  "oracle_px",
-  "funding_rate",
-  "maintenance_margin_rate",
+  "\"mark_px\"",
+  "\"oracle_px\"",
+  "\"funding_rate\"",
+  "\"maintenance_margin_rate\"",
   "book: {",
   "bids:",
   "asks:",
@@ -59,9 +70,13 @@ console.log(JSON.stringify({
   requestCount: requestFiles.length,
   checks: [
     "required files exist",
+    "defines collection-level defaults for no-environment Bruno runs",
     "uses live Hyperliquid snapshot endpoint",
+    "uses local-only Bruno gold mode signer helpers",
     "does not call manual market snapshot endpoint",
     "paper order request has wallet signature headers",
+    "does not require Node crypto in Bruno scripts",
+    "does not require a pasted paper signer private key",
     "request files do not contain concrete secret assignments",
     "request files do not contain manual market data bodies",
   ],

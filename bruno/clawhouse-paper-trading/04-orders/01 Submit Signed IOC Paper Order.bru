@@ -15,16 +15,29 @@ headers {
 }
 
 body:json {
-  {}
+  {
+    "paper_account_id": "{{paper_account_id}}",
+    "client_order_id": "{{client_order_id}}",
+    "market_type": "{{market_type}}",
+    "coin": "{{coin}}",
+    "side": "{{order_side}}",
+    "tif": "Ioc",
+    "size": "{{order_size}}",
+    "margin_mode": "{{margin_mode}}",
+    "leverage": "{{leverage}}",
+    "max_slippage_bps": "{{max_slippage_bps}}",
+    "reason": "{{paper_order_reason}}"
+  }
 }
 
 script:pre-request {
-  const crypto = require("crypto");
-  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
 
   function requireLocalDev() {
-    const baseUrl = String(bru.getEnvVar("base_url") || "");
-    if (String(bru.getEnvVar("local_runtime_only")) !== "true") {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
       throw new Error("local_runtime_only must be true for this collection.");
     }
     if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
@@ -32,100 +45,84 @@ script:pre-request {
     }
   }
 
-  function secret(name, processName) {
-    const value = bru.getEnvVar(name) || bru.getProcessEnv(processName);
-    if (!value) throw new Error(`Missing ${name}. Set ${processName} in the collection .env file or Bruno secret environment.`);
-    return String(value);
+  function unresolved(item) {
+    return item === undefined || item === null || item === "" || String(item).includes("{{");
   }
 
-  function base58Decode(value) {
-    const bytes = [0];
-    for (const char of value) {
-      const index = alphabet.indexOf(char);
-      if (index < 0) throw new Error("Invalid base58 character in signer key.");
-      let carry = index;
-      for (let i = 0; i < bytes.length; i += 1) {
-        carry += bytes[i] * 58;
-        bytes[i] = carry & 0xff;
-        carry >>= 8;
-      }
-      while (carry > 0) {
-        bytes.push(carry & 0xff);
-        carry >>= 8;
-      }
-    }
-    for (const char of value) {
-      if (char === "1") bytes.push(0);
-      else break;
-    }
-    return Uint8Array.from(bytes.reverse());
+  function numberValue(bodyValue, name, fallback) {
+    const selected = unresolved(bodyValue) ? value(name, fallback) : bodyValue;
+    const parsed = Number(selected);
+    if (!Number.isFinite(parsed)) throw new Error(`Invalid ${name}.`);
+    return parsed;
   }
 
-  function privateKeyFromNearSecret(secretKey) {
-    const raw = secretKey.replace(/^ed25519:/, "");
-    const decoded = base58Decode(raw);
-    if (decoded.length !== 64) {
-      throw new Error("Expected a NEAR ed25519 private key with 64 decoded bytes.");
-    }
-    const seed = Buffer.from(decoded.slice(0, 32));
-    const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
-    return crypto.createPrivateKey({
-      key: Buffer.concat([pkcs8Prefix, seed]),
-      format: "der",
-      type: "pkcs8"
-    });
-  }
-
-  function sha256Hex(value) {
-    return crypto.createHash("sha256").update(value).digest("hex");
+  function requestBody() {
+    const current = req.getBody();
+    if (!current) return {};
+    if (typeof current === "string") return JSON.parse(current);
+    return current;
   }
 
   requireLocalDev();
-  const paperAccountId = bru.getVar("paper_account_id") || bru.getEnvVar("paper_account_id");
-  const agentId = bru.getVar("agent_id") || bru.getEnvVar("agent_id") || "regdgen.testnet";
+  const baseUrl = String(value("base_url", ""));
+  const signerId = String(value("paper_signer_id", ""));
+  const paperAccountId = value("paper_account_id", "");
+  const agentId = String(value("agent_id", "regdgen.testnet"));
+  const body = requestBody();
+
+  if (!signerId) throw new Error("Missing paper_signer_id. Run Create Local Paper Signer first.");
   if (!paperAccountId) throw new Error("Missing paper_account_id. Run Create Paper Account first.");
 
-  const coin = String(bru.getEnvVar("coin") || "BTC").toUpperCase();
-  const clientOrderId = `bruno-ioc-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-  const body = {
-    paper_account_id: paperAccountId,
-    client_order_id: clientOrderId,
-    coin,
-    side: "buy",
-    tif: "Ioc",
-    size: Number(bru.getEnvVar("order_size") || 0.0001),
-    margin_mode: "cross",
-    leverage: Number(bru.getEnvVar("leverage") || 2),
-    max_slippage_bps: Number(bru.getEnvVar("max_slippage_bps") || 100),
-    reason: String(bru.getEnvVar("paper_order_reason") || "Bruno signed local dev paper order.")
-  };
-  const rawBody = JSON.stringify(body);
-  const timestamp = Date.now().toString();
-  const nonce = crypto.randomUUID();
-  const bodyHash = sha256Hex(rawBody);
-  const payload = JSON.stringify({
-    domain: "clawhouse.paper-trading.v0",
-    version: 1,
-    method: "POST",
-    path: "/paper/orders",
-    bodyHash,
-    timestamp,
-    nonce,
-    paperAccountId,
-    agentId
-  });
-  const privateKey = privateKeyFromNearSecret(secret("paper_signer_private_key", "PAPER_SIGNER_PRIVATE_KEY"));
-  const signature = crypto.sign(null, Buffer.from(payload), privateKey).toString("base64url");
+  if (unresolved(body.paper_account_id)) body.paper_account_id = String(paperAccountId);
+  if (unresolved(body.client_order_id)) {
+    body.client_order_id = `bruno-ioc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+  if (unresolved(body.market_type)) body.market_type = String(value("market_type", "perp"));
+  if (unresolved(body.coin)) body.coin = String(value("coin", "BTC")).toUpperCase();
+  if (unresolved(body.side)) body.side = String(value("order_side", "buy")).toLowerCase();
+  if (unresolved(body.tif)) body.tif = "Ioc";
+  body.size = numberValue(body.size, "order_size", 0.0001);
+  if (unresolved(body.margin_mode)) {
+    body.margin_mode = String(body.market_type).toLowerCase() === "spot" ? "spot" : String(value("margin_mode", "cross"));
+  }
+  body.leverage = String(body.market_type).toLowerCase() === "spot" ? 1 : numberValue(body.leverage, "leverage", 2);
+  body.max_slippage_bps = numberValue(body.max_slippage_bps, "max_slippage_bps", 100);
+  if (unresolved(body.reason)) body.reason = String(value("paper_order_reason", "Bruno gold mode signed paper order."));
 
-  bru.setVar("last_client_order_id", clientOrderId);
-  req.setBody(body);
+  const referencePx = String(body.side).toLowerCase() === "sell"
+    ? value("current_best_bid_px", "")
+    : value("current_best_ask_px", "");
+  if (!referencePx) {
+    throw new Error("Missing current Hyperliquid price. Run Get Hyperliquid Current Price first.");
+  }
+  bru.setVar("paper_order_reference_px", referencePx);
+
+  const signedResponse = await bru.sendRequest({
+    method: "POST",
+    url: `${baseUrl}/paper/bruno/sign-order`,
+    headers: {
+      "content-type": "application/json",
+      "x-clawhouse-bruno-gold-mode": "true"
+    },
+    data: {
+      signer_id: signerId,
+      agent_id: agentId,
+      path: "/paper/orders",
+      order: body
+    }
+  });
+  const signed = signedResponse.data || signedResponse.body;
+  if (!signed || signed.ok !== true) {
+    throw new Error(`Unable to sign paper order: ${JSON.stringify(signed || signedResponse)}`);
+  }
+  if (!signed.headers || !signed.headers["x-clawhouse-paper-signature"]) {
+    throw new Error("Local signer did not return x-clawhouse-paper-signature.");
+  }
+
+  bru.setVar("last_client_order_id", body.client_order_id);
+  req.setBody(signed.body);
   req.setHeader("content-type", "application/json");
-  req.setHeader("x-clawhouse-paper-account-id", paperAccountId);
-  req.setHeader("x-clawhouse-agent-id", agentId);
-  req.setHeader("x-clawhouse-paper-timestamp", timestamp);
-  req.setHeader("x-clawhouse-paper-nonce", nonce);
-  req.setHeader("x-clawhouse-paper-body-sha256", bodyHash);
-  req.setHeader("x-clawhouse-paper-signature", signature);
+  Object.keys(signed.headers).forEach((key) => req.setHeader(key, signed.headers[key]));
 }
 
 script:post-response {

@@ -19,12 +19,16 @@ body:json {
 }
 
 script:pre-request {
-  const adminToken = bru.getEnvVar("admin_token") || bru.getProcessEnv("AGENT_BOARD_LEDGER_ADMIN_TOKEN");
-  const accountId = bru.getVar("paper_account_id") || bru.getEnvVar("paper_account_id");
-  if (!adminToken) throw new Error("Missing admin_token. Set AGENT_BOARD_LEDGER_ADMIN_TOKEN.");
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  const adminToken = value("admin_token", bru.getProcessEnv("AGENT_BOARD_LEDGER_ADMIN_TOKEN"));
+  const accountId = value("paper_account_id", "");
   if (!accountId) throw new Error("Missing paper_account_id. Run Create Paper Account first.");
-  req.setUrl(`${bru.getEnvVar("base_url")}/paper/accounts/${accountId}/risk-check`);
-  req.setHeader("authorization", `Bearer ${adminToken}`);
+  req.setUrl(`${value("base_url", "http://127.0.0.1:4321")}/paper/accounts/${accountId}/risk-check`);
+  if (adminToken) req.setHeader("authorization", `Bearer ${adminToken}`);
+  req.setHeader("x-clawhouse-bruno-gold-mode", "true");
 }
 
 tests {

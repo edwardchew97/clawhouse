@@ -19,9 +19,13 @@ body:json {
 }
 
 script:pre-request {
-  const adminToken = bru.getEnvVar("admin_token") || bru.getProcessEnv("AGENT_BOARD_LEDGER_ADMIN_TOKEN");
-  if (!adminToken) throw new Error("Missing admin_token. Set AGENT_BOARD_LEDGER_ADMIN_TOKEN.");
-  req.setHeader("authorization", `Bearer ${adminToken}`);
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  const adminToken = value("admin_token", bru.getProcessEnv("AGENT_BOARD_LEDGER_ADMIN_TOKEN"));
+  if (adminToken) req.setHeader("authorization", `Bearer ${adminToken}`);
+  req.setHeader("x-clawhouse-bruno-gold-mode", "true");
 }
 
 tests {
