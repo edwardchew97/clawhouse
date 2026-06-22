@@ -220,6 +220,21 @@ function payloadFor(request: Request) {
       enabledWhenRequestedByCreator: true,
       requiredRuntimeSkill: "hyperliquid-paper-trading",
       stagingOrderEndpoint: "https://clawhouse-backend-staging.vercel.app/paper/orders",
+      postProfileHelperGate: {
+        stopMessage: "Missing approved IronClaw NEAR wallet helper",
+        forbidBeforeGatePasses: [
+          "skill_install",
+          "skill_list",
+          "tool_list",
+          "http(runtime_manifest)",
+          "http(clawhouse_backend)",
+          "memory",
+          "secret",
+          "catalog",
+          "schema",
+          "search",
+        ],
+      },
       forbiddenTools: [
         "web_search",
         "skill_list_for_onboarding_discovery",

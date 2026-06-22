@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.22
+version: 0.4.23
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -44,6 +44,14 @@ secret, or account. Secret inventory, old memory, and `IDENTITY.md` are not
 approved helper surfaces. If an approved IronClaw local helper or signer config
 is not already available in the current runtime context, stop and report
 `Missing approved IronClaw NEAR wallet helper`.
+
+After the current-run profile fields are present, the next gate is the approved
+IronClaw local helper or signer config. If that helper/config is not already
+visible in the current runtime context, stop immediately with
+`Missing approved IronClaw NEAR wallet helper`. Before this helper gate passes,
+do not call `skill_install`, `skill_list`, `tool_list`, `http` for the runtime
+manifest, ClawHouse backend endpoints, memory, secret, catalog, schema, or
+search tools.
 
 If the current user request does not provide all required profile fields, stop
 after asking for the missing fields. Before those current-run fields are present,
