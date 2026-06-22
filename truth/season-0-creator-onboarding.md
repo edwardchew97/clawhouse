@@ -108,6 +108,15 @@
   key/account locally. Onboarding should derive the public account inside
   IronClaw, show that public account for backup and funding, and only ask the
   creator for a public account id as an explicit fallback blocker.
+- Pinned wallet-helper amendment session:
+  `019eee2c-8e0c-7e40-a0fa-f205036f59c2`
+- Amendment date: 2026-06-22
+- Amendment basis: JY chose the lightweight pinned-package path instead of
+  asking IronClaw agents to clone Meteor Wallet repositories. The onboarding
+  skill should use a small `@near-js/crypto@2.5.1` helper inside trusted
+  IronClaw local execution when secure secret/key storage is available, while
+  treating Meteor public repos only as reference evidence for NEAR keypair
+  mechanics.
 
 ## 核心决定
 
@@ -143,6 +152,14 @@ IronClaw 侧。ClawHouse 可以准备固定版本、开源、可审计的 wallet
 instructions，让 IronClaw 在自己的环境里运行；但 Codex、Claude 和 ClawHouse
 backend 不能生成、接触或保存 private key。ClawHouse 最多记录 IronClaw 返回或用户
 手动填写的 public address、public key、key id 这类公开标识。
+
+当前推荐的轻量 helper 方向不是让 IronClaw agent clone Meteor Wallet 或
+`near-api-js` repo。它应在 trusted IronClaw local execution 中使用 exact
+`@near-js/crypto@2.5.1`，由极小脚本生成 `KeyPair.fromRandom("ed25519")`，
+derive public key 和 implicit account id，并把 private key 只写入 IronClaw
+批准的 secure local secret/key store。没有 trusted local execution、lockfile
+control 或 secure secret/key store 时，onboarding 必须停下并报告缺少 approved
+NEAR wallet helper。
 
 在 IronClaw 侧，如果同一个 NEAR key/account 已经可用于 ClawHouse wallet-signed
 backend requests，就优先把这个账户也作为 key-market create transaction 的
@@ -249,7 +266,9 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
    description、avatar reference、banner reference 和 trading strategy。
 4. onboarding skill 在 IronClaw 内解析或创建/绑定 IronClaw-managed NEAR
    public account，并只把公开 account id 作为 `creator_public_account` 写入
-   profile；只有解析/创建失败时才把缺少 public account id 作为 blocker。
+   profile；如果需要生成新 key，优先用 pinned `@near-js/crypto@2.5.1` 轻量
+   helper，而不是 clone Meteor Wallet repo；只有解析/创建失败时才把缺少 public
+   account id 作为 blocker。
 5. onboarding skill 读取 ClawHouse runtime manifest。
 6. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
    权限声明。
@@ -391,3 +410,9 @@ Season 0 不做：
   skill must resolve or create/bind the IronClaw-managed NEAR public account
   inside IronClaw, then show that public account for backup and funding; asking
   the creator for a public account id is only a fallback blocker.
+- 2026-06-22 - `019eee2c-8e0c-7e40-a0fa-f205036f59c2` - Added the lightweight
+  wallet-helper decision: trusted IronClaw local execution should use a pinned
+  `@near-js/crypto@2.5.1` helper to generate the NEAR ed25519 keypair and derive
+  the implicit account id when no signer exists, while Meteor public repos remain
+  reference evidence only and private key material stays inside IronClaw secure
+  storage.

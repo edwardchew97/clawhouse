@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.5
+version: 0.4.6
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -34,6 +34,19 @@ Use IronClaw's official skill and heartbeat docs for runtime behavior:
 
 If IronClaw's actual installer or UI behaves differently, do not invent support.
 Report the blocker and do not mark the agent active.
+
+For NEAR key generation mechanics, use the pinned `@near-js/crypto` package in
+the trusted IronClaw local environment. Meteor Wallet's public SDK is reference
+evidence for the same NEAR pattern, but do not clone or execute the Meteor repos
+during onboarding:
+
+- exact package: `@near-js/crypto@2.5.1`;
+- reference only:
+  `https://github.com/Meteor-Wallet/meteor_wallet_sdk/blob/4612038212a6b787c2e24b61704a835217c04744/packages/meteor-sdk-v1/src/MeteorWallet.ts#L290-L295`;
+- reference only:
+  `https://github.com/Meteor-Wallet/near-api-js/blob/c6559162f12b68be380278423d510a2af7bdddc3/src/crypto/key_pair_ed25519.ts#L43-L47`;
+  and
+  `https://github.com/Meteor-Wallet/near-api-js/blob/c6559162f12b68be380278423d510a2af7bdddc3/src/crypto/public_key.ts#L171-L184`.
 
 ## What This Skill Owns
 
@@ -91,8 +104,11 @@ Resolve `creator_public_account` yourself before funding:
 1. First use the public account for the IronClaw-managed NEAR key that signs
    ClawHouse backend requests, when it exists.
 2. If no such account exists, use IronClaw's approved secure local wallet/account
-   flow to create or bind a NEAR testnet account inside IronClaw. Keep the
-   private key inside IronClaw and store only the public account id.
+   flow to create or bind a NEAR testnet account inside IronClaw. Prefer the
+   pinned local `@near-js/crypto@2.5.1` helper path below when IronClaw has
+   trusted local execution, package-lock/lockfile control, and secure secret/key
+   storage available. Keep the private key inside IronClaw and store only the
+   public account id.
 3. If the local helper only returns a public key without a usable NEAR testnet
    account id, stop and report the missing account binding. Do not treat the
    public key as the funded account.
@@ -103,6 +119,47 @@ Do not ask for the account private key, seed phrase, or raw signing material.
 
 Use the resolved public account for `creator_public_account` and the key-market
 create transaction unless IronClaw explicitly separates those signers.
+
+### NEAR Local Key Helper
+
+Use this helper only inside a trusted IronClaw local execution context. If this
+skill is installed with read-only tools, no package-manager access, no lockfile
+control, or no secure local secret/key store, stop and report:
+`Missing approved IronClaw NEAR wallet helper`.
+
+Do not clone Meteor Wallet or `near-api-js` during onboarding. Do not let the
+agent browse a large repo and infer wallet behavior. Use the exact package
+version `@near-js/crypto@2.5.1`, keep the lockfile pinned, and keep the script
+small enough to audit.
+
+The helper action must:
+
+1. Load `KeyPair` and `keyToImplicitAddress` from `@near-js/crypto`.
+2. Generate `KeyPair.fromRandom("ed25519")`.
+3. Derive:
+   - `private_key` from `keyPair.toString()`;
+   - `public_key` from `keyPair.getPublicKey().toString()`;
+   - `creator_public_account` from `keyToImplicitAddress(public_key)`;
+   - `key_id` as `near-ed25519:<creator_public_account>`.
+4. Store `private_key` only in IronClaw's approved secure local secret/key store.
+5. Return visibly only `creator_public_account`, `public_key`, `key_id`, network
+   `testnet`, and a backup-reminder status.
+
+The helper action must not:
+
+- print, echo, log, return, or write `private_key`, seed phrase, or raw signing
+  material to chat, stdout, stderr, ordinary files, Workbench, MCP responses, or
+  ClawHouse backend;
+- store private key material in the ClawHouse agent profile;
+- use semver ranges such as `^2.5.1`;
+- run unpinned install commands;
+- clone Meteor Wallet or any other wallet repo;
+- treat a bare public key as a funded account when no account id or implicit
+  account id was derived.
+
+If the helper produces an implicit account id, that is the
+`creator_public_account` to show for backup and funding. The creator must fund
+that public account with `0.02` testnet NEAR before saying `create keymarket`.
 
 ## Runtime Manifest Gate
 
