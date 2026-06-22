@@ -1,11 +1,11 @@
 meta {
-  name: 04 Run Paper Risk Check
+  name: 05 Run Liquidation Monitor Tick
   type: http
-  seq: 4
+  seq: 5
 }
 
 post {
-  url: {{base_url}}/paper/accounts/{{paper_account_id}}/risk-check
+  url: {{base_url}}/paper/liquidation-monitor/tick
   body: json
   auth: none
 }
@@ -32,7 +32,8 @@ script:pre-request {
     const roots = [
       bru.cwd(),
       path.resolve(bru.cwd(), "../.."),
-      path.resolve(bru.cwd(), "../../..")
+      path.resolve(bru.cwd(), "../../.."),
+      path.resolve(bru.cwd(), "../../../..")
     ];
     const suffixes = [
       ".env.local",
@@ -76,18 +77,14 @@ script:pre-request {
     return token;
   }
 
-  const accountId = value("paper_account_id", "");
-  if (!accountId) throw new Error("Missing paper_account_id. Run Create Paper Account first.");
-  req.setUrl(`${value("base_url", "http://127.0.0.1:4321")}/paper/accounts/${accountId}/risk-check`);
   req.setHeader("authorization", `Bearer ${requireAdminToken()}`);
 }
 
 tests {
-  test("risk check writes/readbacks real risk state", function() {
+  test("liquidation monitor runs against real open-position state", function() {
     const body = res.getBody();
     expect(res.getStatus()).to.equal(200);
     expect(body.ok).to.equal(true);
-    expect(body.account.id).to.equal(bru.getVar("paper_account_id"));
-    expect(body.risk.risk.paper_account_id).to.equal(bru.getVar("paper_account_id"));
+    expect(["checked", "liquidations_executed", "skipped_no_open_positions"]).to.include(body.status);
   });
 }
