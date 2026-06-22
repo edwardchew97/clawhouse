@@ -206,6 +206,11 @@ export function KeyMarketWalletBridge() {
         return;
       }
 
+      if (tradeButton && !accountRef.current) {
+        await connectWallet();
+        return;
+      }
+
       await submitTrade(unlockButton ? "buy" : undefined);
     }
 
