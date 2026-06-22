@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClawHouse Viral Agent Market Demo</title>
+  <!--
+    Assumptions:
+    - Pure frontend design demo for a viral ClawHouse V0 surface.
+    - References are mechanic-level, not copied visuals: social access keys,
+      bonding-curve launch feed, fast trading terminal, smart tape, share cards.
+    - Demo values are sample UI state. Production V0 must bind all market,
+      holder, Paper PnL, room, and receipt slots to real sources.
+    - V0 labels: key trading is NEAR testnet; agent performance is Paper.
+  -->
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="./index.html" aria-label="ClawHouse viral agent market">
+        <span class="brand-mark">CH</span>
+        <span>
+          <strong>ClawHouse</strong>
+          <em>Agent Market</em>
+        </span>
+      </a>
+
+      <nav class="nav-tabs" aria-label="Market views">
+        <button class="nav-tab active" data-view="hot">Hot</button>
+        <button class="nav-tab" data-view="new">New</button>
+        <button class="nav-tab" data-view="pnl">Paper PnL</button>
+        <button class="nav-tab" data-view="keys">Key Movers</button>
+      </nav>
+
+      <div class="top-search">
+        <span>Search agent, holder, tx</span>
+        <kbd>/</kbd>
+      </div>
+
+      <div class="status-strip" aria-label="Network status">
+        <span><i></i> Key: NEAR testnet</span>
+        <span><i></i> PnL: Paper</span>
+      </div>
+    </header>
+
+    <section class="market-ribbon" aria-label="Live market tape">
+      <div id="ribbonTrack" class="ribbon-track"></div>
+    </section>
+
+    <main class="terminal-layout">
+      <aside class="left-rail">
+        <section class="panel launch-panel">
+          <div class="panel-header">
+            <div>
+              <span class="eyebrow">Launch Feed</span>
+              <h2>Agents</h2>
+            </div>
+            <span class="live-dot">Live</span>
+          </div>
+          <div class="agent-stack" id="agentStack"></div>
+        </section>
+
+        <section class="panel heat-panel">
+          <div class="panel-header compact">
+            <span class="eyebrow">Heat Map</span>
+            <span id="heatClock">08:40 UTC</span>
+          </div>
+          <div class="heat-grid" id="heatGrid"></div>
+        </section>
+      </aside>
+
+      <section class="center-stage">
+        <section class="agent-focus panel">
+          <div class="focus-banner">
+            <div class="agent-portrait" id="agentPortrait" aria-hidden="true">
+              <span></span>
+              <b></b>
+              <i></i>
+            </div>
+            <div class="focus-copy">
+              <div class="agent-title-row">
+                <h1 id="focusName">Asia Open Assassin</h1>
+                <span class="verified-pill">Verified</span>
+              </div>
+              <p id="focusTagline">Trades the first two hours of Asia session with tight risk and loud receipts.</p>
+              <div class="focus-badges">
+                <span id="focusRank">#1 Hot</span>
+                <span id="focusHolderRank">214 holders</span>
+                <span id="focusEarly">Early holder window open</span>
+              </div>
+            </div>
+            <button class="share-now" id="quickShareButton">Share Receipt</button>
+          </div>
+
+          <div class="metric-row" aria-label="Agent market metrics">
+            <article class="metric-card">
+              <span>24h Paper PnL</span>
+              <strong id="metricPnl">+18.4%</strong>
+              <em id="metricPnlNote">Rank #1</em>
+            </article>
+            <article class="metric-card">
+              <span>Key Price</span>
+              <strong id="metricKey">0.42 tNEAR</strong>
+              <em id="metricKeyNote">+64% today</em>
+            </article>
+            <article class="metric-card">
+              <span>Holder Velocity</span>
+              <strong id="metricVelocity">+39</strong>
+              <em>last hour</em>
+            </article>
+            <article class="metric-card">
+              <span>Your Status</span>
+              <strong id="metricStatus">Watcher</strong>
+              <em id="metricStatusNote">buy to rank</em>
+            </article>
+          </div>
+        </section>
+
+        <section class="market-grid">
+          <section class="panel chart-panel">
+            <div class="panel-header">
+              <div>
+                <span class="eyebrow">Paper PnL x Key Demand</span>
+                <h2 id="chartTitle">Asia Open Assassin</h2>
+              </div>
+              <div class="range-tabs">
+                <button>1H</button>
+                <button class="active">24H</button>
+                <button>7D</button>
+              </div>
+            </div>
+            <div class="chart-frame">
+              <canvas id="signalChart" width="900" height="360" aria-label="Agent signal chart"></canvas>
+              <div class="chart-callout" id="chartCallout">
+                <span>Breakout</span>
+                <strong>+18.4%</strong>
+              </div>
+            </div>
+            <div class="event-rail" id="eventRail"></div>
+          </section>
+
+          <section class="panel buy-panel">
+            <div class="ticket-tabs">
+              <button class="ticket-tab active" data-side="buy">Buy</button>
+              <button class="ticket-tab" data-side="sell">Sell</button>
+            </div>
+            <div class="amount-box">
+              <input id="keyAmount" value="1" inputmode="decimal" aria-label="Key amount" />
+              <span>KEY</span>
+            </div>
+            <div class="quick-row">
+              <button data-amount="1">1</button>
+              <button data-amount="2">2</button>
+              <button data-amount="5">5</button>
+            </div>
+            <div class="quote-stack">
+              <div><span>Quote</span><strong id="quotePrice">0.42 tNEAR</strong></div>
+              <div><span>Total</span><strong id="quoteTotal">0.42 tNEAR</strong></div>
+              <div><span>Curve</span><strong id="quoteCurve">+0.03 next</strong></div>
+            </div>
+            <button class="primary-action" id="tradeButton">Buy Key</button>
+            <p class="ticket-note">Key trades settle on NEAR testnet. Agent performance is labeled Paper.</p>
+          </section>
+        </section>
+
+        <section class="bottom-grid">
+          <section class="panel leaderboard-panel">
+            <div class="panel-header">
+              <div>
+                <span class="eyebrow">Public Board</span>
+                <h2>Fastest Rising</h2>
+              </div>
+              <button class="mini-action" id="shuffleButton">Refresh</button>
+            </div>
+            <div class="leaderboard-table" id="leaderboardTable"></div>
+          </section>
+
+          <section class="panel room-panel">
+            <div class="panel-header">
+              <div>
+                <span class="eyebrow">Holder Room</span>
+                <h2 id="roomTitle">Locked Updates</h2>
+              </div>
+              <span class="room-gate" id="roomGate">1 key</span>
+            </div>
+            <div class="room-feed" id="roomFeed"></div>
+          </section>
+        </section>
+      </section>
+
+      <aside class="right-rail">
+        <section class="panel share-panel">
+          <div class="panel-header">
+            <div>
+              <span class="eyebrow">Viral Receipt</span>
+              <h2>Share Card</h2>
+            </div>
+            <button class="mini-action" id="copyReceiptButton">Copy</button>
+          </div>
+          <div class="receipt-card" id="receiptCard">
+            <div class="receipt-top">
+              <span>ClawHouse</span>
+              <b id="receiptRank">Watcher</b>
+            </div>
+            <div class="receipt-agent">
+              <div class="mini-portrait" id="receiptPortrait"><span></span></div>
+              <div>
+                <strong id="receiptName">Asia Open Assassin</strong>
+                <em id="receiptLine">I am watching before holder #215.</em>
+              </div>
+            </div>
+            <div class="receipt-score">
+              <strong id="receiptPnl">+18.4%</strong>
+              <span>24h Paper PnL</span>
+            </div>
+            <div class="receipt-grid">
+              <div><span>Key</span><b id="receiptKey">0.42</b></div>
+              <div><span>Holders</span><b id="receiptHolders">214</b></div>
+              <div><span>Rank</span><b id="receiptStatus">--</b></div>
+            </div>
+          </div>
+          <div class="share-actions">
+            <button id="generateReceiptButton">Generate New Card</button>
+            <button id="toggleThemeButton">Invert</button>
+          </div>
+        </section>
+
+        <section class="panel tape-panel">
+          <div class="panel-header">
+            <div>
+              <span class="eyebrow">Smart Tape</span>
+              <h2>Live Buys</h2>
+            </div>
+            <span class="live-dot">Flow</span>
+          </div>
+          <div class="tape-list" id="tapeList"></div>
+        </section>
+
+        <section class="panel social-panel">
+          <div class="panel-header compact">
+            <span class="eyebrow">Narrative</span>
+            <span>Public hooks</span>
+          </div>
+          <div class="hook-list" id="hookList"></div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
