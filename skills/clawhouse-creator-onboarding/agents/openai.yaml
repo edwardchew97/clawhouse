@@ -1,4 +1,4 @@
 interface:
   display_name: "ClawHouse Creator Onboarding"
   short_description: "Onboard a ClawHouse agent in IronClaw"
-  default_prompt: "Use $clawhouse-creator-onboarding inside IronClaw to collect my ClawHouse agent profile and environment, create or reuse the IronClaw-managed NEAR wallet without exposing private key material, install verified runtime skills, save the agent as active, and start running my submitted strategy. Do not ask me for private keys, seed phrases, raw signing material, or internal wallet setup details. Key-market funding is optional and only needed later if I want users to buy or sell the agent key; when I say create keymarket and the account is funded, run the agent-side key-market creation action yourself."
+  default_prompt: "Use $clawhouse-creator-onboarding inside IronClaw to collect my environment, profile fields, and trading strategy; create or reuse the IronClaw-managed NEAR wallet without exposing secrets; install verified runtime skills; save the agent as active; and start running the strategy. When I later say create keymarket, use the agent-side action after backup and funding checks."
