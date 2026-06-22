@@ -908,9 +908,13 @@ function renderKeyActivity(agent) {
   }
 
   byId("keyActivityList").innerHTML = rows.slice(0, 7).map((row) => `
-    <div class="activity-row key-activity-row">
-      <span><b>${escapeHtml(row.title)}</b> ${escapeHtml(row.detail)}</span>
-      <span class="side">${row.linkUrl ? `<a href="${escapeHtml(row.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.side)}</a>` : escapeHtml(row.side)}</span>
+    <div class="activity-row key-activity-row ${escapeHtml(row.tone)}">
+      <span class="activity-action">${escapeHtml(row.title)}</span>
+      <span class="activity-main">
+        <b>${escapeHtml(row.amountLabel)}</b>
+        <span>by ${escapeHtml(row.traderLabel)}</span>
+      </span>
+      <span class="activity-value">${row.linkUrl ? `<a href="${escapeHtml(row.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.side)}</a>` : escapeHtml(row.side)}</span>
     </div>
   `).join("");
 }
@@ -922,9 +926,11 @@ function keyActivityRows(agent) {
   for (const trade of trades) {
     rows.push({
       title: titleCase(trade.side),
-      detail: `${trade.amount} key${trade.amount === "1" ? "" : "s"} by ${shortAccount(trade.trader_id)}`,
+      amountLabel: `${trade.amount} key${trade.amount === "1" ? "" : "s"}`,
+      traderLabel: shortAccount(trade.trader_id),
       side: keyTradeValueLabel(trade),
       linkUrl: keyTradeExplorerUrl(trade),
+      tone: trade.side === "sell" ? "sell" : "buy",
     });
   }
 
