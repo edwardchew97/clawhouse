@@ -18,6 +18,7 @@ let selectedId = requestedAgentId || agentSelectionKey(agents[0]);
 if (!agents.some((agent) => agentMatchesSelection(agent, selectedId))) selectedId = agentSelectionKey(agents[0]);
 let tradeSide = "buy";
 let agentSort = "pnl";
+let activeChartRange = "24h";
 let activeEventId = null;
 let chainState = {
   accountId: null,
@@ -41,6 +42,12 @@ let chainState = {
 };
 
 const TICKER_PX_PER_SECOND = 18;
+const CHART_RANGES = {
+  "1h": { label: "1H", hours: 1 },
+  "24h": { label: "24H", hours: 24 },
+  "7d": { label: "7D", hours: 24 * 7 },
+  all: { label: "ALL", hours: null },
+};
 
 const byId = (id) => document.getElementById(id);
 function agentSelectionKey(agent) {
@@ -496,9 +503,29 @@ function backendPrices(agent) {
 
 function sortedByObservedAt(rows) {
   return rows.slice().sort((a, b) => {
-    const left = Date.parse(a.observed_at || a.reported_at || a.created_at || "");
-    const right = Date.parse(b.observed_at || b.reported_at || b.created_at || "");
+    const left = rowTimestamp(a);
+    const right = rowTimestamp(b);
     return (Number.isFinite(left) ? left : 0) - (Number.isFinite(right) ? right : 0);
+  });
+}
+
+function rowTimestamp(row) {
+  return Date.parse(row?.observed_at || row?.reported_at || row?.created_at || "");
+}
+
+function chartRangeMeta(range = activeChartRange) {
+  return CHART_RANGES[range] || CHART_RANGES["24h"];
+}
+
+function filterRowsForChartRange(rows, range = activeChartRange) {
+  const meta = chartRangeMeta(range);
+  if (!meta.hours) return rows;
+  const timestamps = rows.map(rowTimestamp).filter(Number.isFinite);
+  if (!timestamps.length) return rows;
+  const cutoff = Math.max(...timestamps) - meta.hours * 60 * 60 * 1000;
+  return rows.filter((row) => {
+    const timestamp = rowTimestamp(row);
+    return Number.isFinite(timestamp) && timestamp >= cutoff;
   });
 }
 
@@ -511,16 +538,18 @@ function normalizeSeries(values) {
 }
 
 function chartModel(agent) {
+  const range = chartRangeMeta();
+  const rangePrefix = `${range.label} / `;
   if (!chainState.backend || !backendApplies(agent)) {
-    return { values: [], events: [], tone: "idle", message: "Reading staging backend for this agent." };
+    return { values: [], events: [], tone: "idle", message: `${rangePrefix}Reading staging backend for this agent.` };
   }
   if (!chainState.backend.ok) {
-    return { values: [], events: [], tone: "error", message: backendErrorMessage() };
+    return { values: [], events: [], tone: "error", message: `${rangePrefix}${backendErrorMessage()}` };
   }
 
-  const events = sortedByObservedAt(backendEvents(agent));
-  const prices = sortedByObservedAt(backendPrices(agent)).filter((row) => asNumber(row.price_usd) !== null);
-  const balanceChanges = sortedByObservedAt(backendBalanceChanges(agent));
+  const events = filterRowsForChartRange(sortedByObservedAt(backendEvents(agent)));
+  const prices = filterRowsForChartRange(sortedByObservedAt(backendPrices(agent))).filter((row) => asNumber(row.price_usd) !== null);
+  const balanceChanges = filterRowsForChartRange(sortedByObservedAt(backendBalanceChanges(agent)));
   let values = [];
   let source = "backend events";
 
@@ -555,7 +584,7 @@ function chartModel(agent) {
     events: normalizedEvents,
     tone: "success",
     source,
-    message: safeValues.length ? source : "Backend is connected, but no chartable network series has been recorded yet.",
+    message: safeValues.length ? `${range.label} ${source}` : `No chartable backend series in ${range.label}.`,
   };
 }
 
@@ -1467,6 +1496,29 @@ document.querySelectorAll(".ticket-tab").forEach((button) => {
   });
 });
 
+function syncChartRangeButtons() {
+  document.querySelectorAll("[data-chart-range]").forEach((button) => {
+    const active = button.dataset.chartRange === activeChartRange;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+document.querySelectorAll("[data-chart-range]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextRange = CHART_RANGES[button.dataset.chartRange] ? button.dataset.chartRange : "24h";
+    if (nextRange === activeChartRange) return;
+    activeChartRange = nextRange;
+    activeEventId = null;
+    chartAnimationPending = true;
+    syncChartRangeButtons();
+    renderHero(selectedAgent());
+    renderRoom(selectedAgent());
+    syncContentColumns();
+    dispatchUiEvent("clawhouse:chart-range-change");
+  });
+});
+
 const agentSortControl = byId("agentSort");
 if (agentSortControl) {
   agentSortControl.value = agentSort;
@@ -1566,10 +1618,12 @@ window.ClawHouseDemo = {
   getSelectedAgent: selectedAgent,
   getTradeSide: () => tradeSide,
   getKeyAmount: () => byId("keyAmount")?.value || "1",
+  getChartRange: () => activeChartRange,
   setChainState,
   showToast
 };
 
+syncChartRangeButtons();
 render();
 dispatchUiEvent("clawhouse:ready");
 scheduleKeyMarketRefresh("initial", 0);
