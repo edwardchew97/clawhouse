@@ -74,6 +74,15 @@
   Hyperliquid paper perps and Hyperliquid paper spot through the same
   `hyperliquid-paper-trading` runtime skill, while removing the legacy spot
   runtime/onboarding path from current documentation.
+- Public onboarding flow correction session:
+  `019eee29-4926-78e3-a56e-f1d78953ab94`
+- Amendment date: 2026-06-22
+- Amendment basis: JY corrected the public onboarding boundary after IronClaw
+  tests. The public skill should not show internal wallet setup wording,
+  should not include test-only trade-submission checks, should mark
+  the agent active only when IronClaw is already running the submitted strategy,
+  and should present key-market funding as optional follow-up for selling agent
+  keys rather than an onboarding blocker.
 - Agent banner amendment session: `019ee90e-c5da-78d1-88b5-1eac080c59fc`
 - Amendment date: 2026-06-21
 - Amendment basis: JY confirmed that creator onboarding should ask agents for a
@@ -262,32 +271,36 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 
 1. 创作者打开目标 IronClaw agent。
 2. 创作者安装 ClawHouse onboarding skill。
-3. onboarding skill 欢迎用户创建 ClawHouse trading agent，并收集 name、
-   description、avatar reference、banner reference 和 trading strategy。
+3. onboarding skill 欢迎用户创建 ClawHouse trading agent，并收集 environment、
+   name、description、avatar reference 和 trading strategy。banner reference 是可选项，
+   没有时使用 ClawHouse default display banner。
 4. onboarding skill 在 IronClaw 内解析或创建/绑定 IronClaw-managed NEAR
    public account，并只把公开 account id 作为 `creator_public_account` 写入
    profile；如果需要生成新 key，优先用 pinned `@near-js/crypto@2.5.1` 轻量
-   helper，而不是 clone Meteor Wallet repo；只有解析/创建失败时才把缺少 public
-   account id 作为 blocker。
+   generator，而不是 clone Meteor Wallet repo。用户不需要、也不应该提供 internal
+   wallet setup details、private key、seed phrase 或 raw signing material。
 5. onboarding skill 读取 ClawHouse runtime manifest。
 6. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
    权限声明。
 7. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
-8. onboarding skill 写入 active strategy profile，并保持 `status: active`。
+8. onboarding skill 写入 active strategy profile，并启动 IronClaw strategy loop。
+   只有当 IronClaw 已经在跑用户提交的 strategy 时，才可以回报 `status: active`。
 9. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
 10. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
-   config、creator public account resolution、private-key backup reminder 和 active status
-   缺什么。
-11. 如果 key market 不存在，onboarding skill 只给短提示：agent 已 active；要让用户
-    trade 你的 key，请先用 IronClaw 的安全流程备份这个 NEAR private key，再把
-    `0.02` testnet NEAR 放到 `<creator_public_account>`，然后对 agent 说
-    `create keymarket`。
-12. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
+   config、creator public account resolution、private-key backup reminder、
+   active status 和 running strategy。
+11. public onboarding skill 不包含 test-only trade-submission check；这只属于测试
+    harness 的验收要求。
+12. 如果 key market 不存在，onboarding skill 只给 optional 后续提示：agent 已 active
+    且 IronClaw 已在跑 strategy；如果要让用户 buy/sell agent key，请先用 IronClaw 的
+    安全流程备份这个 NEAR private key，再把 `0.02` testnet NEAR 放到
+    `<creator_public_account>`，然后对 agent 说 `create keymarket`。
+13. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
     IronClaw 内部已批准的签名工具 / 本地 `agent-key-market` runner 创建 key market。
     如果 IronClaw 已经有用于 ClawHouse backend request signing 的同一个 NEAR
     key/account，就用同一个 signer/account 创建 key market。这不是 ClawHouse
     backend 代跑，也不是让 creator 自己跑 shell command。
-12. IronClaw 运行 agent：perps/paper margin 策略用
+14. IronClaw 运行 agent：perps/paper margin 策略用
     `hyperliquid-paper-trading`。需要事件时间线时，再用 reporting skill 写入 Agent
     Board Ledger summary/analysis。
 
@@ -416,3 +429,9 @@ Season 0 不做：
   the implicit account id when no signer exists, while Meteor public repos remain
   reference evidence only and private key material stays inside IronClaw secure
   storage.
+- 2026-06-22 - `019eee29-4926-78e3-a56e-f1d78953ab94` - Corrected public
+  onboarding copy and acceptance boundaries: the public skill must not expose
+  internal wallet setup wording, must not include test-only trade-submission
+  checks, must report active only after IronClaw is already running the
+  submitted strategy, and must treat key-market funding as optional follow-up
+  for selling agent keys rather than an onboarding blocker.
