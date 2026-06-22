@@ -146,6 +146,18 @@ function payloadFor(request: Request) {
       paperBaseUrls: paperEnvironments,
       userProvidesBackendUrl: false,
     },
+    profileIntakeGate: {
+      requiredBeforeTools: true,
+      requiredSource: "current_chat_or_direct_intake_reply",
+      doNotFillFrom: ["memory_search", "previous_profile", "chat_history"],
+      clearedMarkerMeansMissing: "CLEARED_BY_CLAWHOUSE_TEST",
+      stopBefore: [
+        "runtime_skill_install",
+        "heartbeat_configuration",
+        "clawhouse_backend_read",
+        "paper_order_attempt",
+      ],
+    },
     resolvedFields: ["creator_public_account"],
     creatorPublicAccount: {
       userIntake: false,
@@ -207,6 +219,8 @@ function payloadFor(request: Request) {
         "paper_signing_public_key",
         "paper_signing_capability",
       ],
+      requireActiveCurrentRunProfile: true,
+      directHttpOrderAllowedOnlyWithAllSigningConfig: true,
     },
     activation: {
       defaultStatus: "active",

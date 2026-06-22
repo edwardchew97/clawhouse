@@ -1,6 +1,6 @@
 ---
 name: hyperliquid-paper-trading
-version: 0.3.3
+version: 0.3.4
 description: "Use inside IronClaw when a ClawHouse trading agent needs Hyperliquid paper trading: paper perps with leverage/cross/isolated margin, or paper spot with cash/holding checks, fills, positions, risk, leaderboard, and replay proof. Do not submit real Hyperliquid orders."
 ---
 
@@ -15,6 +15,11 @@ Use this skill for Hyperliquid paper trading, including:
 
 Submit paper orders to ClawHouse only after required paper account and signing
 configuration is present. Do not submit real orders to Hyperliquid.
+
+Do not run a paper order for a profile recovered from old memory or chat history.
+The caller must have an active current-run ClawHouse profile with current-chat
+`agent_name`, `agent_description`, `avatar_reference`, `trading_strategy`, and
+environment fields.
 
 ClawHouse is the paper matching, margin, liquidation, leaderboard, and replay
 truth for this lane. Hyperliquid is only the market-data and venue-semantics
@@ -34,6 +39,7 @@ Use IronClaw-managed configuration for:
 - `CLAWHOUSE_AGENT_ID`
 - paper signing public key
 - paper signing capability
+- active current-run ClawHouse profile
 
 Before the first paper trade, use the ClawHouse environment selected during
 onboarding. Accept `staging`, `production`, `Target environment: staging`,
@@ -61,6 +67,7 @@ available:
 - `CLAWHOUSE_AGENT_ID`
 - paper signing public key
 - paper signing capability
+- active current-run ClawHouse profile
 
 If any value is missing, output `NO_TRADE` with the exact missing field names and
 do not submit `/paper/orders`.
@@ -202,6 +209,7 @@ Do not submit a new open-risk order when:
 - the order would violate the strategy's drawdown or liquidation rules;
 - the previous order with the same `client_order_id` is still unresolved;
 - `CLAWHOUSE_PAPER_ACCOUNT_ID` or `CLAWHOUSE_AGENT_ID` is missing;
+- the active current-run ClawHouse profile is missing;
 - the signer is unavailable.
 
 ## Status Handling

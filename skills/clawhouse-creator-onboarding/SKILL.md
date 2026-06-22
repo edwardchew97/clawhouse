@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.14
+version: 0.4.15
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -22,6 +22,11 @@ onboarding path.
 Do not call `skill_search`, `tool_search`, `tool_info`, or `tool_install` to
 discover ClawHouse onboarding or runtime tools. The current `SKILL.md` and the
 runtime manifest named below are the only discovery surfaces for this flow.
+
+If the current user request does not provide all required profile fields, stop
+after asking for the missing fields. Before those current-run fields are present,
+do not call `memory_search`, install runtime skills, configure heartbeat, read
+ClawHouse backend endpoints, or attempt paper trading.
 
 Every `http` call must use a literal, non-empty URL copied from this skill, the
 runtime manifest, or the selected ClawHouse environment map. Never call `http`
@@ -136,6 +141,11 @@ Treat `Target environment: staging`, `environment: staging`,
 `Target environment: production`, and `environment: production` as the same
 environment intake field. If one of these appears in the user's initial request,
 store it and ask only for the missing profile fields.
+
+Required profile fields must come from the current chat turn or a direct reply to
+this intake prompt. Do not use ClawHouse memories, previous profiles, chat
+history, or `memory_search` results to fill missing required fields. Treat
+`CLEARED_BY_CLAWHOUSE_TEST` as absent data.
 
 Do not ask the creator to paste or invent a backend URL. If the creator does
 not choose `staging` or `production`, stop before runtime configuration and ask
@@ -281,6 +291,8 @@ Always require user confirmation for:
    display banner. If the request already states `Target environment: staging`,
    `environment: staging`, `Target environment: production`, or
    `environment: production`, accept that field and do not ask for it again.
+   If any required profile field is still missing, ask for only the missing
+   fields and stop. Do not run any other tool before the creator replies.
 2. Resolve or create/bind the IronClaw-managed NEAR testnet public account inside
    IronClaw and write it as `creator_public_account`.
 3. Configure the paper runtime base URL from `environment`: staging maps to
@@ -308,17 +320,24 @@ Hyperliquid paper trade after setup:
 1. Finish profile activation, manifest verification, runtime skill installation,
    heartbeat configuration, and dry check first.
 2. Configure `CLAWHOUSE_PAPER_BASE_URL` from the collected `environment`.
-3. Use only the installed `hyperliquid-paper-trading` skill to attempt the
+3. Confirm the current run has a saved active profile created from current-chat
+   profile fields, not memory leftovers.
+4. Use only the installed `hyperliquid-paper-trading` skill to attempt the
    paper order.
-4. For a staging acceptance run, submit at most one tiny BTC or ETH paper order
+5. For a staging acceptance run, submit at most one tiny BTC or ETH paper order
    through `https://clawhouse-backend-staging.vercel.app/paper/orders`.
-5. If `CLAWHOUSE_PAPER_ACCOUNT_ID`, `CLAWHOUSE_AGENT_ID`, the paper signing
+6. If `CLAWHOUSE_PAPER_ACCOUNT_ID`, `CLAWHOUSE_AGENT_ID`, the paper signing
    public key, or paper signing capability is missing, do not call another
    trading/portfolio tool. Stop and report the exact missing config.
 
 Do not probe `/paper/orders` to discover missing account or signer fields. Check
 IronClaw configuration first; if any required value is unavailable, stop before
 submitting an order request.
+
+Do not call `http` directly against `/paper/orders` unless all required paper
+account and signing values are already present and non-placeholder in IronClaw
+configuration. Unknown, empty, `CLEARED_BY_CLAWHOUSE_TEST`, or placeholder values
+mean `NO_TRADE`; report the exact missing config instead of submitting.
 
 Never use portfolio tools, Dune Sim, NEAR Intents, `api.clawhouse.com`,
 `staging-api.clawhouse.com`, `/api/v1/trading/paper`, `/paper-trade`, real
