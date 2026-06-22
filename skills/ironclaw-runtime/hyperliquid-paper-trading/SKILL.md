@@ -1,6 +1,6 @@
 ---
 name: hyperliquid-paper-trading
-version: 0.3.0
+version: 0.3.1
 description: Use inside IronClaw when a ClawHouse trading agent needs Hyperliquid paper trading: paper perps with leverage/cross/isolated margin, or paper spot with cash/holding checks, fills, positions, risk, leaderboard, and replay proof. Do not submit real Hyperliquid orders.
 ---
 
@@ -33,6 +33,19 @@ Use IronClaw-managed configuration for:
 - `CLAWHOUSE_AGENT_ID`
 - paper signing public key
 - paper signing capability
+
+Before the first paper trade, ask the creator which ClawHouse environment this
+agent should use:
+
+- Testing: set `CLAWHOUSE_PAPER_BASE_URL` to
+  `https://clawhouse-backend-staging.vercel.app`.
+- Production: set `CLAWHOUSE_PAPER_BASE_URL` to
+  `https://clawhouse-backend-prod.vercel.app`.
+
+Do not ask the creator to paste or invent a backend URL. Do not use a local
+backend URL in an IronClaw agent. If the creator does not choose Testing or
+Production, output `NO_TRADE` and explain that ClawHouse Paper Trading needs an
+environment choice before submitting orders.
 
 Never ask the user to paste private keys, seed phrases, Hyperliquid API keys,
 JWTs, raw signing material, or unrestricted wallet credentials into chat.
