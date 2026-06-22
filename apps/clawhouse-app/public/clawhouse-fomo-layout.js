@@ -331,15 +331,30 @@ function boardMetadata(agent) {
   return board?.metadata ?? parseJsonField(board?.metadata_json) ?? {};
 }
 
+function isPaperAgent(agent) {
+  if (paperLeaderboardRow(agent)) return true;
+  const text = [
+    agent?.id,
+    agent?.name,
+    agent?.displayName,
+    agent?.strategy,
+    agent?.desc,
+    agent?.description,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return text.includes("paper") || text.includes("hyperliquid");
+}
+
 function backendNetwork(agent) {
   const board = backendBoard(agent);
   const metadata = boardMetadata(agent);
+  if (isPaperAgent(agent)) return "hyperliquid";
   return metadata.network_id || metadata.networkId || board?.chain || "near";
 }
 
 function backendVenue(agent) {
   const board = backendBoard(agent);
   const metadata = boardMetadata(agent);
+  if (isPaperAgent(agent)) return "hyperliquid-paper";
   return metadata.venue || metadata.venue_namespace || board?.venue_namespace || "agent-board-ledger";
 }
 
@@ -444,21 +459,57 @@ function formatBackendAction(event) {
 function formatBackendSummary(event, agent) {
   const action = formatBackendAction(event);
   const status = event.status_claim ? `Status: ${event.status_claim}.` : "";
-  const network = `${backendNetwork(agent)} / ${backendVenue(agent)}`;
-  const tx = event.tx_hash ? `Tx ${shortHash(event.tx_hash)}.` : event.intent_id ? `Intent ${shortHash(event.intent_id)}.` : "";
-  return [action, status, network, tx].filter(Boolean).join(" ");
+  const venue = `${eventNetwork(event, agent)} / ${eventVenue(event, agent)}`;
+  const reference = eventReferenceLabel(event);
+  return [action, status, venue, reference].filter(Boolean).join(" ");
 }
 
 function backendTxUrl(event, agent) {
+  if (isPaperTradeEvent(event)) return null;
   if (!event.tx_hash) return null;
-  const network = String(event.metadata?.network_id || event.metadata?.networkId || backendNetwork(agent)).toLowerCase();
+  const network = String(eventNetwork(event, agent)).toLowerCase();
   const host = network.includes("testnet") ? "testnet.nearblocks.io" : "nearblocks.io";
   return `https://${host}/txns/${encodeURIComponent(event.tx_hash)}`;
 }
 
+function eventMetadata(event) {
+  return event?.metadata && typeof event.metadata === "object" ? event.metadata : {};
+}
+
+function isPaperTradeEvent(event) {
+  const metadata = eventMetadata(event);
+  const source = String(metadata.source || "").toLowerCase();
+  return event?.event_type === "paper_trade"
+    || String(event?.intent_id || "").startsWith("paper_")
+    || source.includes("paper")
+    || metadata.venue === "hyperliquid-paper"
+    || Boolean(metadata.market_type || metadata.marketType);
+}
+
+function eventNetwork(event, agent) {
+  const metadata = eventMetadata(event);
+  if (isPaperTradeEvent(event)) return "hyperliquid";
+  return metadata.network_id || metadata.networkId || backendNetwork(agent);
+}
+
+function eventVenue(event, agent) {
+  const metadata = eventMetadata(event);
+  if (isPaperTradeEvent(event)) return "hyperliquid-paper";
+  return metadata.venue || metadata.venue_namespace || backendVenue(agent);
+}
+
+function eventReferenceLabel(event) {
+  const paper = isPaperTradeEvent(event);
+  if (paper && event.intent_id) return `Paper order ${shortHash(event.intent_id)}.`;
+  if (paper && event.tx_hash) return `Paper receipt ${shortHash(event.tx_hash)}.`;
+  if (event.tx_hash) return `Tx ${shortHash(event.tx_hash)}.`;
+  if (!event.intent_id) return "";
+  return `Intent ${shortHash(event.intent_id)}.`;
+}
+
 function normalizeBackendEvent(event, index, agent, valueIndex) {
   const status = event.status_claim || event.event_type || "event";
-  const metadata = event.metadata && typeof event.metadata === "object" ? event.metadata : {};
+  const metadata = eventMetadata(event);
   return {
     id: event.id || event.client_event_id || event.tx_hash || `backend-event-${index}`,
     index: valueIndex,
@@ -477,12 +528,12 @@ function normalizeBackendEvent(event, index, agent, valueIndex) {
 
 function backendEventSources(event, agent) {
   const sources = [
-    `network: ${backendNetwork(agent)}`,
-    `venue: ${backendVenue(agent)}`,
+    `network: ${eventNetwork(event, agent)}`,
+    `venue: ${eventVenue(event, agent)}`,
   ];
   if (event.status_claim) sources.push(`status_claim: ${event.status_claim}`);
   if (event.tx_hash) sources.push(`tx_hash: ${event.tx_hash}`);
-  if (event.intent_id) sources.push(`intent_id: ${event.intent_id}`);
+  if (event.intent_id) sources.push(`${isPaperTradeEvent(event) ? "paper_order_id" : "intent_id"}: ${event.intent_id}`);
   if (event.client_event_id) sources.push(`client_event_id: ${event.client_event_id}`);
   if (event.wallet_address) sources.push(`wallet: ${event.wallet_address}`);
   if (event.metadata?.source) sources.push(`source: ${event.metadata.source}`);
@@ -1385,8 +1436,8 @@ function renderBackendEventModal(agent, event) {
   byId("modalMove").textContent = raw.status_claim || raw.event_type || "event";
   byId("modalMove").className = String(raw.status_claim || "").toLowerCase().includes("fail") ? "red" : "green";
   byId("modalMoveHint").textContent = raw.id || "Agent Board Ledger";
-  byId("modalNetwork").textContent = backendNetwork(agent);
-  byId("modalVenue").textContent = backendVenue(agent);
+  byId("modalNetwork").textContent = eventNetwork(raw, agent);
+  byId("modalVenue").textContent = eventVenue(raw, agent);
   byId("modalAction").textContent = event.action;
   byId("modalReason").textContent = event.reason;
   byId("modalPath").innerHTML = eventPathItems(raw).map((item, index) => `
@@ -1398,7 +1449,9 @@ function renderBackendEventModal(agent, event) {
 function eventPathItems(event) {
   return [
     event.client_event_id ? `client ${shortHash(event.client_event_id)}` : "client event",
-    event.intent_id ? `intent ${shortHash(event.intent_id)}` : titleCase(event.status_claim || "status"),
+    event.intent_id
+      ? `${isPaperTradeEvent(event) ? "paper order" : "intent"} ${shortHash(event.intent_id)}`
+      : titleCase(event.status_claim || "status"),
     event.tx_hash ? `tx ${shortHash(event.tx_hash)}` : titleCase(event.event_type || "ledger row"),
   ];
 }

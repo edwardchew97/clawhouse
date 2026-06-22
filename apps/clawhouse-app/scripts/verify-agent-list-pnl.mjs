@@ -119,7 +119,7 @@ function agent(id, boardId, totalPnlPct, holders) {
     boardId,
     name: id,
     initials: id.slice(0, 2).toUpperCase(),
-    strategy: `${id} / near-intents`,
+    strategy: `${id} / hyperliquid-paper`,
     description: "Workbench test agent.",
     gate: "1 key",
     status: "available",
