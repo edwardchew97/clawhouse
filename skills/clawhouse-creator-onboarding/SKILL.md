@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.27
+version: 0.4.28
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -28,10 +28,14 @@ Use this normal onboarding state machine:
   paper orders, setup steps, or later actions.
 - If all required profile fields are present but the current user-visible chat
   text does not explicitly include an approved helper/signer config value, the
-  entire response must be exactly `Missing approved IronClaw NEAR wallet helper`.
+  entire response must be exactly `Missing approved IronClaw NEAR wallet helper`
+  and nothing else.
 - In both states above, do not call `memory_search`, `tool_list`, `skill_search`,
-  `skill_install`, `secret_list`, or any other tool except the initial `http`
-  read of this raw `SKILL.md`.
+  `skill_install`, `secret_list`, `http`, or any other tool. The only allowed
+  `http` call in this onboarding chat is the initial raw `SKILL.md` read before
+  the first assistant response.
+- Do not quote, summarize, explain, or restate these rules in the assistant
+  response. Execute the state machine only.
 
 `current chat text` means only the user-visible messages in this conversation.
 It does not mean memory, installed skills, skill catalogs, tool lists, secret
@@ -49,6 +53,8 @@ install this onboarding skill before continuing. The raw file is already the
 active instruction source for this run.
 Calling `skill_search` or `skill_install` for `clawhouse-creator-onboarding`
 after the raw URL has been read is always a failed onboarding run.
+Calling `http` to re-read this `SKILL.md` after the creator provides profile
+fields is also a failed onboarding run.
 
 Do not call `memory_read` for `skills/clawhouse-creator-onboarding/SKILL.md` or
 any local skill path. Do not use memory as a fallback for this skill; use only
@@ -79,9 +85,10 @@ explicitly provide an approved helper or signer config, reply exactly
 
 After the current-run profile fields are present, do not say that you need to
 check for a helper. Do not run `tool_list`, `memory_search`, `secret_list`,
-`memory_read`, schema lookup, or any other tool. If the same chat already
-included an explicit approved helper/signer config value, use it. Otherwise the
-entire response must be exactly:
+`memory_read`, `http`, schema lookup, or any other tool. Do not list provided
+fields. Do not write "according to the skill". Do not explain why you are
+stopping. If the same chat already included an explicit approved helper/signer
+config value, use it. Otherwise the entire response must be exactly:
 
 ```text
 Missing approved IronClaw NEAR wallet helper

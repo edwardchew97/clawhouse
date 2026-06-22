@@ -247,6 +247,8 @@ function payloadFor(request: Request) {
         stopMessage: "Missing approved IronClaw NEAR wallet helper",
         exactStopOnly: true,
         noToolCheck: true,
+        noPostProfileSkillReread: true,
+        noExplanation: true,
         userVisibleChatTextOnly: true,
         missingIfToolCheckWouldBeRequired: true,
         forbidBeforeGatePasses: [
@@ -256,6 +258,7 @@ function payloadFor(request: Request) {
           "tool_list",
           "memory_search",
           "memory_read",
+          "http(skill_reread)",
           "http(runtime_manifest)",
           "http(clawhouse_backend)",
           "memory",
