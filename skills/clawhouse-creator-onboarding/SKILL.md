@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.4
+version: 0.4.5
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -44,6 +44,8 @@ Report the blocker and do not mark the agent active.
   permission declaration before installation.
 - Install or guide installation of required runtime skills.
 - Configure heartbeat checks for ClawHouse runtime updates.
+- Resolve or create/bind the IronClaw-managed NEAR testnet public account inside
+  IronClaw, then store only the public account id in the active profile.
 - Run a dry check, save the ClawHouse agent profile as `active`, and keep the
   only remaining launch blocker scoped to the key market when it does not exist.
 - When the creator says `create keymarket`, create the NEAR testnet key market
@@ -55,7 +57,8 @@ Report the blocker and do not mark the agent active.
 
 ## What This Skill Does Not Own
 
-- Wallet or private-key generation.
+- Wallet or private-key generation outside IronClaw's approved secure local
+  wallet/account flow.
 - Secret storage.
 - Deposits, withdrawals, custody, or funds policy.
 - Trade execution.
@@ -67,14 +70,13 @@ Report the blocker and do not mark the agent active.
 
 ## Minimal Intake
 
-Ask for only these fields:
+Ask the creator only for these fields:
 
 - `agent_name`
 - `agent_description`
 - `avatar_reference`
 - `banner_reference`
 - `trading_strategy`
-- `creator_public_account`
 
 `banner_reference` is the creator-uploaded Twitter-style profile banner for the
 public ClawHouse agent page. If the creator does not provide one, ClawHouse uses
@@ -84,14 +86,23 @@ asset.
 If the user volunteers secrets, stop and tell them the value should be treated as
 exposed. Do not repeat the secret.
 
-`creator_public_account` must be a public NEAR testnet account controlled by
-IronClaw. Do not ask for the account private key, seed phrase, or raw signing
-material.
+Resolve `creator_public_account` yourself before funding:
 
-If IronClaw already created or holds the NEAR key used to sign ClawHouse backend
-requests, use that same public account for `creator_public_account` and the
-key-market create transaction unless IronClaw explicitly separates those
-signers.
+1. First use the public account for the IronClaw-managed NEAR key that signs
+   ClawHouse backend requests, when it exists.
+2. If no such account exists, use IronClaw's approved secure local wallet/account
+   flow to create or bind a NEAR testnet account inside IronClaw. Keep the
+   private key inside IronClaw and store only the public account id.
+3. If the local helper only returns a public key without a usable NEAR testnet
+   account id, stop and report the missing account binding. Do not treat the
+   public key as the funded account.
+4. Ask the creator for a public account id only when IronClaw cannot resolve or
+   create/bind one. Present that as a blocker, not as normal intake.
+
+Do not ask for the account private key, seed phrase, or raw signing material.
+
+Use the resolved public account for `creator_public_account` and the key-market
+create transaction unless IronClaw explicitly separates those signers.
 
 ## Runtime Manifest Gate
 
@@ -128,18 +139,19 @@ Always require user confirmation for:
 ## Onboarding Workflow
 
 1. Collect `agent_name`, `agent_description`, `avatar_reference`,
-   `banner_reference`, `trading_strategy`, and the IronClaw-managed
-   `creator_public_account`.
-2. Save an active profile using the shape below.
-3. Verify the ClawHouse runtime manifest, then install current runtime skills:
+   `banner_reference`, and `trading_strategy`.
+2. Resolve or create/bind the IronClaw-managed NEAR testnet public account inside
+   IronClaw and write it as `creator_public_account`.
+3. Save an active profile using the shape below.
+4. Verify the ClawHouse runtime manifest, then install current runtime skills:
    - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
    - `skill_install(name="hyperliquid-paper-trading", url="<manifest.skills[].url>")`
-4. Configure heartbeat against the same manifest.
-5. Dry check selected skills, required configs, secret hygiene, `active` status,
-   the creator public account, the private-key backup reminder, and whether the
+5. Configure heartbeat against the same manifest.
+6. Dry check selected skills, required configs, secret hygiene, `active` status,
+   public account resolution, the private-key backup reminder, and whether the
    key market already exists.
-6. If no key market exists, give the creator the short key-market step below.
-7. When the creator says `create keymarket`, verify the public account has at
+7. If no key market exists, give the creator the short key-market step below.
+8. When the creator says `create keymarket`, verify the public account has at
    least `0.02` testnet NEAR available for storage deposit and fees, then run the
    local key-market create action yourself. Do not ask the creator to run a shell
    command.
