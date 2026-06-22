@@ -160,6 +160,11 @@ function payloadFor(request: Request) {
       clearedMarkerMeansMissing: "CLEARED_BY_CLAWHOUSE_TEST",
       missingFieldsResponseOnly: true,
       missingFieldsPromptCarriesNextHelperGate: true,
+      missingFieldsPromptTail: [
+        "Do not include secrets.",
+        "After the creator replies, use only the visible chat text and call no tools.",
+        "If the reply does not include an explicit approved IronClaw NEAR wallet helper or signer config value, reply exactly: Missing approved IronClaw NEAR wallet helper",
+      ],
       doNotMentionBeforeProfileComplete: [
         "runtime_skills",
         "paper_orders",
