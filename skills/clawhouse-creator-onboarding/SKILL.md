@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.21
+version: 0.4.22
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -19,9 +19,16 @@ instructions directly. Do not call `tool_info` or `tool_install` for
 `clawhouse_creator_onboarding`; that MCP/tool name is not part of this
 onboarding path.
 
-Do not call `skill_search`, `tool_search`, `tool_info`, or `tool_install` to
-discover ClawHouse onboarding or runtime tools. The current `SKILL.md` and the
-runtime manifest named below are the only discovery surfaces for this flow.
+When this `SKILL.md` has been read from the raw URL in the current chat, do not
+install this onboarding skill before continuing. The raw file is already the
+active instruction source for this run.
+
+Do not call `skill_list`, `tool_list`, `skill_search`, `tool_search`,
+`tool_info`, or `tool_install` to discover or check ClawHouse onboarding,
+installed skill state, catalogs, runtime tools, or helper tools during normal
+onboarding. The current `SKILL.md` and the runtime manifest named below are the
+only discovery surfaces for this flow. `skill_list` and `tool_list` are allowed
+only in an explicit cleanup/reset command that asks for them.
 
 Do not call `skill_install` by name only for any ClawHouse skill. This includes
 `clawhouse-creator-onboarding`, `clawhouse-ledger-reporting`, and
@@ -47,9 +54,9 @@ Every `http` call must use a literal, non-empty URL copied from this skill, the
 runtime manifest, or the selected ClawHouse environment map. Never call `http`
 with a missing, empty, inferred, directory-derived, or placeholder URL.
 
-Do not call `skill_install` for this onboarding skill by name only. If IronClaw
-requires persisting this onboarding skill before continuing, call
-`skill_install` with both:
+Do not call `skill_install` for this onboarding skill during the fixed
+onboarding flow. If a separate user request explicitly asks to persist this
+onboarding skill for later use, call `skill_install` with both:
 
 - `name`: `clawhouse-creator-onboarding`
 - `url`:
