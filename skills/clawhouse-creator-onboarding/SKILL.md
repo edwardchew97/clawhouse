@@ -1,7 +1,7 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.6
-description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect public profile fields and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
+version: 0.4.12
+description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
 # ClawHouse Creator Onboarding
@@ -13,6 +13,26 @@ ClawHouse trading agent.
 
 Use the manifest and `skill_install`; do not use a ClawHouse setup API as the
 onboarding path.
+
+If this `SKILL.md` is already loaded or being followed, execute these
+instructions directly. Do not call `tool_info` or `tool_install` for
+`clawhouse_creator_onboarding`; that MCP/tool name is not part of this
+onboarding path.
+
+Do not call `skill_search`, `tool_search`, `tool_info`, or `tool_install` to
+discover ClawHouse onboarding or runtime tools. The current `SKILL.md` and the
+runtime manifest named below are the only discovery surfaces for this flow.
+
+Do not call `skill_install` for this onboarding skill by name only. If IronClaw
+requires persisting this onboarding skill before continuing, call
+`skill_install` with both:
+
+- `name`: `clawhouse-creator-onboarding`
+- `url`:
+  `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md`
+
+If that install fails, stop and report the exact error instead of searching a
+catalog or retrying without the URL.
 
 Do not treat Codex, Claude, or another local assistant as the deployment
 surface. If this skill is being read outside IronClaw, help draft public wording
@@ -51,6 +71,7 @@ during onboarding:
 ## What This Skill Owns
 
 - Collect public agent profile fields.
+- Collect the target ClawHouse environment: `staging` or `production`.
 - Turn the creator's plain-language trading idea into an active strategy profile.
 - Read the ClawHouse runtime manifest.
 - Verify required runtime skill name, version, URL allowlist, sha256, and
@@ -67,6 +88,9 @@ during onboarding:
 - Reuse the same IronClaw-managed NEAR key/account for ClawHouse wallet-signed
   backend requests and key-market creation when that signer already exists,
   unless IronClaw intentionally separates signers.
+- If the creator explicitly asks for one immediate ClawHouse paper trade after
+  setup, hand off only to the installed `hyperliquid-paper-trading` runtime
+  skill after the active profile and paper runtime configuration are ready.
 
 ## What This Skill Does Not Own
 
@@ -77,6 +101,11 @@ during onboarding:
 - Trade execution.
 - Agent Board Ledger writes; use `clawhouse-ledger-reporting`.
 - Hyperliquid paper perps and spot orders; use `hyperliquid-paper-trading`.
+- Portfolio scanning, Dune Sim, NEAR Intents, `api.clawhouse.com`, or any
+  non-`/paper/...` trading API route.
+- The legacy or custom MCP/tool path named `clawhouse_creator_onboarding`;
+  do not call `skill_search`, `tool_search`, `tool_info`, or `tool_install` for
+  that name.
 - Backend-run key-market creation.
 - Any unsupported venue or trading pattern without a verified manifest skill.
 - Product-scope changes; use the repo truth process instead.
@@ -85,11 +114,27 @@ during onboarding:
 
 Ask the creator only for these fields:
 
+- `environment`: `staging` or `production`
 - `agent_name`
 - `agent_description`
 - `avatar_reference`
 - `banner_reference`
 - `trading_strategy`
+
+The environment controls ClawHouse paper-trading configuration:
+
+- `staging`: use `https://clawhouse-backend-staging.vercel.app`.
+- `production`: use `https://clawhouse-backend-prod.vercel.app`.
+
+Do not ask the creator to paste or invent a backend URL. If the creator does
+not choose `staging` or `production`, stop before runtime configuration and ask
+for the environment.
+
+For `staging`, ClawHouse paper trading uses `/paper/...` on
+`https://clawhouse-backend-staging.vercel.app`. Do not use
+`/api/v1/trading/paper`, `/paper-trade`, `api.clawhouse.com`,
+`staging-api.clawhouse.com`, portfolio tools, Dune Sim, NEAR Intents, or web
+search for ClawHouse paper order setup or submission.
 
 `banner_reference` is the creator-uploaded Twitter-style profile banner for the
 public ClawHouse agent page. If the creator does not provide one, ClawHouse uses
@@ -166,6 +211,10 @@ that public account with `0.02` testnet NEAR before saying `create keymarket`.
 Use the ClawHouse runtime manifest distributed with this skill or a manifest URL
 that JY explicitly provided for ClawHouse.
 
+Do not use `skill_search`, `tool_search`, `tool_info`, or `tool_install` to find
+ClawHouse runtime skills or onboarding tools. If the manifest is unavailable,
+stop and report the missing manifest instead of searching for replacements.
+
 Before installing any runtime skill, verify:
 
 - URL starts with an approved ClawHouse source prefix.
@@ -181,8 +230,13 @@ or third-party manifests.
 
 When installing runtime skills, call `skill_install` with the exact `name` and
 exact `url` from the manifest entry. Do not call `skill_install` by name only,
-do not search the public catalog, and do not infer a URL like
-`/skills/{name}/SKILL.md`.
+do not search the public catalog, do not run `skill_search`, and do not infer a
+URL like `/skills/{name}/SKILL.md`.
+
+Do not use `web_search` to discover ClawHouse endpoints or skill URLs. The
+environment map and manifest are the source of truth. If `skill_install` fails,
+do not retry with the fetched `SKILL.md` content as the skill name. Stop and
+report the exact failed `name`, `url`, and error.
 
 Always require user confirmation for:
 
@@ -195,23 +249,49 @@ Always require user confirmation for:
 
 ## Onboarding Workflow
 
-1. Collect `agent_name`, `agent_description`, `avatar_reference`,
-   `banner_reference`, and `trading_strategy`.
+1. Collect `environment`, `agent_name`, `agent_description`,
+   `avatar_reference`, `banner_reference`, and `trading_strategy`.
+   If the request already states `environment: staging` or
+   `environment: production`, accept that field and do not ask for it again.
 2. Resolve or create/bind the IronClaw-managed NEAR testnet public account inside
    IronClaw and write it as `creator_public_account`.
-3. Save an active profile using the shape below.
-4. Verify the ClawHouse runtime manifest, then install current runtime skills:
+3. Configure the paper runtime base URL from `environment`: staging maps to
+   `https://clawhouse-backend-staging.vercel.app`, and production maps to
+   `https://clawhouse-backend-prod.vercel.app`.
+4. Save an active profile using the shape below.
+5. Verify the ClawHouse runtime manifest, then install current runtime skills:
    - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
    - `skill_install(name="hyperliquid-paper-trading", url="<manifest.skills[].url>")`
-5. Configure heartbeat against the same manifest.
-6. Dry check selected skills, required configs, secret hygiene, `active` status,
+6. Configure heartbeat against the same manifest.
+7. Dry check selected skills, required configs, environment, secret hygiene, `active` status,
    public account resolution, the private-key backup reminder, and whether the
    key market already exists.
-7. If no key market exists, give the creator the short key-market step below.
-8. When the creator says `create keymarket`, verify the public account has at
+8. If no key market exists, give the creator the short key-market step below.
+9. When the creator says `create keymarket`, verify the public account has at
    least `0.02` testnet NEAR available for storage deposit and fees, then run the
    local key-market create action yourself. Do not ask the creator to run a shell
    command.
+
+## Immediate Paper Trade Acceptance Request
+
+If the creator asks this onboarding run to immediately create one ClawHouse
+Hyperliquid paper trade after setup:
+
+1. Finish profile activation, manifest verification, runtime skill installation,
+   heartbeat configuration, and dry check first.
+2. Configure `CLAWHOUSE_PAPER_BASE_URL` from the collected `environment`.
+3. Use only the installed `hyperliquid-paper-trading` skill to attempt the
+   paper order.
+4. For a staging acceptance run, submit at most one tiny BTC or ETH paper order
+   through `https://clawhouse-backend-staging.vercel.app/paper/orders`.
+5. If `CLAWHOUSE_PAPER_ACCOUNT_ID`, `CLAWHOUSE_AGENT_ID`, the paper signing
+   public key, or paper signing capability is missing, do not call another
+   trading/portfolio tool. Stop and report the exact missing config.
+
+Never use portfolio tools, Dune Sim, NEAR Intents, `api.clawhouse.com`,
+`staging-api.clawhouse.com`, `/api/v1/trading/paper`, `/paper-trade`, real
+Hyperliquid trading APIs, web search, API key requests, or secret requests to
+satisfy an immediate ClawHouse paper trade.
 
 ## Key Market Handoff
 
@@ -283,6 +363,8 @@ Use this shape as the saved profile, not as an execution command:
 ```yaml
 clawhouse_agent_profile:
   status: "active"
+  environment: "staging"
+  paper_base_url: "https://clawhouse-backend-staging.vercel.app"
   agent_name: ""
   agent_description: ""
   avatar_reference: ""
