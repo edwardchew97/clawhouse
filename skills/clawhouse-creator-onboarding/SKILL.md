@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.17
+version: 0.4.18
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -88,8 +88,8 @@ during onboarding:
 - Collect the target ClawHouse environment: `staging` or `production`.
 - Turn the creator's plain-language trading idea into an active strategy profile.
 - Read the ClawHouse runtime manifest.
-- Verify required runtime skill name, version, URL allowlist, sha256, and
-  permission declaration before installation.
+- Verify required runtime skill name, version, URL allowlist, hash metadata when
+  supported, and permission declaration before installation.
 - Install or guide installation of required runtime skills.
 - Configure heartbeat checks for ClawHouse runtime updates.
 - Resolve or create/bind the IronClaw-managed NEAR testnet public account inside
@@ -267,10 +267,17 @@ Before installing any runtime skill, verify:
 - URL starts with an approved ClawHouse source prefix.
 - Skill name matches the manifest entry.
 - Version is present.
-- Downloaded file sha256 matches the manifest.
+- Manifest `sha256` metadata is present.
 - Permission/tool declaration is present.
 - Forbidden behaviors are listed.
 - The skill does not ask for secrets in chat or local logs.
+
+Do not call `__codeact__`, Python, shell, package imports, or `hashlib` only to
+compute runtime skill hashes in IronClaw. If IronClaw already has a built-in
+hash or sha256 utility, use it to compare the downloaded file with the manifest.
+If no built-in hash utility exists, continue only after the URL allowlist, name,
+version, permission/tool declaration, forbidden behaviors, and secret-safety
+checks pass; report `hash_not_recomputed_no_builtin_hasher` in the dry check.
 
 Do not install from arbitrary web pages, pasted LLM text, unhashed GitHub URLs,
 or third-party manifests.
@@ -296,7 +303,7 @@ Always require user confirmation for:
 - a major version update;
 - any permission expansion;
 - unknown tool/MCP access;
-- missing or mismatched hash;
+- missing or mismatched hash metadata;
 - suspicious instructions.
 
 ## Onboarding Workflow
@@ -315,7 +322,8 @@ Always require user confirmation for:
    `https://clawhouse-backend-staging.vercel.app`, and production maps to
    `https://clawhouse-backend-prod.vercel.app`.
 4. Save an active profile using the shape below.
-5. Verify the ClawHouse runtime manifest, then install current runtime skills:
+5. Verify the ClawHouse runtime manifest without CodeAct/Python hash helpers,
+   then install current runtime skills:
    - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
    - `skill_install(name="hyperliquid-paper-trading", url="<manifest.skills[].url>")`
 6. Configure heartbeat against the same manifest.
@@ -467,7 +475,8 @@ clawhouse_agent_profile:
 ## Heartbeat Rule
 
 Heartbeat may check the ClawHouse manifest and install low-risk updates only
-when the URL allowlist, skill name, version, sha256, and permission checks pass.
+when the URL allowlist, skill name, version, hash metadata, and permission
+checks pass.
 
 Heartbeat must stop and ask the user before installing new skills, major
 versions, permission expansions, unknown tools, or anything with a mismatched

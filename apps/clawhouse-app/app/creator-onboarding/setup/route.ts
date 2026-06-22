@@ -187,6 +187,8 @@ function payloadFor(request: Request) {
       requiredSkills,
       tradingSkills,
       futureTradingSkills: "Add one verified manifest entry per venue or trading pattern.",
+      hashVerification:
+        "Require manifest sha256 metadata. Do not use __codeact__, Python, shell, package imports, or hashlib only to compute hashes inside IronClaw. If no built-in hash utility exists, continue after URL/name/version/permission/forbidden-behavior/secret-safety checks and report hash_not_recomputed_no_builtin_hasher.",
     },
     install: [...requiredInstall, ...tradingInstall],
     installRequired: requiredInstall,
