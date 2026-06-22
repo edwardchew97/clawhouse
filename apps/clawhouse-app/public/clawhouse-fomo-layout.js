@@ -540,11 +540,20 @@ function normalizeSeries(values) {
 function chartModel(agent) {
   const range = chartRangeMeta();
   const rangePrefix = `${range.label} / `;
+  if (!chainState.accountId) {
+    return {
+      values: [],
+      events: [],
+      tone: "wallet",
+      title: "Connect Wallet",
+      message: `${rangePrefix}Connect Wallet to load holder-gated chart data.`,
+    };
+  }
   if (!chainState.backend || !backendApplies(agent)) {
-    return { values: [], events: [], tone: "idle", message: `${rangePrefix}Reading staging backend for this agent.` };
+    return { values: [], events: [], tone: "idle", title: "Backend chart loading", message: `${rangePrefix}Reading backend for this agent.` };
   }
   if (!chainState.backend.ok) {
-    return { values: [], events: [], tone: "error", message: `${rangePrefix}${backendErrorMessage()}` };
+    return { values: [], events: [], tone: "error", title: "Backend chart unavailable", message: `${rangePrefix}${backendErrorMessage()}` };
   }
 
   const events = filterRowsForChartRange(sortedByObservedAt(backendEvents(agent)));
@@ -583,6 +592,7 @@ function chartModel(agent) {
     values: safeValues,
     events: normalizedEvents,
     tone: "success",
+    title: safeValues.length ? undefined : "No chart data yet",
     source,
     message: safeValues.length ? `${range.label} ${source}` : `No chartable backend series in ${range.label}.`,
   };
@@ -1117,7 +1127,7 @@ function drawChart(agent, progress = 1) {
   const values = model.values;
   if (values.length < 2) {
     drawEmptyChart(ctx, rect, model.message);
-    setChartEmptyState(true, model.message);
+    setChartEmptyState(true, model.message, model.title);
     byId("chartEvents").innerHTML = "";
     hidePriceMarker();
     return;
@@ -1212,14 +1222,14 @@ function drawEmptyChart(ctx, rect, message) {
   drawChartAxes(ctx, geo, [-10, 0, 10]);
 }
 
-function setChartEmptyState(isEmpty, message = "") {
+function setChartEmptyState(isEmpty, message = "", title = "Backend chart data unavailable") {
   const panel = byId("chartPanel");
   const overlay = byId("chartEmptyOverlay");
   if (!panel || !overlay) return;
   panel.classList.toggle("is-empty", isEmpty);
   overlay.hidden = !isEmpty;
   if (!isEmpty) return;
-  byId("chartEmptyTitle").textContent = "Backend chart data unavailable";
+  byId("chartEmptyTitle").textContent = title;
   byId("chartEmptyDetail").textContent = message || "No backend time series has been recorded for this agent.";
 }
 

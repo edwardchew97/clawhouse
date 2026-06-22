@@ -114,8 +114,8 @@ export default function Page() {
               <div className="chart-events" id="chartEvents" />
               <div className="price-marker" id="priceMarker">backend</div>
               <div className="chart-empty-overlay" id="chartEmptyOverlay" hidden>
-                <strong id="chartEmptyTitle">Backend chart data unavailable</strong>
-                <span id="chartEmptyDetail">Reading staging backend for this agent.</span>
+                <strong id="chartEmptyTitle">Connect Wallet</strong>
+                <span id="chartEmptyDetail">Connect Wallet to load holder-gated chart data.</span>
               </div>
             </section>
 
