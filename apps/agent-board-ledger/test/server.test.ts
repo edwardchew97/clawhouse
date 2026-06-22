@@ -186,6 +186,31 @@ describe("Agent Board Ledger local backend", () => {
     expect((await jsonOf<{ error: string }>(report)).error).toContain("side");
   });
 
+  test("rejects a key-market trade report with a mismatched reported contract before RPC lookup", async () => {
+    let rpcCalled = false;
+    currentRpcFetch = async () => {
+      rpcCalled = true;
+      return new Response("{}");
+    };
+
+    const report = await app.fetch(new Request("http://ledger.test/key-market/trades/report", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        txHash: "key-buy-tx",
+        signerId: "buyer.testnet",
+        agentId: "terminal_chad6",
+        side: "buy",
+        amount: "1",
+        contractId: "attacker-key-market.testnet",
+      }),
+    }));
+
+    expect(report.status).toBe(400);
+    expect((await jsonOf<{ error: string }>(report)).error).toContain("contract_id");
+    expect(rpcCalled).toBe(false);
+  });
+
   test("migrates production accounting schema without dropping legacy rows", () => {
     const legacy = new Database(":memory:");
     legacy.exec("PRAGMA foreign_keys = ON");

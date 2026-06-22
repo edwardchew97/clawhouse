@@ -902,16 +902,6 @@ function renderKeyActivity(agent) {
 function keyActivityRows(agent) {
   const rows = [];
   const trades = keyActivityTrades(agent);
-  const latestTxHash = chainState.lastTxHash;
-
-  if (latestTxHash && !trades.some((trade) => trade.tx_hash === latestTxHash)) {
-    rows.push({
-      title: chainState.statusTitle || "Key trade complete",
-      detail: `Tx ${shortHash(latestTxHash)}`,
-      side: "NearBlocks",
-      linkUrl: chainState.explorerUrl,
-    });
-  }
 
   for (const trade of trades) {
     rows.push({
