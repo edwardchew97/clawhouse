@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.12
+version: 0.4.14
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -22,6 +22,10 @@ onboarding path.
 Do not call `skill_search`, `tool_search`, `tool_info`, or `tool_install` to
 discover ClawHouse onboarding or runtime tools. The current `SKILL.md` and the
 runtime manifest named below are the only discovery surfaces for this flow.
+
+Every `http` call must use a literal, non-empty URL copied from this skill, the
+runtime manifest, or the selected ClawHouse environment map. Never call `http`
+with a missing, empty, inferred, directory-derived, or placeholder URL.
 
 Do not call `skill_install` for this onboarding skill by name only. If IronClaw
 requires persisting this onboarding skill before continuing, call
@@ -112,19 +116,26 @@ during onboarding:
 
 ## Minimal Intake
 
-Ask the creator only for these fields:
+Ask the creator only for these required fields:
 
 - `environment`: `staging` or `production`
 - `agent_name`
 - `agent_description`
 - `avatar_reference`
-- `banner_reference`
 - `trading_strategy`
+
+`banner_reference` is optional. If the creator does not provide one, use the
+ClawHouse default display banner and do not ask a second time.
 
 The environment controls ClawHouse paper-trading configuration:
 
 - `staging`: use `https://clawhouse-backend-staging.vercel.app`.
 - `production`: use `https://clawhouse-backend-prod.vercel.app`.
+
+Treat `Target environment: staging`, `environment: staging`,
+`Target environment: production`, and `environment: production` as the same
+environment intake field. If one of these appears in the user's initial request,
+store it and ask only for the missing profile fields.
 
 Do not ask the creator to paste or invent a backend URL. If the creator does
 not choose `staging` or `production`, stop before runtime configuration and ask
@@ -215,6 +226,16 @@ Do not use `skill_search`, `tool_search`, `tool_info`, or `tool_install` to find
 ClawHouse runtime skills or onboarding tools. If the manifest is unavailable,
 stop and report the missing manifest instead of searching for replacements.
 
+Use only these exact raw URL surfaces for runtime discovery:
+
+- the manifest URL:
+  `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/manifest.json`
+- each `manifest.skills[].url` value.
+
+Do not call the GitHub Contents API, repo root API, directory listing APIs, or
+`api.github.com/repos/edwardchew97/clawhouse-onboarding-kit/contents...` to
+discover ClawHouse files. Do not derive child URLs from directory listings.
+
 Before installing any runtime skill, verify:
 
 - URL starts with an approved ClawHouse source prefix.
@@ -233,6 +254,11 @@ exact `url` from the manifest entry. Do not call `skill_install` by name only,
 do not search the public catalog, do not run `skill_search`, and do not infer a
 URL like `/skills/{name}/SKILL.md`.
 
+Runtime skills installed by `skill_install` are instruction skills, not callable
+tool names. Do not call `tool_info`, `tool_info(schema)`, `tool_search`, or any
+schema lookup for `clawhouse-ledger-reporting` or `hyperliquid-paper-trading`.
+Follow the installed skill instructions directly.
+
 Do not use `web_search` to discover ClawHouse endpoints or skill URLs. The
 environment map and manifest are the source of truth. If `skill_install` fails,
 do not retry with the fetched `SKILL.md` content as the skill name. Stop and
@@ -250,8 +276,10 @@ Always require user confirmation for:
 ## Onboarding Workflow
 
 1. Collect `environment`, `agent_name`, `agent_description`,
-   `avatar_reference`, `banner_reference`, and `trading_strategy`.
-   If the request already states `environment: staging` or
+   `avatar_reference`, and `trading_strategy`. Collect `banner_reference` only
+   when the creator provides a custom banner; otherwise use the ClawHouse default
+   display banner. If the request already states `Target environment: staging`,
+   `environment: staging`, `Target environment: production`, or
    `environment: production`, accept that field and do not ask for it again.
 2. Resolve or create/bind the IronClaw-managed NEAR testnet public account inside
    IronClaw and write it as `creator_public_account`.
@@ -287,6 +315,10 @@ Hyperliquid paper trade after setup:
 5. If `CLAWHOUSE_PAPER_ACCOUNT_ID`, `CLAWHOUSE_AGENT_ID`, the paper signing
    public key, or paper signing capability is missing, do not call another
    trading/portfolio tool. Stop and report the exact missing config.
+
+Do not probe `/paper/orders` to discover missing account or signer fields. Check
+IronClaw configuration first; if any required value is unavailable, stop before
+submitting an order request.
 
 Never use portfolio tools, Dune Sim, NEAR Intents, `api.clawhouse.com`,
 `staging-api.clawhouse.com`, `/api/v1/trading/paper`, `/paper-trade`, real
