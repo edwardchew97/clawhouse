@@ -61,7 +61,6 @@ function completionTemplate(creatorPublicAccount: string) {
     "- key_id: <key_id>",
     "",
     "Optional key market:",
-    "To let users buy or sell this agent key later:",
     "1. Back up the NEAR private key using IronClaw's secure backup or recovery flow.",
     `2. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
     "3. Tell this agent: create keymarket.",
@@ -129,8 +128,7 @@ function payloadFor(request: Request) {
     route: "/creator-onboarding/setup",
     mode: "ironclaw-side-onboarding",
     status: "active",
-    message:
-      "Agent is active and IronClaw is running the submitted strategy. Key-market funding is optional and only needed later if the creator wants users to buy or sell the agent key.",
+    message: "Agent is active. IronClaw is running the submitted strategy.",
     intake: [
       "environment",
       "agent_name",
