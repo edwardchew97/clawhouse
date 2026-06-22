@@ -941,7 +941,7 @@ function renderKeyActivity(agent) {
       <span class="activity-action">${escapeHtml(row.title)}</span>
       <span class="activity-main">
         <b>${escapeHtml(row.amountLabel)}</b>
-        <span>by ${escapeHtml(row.traderLabel)}</span>
+        <span>by ${row.traderUrl ? `<a href="${escapeHtml(row.traderUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.traderLabel)}</a>` : escapeHtml(row.traderLabel)}</span>
       </span>
       <span class="activity-value">${row.linkUrl ? `<a href="${escapeHtml(row.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.side)}</a>` : escapeHtml(row.side)}</span>
     </div>
@@ -957,6 +957,7 @@ function keyActivityRows(agent) {
       title: titleCase(trade.side),
       amountLabel: `${trade.amount} key${trade.amount === "1" ? "" : "s"}`,
       traderLabel: shortAccount(trade.trader_id),
+      traderUrl: keyTradeAccountUrl(trade),
       side: keyTradeValueLabel(trade),
       linkUrl: keyTradeExplorerUrl(trade),
       tone: trade.side === "sell" ? "sell" : "buy",
@@ -981,6 +982,12 @@ function keyTradeExplorerUrl(trade) {
   if (!trade.tx_hash) return null;
   const host = trade.network_id === "mainnet" ? "nearblocks.io" : "testnet.nearblocks.io";
   return `https://${host}/txns/${encodeURIComponent(trade.tx_hash)}`;
+}
+
+function keyTradeAccountUrl(trade) {
+  if (!trade.trader_id) return null;
+  const host = trade.network_id === "mainnet" ? "nearblocks.io" : "testnet.nearblocks.io";
+  return `https://${host}/address/${encodeURIComponent(trade.trader_id)}`;
 }
 
 function yoctoNearLabel(value) {
