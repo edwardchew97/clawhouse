@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.18
+version: 0.4.20
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -23,10 +23,13 @@ Do not call `skill_search`, `tool_search`, `tool_info`, or `tool_install` to
 discover ClawHouse onboarding or runtime tools. The current `SKILL.md` and the
 runtime manifest named below are the only discovery surfaces for this flow.
 
-Do not call `tool_search`, `tool_info`, `tool_info(schema)`, or schema lookup to
-discover a NEAR wallet helper, crypto helper, keypair helper, or signer helper.
-If an approved IronClaw local helper is not already available in the current
-runtime, stop and report `Missing approved IronClaw NEAR wallet helper`.
+Do not call `tool_search`, `tool_info`, `tool_info(schema)`, `tool_list`,
+`secret_list`, `memory_search`, `memory_tree`, `memory_read`, or schema lookup
+to discover a NEAR wallet helper, crypto helper, keypair helper, signer helper,
+secret, or account. Secret inventory, old memory, and `IDENTITY.md` are not
+approved helper surfaces. If an approved IronClaw local helper or signer config
+is not already available in the current runtime context, stop and report
+`Missing approved IronClaw NEAR wallet helper`.
 
 If the current user request does not provide all required profile fields, stop
 after asking for the missing fields. Before those current-run fields are present,
@@ -178,7 +181,8 @@ exposed. Do not repeat the secret.
 Resolve `creator_public_account` yourself before funding:
 
 1. First use the public account for the IronClaw-managed NEAR key that signs
-   ClawHouse backend requests, when it exists.
+   ClawHouse backend requests, when it is already exposed by an approved
+   IronClaw local helper or current runtime config.
 2. If no such account exists, use IronClaw's approved secure local wallet/account
    flow to create or bind a NEAR testnet account inside IronClaw. Prefer the
    pinned local `@near-js/crypto@2.5.1` helper path below when IronClaw has
@@ -188,10 +192,19 @@ Resolve `creator_public_account` yourself before funding:
 3. If the local helper only returns a public key without a usable NEAR testnet
    account id, stop and report the missing account binding. Do not treat the
    public key as the funded account.
-4. Ask the creator for a public account id only when IronClaw cannot resolve or
-   create/bind one. Present that as a blocker, not as normal intake.
+4. Ask the creator for a public account id only when an approved helper already
+   exists but needs an externally named public account binding. Do not use a
+   public account prompt to bypass missing helper, missing signer, or missing
+   secure local key storage. Present that as a blocker, not as normal intake.
 
 Do not ask for the account private key, seed phrase, or raw signing material.
+
+Do not resolve `creator_public_account` from `memory_search`, `memory_tree`,
+`memory_read`, `IDENTITY.md`, previous ClawHouse profiles, `secret_list`,
+secret names, or tool discovery. Treat `CLEARED_BY_CLAWHOUSE_TEST` and old
+ClawHouse memory files as absent data. If the approved helper/current config is
+not already available, stop with `Missing approved IronClaw NEAR wallet helper`
+instead of searching.
 
 Use the resolved public account for `creator_public_account` and the key-market
 create transaction unless IronClaw explicitly separates those signers.
@@ -204,10 +217,12 @@ control, or no secure local secret/key store, stop and report:
 `Missing approved IronClaw NEAR wallet helper`.
 
 Do not search for a helper. Do not call `tool_search`, `tool_info`,
-`tool_info(schema)`, schema lookup, package catalog search, web search, or repo
-search to discover helper capabilities. Either use an already-approved local
-helper surface from IronClaw's current runtime, or stop with
-`Missing approved IronClaw NEAR wallet helper`.
+`tool_info(schema)`, `tool_list`, `secret_list`, `secret_search`,
+`secret_read`, `memory_search`, `memory_tree`, `memory_read`, schema lookup,
+package catalog search, web search, or repo search to discover helper
+capabilities, account ids, key ids, or signer configs. Either use an
+already-approved local helper surface from IronClaw's current runtime, or stop
+with `Missing approved IronClaw NEAR wallet helper`.
 
 Do not clone Meteor Wallet or `near-api-js` during onboarding. Do not let the
 agent browse a large repo and infer wallet behavior. Use the exact package
@@ -317,7 +332,10 @@ Always require user confirmation for:
    If any required profile field is still missing, ask for only the missing
    fields and stop. Do not run any other tool before the creator replies.
 2. Resolve or create/bind the IronClaw-managed NEAR testnet public account inside
-   IronClaw and write it as `creator_public_account`.
+   IronClaw and write it as `creator_public_account`. If the approved helper or
+   current signer config is not already available, stop with
+   `Missing approved IronClaw NEAR wallet helper`; do not run memory, secret, or
+   tool discovery to find one.
 3. Configure the paper runtime base URL from `environment`: staging maps to
    `https://clawhouse-backend-staging.vercel.app`, and production maps to
    `https://clawhouse-backend-prod.vercel.app`.

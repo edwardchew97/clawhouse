@@ -156,7 +156,7 @@ function payloadFor(request: Request) {
     profileIntakeGate: {
       requiredBeforeTools: true,
       requiredSource: "current_chat_or_direct_intake_reply",
-      doNotFillFrom: ["memory_search", "previous_profile", "chat_history"],
+      doNotFillFrom: ["memory_search", "previous_profile", "chat_history", "IDENTITY.md"],
       clearedMarkerMeansMissing: "CLEARED_BY_CLAWHOUSE_TEST",
       stopBefore: [
         "runtime_skill_install",
@@ -174,11 +174,28 @@ function payloadFor(request: Request) {
         "Resolve or create/bind the IronClaw-managed NEAR testnet public account inside IronClaw before funding.",
       helperDiscovery: {
         toolSearchAllowed: false,
+        toolListAllowed: false,
         toolInfoSchemaAllowed: false,
+        secretListAllowed: false,
+        memorySearchAllowed: false,
+        memoryReadAllowed: false,
+        identityMemoryAllowed: false,
         stopIfMissing: "Missing approved IronClaw NEAR wallet helper",
+        notApprovedHelperSurfaces: ["secret inventory", "old memory", "IDENTITY.md"],
       },
       fallbackPrompt:
-        "Ask the creator for a public account id only if IronClaw cannot resolve or create/bind one.",
+        "Ask the creator for a public account id only when an approved helper already exists but needs an externally named public account binding. Do not use this prompt to bypass missing helper, missing signer, or missing secure local key storage.",
+      doNotResolveFrom: [
+        "memory_search",
+        "memory_tree",
+        "memory_read",
+        "IDENTITY.md",
+        "previous_clawhouse_profile",
+        "secret_list",
+        "secret_names",
+        "tool_search",
+        "tool_list",
+      ],
       privateKeyHandling:
         "Never ask for, store, echo, or log the NEAR private key, seed phrase, or raw signing material.",
     },
