@@ -37,6 +37,8 @@ type DemoChainState = {
   quote?: Record<string, unknown> | null;
   quoteSide?: TradeSide | null;
   protection?: Record<string, unknown> | null;
+  activity?: Record<string, unknown> | null;
+  activityError?: string | null;
   error?: string | null;
   statusTitle?: string;
   statusBody?: string;
@@ -302,11 +304,12 @@ export function KeyMarketWalletBridge() {
       const side = forcedSide ?? demo.getTradeSide();
       const amount = normalizedAmount(forcedSide ? "1" : demo.getKeyAmount());
       const actionLabel = side === "buy" ? "Buy" : "Sell";
+      const accountId = accountRef.current.accountId;
 
       let quoteResponse: QuoteResponse;
       try {
         renderChainState({
-          accountId: accountRef.current.accountId,
+          accountId,
           pending: true,
           phase: "quoting",
           lastTxHash: null,
@@ -321,7 +324,7 @@ export function KeyMarketWalletBridge() {
       } catch (error) {
         busyRef.current = false;
         renderChainState({
-          accountId: accountRef.current.accountId,
+          accountId,
           pending: false,
           phase: "idle",
           lastTxHash: null,
@@ -376,7 +379,7 @@ export function KeyMarketWalletBridge() {
       try {
         const result = await wallet.signAndSendTransaction({
           network: config.networkId,
-          signerId: accountRef.current.accountId,
+          signerId: accountId,
           receiverId: config.contractId,
           actions: [action],
         });
@@ -386,7 +389,7 @@ export function KeyMarketWalletBridge() {
         const txHash = extractTxHash(result);
         const explorerUrl = nearBlocksTxUrl(txHash, config.networkId);
         renderChainState({
-          accountId: accountRef.current.accountId,
+          accountId,
           pending: true,
           phase: "refreshing",
           lastTxHash: txHash,
@@ -400,14 +403,36 @@ export function KeyMarketWalletBridge() {
           explorerUrl ? { linkUrl: explorerUrl, linkLabel: "NearBlocks", durationMs: 9000 } : undefined,
         );
         await refreshWalletRead("trade-confirmed");
+        let activityRecorded = false;
+        let activityReportError = "";
+        if (txHash) {
+          try {
+            await reportKeyMarketActivity({
+              txHash,
+              signerId: accountId,
+              agentId: agent.id,
+              side,
+              amount,
+              contractId: config.contractId,
+              networkId: config.networkId,
+            });
+            activityRecorded = true;
+            await refreshWalletRead("activity-reported");
+          } catch (error) {
+            activityReportError = errorMessage(error, "Activity report failed.");
+            showToast(`Activity report failed: ${activityReportError}`, { durationMs: 4200 });
+          }
+        }
         renderChainState({
-          accountId: accountRef.current.accountId,
+          accountId,
           pending: false,
           phase: "idle",
           lastTxHash: txHash,
           explorerUrl,
           statusTitle: `${actionLabel} complete`,
-          statusBody: txHash ? `Tx ${shortHash(txHash)}. Key balance refreshed.` : "Transaction confirmed and key balance refreshed.",
+          statusBody: txHash
+            ? `Tx ${shortHash(txHash)}. Key balance refreshed.${activityRecorded ? " Activity recorded." : activityReportError ? " Activity report failed." : ""}`
+            : "Transaction confirmed and key balance refreshed.",
           statusTone: "success",
         });
       } catch (error) {
@@ -441,9 +466,11 @@ export function KeyMarketWalletBridge() {
       const holderParam = account?.accountId ? `&holderId=${encodeURIComponent(account.accountId)}` : "";
       const statePath = `/api/key-market/state?agentId=${encodeURIComponent(agent.id)}${holderParam}`;
       const quotePath = `/api/key-market/quote?side=${side}&agentId=${encodeURIComponent(agent.id)}&amount=${encodeURIComponent(amount)}`;
-      const [stateResult, quoteResult] = await Promise.allSettled([
+      const activityPath = `/api/key-market/activity?agentId=${encodeURIComponent(agent.id)}&limit=7`;
+      const [stateResult, quoteResult, activityResult] = await Promise.allSettled([
         fetchJson<{ state: Record<string, unknown> }>(statePath),
         fetchJson<QuoteResponse>(quotePath),
+        fetchJson<Record<string, unknown>>(activityPath),
       ]);
 
       renderChainState({
@@ -454,6 +481,8 @@ export function KeyMarketWalletBridge() {
         quote: quoteResult.status === "fulfilled" ? quoteResult.value.quote : null,
         quoteSide: quoteResult.status === "fulfilled" ? side : null,
         protection: quoteResult.status === "fulfilled" ? quoteResult.value.protection : null,
+        activity: activityResult.status === "fulfilled" ? activityResult.value : null,
+        activityError: firstRejectedMessage([activityResult]),
         error: firstRejectedMessage([stateResult, quoteResult]),
       });
     }
@@ -477,8 +506,16 @@ export function KeyMarketWalletBridge() {
   return null;
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(path);
+async function reportKeyMarketActivity(body: Record<string, string>) {
+  await fetchJson("/api/key-market/activity", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, init);
   const data = await response.json() as T & { ok?: boolean; error?: string };
   if (!response.ok || data.ok === false) {
     throw new Error(data.error || `Request failed: ${response.status}`);

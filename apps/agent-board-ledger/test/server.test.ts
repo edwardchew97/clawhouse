@@ -120,6 +120,72 @@ describe("Agent Board Ledger local backend", () => {
     expect("metadata_json" in (body.boards[0] ?? {})).toBe(false);
   });
 
+  test("records a verified key-market buy report from a NEAR tx hash", async () => {
+    currentRpcFetch = mockNearKeyMarketTx({
+      txHash: "key-buy-tx",
+      signerId: "buyer.testnet",
+      methodName: "buy_key",
+      side: "buy",
+      agentId: "terminal_chad6",
+      amount: "1",
+      totalCost: "55550000000000000000000",
+      payout: "0",
+    });
+
+    const report = await app.fetch(new Request("http://ledger.test/key-market/trades/report", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        txHash: "key-buy-tx",
+        signerId: "buyer.testnet",
+        agentId: "terminal_chad6",
+        side: "buy",
+        amount: "1",
+      }),
+    }));
+    const reportBody = await jsonOf<{ ok: true; trade: { tx_hash: string; side: string; source: string; total_cost: string } }>(report);
+
+    expect(report.status).toBe(201);
+    expect(reportBody.trade.tx_hash).toBe("key-buy-tx");
+    expect(reportBody.trade.side).toBe("buy");
+    expect(reportBody.trade.source).toBe("contract_event");
+    expect(reportBody.trade.total_cost).toBe("55550000000000000000000");
+
+    const list = await app.fetch(new Request("http://ledger.test/key-market/trades?agentId=terminal_chad6"));
+    const listBody = await jsonOf<{ ok: true; count: number; trades: Array<{ tx_hash: string }> }>(list);
+    expect(list.status).toBe(200);
+    expect(listBody.count).toBe(1);
+    expect(listBody.trades[0]?.tx_hash).toBe("key-buy-tx");
+  });
+
+  test("rejects a key-market trade report when the reported side does not match the tx", async () => {
+    currentRpcFetch = mockNearKeyMarketTx({
+      txHash: "key-sell-tx",
+      signerId: "seller.testnet",
+      methodName: "sell_key",
+      side: "sell",
+      agentId: "terminal_chad6",
+      amount: "1",
+      totalCost: "0",
+      payout: "46800000000000000000000",
+    });
+
+    const report = await app.fetch(new Request("http://ledger.test/key-market/trades/report", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        txHash: "key-sell-tx",
+        signerId: "seller.testnet",
+        agentId: "terminal_chad6",
+        side: "buy",
+        amount: "1",
+      }),
+    }));
+
+    expect(report.status).toBe(400);
+    expect((await jsonOf<{ error: string }>(report)).error).toContain("side");
+  });
+
   test("migrates production accounting schema without dropping legacy rows", () => {
     const legacy = new Database(":memory:");
     legacy.exec("PRAGMA foreign_keys = ON");
@@ -1379,6 +1445,48 @@ describe("Agent Board Ledger local backend", () => {
     expect(body.account.id).toBe("paper-vercel");
   });
 
+  test("normalizes Vercel key-market activity rewrites", async () => {
+    currentRpcFetch = mockNearKeyMarketTx({
+      txHash: "key-vercel-tx",
+      signerId: "buyer.testnet",
+      methodName: "buy_key",
+      side: "buy",
+      agentId: "terminal_chad6",
+      amount: "1",
+      totalCost: "55550000000000000000000",
+      payout: "0",
+    });
+    const report = await handleVercelLedgerRequest(
+      new Request("http://ledger.test/api/ledger?ledgerPath=/key-market/trades/report/", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          txHash: "key-vercel-tx",
+          signerId: "buyer.testnet",
+          agentId: "terminal_chad6",
+          side: "buy",
+          amount: "1",
+        }),
+      }),
+      {
+        db: sqliteDb,
+        env: { [ADMIN_TOKEN_ENV]: adminToken },
+        rpcFetch: (...args) => currentRpcFetch(...args),
+      },
+    );
+    expect(report.status).toBe(201);
+
+    const read = await handleVercelLedgerRequest(
+      new Request("http://ledger.test/api/ledger?ledgerPath=/key-market/trades/&agentId=terminal_chad6"),
+      { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
+    );
+    const body = await jsonOf<{ count: number; trades: Array<{ tx_hash: string }> }>(read);
+
+    expect(read.status).toBe(200);
+    expect(body.count).toBe(1);
+    expect(body.trades[0]?.tx_hash).toBe("key-vercel-tx");
+  });
+
   test("rejects Vercel cron requests without the cron secret", async () => {
     const response = await handleVercelLedgerRequest(
       new Request("http://ledger.test/api/cron", {
@@ -2565,6 +2673,80 @@ function createWallet() {
     keyPair,
     publicKey,
     walletAddress: keyToImplicitAddress(keyPair.getPublicKey()),
+  };
+}
+
+function mockNearKeyMarketTx(input: {
+  txHash: string;
+  signerId: string;
+  methodName: "buy_key" | "sell_key";
+  side: "buy" | "sell";
+  agentId: string;
+  amount: string;
+  totalCost: string;
+  payout: string;
+}) {
+  return async (_request: string | URL | Request, init?: RequestInit) => {
+    const rpcBody = JSON.parse(String(init?.body ?? "{}")) as { params?: unknown[] };
+    expect(rpcBody.params).toEqual([input.txHash, input.signerId]);
+    const args = {
+      agent_id: input.agentId,
+      amount: input.amount,
+      ...(input.methodName === "buy_key" ? { max_price: input.totalCost } : { min_payout: input.payout }),
+    };
+    const trade = {
+      agent_id: input.agentId,
+      side: input.side,
+      trader_id: input.signerId,
+      amount: input.amount,
+      supply_after: input.side === "buy" ? "2" : "1",
+      trader_balance_after: input.side === "buy" ? "1" : "0",
+      reserve_after: input.side === "buy" ? "50500000000000000000000" : "3700000000000000000000",
+      price: "50500000000000000000000",
+      protocol_fee: "2525000000000000000000",
+      creator_fee: "2525000000000000000000",
+      total_cost: input.totalCost,
+      payout: input.payout,
+    };
+
+    return new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      result: {
+        status: { SuccessValue: Buffer.from(JSON.stringify(trade)).toString("base64") },
+        transaction: {
+          signer_id: input.signerId,
+          receiver_id: "clawhouse-key-20260619125948.testnet",
+          actions: [{
+            FunctionCall: {
+              method_name: input.methodName,
+              args: Buffer.from(JSON.stringify(args)).toString("base64"),
+            },
+          }],
+        },
+        transaction_outcome: {
+          id: input.txHash,
+          block_hash: "block-hash-1",
+          outcome: { logs: [] },
+        },
+        receipts_outcome: [{
+          id: "receipt-1",
+          block_hash: "block-hash-1",
+          outcome: {
+            logs: [
+              `EVENT_JSON:${JSON.stringify({
+                standard: "clawhouse-key-market",
+                version: "1.0.0",
+                event: "key_trade",
+                data: [trade],
+              })}`,
+            ],
+          },
+        }],
+      },
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   };
 }
 

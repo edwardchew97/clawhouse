@@ -103,6 +103,12 @@
             "userBuysKey.key.stateAfterBuy": [
               "agentId"
             ],
+            "userBuysKey.app.reportBuyActivity": [
+              "agentId"
+            ],
+            "userBuysKey.app.listKeyActivity": [
+              "agentId"
+            ],
             "userBuysKey.ledger.nearKeyMarketReadAccess": [
               "agentId"
             ],
@@ -114,6 +120,12 @@
               "minPayoutNear"
             ],
             "userSellsKey.key.stateAfterSell": [
+              "agentId"
+            ],
+            "userSellsKey.app.reportSellActivity": [
+              "agentId"
+            ],
+            "userSellsKey.app.listKeyActivity": [
               "agentId"
             ],
             "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
@@ -1001,6 +1013,13 @@
             "userBuysKey.key.stateAfterBuy": [
               "agentId"
             ],
+            "userBuysKey.app.reportBuyActivity": [
+              "contractId",
+              "agentId"
+            ],
+            "userBuysKey.app.listKeyActivity": [
+              "agentId"
+            ],
             "userBuysKey.ledger.nearKeyMarketReadAccess": [
               "contractId",
               "agentId"
@@ -1012,6 +1031,13 @@
               "agentId"
             ],
             "userSellsKey.key.stateAfterSell": [
+              "agentId"
+            ],
+            "userSellsKey.app.reportSellActivity": [
+              "contractId",
+              "agentId"
+            ],
+            "userSellsKey.app.listKeyActivity": [
               "agentId"
             ],
             "userSellsKey.ledger.nearKeyMarketReadAccessAfterSell": [
@@ -1337,6 +1363,11 @@
             "supplyAfterBuy": "response.json.result.supply_after",
             "holderBalanceAfterBuy": "response.json.result.trader_balance_after",
             "reserveAfterBuyYocto": "response.json.result.reserve_after"
+          },
+          "clearInputs": {
+            "userBuysKey.app.reportBuyActivity": [
+              "buyTxHash"
+            ]
           }
         },
         {
@@ -1364,6 +1395,66 @@
             "keySupply": "response.json.agent.supply",
             "reserveYocto": "response.json.agent.reserve",
             "holderBalance": "response.json.holder_balance"
+          }
+        },
+        {
+          "id": "userBuysKey.app.reportBuyActivity",
+          "name": "Report Buy Activity",
+          "description": "Sends the buy transaction hash to the ClawHouse App API so the backend can verify the NEAR receipt and store public key-market activity.",
+          "type": "http",
+          "access": "public",
+          "method": "POST",
+          "url": "{{clawhouseAppBaseUrl}}/api/key-market/activity",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": {
+            "txHash": "{{buyTxHash}}",
+            "signerId": "{{testUserAccountId}}",
+            "agentId": "{{agentId}}",
+            "side": "buy",
+            "amount": "{{keyAmount}}",
+            "contractId": "{{contractId}}",
+            "networkId": "testnet"
+          },
+          "runningNotes": [
+            "Calling the same Next API route the browser wallet flow uses after a successful buy.",
+            "The backend verifies the tx hash through NEAR RPC before writing key_market_trades.",
+            "The visible activity row comes from verified chain data, not from frontend-provided price fields."
+          ],
+          "inputs": {
+            "buyTxHash": "",
+            "testUserAccountId": "",
+            "agentId": "",
+            "keyAmount": "1",
+            "contractId": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "keyAmount"
+          ],
+          "setVars": {
+            "keyActivityBuyTxHash": "response.json.json.trade.tx_hash",
+            "keyActivityBuySide": "response.json.json.trade.side"
+          }
+        },
+        {
+          "id": "userBuysKey.app.listKeyActivity",
+          "name": "Read Public Key Activity",
+          "description": "Reads the public buy/sell activity feed for this key market after the buy report is stored.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{clawhouseAppBaseUrl}}/api/key-market/activity?agentId={{agentId}}&limit=7",
+          "runningNotes": [
+            "Calling the public ClawHouse App activity feed.",
+            "Confirming the latest visible key-market row can be read back after the verified buy report."
+          ],
+          "inputs": {
+            "agentId": ""
+          },
+          "setVars": {
+            "latestKeyActivityTxHash": "response.json.json.trades.0.tx_hash",
+            "latestKeyActivitySide": "response.json.json.trades.0.side"
           }
         },
         {
@@ -2569,6 +2660,11 @@
             "supplyAfterSell": "response.json.result.supply_after",
             "holderBalanceAfterSell": "response.json.result.trader_balance_after",
             "reserveAfterSellYocto": "response.json.result.reserve_after"
+          },
+          "clearInputs": {
+            "userSellsKey.app.reportSellActivity": [
+              "sellTxHash"
+            ]
           }
         },
         {
@@ -2596,6 +2692,66 @@
             "keySupply": "response.json.agent.supply",
             "reserveYocto": "response.json.agent.reserve",
             "holderBalance": "response.json.holder_balance"
+          }
+        },
+        {
+          "id": "userSellsKey.app.reportSellActivity",
+          "name": "Report Sell Activity",
+          "description": "Sends the sell transaction hash to the ClawHouse App API so the backend can verify the NEAR receipt and store public key-market activity.",
+          "type": "http",
+          "access": "public",
+          "method": "POST",
+          "url": "{{clawhouseAppBaseUrl}}/api/key-market/activity",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "body": {
+            "txHash": "{{sellTxHash}}",
+            "signerId": "{{testUserAccountId}}",
+            "agentId": "{{agentId}}",
+            "side": "sell",
+            "amount": "{{keyAmount}}",
+            "contractId": "{{contractId}}",
+            "networkId": "testnet"
+          },
+          "runningNotes": [
+            "Calling the same Next API route the browser wallet flow uses after a successful sell.",
+            "The backend verifies the tx hash through NEAR RPC before writing key_market_trades.",
+            "The visible activity row comes from verified chain data, not from frontend-provided payout fields."
+          ],
+          "inputs": {
+            "sellTxHash": "",
+            "testUserAccountId": "",
+            "agentId": "",
+            "keyAmount": "1",
+            "contractId": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "keyAmount"
+          ],
+          "setVars": {
+            "keyActivitySellTxHash": "response.json.json.trade.tx_hash",
+            "keyActivitySellSide": "response.json.json.trade.side"
+          }
+        },
+        {
+          "id": "userSellsKey.app.listKeyActivity",
+          "name": "Read Public Key Activity After Sell",
+          "description": "Reads the public buy/sell activity feed for this key market after the sell report is stored.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{clawhouseAppBaseUrl}}/api/key-market/activity?agentId={{agentId}}&limit=7",
+          "runningNotes": [
+            "Calling the public ClawHouse App activity feed.",
+            "Confirming the latest visible key-market row can be read back after the verified sell report."
+          ],
+          "inputs": {
+            "agentId": ""
+          },
+          "setVars": {
+            "latestKeyActivityTxHash": "response.json.json.trades.0.tx_hash",
+            "latestKeyActivitySide": "response.json.json.trades.0.side"
           }
         },
         {

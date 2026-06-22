@@ -165,6 +165,31 @@ export type ReadAccessCheckRow = {
   created_at: string;
 };
 
+export type KeyMarketTradeRow = {
+  id: string;
+  network_id: string;
+  contract_id: string;
+  agent_id: string;
+  trader_id: string;
+  side: string;
+  amount: string;
+  tx_hash: string;
+  receipt_id: string | null;
+  block_hash: string | null;
+  block_height: string | null;
+  supply_after: string | null;
+  trader_balance_after: string | null;
+  reserve_after: string | null;
+  price: string | null;
+  protocol_fee: string | null;
+  creator_fee: string | null;
+  total_cost: string | null;
+  payout: string | null;
+  source: string;
+  metadata_json: string | null;
+  created_at: string;
+};
+
 export type AuditEventRow = {
   id: string;
   board_id: string | null;
