@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.26
+version: 0.4.27
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -21,6 +21,22 @@ Follow this strict order:
 4. Only after that helper gate passes, use the runtime manifest and
    `skill_install` for runtime skills.
 
+Use this normal onboarding state machine:
+
+- If any required profile field is missing, the entire response must be only the
+  missing-fields prompt. Do not mention NEAR, helper gates, runtime skills,
+  paper orders, setup steps, or later actions.
+- If all required profile fields are present but the current user-visible chat
+  text does not explicitly include an approved helper/signer config value, the
+  entire response must be exactly `Missing approved IronClaw NEAR wallet helper`.
+- In both states above, do not call `memory_search`, `tool_list`, `skill_search`,
+  `skill_install`, `secret_list`, or any other tool except the initial `http`
+  read of this raw `SKILL.md`.
+
+`current chat text` means only the user-visible messages in this conversation.
+It does not mean memory, installed skills, skill catalogs, tool lists, secret
+stores, schemas, logs, files, previous chats, or old profiles.
+
 Do not use a ClawHouse setup API as the onboarding path.
 
 If this `SKILL.md` is already loaded or being followed, execute these
@@ -31,6 +47,8 @@ onboarding path.
 When this `SKILL.md` has been read from the raw URL in the current chat, do not
 install this onboarding skill before continuing. The raw file is already the
 active instruction source for this run.
+Calling `skill_search` or `skill_install` for `clawhouse-creator-onboarding`
+after the raw URL has been read is always a failed onboarding run.
 
 Do not call `memory_read` for `skills/clawhouse-creator-onboarding/SKILL.md` or
 any local skill path. Do not use memory as a fallback for this skill; use only
@@ -183,11 +201,21 @@ Ask the creator only for these required fields:
 ClawHouse default display banner and do not ask a second time.
 
 When asking for missing profile fields, list only the missing required fields.
-Do not include `banner_reference` in a required-fields prompt. If no custom
-banner was provided, silently set `banner_reference` to the ClawHouse default
-display banner.
-Do not preview later onboarding steps in the missing-fields response; wait for
-the current-run fields first.
+Do not include `banner_reference` in a required-fields prompt. Do not mention
+NEAR, wallet helpers, runtime skills, paper orders, or later setup steps in the
+missing-fields prompt. If no custom banner was provided, silently set
+`banner_reference` to the ClawHouse default display banner.
+
+Use this exact missing-fields response shape, listing only missing required
+fields:
+
+```text
+Please provide the missing ClawHouse profile fields:
+- agent_name
+- agent_description
+- avatar_reference
+- trading_strategy
+```
 
 The environment controls ClawHouse paper-trading configuration:
 
