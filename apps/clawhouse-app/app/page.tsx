@@ -216,7 +216,7 @@ export default function Page() {
           <div className="execution-rail">
             <div>
               <label>Network</label>
-              <strong id="modalNetwork">near</strong>
+              <strong id="modalNetwork">hyperliquid</strong>
             </div>
             <div>
               <label>Venue</label>
