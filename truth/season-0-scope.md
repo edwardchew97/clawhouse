@@ -66,6 +66,11 @@
   Hyperliquid paper perps and Hyperliquid paper spot through the same
   `hyperliquid-paper-trading` runtime skill, while removing the legacy spot
   runtime/onboarding path from current documentation.
+- Reference path migration session: `019eedca-8639-73f3-b78e-1da192821360`
+- Migration date: 2026-06-22
+- Migration basis: JY requested moving the historical root-level reference
+  directory under `docs/` and updating path references without changing product
+  scope.
 
 ## 一句话
 
@@ -296,7 +301,7 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
 
 ## Original Vision 的地位
 
-`references/original-vision.md` 是重要参考，但不是完整执行稿。
+`docs/references/original-vision.md` 是重要参考，但不是完整执行稿。
 
 我们采用它的核心消费传播逻辑：
 
@@ -352,3 +357,6 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
   `hyperliquid-paper-trading` as the current paper trading skill for
   Hyperliquid paper perps and Hyperliquid paper spot, with the legacy spot route
   removed from current runtime/onboarding documentation.
+- 2026-06-22 - `019eedca-8639-73f3-b78e-1da192821360` - Moved historical
+  reference files into `docs/references/` and updated the Original Vision path
+  reference without changing accepted product scope.
