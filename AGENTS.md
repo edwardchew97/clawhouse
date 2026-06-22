@@ -126,10 +126,10 @@ Before changing product scope, implementation scope, or docs, read:
 - `truth/season-0-creator-onboarding.md`
 - `truth/agent-trading-scope.md`
 - `truth/agent-board-ledger-scope.md`
-- `references/original-vision.md`
-- `references/scope-v0.md`
+- `docs/references/original-vision.md`
+- `docs/references/scope-v0.md`
 
-Accepted truth lives in `truth/`. Files in `references/` are context only unless
+Accepted truth lives in `truth/`. Files in `docs/references/` are context only unless
 JY explicitly promotes them to truth.
 
 ## Truth Document Source And Change Log
