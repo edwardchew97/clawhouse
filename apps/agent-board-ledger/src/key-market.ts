@@ -15,7 +15,7 @@ const defaultRpcUrls: Record<string, string> = {
 export async function listKeyMarketTrades(db: LedgerDb, env: RuntimeEnv, searchParams: URLSearchParams) {
   const agentId = cleanString(searchParams.get("agentId") ?? searchParams.get("agent_id"));
   const limit = boundedLimit(searchParams.get("limit"));
-  const config = keyMarketConfig(env, {});
+  const config = keyMarketConfig(env);
   const where = ["network_id = ?", "contract_id = ?"];
   const params: unknown[] = [config.networkId, config.contractId];
 
@@ -58,7 +58,8 @@ export async function reportKeyMarketTrade(
     side: normalizeSide(data.side),
     amount: integerString(data.amount, "amount", false),
   };
-  const config = keyMarketConfig(env, data);
+  const config = keyMarketConfig(env);
+  assertReportedKeyMarketConfig(data, config);
   const txStatus = await fetchNearTxStatus(rpcFetch, config.rpcUrl, txHash, signerId);
   const verified = verifyKeyMarketTx(txStatus, {
     txHash,
@@ -162,16 +163,14 @@ export async function reportKeyMarketTrade(
   };
 }
 
-function keyMarketConfig(env: RuntimeEnv, input: JsonObject) {
-  const networkId = cleanString(input.networkId ?? input.network_id)
-    ?? cleanEnv(env.CLAWHOUSE_KEY_NEAR_NETWORK_ID)
+function keyMarketConfig(env: RuntimeEnv) {
+  const networkId = cleanEnv(env.CLAWHOUSE_KEY_NEAR_NETWORK_ID)
     ?? cleanEnv(env.KEY_NEAR_NETWORK_ID)
     ?? cleanEnv(env.NEAR_NETWORK_ID)
     ?? defaultNetworkId;
   const contractId = cleanEnv(env.CLAWHOUSE_KEY_MARKET_CONTRACT_ID)
     ?? cleanEnv(env.KEY_MARKET_CONTRACT_ID)
     ?? cleanEnv(env.CONTRACT_ID)
-    ?? cleanString(input.contractId ?? input.contract_id)
     ?? defaultContractId;
   const rpcUrl = cleanEnv(env.CLAWHOUSE_KEY_NEAR_RPC_URL)
     ?? cleanEnv(env.KEY_NEAR_RPC_URL)
@@ -181,6 +180,17 @@ function keyMarketConfig(env: RuntimeEnv, input: JsonObject) {
     ?? `https://rpc.${networkId}.near.org`;
 
   return { networkId, contractId, rpcUrl };
+}
+
+function assertReportedKeyMarketConfig(input: JsonObject, config: ReturnType<typeof keyMarketConfig>) {
+  const reportedNetworkId = cleanString(input.networkId ?? input.network_id);
+  const reportedContractId = cleanString(input.contractId ?? input.contract_id);
+  if (reportedNetworkId && reportedNetworkId !== config.networkId) {
+    throw new RequestError("Reported network_id does not match configured key-market network", 400);
+  }
+  if (reportedContractId && reportedContractId !== config.contractId) {
+    throw new RequestError("Reported contract_id does not match configured key-market contract", 400);
+  }
 }
 
 async function fetchNearTxStatus(rpcFetch: FetchLike, rpcUrl: string, txHash: string, signerId: string) {
