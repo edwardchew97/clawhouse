@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.25
+version: 0.4.26
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -14,11 +14,10 @@ ClawHouse trading agent.
 Follow this strict order:
 
 1. Collect the current-run environment and required profile fields.
-2. Check whether an approved IronClaw local helper or signer config was already
-   provided in this chat's current runtime context before any helper-check tool
-   call.
-3. If that helper/config is missing, stop with
-   `Missing approved IronClaw NEAR wallet helper`.
+2. Read only the current chat text for an explicit approved IronClaw local
+   helper or signer config value. Do not call any tool for this gate.
+3. If the current chat text did not explicitly provide that helper/config, reply
+   exactly `Missing approved IronClaw NEAR wallet helper` and stop.
 4. Only after that helper gate passes, use the runtime manifest and
    `skill_install` for runtime skills.
 
@@ -56,18 +55,23 @@ particular, do not call `tool_search`, `tool_info`, `tool_info(schema)`,
 `tool_list`, `secret_list`, `memory_search`, `memory_tree`, `memory_read`, or
 schema lookup to discover a NEAR wallet helper, crypto helper, keypair helper,
 signer helper, secret, or account. Secret inventory, old memory, and
-`IDENTITY.md` are not approved helper surfaces. If the current chat/runtime did
-not already provide an approved helper or signer config before tool use, treat
-the helper as missing and report `Missing approved IronClaw NEAR wallet helper`.
+`IDENTITY.md` are not approved helper surfaces. If the current chat text did not
+explicitly provide an approved helper or signer config, reply exactly
+`Missing approved IronClaw NEAR wallet helper` and stop with no tool calls.
 
-After the current-run profile fields are present, the next response must be
-either an already-known approved helper/signer result or exactly
-`Missing approved IronClaw NEAR wallet helper`. If deciding that requires
-`tool_list`, `memory_search`, `secret_list`, `memory_read`, schema lookup, or
-any other tool call, the helper is missing. Before this helper gate passes, do
-not call `skill_install`, `skill_list`, `tool_list`, `memory_read`, `http` for
-the runtime manifest, ClawHouse backend endpoints, memory, secret, catalog,
-schema, or search tools.
+After the current-run profile fields are present, do not say that you need to
+check for a helper. Do not run `tool_list`, `memory_search`, `secret_list`,
+`memory_read`, schema lookup, or any other tool. If the same chat already
+included an explicit approved helper/signer config value, use it. Otherwise the
+entire response must be exactly:
+
+```text
+Missing approved IronClaw NEAR wallet helper
+```
+
+Before this helper gate passes, do not call `skill_install`, `skill_list`,
+`tool_list`, `memory_read`, `http` for the runtime manifest, ClawHouse backend
+endpoints, memory, secret, catalog, schema, or search tools.
 
 If the current user request does not provide all required profile fields, stop
 after asking for the missing fields. Before those current-run fields are present,
@@ -382,11 +386,10 @@ Always require user confirmation for:
    `environment: production`, accept that field and do not ask for it again.
    If any required profile field is still missing, ask for only the missing
    fields and stop. Do not run any other tool before the creator replies.
-2. Gate on an already-known approved IronClaw local helper or signer config
-   before account resolution. If this helper/config was not already provided in
-   the current runtime context before tool use, stop with
-   `Missing approved IronClaw NEAR wallet helper`; do not run memory, secret,
-   tool, schema, catalog, or search discovery to find one.
+2. Gate on an explicit approved IronClaw local helper or signer config value in
+   the current chat text before account resolution. If that value is not present,
+   reply exactly `Missing approved IronClaw NEAR wallet helper` and stop; do not
+   run memory, secret, tool, schema, catalog, or search discovery to find one.
 3. Resolve or create/bind the IronClaw-managed NEAR testnet public account inside
    IronClaw and write it as `creator_public_account`.
 4. Configure the paper runtime base URL from `environment`: staging maps to

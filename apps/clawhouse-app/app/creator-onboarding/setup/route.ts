@@ -171,10 +171,10 @@ function payloadFor(request: Request) {
       account,
       source,
       resolution:
-        "Gate on an already-known approved IronClaw local helper or signer config before resolving the IronClaw-managed NEAR testnet public account.",
+        "Gate on an explicit approved IronClaw local helper or signer config value in the current chat text before resolving the IronClaw-managed NEAR testnet public account.",
       helperDiscovery: {
         toolBasedCheckAllowed: false,
-        currentRuntimeContextOnly: true,
+        currentChatTextOnly: true,
         toolSearchAllowed: false,
         toolListAllowed: false,
         toolInfoSchemaAllowed: false,
@@ -183,6 +183,7 @@ function payloadFor(request: Request) {
         memoryReadAllowed: false,
         identityMemoryAllowed: false,
         stopIfMissing: "Missing approved IronClaw NEAR wallet helper",
+        exactStopOnly: true,
         missingIfToolCheckWouldBeRequired: true,
         notApprovedHelperSurfaces: ["secret inventory", "old memory", "IDENTITY.md"],
       },
@@ -225,6 +226,7 @@ function payloadFor(request: Request) {
       stagingOrderEndpoint: "https://clawhouse-backend-staging.vercel.app/paper/orders",
       postProfileHelperGate: {
         stopMessage: "Missing approved IronClaw NEAR wallet helper",
+        exactStopOnly: true,
         noToolCheck: true,
         missingIfToolCheckWouldBeRequired: true,
         forbidBeforeGatePasses: [
