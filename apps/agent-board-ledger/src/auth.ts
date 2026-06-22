@@ -103,7 +103,7 @@ export function assertServiceBearer(headers: Headers, configuredToken: string | 
   }
 }
 
-function tokensMatch(actual: string, expected: string) {
+export function tokensMatch(actual: string, expected: string) {
   const actualBuffer = Buffer.from(actual);
   const expectedBuffer = Buffer.from(expected);
   return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);

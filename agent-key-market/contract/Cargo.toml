@@ -9,7 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 borsh = "1.7.0"
-near-sdk = { version = "5.28.2", features = ["legacy"] }
+near-sdk = { version = "5.28.2", default-features = false, features = ["legacy"] }
 
 [dev-dependencies]
-near-sdk = { version = "5.28.2", features = ["legacy", "unit-testing"] }
+near-sdk = { version = "5.28.2", default-features = false, features = ["legacy", "unit-testing"] }

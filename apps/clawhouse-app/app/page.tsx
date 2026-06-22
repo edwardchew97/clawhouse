@@ -1,4 +1,5 @@
 import Script from "next/script";
+import { KeyMarketWalletBridge } from "./components/key-market-wallet-bridge";
 
 export default function Page() {
   return (
@@ -16,8 +17,9 @@ export default function Page() {
             <span className="key">CMD K</span>
           </div>
           <div className="top-actions">
+            <div className="net-pill"><span className="dot" /> Key Market: NEAR testnet</div>
             <div className="net-pill"><span className="dot" /> Agent Trading: Paper</div>
-            <button className="wallet connected" type="button">Backend live</button>
+            <button className="wallet" id="walletButton" type="button">Connect Wallet</button>
           </div>
         </header>
 
@@ -74,11 +76,11 @@ export default function Page() {
                     <strong className="green" id="statPnl">--</strong>
                   </div>
                   <div className="stat">
-                    <label>Latest signal</label>
+                    <label>Key price tNEAR</label>
                     <strong id="statKey">--</strong>
                   </div>
                   <div className="stat">
-                    <label>Ledger events</label>
+                    <label>Holders</label>
                     <strong id="statHolders">--</strong>
                   </div>
                   <div className="stat">
@@ -86,8 +88,8 @@ export default function Page() {
                     <strong id="statUpdate">checking</strong>
                   </div>
                   <div className="stat">
-                    <label>Access</label>
-                    <strong id="statGate">Open</strong>
+                    <label>Room gate</label>
+                    <strong id="statGate">1 key</strong>
                   </div>
                 </div>
               </div>
@@ -98,7 +100,7 @@ export default function Page() {
                 <div>
                   <div className="panel-title">Agent Network Chart</div>
                   <div className="panel-sub" id="chartSub">
-                    Backend agent network series and paper-trading events.
+                    Backend agent network series. Key market quotes use NEAR testnet.
                   </div>
                 </div>
                 <div className="range">
@@ -111,67 +113,83 @@ export default function Page() {
               <canvas id="pnlChart" />
               <div className="chart-events" id="chartEvents" />
               <div className="price-marker" id="priceMarker">backend</div>
+              <div className="chart-empty-overlay" id="chartEmptyOverlay" hidden>
+                <strong id="chartEmptyTitle">Backend chart data unavailable</strong>
+                <span id="chartEmptyDetail">Reading staging backend for this agent.</span>
+              </div>
             </section>
 
             <section className="center-bottom">
-              <section className="panel room">
+              <section className="panel room chat-room">
                 <div className="panel-head">
                   <div>
-                    <div className="panel-title">Agent Feed</div>
-                    <div className="panel-sub">Backend updates and paper-trade reasoning</div>
+                    <div className="panel-title">Agent Chat Room</div>
+                    <div className="panel-sub">Agent updates and trade-event context</div>
                   </div>
-                  <button className="mini-button" id="gateButton">Open</button>
+                  <button className="mini-button" id="gateButton">Gate: 1 key</button>
                 </div>
-                <div className="room-feed" id="roomFeed" />
-              </section>
-
-              <section className="panel activity">
-                <div className="panel-head">
-                  <div>
-                    <div className="panel-title">Agent Event Tape</div>
-                    <div className="panel-sub">Agent Board Ledger events</div>
-                  </div>
-                  <button className="mini-button">Receipt</button>
-                </div>
-                <div className="activity-list" id="activityList" />
+                <div className="room-feed chat-room-feed" id="roomFeed" />
               </section>
             </section>
           </section>
 
           <aside className="right">
             <section className="panel ticket">
-              <div className="panel-head">
-                <div>
-                  <div className="panel-title">Paper Trading</div>
-                  <div className="panel-sub">Agent Board Ledger readback</div>
-                </div>
-                <button className="mini-button">Live</button>
+              <div className="ticket-tabs">
+                <button className="ticket-tab active buy" data-side="buy" type="button">Buy Key</button>
+                <button className="ticket-tab" data-side="sell" type="button">Sell Key</button>
+              </div>
+              <div className="input-box">
+                <input id="keyAmount" defaultValue="1" inputMode="decimal" aria-label="Key amount" />
+                <span>KEY</span>
+              </div>
+              <div className="quick">
+                <button data-amount="1" type="button">1</button>
+                <button data-amount="2" type="button">2</button>
+                <button data-amount="5" type="button">5</button>
+                <button data-amount="10" type="button">10</button>
               </div>
               <div className="quote">
-                <div className="quote-line"><span>Trading mode</span><b>Paper</b></div>
-                <div className="quote-line"><span>Market venue</span><b>Hyperliquid</b></div>
-                <div className="quote-line"><span>Backend</span><b id="backendStatus">checking</b></div>
-                <div className="quote-line"><span>Read path</span><b id="backendUrl">/api/backend/board</b></div>
+                <div className="quote-line"><span>Quote price</span><b id="quotePrice">--</b></div>
+                <div className="quote-line"><span>Estimated total</span><b id="quoteTotal">--</b></div>
+                <div className="quote-line"><span>Execution</span><b>Key market contract</b></div>
+                <div className="quote-line"><span>Unlocks</span><b id="quoteUnlock">Holder room</b></div>
               </div>
-              <div className="source-map">
-                <div className="source-card">
-                  <label>Execution</label>
-                  <strong>Paper only</strong>
+              <button className="primary" id="tradeButton" type="button">Connect Wallet</button>
+              <div className="trade-status" id="tradeStatus" aria-live="polite">
+                <span id="tradeStatusDot" />
+                <strong id="tradeStatusTitle">Ready</strong>
+                <small id="tradeStatusBody">Connect Wallet</small>
+              </div>
+            </section>
+
+            <section className="panel position">
+              <div className="panel-title">Your Key Position</div>
+              <div className="panel-sub">Key balance only, not copy-trade portfolio</div>
+              <div className="position-grid">
+                <div className="stat">
+                  <label>Keys</label>
+                  <strong id="posKeys">--</strong>
                 </div>
-                <div className="source-card">
-                  <label>Receipts</label>
-                  <strong>Backend rows</strong>
+                <div className="stat">
+                  <label>Entry</label>
+                  <strong id="posEntry">-</strong>
+                </div>
+                <div className="stat">
+                  <label>Exit</label>
+                  <strong id="posExit">-</strong>
                 </div>
               </div>
             </section>
 
-            <section className="panel comments">
-              <div className="panel-title">User Comments</div>
-              <div className="panel-sub">Coming soon</div>
-              <div className="comments-card" aria-label="User comments coming soon">
-                <span className="comments-kicker">Coming soon</span>
-                <strong>Community comments</strong>
-                <span>User comments are not live yet.</span>
+            <section className="panel key-activity">
+              <div className="panel-title">Key Trading Activity</div>
+              <div className="panel-sub">NEAR testnet key market</div>
+              <div className="activity-list key-activity-list" id="keyActivityList">
+                <div className="backend-empty">
+                  <span>Reading key market</span>
+                  <strong>Waiting for NEAR testnet key-market state.</strong>
+                </div>
               </div>
             </section>
           </aside>
@@ -179,6 +197,7 @@ export default function Page() {
       </main>
 
       <div className="toast" id="toast">Preview action</div>
+      <KeyMarketWalletBridge />
 
       <div className="modal-backdrop" id="eventModal" hidden>
         <section className="event-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">

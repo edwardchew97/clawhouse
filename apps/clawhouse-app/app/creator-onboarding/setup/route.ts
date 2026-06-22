@@ -49,8 +49,9 @@ function completionTemplate(creatorPublicAccount: string) {
     "",
     "Next: create the ClawHouse key market so users can trade your key.",
     "",
-    `1. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
-    "2. Tell this agent: create keymarket.",
+    "1. Back up the NEAR private key using IronClaw's secure backup or recovery flow.",
+    `2. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
+    "3. Tell this agent: create keymarket.",
     "",
     "The agent can already submit paper orders and reasoning. It will create the key market through the local ClawHouse skill once the account is funded.",
     "",
@@ -70,10 +71,18 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
     fundTo: creatorPublicAccount,
     fundingAddressRequired: true,
     fundingAddressProvided: hasCreatorPublicAccount,
+    fundingAddressSource: hasCreatorPublicAccount
+      ? "resolved_public_account"
+      : "ironclaw_account_resolution_required",
+    creatorPublicAccountIsUserIntake: false,
     createTrigger: "create keymarket",
     userRunsCommand: false,
     backendRunsCommand: false,
     executor: "clawhouse-creator-onboarding skill inside the target IronClaw agent",
+    signerReuse:
+      "Use the same IronClaw-managed NEAR key/account for ClawHouse wallet-signed backend requests and key-market creation when that signer already exists.",
+    backupReminder:
+      "Back up the NEAR private key using IronClaw's secure backup or recovery flow before funding. Do not paste it into chat, Workbench, tool output, or logs.",
     localAction: {
       runner: "agent-key-market create",
       cwd: "agent-key-market",
@@ -89,19 +98,21 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
       args: ["<agent_id>", "<agent_name>", "<metadata_uri>"],
     },
     userFacingSteps: [
+      "Back up the NEAR private key using IronClaw's secure backup or recovery flow.",
       `Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
       "Tell this agent: create keymarket.",
     ],
     forbidden: [
       "Do not show the creator a bun run command as the normal path.",
       "Do not paste NEAR private keys or seed phrases into chat.",
+      "Do not paste NEAR private keys or seed phrases into Workbench, tool output, or logs.",
       "Do not send mainnet NEAR for this testnet key market.",
     ],
   };
 }
 
 function payloadFor(request: Request) {
-  const { account, hasAccount } = creatorPublicAccount(request);
+  const { account, hasAccount, source } = creatorPublicAccount(request);
 
   return {
     ok: true,
@@ -109,15 +120,26 @@ function payloadFor(request: Request) {
     mode: "ironclaw-side-onboarding",
     status: "active",
     message:
-      "Agent is active. Use the manifest and skill_install inside IronClaw; the remaining creator action is key-market funding and the create keymarket skill action.",
+      "Agent is active. Use the manifest and skill_install inside IronClaw; the remaining creator actions are secure NEAR private-key backup, key-market funding, and the create keymarket skill action.",
     intake: [
       "agent_name",
       "agent_description",
       "avatar_reference",
       "banner_reference",
       "trading_strategy",
-      "creator_public_account",
     ],
+    resolvedFields: ["creator_public_account"],
+    creatorPublicAccount: {
+      userIntake: false,
+      account,
+      source,
+      resolution:
+        "Resolve or create/bind the IronClaw-managed NEAR testnet public account inside IronClaw before funding.",
+      fallbackPrompt:
+        "Ask the creator for a public account id only if IronClaw cannot resolve or create/bind one.",
+      privateKeyHandling:
+        "Never ask for, store, echo, or log the NEAR private key, seed phrase, or raw signing material.",
+    },
     manifest: {
       url: manifestUrl,
       requiredSkills,
@@ -170,20 +192,26 @@ export function GET(request: Request) {
 
 function creatorPublicAccount(request: Request) {
   const url = new URL(request.url);
-  const account = cleanAccountId(
-    url.searchParams.get("creatorPublicAccount") ??
-      firstEnv([
-        "CLAWHOUSE_CREATOR_PUBLIC_ACCOUNT",
-        "CLAWHOUSE_CREATOR_PUBLIC_ACCOUNT_ID",
-        "ACCOUNT_ID",
-        "NEAR_ACCOUNT_ID",
-        "testUserAccountId",
-      ]),
+  const queryAccount = cleanAccountId(url.searchParams.get("creatorPublicAccount"));
+  const envAccount = cleanAccountId(
+    firstEnv([
+      "CLAWHOUSE_CREATOR_PUBLIC_ACCOUNT",
+      "CLAWHOUSE_CREATOR_PUBLIC_ACCOUNT_ID",
+      "ACCOUNT_ID",
+      "NEAR_ACCOUNT_ID",
+      "testUserAccountId",
+    ]),
   );
+  const account = queryAccount || envAccount;
 
   return {
     account: account || "<creator_public_account>",
     hasAccount: Boolean(account),
+    source: queryAccount
+      ? "request_query"
+      : envAccount
+        ? "environment"
+        : "ironclaw_managed_wallet_required",
   };
 }
 

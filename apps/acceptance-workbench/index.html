@@ -1783,7 +1783,7 @@
         try {
           const response = await fetch("/crypto/encrypt", {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: workbenchHeaders({ "content-type": "application/json" }),
             body: JSON.stringify({ value })
           });
           const result = await response.json();
@@ -1809,7 +1809,7 @@
         try {
           const response = await fetch("/crypto/decrypt", {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: workbenchHeaders({ "content-type": "application/json" }),
             body: JSON.stringify({ ciphertext })
           });
           const result = await response.json();
@@ -2560,7 +2560,7 @@
 
       const response = await fetch(runnerPath(sourceStep), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: workbenchHeaders({ "content-type": "application/json" }),
         body: JSON.stringify({
           stepId: sourceStep.id,
           env: state.env,
@@ -3566,7 +3566,7 @@
 
         const response = await fetch(target, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: workbenchHeaders({ "content-type": "application/json" }),
           body: JSON.stringify(payload)
         });
         const rawResult = await response.json();
@@ -3774,10 +3774,18 @@
       return escapeHtml(value);
     }
 
+    function workbenchHeaders(extra = {}) {
+      const token = document.querySelector("meta[name='clawhouse-workbench-token']")?.content || "";
+      return {
+        ...extra,
+        ...(token ? { "x-clawhouse-workbench-token": token } : {})
+      };
+    }
+
     async function boot() {
       const [spec, health] = await Promise.all([
-        fetch("/flows.json").then((res) => res.json()),
-        fetch("/health").then((res) => res.json())
+        fetch("/flows.json", { headers: workbenchHeaders() }).then((res) => res.json()),
+        fetch("/health", { headers: workbenchHeaders() }).then((res) => res.json())
       ]);
       state.spec = spec;
       normalizeSelection();

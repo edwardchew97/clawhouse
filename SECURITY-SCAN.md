@@ -14,6 +14,15 @@
 
 ---
 
+## Remediation status
+
+Current branch remediation after the audit:
+- Fixed in code: A3/A4 Workbench localhost bind, flow/runner/health auth, outbound allowlist, and disabled redirect following; A5 timing-safe cron/read-token comparisons; A6 generic unexpected Workbench/app-backend 5xx responses; C3 read grants are no longer capped to the latest 50 rows; B2 now has a pre-mutation deposit floor check before buy state writes; the GitHub Dependabot `wee_alloc` critical alert is removed from the key-market contract dependency graph.
+- Not fixed in code: A1 credential rotation, A2 local wallet purging, and B1 full transfer-failure compensation. These require external secret rotation, operator confirmation for deleting local ignored wallet files, or a dedicated contract payout/claim redesign.
+- Dependency advisories remain open: compatible `bun update` did not clear the `postcss` or `elliptic` advisories; `cargo-audit` is still not installed. The GitHub default-branch alert for `wee_alloc` can remain visible until this fix is promoted to `main`.
+
+---
+
 ## Part A — Security findings
 
 Severity: **Critical / High / Medium / Low / Informational**.
@@ -33,18 +42,22 @@ Severity: **Critical / High / Medium / Low / Informational**.
 - `/crypto/decrypt` = unauthenticated decryption oracle for the workbench's AES key.
 - `/run/script` runs allowlisted scripts with `NEAR_PRIVATE_KEY` injected as env.
 - **Action:** Set `hostname: "127.0.0.1"` explicitly for defense against runtime/config drift; add a bearer check to `/run/*` and `/crypto/*`.
+- **Status:** Fixed in code: explicit localhost bind plus per-page runner token on `/flows.json`, `/run/*`, `/crypto/*`, and `/health`.
 
 ### A4. `/run/http` is an unauthenticated local SSRF-style fetcher — **Low** (Medium if exposed beyond localhost)
 `runHttp()` (~line 224) does `fetch(String(payload.url))` with a caller-supplied URL, no host allowlist, no block on link-local. Current Bun defaults keep this localhost-only, but any local caller or future non-local bind could use it to reach internal services such as `169.254.169.254`.
 - **Action:** Allowlist outbound targets (or block private/loopback/link-local) and gate behind auth.
+- **Status:** Fixed in code for `/run/http` and `/run/near-view` with outbound origin allowlists and redirect following disabled.
 
 ### A5. Non-constant-time comparison for cron secret and read-token hash — **Low**
 `src/vercel.ts:~70` `authorization !== \`Bearer ${cronSecret}\``; `src/server.ts:~1608` `metadata?.read_token_sha256 !== tokenHash`. The admin-token path is already correct (`crypto.timingSafeEqual` in `auth.ts`); these two aren't.
 - **Action:** Reuse the timing-safe comparison.
+- **Status:** Fixed in code.
 
 ### A6. Internal error messages returned to clients — **Low (info)**
 `acceptance-workbench/server.ts:505` (`String(error)`) and `clawhouse-app/app/api/backend/lib.ts:63–70` serialize `error.message` into responses. `agent-board-ledger/src/server.ts` already returns a generic `"Internal server error"` for unexpected 500s, but still exposes expected `RequestError` messages and includes `safeErrorMessage(error)` in cron failure payloads.
 - **Action:** Generic messages for unexpected 5xx; log detail server-side.
+- **Status:** Fixed in code for unexpected Workbench/app-backend 5xx responses; expected validation/auth errors still return specific messages.
 
 ### A7. Floating-point math for paper-trading balances — **Low (info)**
 `src/paper-trading.ts` uses JS `Number`/`Math.abs` + `EPSILON` for cash/margin. Fine for simulated money; would be a real issue for real funds (use integer minor-units / decimals).
@@ -67,6 +80,7 @@ The line-by-line read did surface real issues the earlier pattern-grep missed:
 ### B2. State mutated before deposit assertion in `buy_key` — **Low**
 `buy_key` writes `agent.supply/reserve` and the buyer balance (lines 192-195) **before** `assert_attached_deposit(required_deposit)` (203). This is *safe today* because a NEAR panic rolls back all state in the same call — but the ordering is fragile: any future refactor that does partial commits, or a non-panicking validation, would persist state for an unpaid buy.
 - **Action:** Move deposit/slippage checks above the writes (compute `required_deposit` and assert before mutating), for defense in depth and readability.
+- **Status:** Partially fixed in code: `quote.total_cost` is asserted before mutation; the final storage-inclusive deposit check still happens after mutation because storage cost depends on the write.
 
 ### B3. Creator's initial free key is structurally locked — **Informational (by design, worth documenting)**
 `create_agent_key` mints `supply = 1` to the creator for free (lines 139-151), and `sell_key` forbids `amount >= supply` ("Cannot sell final key", line 369). So the creator's seed key can never be sold and the curve's first paid buy starts at `price_range(1,1)` ≈ 0.0505 NEAR. This is a deliberate design choice but isn't stated anywhere; an integrator could misread the supply/price relationship. Note it in the contract docs.
@@ -106,7 +120,7 @@ Reviewed as a third party from the code itself, not the docs. The backend is one
 
 ### C3. Code-level design issues
 - **N+1 on the event timeline:** `listEvents` then `Promise.all(map(presentEvent))`, each firing its own `listAttachments` (server.ts:~1480, 1497-1505).
-- **Missing pagination / silent caps:** `GET /boards/:id/events` is **fully unbounded** (db.ts:743-745); balance-changes/prices silently cap at `LIMIT 100` with no cursor; `GET /boards` caps at 100. Worst: **`matchingReadGrant` scans only the last `LIMIT 50` granted checks (server.ts:~1601)** — a board with >50 newer grants can push a still-valid token out of the window and **randomly deny a valid read token**. This is a correctness bug, not just ergonomics.
+- **Missing pagination / silent caps:** `GET /boards/:id/events` is **fully unbounded** (db.ts:743-745); balance-changes/prices silently cap at `LIMIT 100` with no cursor; `GET /boards` caps at 100. Original scan found that `matchingReadGrant` scanned only the last `LIMIT 50` granted checks (server.ts:~1601), so a board with >50 newer grants could push a still-valid token out of the window and randomly deny a valid read token. **Status:** the `LIMIT 50` correctness bug is fixed; indexed token lookup remains a follow-up schema improvement.
 - **Idempotency only works sequentially:** `submitPaperOrder` does its idempotency `SELECT` outside the transaction (paper-trading.ts:188); two concurrent identical `client_order_id`s both pass the pre-check, and the second hits the generic unique-violation → **409 "Duplicate record"** instead of the intended "return existing order" replay path.
 - **Double-write on board creation (SQLite only):** the handler inserts `tracked_wallets` (server.ts:274-293) **and** an `AFTER INSERT` trigger inserts the same row (db.ts:567-593); the Neon schema has no such trigger. Idempotent today (`ON CONFLICT DO NOTHING`) but a divergence that will break when one path is edited.
 - **Watch endpoints write a row every tick even on zero delta** (server.ts:750-779, 873-902); there's even a persisted `"no_change"` classification (~1950). Unbounded write amplification for idle boards.
@@ -139,12 +153,13 @@ Reviewed as a third party from the code itself, not the docs. The backend is one
 - `bun audit` in `apps/clawhouse-app`: **1 moderate** advisory, `postcss <8.5.10` via `next` (`GHSA-qx2v-qp2m-jg93`).
 - `bun audit` in `apps/agent-board-ledger`: **1 low** advisory, `elliptic <=6.6.1` via `@near-js/crypto` through `secp256k1` (`GHSA-848j-6mx2-7j84`).
 - `bun audit` in `agent-key-market`: no JavaScript vulnerabilities found.
+- GitHub Dependabot readback reported **1 critical** Rust advisory on the default branch: `wee_alloc` in `agent-key-market/Cargo.lock` (`GHSA-rc23-xxgq-x27g`). Current branch mitigation disables `near-sdk` default features in `agent-key-market/contract/Cargo.toml`; `cargo tree --target all -i wee_alloc` no longer finds the package.
 - `cargo audit` could not be run because the `cargo-audit` subcommand is not installed.
 
 ## Overall priority order
 1. Rotate Neon password + admin token (A1).
-2. Make acceptance-workbench's localhost bind explicit; add auth and outbound allowlists (A3, A4).
-3. Smart contract: handle transfer failure on the sell payout path (B1).
-4. Backend: fix the read-grant `LIMIT 50` denial bug and the inverted trust model (C3, C4).
-5. Patch the dependency advisories surfaced by `bun audit`; install/run `cargo audit`.
-6. Cleanups: timing-safe comparisons (A5), sanitize 5xx bodies (A6), purge stale wallets (A2), dedup params and validators (C2).
+2. Smart contract: handle transfer failure on the sell payout path (B1).
+3. Decide and implement the backend trust-model change for PnL-moving writes (C4).
+4. Patch the dependency advisories surfaced by `bun audit`; install/run `cargo audit`.
+5. Purge stale local wallet JSON after operator confirmation (A2).
+6. Continue backend cleanup: indexed read-token lookup, pagination, input normalization, and validator deduplication (C2/C3).

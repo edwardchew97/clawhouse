@@ -1,5 +1,5 @@
 import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openRuntimeLedgerDb, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
-import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAuthPayload, readSignedHeaders, sha256Hex, timestampIsFresh, verifySignature } from "./auth.js";
+import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAuthPayload, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
 import { refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
 import { PaperAuthError, createPaperAccount, createPaperMarketSnapshot, readPaperAccount, readPaperLeaderboard, replayPaperOrder, runPaperRiskCheck, submitPaperOrder } from "./paper-trading.js";
 import type { AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
@@ -1597,15 +1597,14 @@ async function matchingReadGrant(
   const checks = await db.all<ReadAccessCheckRow>(
     `SELECT * FROM read_access_checks
      WHERE board_id = ? AND access_result = 'granted'
-     ORDER BY checked_at DESC, created_at DESC, id DESC
-     LIMIT 50`,
+     ORDER BY checked_at DESC, created_at DESC, id DESC`,
     [boardId],
   );
 
   for (const check of checks) {
     if (!accessLevelAllows(check.access_level, requiredLevel)) continue;
     const metadata = parseJson(check.metadata_json) as JsonObject | null;
-    if (metadata?.read_token_sha256 !== tokenHash) continue;
+    if (typeof metadata?.read_token_sha256 !== "string" || !tokensMatch(metadata.read_token_sha256, tokenHash)) continue;
     const expiresAt = typeof metadata.expires_at === "string" ? metadata.expires_at : null;
     if (expiresAt && Date.parse(expiresAt) <= Date.parse(now)) continue;
     if (metadata?.key_holder_live_check === true) {

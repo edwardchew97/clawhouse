@@ -355,7 +355,8 @@ async function updateHealth(services: ServiceRuntime[]) {
 
 async function checkHealth(url: string): Promise<HealthResult> {
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(1500) });
+    const headers = await healthHeaders(url);
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(1500) });
     return {
       ok: response.ok,
       status: response.status,
@@ -368,6 +369,18 @@ async function checkHealth(url: string): Promise<HealthResult> {
       checkedAt: new Date().toISOString(),
     };
   }
+}
+
+async function healthHeaders(url: string) {
+  const parsed = new URL(url);
+  if (parsed.pathname !== "/health" || parsed.port !== "4318") return {};
+
+  const response = await fetch(parsed.origin, { signal: AbortSignal.timeout(1500) });
+  if (!response.ok) return {};
+
+  const html = await response.text();
+  const token = html.match(/name="clawhouse-workbench-token" content="([^"]+)"/)?.[1] ?? "";
+  return token ? { "x-clawhouse-workbench-token": token } : {};
 }
 
 function allHealthy(services: ServiceRuntime[]) {

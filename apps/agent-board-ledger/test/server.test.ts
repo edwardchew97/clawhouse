@@ -400,6 +400,45 @@ describe("Agent Board Ledger local backend", () => {
     expect(grant.check.metadata.expires_at).toBe("2026-06-19T00:10:00.000Z");
   });
 
+  test("does not drop valid read tokens behind newer grants", async () => {
+    await registerBoard({ visibility_mode: "holder_gated" });
+    await signedFetch("POST", "/boards/board-1/events", {
+      client_event_id: "client-private",
+      reason: "Older grant should still read this.",
+    });
+
+    const readToken = "older-still-valid-token";
+    const originalGrant = await postJson("/boards/board-1/read-access/checks", {
+      requester_wallet_address: "early-holder.testnet",
+      access_level: "key_holder_detail",
+      access_result: "granted",
+      read_token: readToken,
+      expires_at: "2026-06-20T00:00:00.000Z",
+    });
+    expect(originalGrant.status).toBe(201);
+
+    for (let index = 1; index <= 51; index += 1) {
+      currentNow = new Date(`2026-06-19T00:${String(index).padStart(2, "0")}:00.000Z`);
+      const grant = await postJson("/boards/board-1/read-access/checks", {
+        requester_wallet_address: `newer-holder-${index}.testnet`,
+        access_level: "key_holder_detail",
+        access_result: "granted",
+        read_token: `newer-token-${index}`,
+        expires_at: "2026-06-20T00:00:00.000Z",
+      });
+      expect(grant.status).toBe(201);
+    }
+
+    currentNow = new Date("2026-06-19T00:52:00.000Z");
+    const allowed = await app.fetch(new Request("http://ledger.test/boards/board-1/events", {
+      headers: { "x-clawhouse-read-token": readToken },
+    }));
+    const allowedBody = await jsonOf<{ events: Array<Record<string, any>> }>(allowed);
+
+    expect(allowed.status).toBe(200);
+    expect(allowedBody.events[0].reason).toBe("Older grant should still read this.");
+  });
+
   test("accepts a wallet-signed event and records transaction identifiers", async () => {
     await registerBoard();
 

@@ -172,6 +172,7 @@ impl Contract {
             quote.total_cost.0 <= max_price.0,
             "Total cost exceeds max_price"
         );
+        assert_attached_deposit(quote.total_cost.0);
 
         let balance_key = BalanceKey {
             agent_id: agent_id.clone(),

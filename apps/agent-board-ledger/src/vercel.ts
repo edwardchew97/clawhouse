@@ -1,4 +1,4 @@
-import { ADMIN_TOKEN_ENV } from "./auth.js";
+import { ADMIN_TOKEN_ENV, tokensMatch } from "./auth.js";
 import { openRuntimeLedgerDb, type LedgerDb } from "./db.js";
 import { createApp } from "./server.js";
 
@@ -67,7 +67,10 @@ export function normalizeVercelLedgerUrl(input: string | URL) {
 function prepareCronTickRequest(request: Request, url: URL, env: RuntimeEnv) {
   const cronSecret = env[CRON_SECRET_ENV]?.trim();
   const authorization = request.headers.get("authorization")?.trim();
-  if (!cronSecret || authorization !== `Bearer ${cronSecret}`) {
+  const bearerToken = authorization?.toLowerCase().startsWith("bearer ")
+    ? authorization.slice("bearer ".length).trim()
+    : "";
+  if (!cronSecret || !bearerToken || !tokensMatch(bearerToken, cronSecret)) {
     return json({ ok: false, error: "Unauthorized cron request" }, 401);
   }
 
