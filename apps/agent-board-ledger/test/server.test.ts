@@ -4,7 +4,7 @@ import { KeyPair, keyToImplicitAddress } from "@near-js/crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { migrate, openRuntimeLedgerDb, openSqliteLedgerDb, type SqliteLedgerDb } from "../src/db";
+import { migrate, openMigratedRuntimeLedgerDb, openRuntimeLedgerDb, openSqliteLedgerDb, type LedgerDb, type SqliteLedgerDb } from "../src/db";
 import { ADMIN_TOKEN_ENV, canonicalAuthPayload, sha256Hex } from "../src/auth";
 import { canonicalPaperAuthPayload } from "../src/paper-trading";
 import { createApp } from "../src/server";
@@ -351,6 +351,29 @@ describe("Agent Board Ledger local backend", () => {
     await expect(openRuntimeLedgerDb({})).rejects.toThrow(
       "Missing AGENT_BOARD_LEDGER_DATABASE_URL, DATABASE_URL, or ledgerDatabaseUrl; runtime storage must use Neon/Postgres",
     );
+  });
+
+  test("runtime DB open does not run Neon migrations", async () => {
+    const fake = createFakeLedgerDb();
+    const db = await openRuntimeLedgerDb(
+      { AGENT_BOARD_LEDGER_DATABASE_URL: "postgres://runtime.test/db" },
+      () => fake.db,
+    );
+
+    expect(db).toBe(fake.db);
+    expect(fake.runs).toEqual([]);
+  });
+
+  test("explicit migrated runtime DB open runs Neon migrations", async () => {
+    const fake = createFakeLedgerDb();
+    const db = await openMigratedRuntimeLedgerDb(
+      { AGENT_BOARD_LEDGER_DATABASE_URL: "postgres://runtime.test/db" },
+      () => fake.db,
+    );
+
+    expect(db).toBe(fake.db);
+    expect(fake.runs.length).toBeGreaterThan(0);
+    expect(fake.closed).toBe(false);
   });
 
   test("requires service authorization for board registration", async () => {
@@ -2785,6 +2808,38 @@ function columnNames(db: Database, table: string) {
 
 function countRows(table: "holding_snapshots" | "pnl_snapshots" | "events" | "observations" | "balance_changes") {
   return sqliteDb.raw.query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM ${table}`).get()?.count ?? 0;
+}
+
+function createFakeLedgerDb() {
+  const runs: string[] = [];
+  const state = { closed: false };
+  const db: LedgerDb = {
+    provider: "neon-postgres",
+    async get<T>() {
+      return undefined as T | undefined;
+    },
+    async all<T>() {
+      return [] as T[];
+    },
+    async run(sql: string) {
+      runs.push(sql);
+      return { changes: 0 };
+    },
+    async transaction<T>(callback: (tx: LedgerDb) => Promise<T>) {
+      return await callback(db);
+    },
+    close() {
+      state.closed = true;
+    },
+  };
+
+  return {
+    db,
+    runs,
+    get closed() {
+      return state.closed;
+    },
+  };
 }
 
 function mockHyperliquidFetch(input: {
