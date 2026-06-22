@@ -1,0 +1,45 @@
+meta {
+  name: 03 Read Reasoning With Token
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/boards/{{ledger_board_id}}/events
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  requireLocalDev();
+  const boardId = String(value("ledger_board_id", ""));
+  const readToken = String(value("ledger_read_token", ""));
+  if (!boardId) throw new Error("Missing ledger_board_id. Run Register Holder-Gated Board first.");
+  if (!readToken) throw new Error("Missing ledger_read_token. Run Create Holder Read Token first.");
+  req.setUrl(`${value("base_url", "http://127.0.0.1:4321")}/boards/${boardId}/events`);
+  req.setHeader("x-clawhouse-read-token", readToken);
+}
+
+tests {
+  test("holder-gated reasoning is readable with a read token", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(200);
+    expect(body.events).to.be.an("array");
+    expect(body.events.length).to.be.greaterThan(0);
+    expect(body.events[0].reason).to.equal(bru.getVar("ledger_event_reason"));
+  });
+}

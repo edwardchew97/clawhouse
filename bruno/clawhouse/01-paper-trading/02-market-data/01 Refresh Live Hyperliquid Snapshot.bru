@@ -56,7 +56,8 @@ script:pre-request {
     const roots = [
       bru.cwd(),
       path.resolve(bru.cwd(), "../.."),
-      path.resolve(bru.cwd(), "../../..")
+      path.resolve(bru.cwd(), "../../.."),
+      path.resolve(bru.cwd(), "../../../..")
     ];
     const suffixes = [
       ".env.local",
