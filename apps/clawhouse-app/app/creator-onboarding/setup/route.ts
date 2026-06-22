@@ -42,6 +42,11 @@ const tradingInstall = tradingSkills.map(({ name, url }) => ({
   parameters: { name, url },
 }));
 
+const paperEnvironments = {
+  staging: "https://clawhouse-backend-staging.vercel.app",
+  production: "https://clawhouse-backend-prod.vercel.app",
+};
+
 // Keep this text matched with skills/clawhouse-creator-onboarding/SKILL.md.
 function completionTemplate(creatorPublicAccount: string) {
   return [
@@ -122,12 +127,19 @@ function payloadFor(request: Request) {
     message:
       "Agent is active. Use the manifest and skill_install inside IronClaw; the remaining creator actions are secure NEAR private-key backup, key-market funding, and the create keymarket skill action.",
     intake: [
+      "environment",
       "agent_name",
       "agent_description",
       "avatar_reference",
       "banner_reference",
       "trading_strategy",
     ],
+    environment: {
+      required: true,
+      choices: ["staging", "production"],
+      paperBaseUrls: paperEnvironments,
+      userProvidesBackendUrl: false,
+    },
     resolvedFields: ["creator_public_account"],
     creatorPublicAccount: {
       userIntake: false,
@@ -154,6 +166,35 @@ function payloadFor(request: Request) {
       canSubmitPaperOrders: true,
       canSubmitReasoning: true,
       appDiscoveryBlocker: "missing_key_market",
+    },
+    immediatePaperTradeAcceptance: {
+      enabledWhenRequestedByCreator: true,
+      requiredRuntimeSkill: "hyperliquid-paper-trading",
+      stagingOrderEndpoint: "https://clawhouse-backend-staging.vercel.app/paper/orders",
+      forbiddenTools: [
+        "web_search",
+        "skill_search(clawhouse)",
+        "tool_search(clawhouse)",
+        "tool_info(clawhouse_creator_onboarding)",
+        "tool_install(clawhouse_creator_onboarding)",
+        "skill_install(clawhouse-creator-onboarding_without_url)",
+        "skill_install_with_fetched_skill_markdown_as_name",
+      ],
+      forbiddenRoutes: [
+        "portfolio",
+        "dune_sim",
+        "near_intents",
+        "api.clawhouse.com",
+        "staging-api.clawhouse.com",
+        "/api/v1/trading/paper",
+        "/paper-trade",
+      ],
+      stopIfMissing: [
+        "CLAWHOUSE_PAPER_ACCOUNT_ID",
+        "CLAWHOUSE_AGENT_ID",
+        "paper_signing_public_key",
+        "paper_signing_capability",
+      ],
     },
     activation: {
       defaultStatus: "active",
@@ -182,6 +223,19 @@ function payloadFor(request: Request) {
       "withdrawal",
       "real_money_trade_execution",
       "backend_key_market_creation",
+      "portfolio_for_paper_trade",
+      "dune_sim_for_paper_trade",
+      "near_intents_for_paper_trade",
+      "api_clawhouse_com_for_paper_trade",
+      "paper_trade_route_outside_paper_namespace",
+      "skill_search_clawhouse",
+      "tool_search_clawhouse",
+      "tool_info_clawhouse_creator_onboarding",
+      "tool_install_clawhouse_creator_onboarding",
+      "skill_install_clawhouse_creator_onboarding_without_url",
+      "web_search_for_clawhouse_endpoints",
+      "staging_api_clawhouse_com_for_paper_trade",
+      "skill_install_with_fetched_skill_markdown_as_name",
     ],
   };
 }

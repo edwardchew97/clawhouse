@@ -156,11 +156,6 @@ export default function Page() {
                 <div className="quote-line"><span>Unlocks</span><b id="quoteUnlock">Holder room</b></div>
               </div>
               <button className="primary" id="tradeButton" type="button">Connect Wallet</button>
-              <div className="trade-status" id="tradeStatus" aria-live="polite">
-                <span id="tradeStatusDot" />
-                <strong id="tradeStatusTitle">Ready</strong>
-                <small id="tradeStatusBody">Connect Wallet</small>
-              </div>
             </section>
 
             <section className="panel position">

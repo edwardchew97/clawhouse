@@ -1,0 +1,41 @@
+meta {
+  name: 01 Read Reasoning Without Token
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/boards/{{ledger_board_id}}/events
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  requireLocalDev();
+  const boardId = String(value("ledger_board_id", ""));
+  if (!boardId) throw new Error("Missing ledger_board_id. Run Register Holder-Gated Board first.");
+  req.setUrl(`${value("base_url", "http://127.0.0.1:4321")}/boards/${boardId}/events`);
+}
+
+tests {
+  test("holder-gated reasoning is not readable without a read token", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(403);
+    expect(body.ok).to.equal(false);
+    expect(body.error).to.equal("Read access required");
+  });
+}

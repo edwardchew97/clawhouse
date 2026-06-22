@@ -80,6 +80,29 @@ pub struct TradeResult {
     pub payout: U128,
 }
 
+#[derive(Serialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct KeyTradeEventData {
+    pub agent_id: String,
+    pub side: String,
+    pub trader_id: AccountId,
+    pub amount: U64,
+    pub supply_after: U64,
+    pub trader_balance_after: U64,
+    pub reserve_after: U128,
+    pub price: U128,
+    pub protocol_fee: U128,
+    pub creator_fee: U128,
+    pub total_cost: U128,
+    pub payout: U128,
+}
+
+#[near(event_json(standard = "clawhouse-key-market"))]
+pub enum KeyMarketEvent {
+    #[event_version("1.0.0")]
+    KeyTrade(Vec<KeyTradeEventData>),
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct MarketState {
@@ -206,7 +229,7 @@ impl Contract {
         transfer_if_positive(agent.creator_id, quote.creator_fee.0);
         refund_attached_deposit(required_deposit);
 
-        TradeResult {
+        let result = TradeResult {
             agent_id,
             trader_id: buyer_id,
             amount: U64(amount),
@@ -218,7 +241,9 @@ impl Contract {
             creator_fee: quote.creator_fee,
             total_cost: quote.total_cost,
             payout: U128(0),
-        }
+        };
+        emit_key_trade("buy", &result);
+        result
     }
 
     pub fn get_sell_price(&self, agent_id: String, amount: U64) -> PriceQuote {
@@ -267,7 +292,7 @@ impl Contract {
         transfer_if_positive(self.treasury_id.clone(), quote.protocol_fee.0);
         transfer_if_positive(agent.creator_id, quote.creator_fee.0);
 
-        TradeResult {
+        let result = TradeResult {
             agent_id,
             trader_id: seller_id,
             amount: U64(amount),
@@ -279,7 +304,9 @@ impl Contract {
             creator_fee: quote.creator_fee,
             total_cost: U128(0),
             payout: quote.payout,
-        }
+        };
+        emit_key_trade("sell", &result);
+        result
     }
 
     pub fn get_agent(&self, agent_id: String) -> Option<AgentView> {
@@ -355,6 +382,24 @@ fn validate_agent_id(agent_id: &str) {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_'),
         "Agent id must use lowercase letters, digits, hyphen, or underscore"
     );
+}
+
+fn emit_key_trade(side: &str, result: &TradeResult) {
+    KeyMarketEvent::KeyTrade(vec![KeyTradeEventData {
+        agent_id: result.agent_id.clone(),
+        side: side.to_string(),
+        trader_id: result.trader_id.clone(),
+        amount: result.amount,
+        supply_after: result.supply_after,
+        trader_balance_after: result.trader_balance_after,
+        reserve_after: result.reserve_after,
+        price: result.price,
+        protocol_fee: result.protocol_fee,
+        creator_fee: result.creator_fee,
+        total_cost: result.total_cost,
+        payout: result.payout,
+    }])
+    .emit();
 }
 
 fn quote_buy(agent: &Agent, amount: u64) -> PriceQuote {
@@ -494,7 +539,7 @@ fn transfer_if_positive(account_id: AccountId, amount: u128) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use near_sdk::test_utils::VMContextBuilder;
+    use near_sdk::test_utils::{get_logs, VMContextBuilder};
     use near_sdk::testing_env;
 
     fn account(account_id: &str) -> AccountId {
@@ -608,6 +653,25 @@ mod tests {
     }
 
     #[test]
+    fn buy_key_emits_key_trade_event() {
+        let mut contract = create_contract();
+        create_market(&mut contract);
+        let quote = contract.get_buy_price("terminal_chad".to_string(), U64(1));
+
+        set_context("buyer.testnet", near(2));
+        contract.buy_key("terminal_chad".to_string(), U64(1), quote.total_cost);
+
+        let logs = get_logs();
+        let event = logs.last().expect("expected key trade event log");
+        assert!(event.starts_with("EVENT_JSON:"));
+        assert!(event.contains(r#""standard":"clawhouse-key-market""#));
+        assert!(event.contains(r#""event":"key_trade""#));
+        assert!(event.contains(r#""agent_id":"terminal_chad""#));
+        assert!(event.contains(r#""side":"buy""#));
+        assert!(event.contains(r#""trader_id":"buyer.testnet""#));
+    }
+
+    #[test]
     #[should_panic(expected = "Total cost exceeds max_price")]
     fn buy_key_rejects_when_max_price_is_too_low() {
         let mut contract = create_contract();
@@ -640,6 +704,28 @@ mod tests {
             result.reserve_after.0,
             buy_quote.price.0 - sell_quote.price.0
         );
+    }
+
+    #[test]
+    fn sell_key_emits_key_trade_event() {
+        let mut contract = create_contract();
+        create_market(&mut contract);
+        let buy_quote = contract.get_buy_price("terminal_chad".to_string(), U64(2));
+        set_context("buyer.testnet", near(2));
+        contract.buy_key("terminal_chad".to_string(), U64(2), buy_quote.total_cost);
+        let sell_quote = contract.get_sell_price("terminal_chad".to_string(), U64(1));
+
+        set_context("buyer.testnet", NearToken::from_yoctonear(0));
+        contract.sell_key("terminal_chad".to_string(), U64(1), sell_quote.payout);
+
+        let logs = get_logs();
+        let event = logs.last().expect("expected key trade event log");
+        assert!(event.starts_with("EVENT_JSON:"));
+        assert!(event.contains(r#""standard":"clawhouse-key-market""#));
+        assert!(event.contains(r#""event":"key_trade""#));
+        assert!(event.contains(r#""agent_id":"terminal_chad""#));
+        assert!(event.contains(r#""side":"sell""#));
+        assert!(event.contains(r#""trader_id":"buyer.testnet""#));
     }
 
     #[test]

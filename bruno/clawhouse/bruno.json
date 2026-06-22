@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "name": "ClawHouse Paper Trading Local Dev",
+  "name": "ClawHouse Local Dev",
   "type": "collection",
   "ignore": [
     "node_modules",

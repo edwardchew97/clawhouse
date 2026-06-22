@@ -17,6 +17,7 @@
     "ledger:test": "cd apps/agent-board-ledger && bun test",
     "ledger:typecheck": "cd apps/agent-board-ledger && bun run typecheck",
     "workbench": "bun scripts/workbench.ts",
-    "workbench:once": "bun apps/acceptance-workbench/server.ts --port=4318"
+    "workbench:once": "bun apps/acceptance-workbench/server.ts --port=4318",
+    "onboarding-kit:sync": "bun scripts/sync-onboarding-kit.ts"
   }
 }
