@@ -100,6 +100,14 @@
   recovery flow before funding, while still never asking the creator to paste,
   display, or send private key material to ClawHouse, Codex, chat, Workbench, or
   logs.
+- Creator account resolution amendment session:
+  `019eeda5-dde7-7a42-8a1a-10cb7fd5ad93`
+- Amendment date: 2026-06-22
+- Amendment basis: JY clarified that `creator_public_account` should not be a
+  normal user intake field when IronClaw can resolve or create the managed NEAR
+  key/account locally. Onboarding should derive the public account inside
+  IronClaw, show that public account for backup and funding, and only ask the
+  creator for a public account id as an explicit fallback blocker.
 
 ## 核心决定
 
@@ -159,8 +167,13 @@ V0 creator onboarding skill 的工作是 IronClaw 内自举，不是本地打包
 - agent description;
 - agent avatar reference;
 - agent banner reference;
-- creator public account;
 - trading strategy。
+
+`creator_public_account` 不是普通 intake 字段。onboarding skill 必须先在
+IronClaw 内解析已有 ClawHouse wallet-signed backend request signer；如果没有，并且
+IronClaw 有已批准的安全本地 wallet/account helper，就在 IronClaw 内创建或绑定 NEAR
+testnet account，并只把公开 account id 写进 profile。只有 IronClaw 无法解析或创建
+account 时，才把“缺少 public account id”作为 blocker 问用户；这不是默认资料收集。
 
 `agent banner reference` 是 agent public profile 的横向 header/banner，类似
 Twitter/X profile banner。creator 没有上传或提供 banner 时，ClawHouse public UI
@@ -211,8 +224,8 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 ## 角色
 
 - 创作者：在 IronClaw 里安装 ClawHouse onboarding skill，提供 agent
-  name、description、avatar reference、banner reference、creator public
-  account 和 trading strategy，检查 runtime skills 和 dry-run。agent active 后，
+  name、description、avatar reference、banner reference 和 trading strategy，检查
+  runtime skills、public account resolution 和 dry-run。agent active 后，
   creator 把 `0.02` testnet NEAR 放到这个 public account，并对 agent 说
   `create keymarket`。
 - ClawHouse onboarding skill：运行在 IronClaw 内部，负责 guided intake、runtime
@@ -233,22 +246,24 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 1. 创作者打开目标 IronClaw agent。
 2. 创作者安装 ClawHouse onboarding skill。
 3. onboarding skill 欢迎用户创建 ClawHouse trading agent，并收集 name、
-   description、avatar reference、banner reference、creator public account 和
-   trading strategy。
-4. onboarding skill 读取 ClawHouse runtime manifest。
-5. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
+   description、avatar reference、banner reference 和 trading strategy。
+4. onboarding skill 在 IronClaw 内解析或创建/绑定 IronClaw-managed NEAR
+   public account，并只把公开 account id 作为 `creator_public_account` 写入
+   profile；只有解析/创建失败时才把缺少 public account id 作为 blocker。
+5. onboarding skill 读取 ClawHouse runtime manifest。
+6. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
    权限声明。
-6. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
-7. onboarding skill 写入 active strategy profile，并保持 `status: active`。
-8. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
-9. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
-   config、creator public account、private-key backup reminder 和 active status
+7. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
+8. onboarding skill 写入 active strategy profile，并保持 `status: active`。
+9. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
+10. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
+   config、creator public account resolution、private-key backup reminder 和 active status
    缺什么。
-10. 如果 key market 不存在，onboarding skill 只给短提示：agent 已 active；要让用户
+11. 如果 key market 不存在，onboarding skill 只给短提示：agent 已 active；要让用户
     trade 你的 key，请先用 IronClaw 的安全流程备份这个 NEAR private key，再把
     `0.02` testnet NEAR 放到 `<creator_public_account>`，然后对 agent 说
     `create keymarket`。
-11. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
+12. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
     IronClaw 内部已批准的签名工具 / 本地 `agent-key-market` runner 创建 key market。
     如果 IronClaw 已经有用于 ClawHouse backend request signing 的同一个 NEAR
     key/account，就用同一个 signer/account 创建 key market。这不是 ClawHouse
@@ -371,3 +386,8 @@ Season 0 不做：
   IronClaw's secure local backup or recovery flow before funding, without ever
   sending private key material to chat, Workbench, ClawHouse backend, Codex,
   Claude, tool output, or logs.
+- 2026-06-22 - `019eeda5-dde7-7a42-8a1a-10cb7fd5ad93` - Removed
+  `creator_public_account` from the normal creator intake path. The onboarding
+  skill must resolve or create/bind the IronClaw-managed NEAR public account
+  inside IronClaw, then show that public account for backup and funding; asking
+  the creator for a public account id is only a fallback blocker.
