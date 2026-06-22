@@ -1,7 +1,7 @@
 meta {
-  name: 01 Create Paper Account
+  name: 02 Create Paper Account
   type: http
-  seq: 1
+  seq: 2
 }
 
 post {
@@ -30,6 +30,9 @@ body:json {
 }
 
 script:pre-request {
+  const { KeyPair } = require("@near-js/crypto");
+  const CryptoJS = require("crypto-js");
+
   function value(name, fallback) {
     return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
   }
@@ -109,12 +112,45 @@ script:pre-request {
     return token;
   }
 
+  function sha256Hex(value) {
+    return CryptoJS.SHA256(value).toString(CryptoJS.enc.Hex);
+  }
+
+  function base64Url(bytes) {
+    if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64url");
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function canonicalAgentAuthPayload(input) {
+    return JSON.stringify({
+      domain: "clawhouse.agent-board-ledger.v0",
+      version: 1,
+      purpose: input.purpose,
+      method: String(input.method).toUpperCase(),
+      path: input.path,
+      bodyHash: input.bodyHash,
+      timestamp: input.timestamp,
+      nonce: input.nonce,
+      agentId: input.agentId,
+      agentPublicKey: input.agentPublicKey,
+      boardId: input.boardId
+    });
+  }
+
+  function uuid() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return `bruno-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+
   requireLocalDev();
   const body = requestBody();
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const accountPrefix = String(value("paper_account_prefix", "local-paper"));
   const publicKey = value("paper_agent_public_key", "");
-  if (!publicKey) throw new Error("Missing paper_agent_public_key. Run Create Local Paper Signer first.");
+  const secretKey = String(value("paper_signer_secret_key", ""));
+  if (!publicKey || !secretKey) throw new Error("Missing paper signer vars. Run Create Local Paper Signer first.");
 
   if (unresolved(body.paper_account_id)) body.paper_account_id = `${accountPrefix}-${runId}`;
   if (unresolved(body.agent_id)) body.agent_id = String(value("agent_id", "regdgen.testnet"));
@@ -130,7 +166,29 @@ script:pre-request {
   bru.setVar("agent_id", body.agent_id);
   bru.setVar("paper_agent_public_key", body.agent_public_key);
 
+  const rawBody = JSON.stringify(body);
+  const timestamp = Date.now().toString();
+  const nonce = uuid();
+  const bodyHash = sha256Hex(rawBody);
+  const payload = canonicalAgentAuthPayload({
+    purpose: "paper_account_registration",
+    method: "POST",
+    path: "/paper/accounts",
+    bodyHash,
+    timestamp,
+    nonce,
+    agentId: body.agent_id,
+    agentPublicKey: body.agent_public_key,
+    boardId: null
+  });
+  const signature = KeyPair.fromString(secretKey).sign(new TextEncoder().encode(payload)).signature;
+
   req.setHeader("authorization", `Bearer ${requireAdminToken()}`);
+  req.setHeader("x-clawhouse-agent-public-key", body.agent_public_key);
+  req.setHeader("x-clawhouse-agent-timestamp", timestamp);
+  req.setHeader("x-clawhouse-agent-nonce", nonce);
+  req.setHeader("x-clawhouse-agent-body-sha256", bodyHash);
+  req.setHeader("x-clawhouse-agent-signature", base64Url(signature));
   req.setBody(body);
 }
 

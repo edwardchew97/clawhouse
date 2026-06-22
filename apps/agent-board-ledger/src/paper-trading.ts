@@ -89,11 +89,17 @@ export function canonicalPaperAuthPayload(input: {
 export async function createPaperAccount(db: LedgerDb, body: BodyInput, createdAt: string) {
   const data = asObject(body.json);
   const startingBalance = requiredPositiveNumber(data.startingBalanceUsd ?? data.starting_balance_usd, "starting_balance_usd");
+  const requestedBoardId = cleanString(data.boardId ?? data.board_id);
+  const identity = await resolvePaperAccountIdentity(db, {
+    boardId: requestedBoardId,
+    agentId: cleanString(data.agentId ?? data.agent_id),
+    agentPublicKey: cleanString(data.agentPublicKey ?? data.agent_public_key),
+  });
   const account: PaperAccountRow = {
     id: cleanString(data.paperAccountId ?? data.paper_account_id) ?? newId("paper_acct"),
-    board_id: cleanString(data.boardId ?? data.board_id),
-    agent_id: requiredString(data.agentId ?? data.agent_id, "agent_id"),
-    agent_public_key: requiredString(data.agentPublicKey ?? data.agent_public_key, "agent_public_key"),
+    board_id: requestedBoardId,
+    agent_id: identity.agentId,
+    agent_public_key: identity.agentPublicKey,
     base_currency: cleanString(data.baseCurrency ?? data.base_currency) ?? "USD",
     starting_balance_usd: startingBalance,
     cash_balance_usd: startingBalance,
@@ -126,6 +132,57 @@ export async function createPaperAccount(db: LedgerDb, body: BodyInput, createdA
   );
   await appendPaperAuditEvent(db, account.id, "paper_account", account.id, "paper_account_created", account, createdAt);
   return { ok: true, account: presentPaperAccount(account) };
+}
+
+async function resolvePaperAccountIdentity(
+  db: LedgerDb,
+  input: {
+    boardId: string | null;
+    agentId: string | null;
+    agentPublicKey: string | null;
+  },
+) {
+  if (input.boardId) {
+    const board = await db.get<{ agent_id: string; agent_public_key: string | null; public_key: string }>(
+      "SELECT agent_id, agent_public_key, public_key FROM boards WHERE id = ?",
+      [input.boardId],
+    );
+    if (!board) throw new RequestError("Board not found", 404);
+
+    const boardAgentPublicKey = requiredBoardAgentPublicKey(board);
+    if (input.agentId && input.agentId !== board.agent_id) {
+      throw new RequestError("paper account agent_id must match board agent_id", 400);
+    }
+    if (input.agentPublicKey && input.agentPublicKey !== boardAgentPublicKey) {
+      throw new RequestError("paper account agent_public_key must match board agent_public_key", 400);
+    }
+    await requireActiveAgentRegistration(db, board.agent_id, boardAgentPublicKey);
+    return { agentId: board.agent_id, agentPublicKey: boardAgentPublicKey };
+  }
+
+  const agentId = requiredString(input.agentId, "agent_id");
+  const agentPublicKey = requiredString(input.agentPublicKey, "agent_public_key");
+  await requireActiveAgentRegistration(db, agentId, agentPublicKey);
+  return { agentId, agentPublicKey };
+}
+
+function requiredBoardAgentPublicKey(board: { agent_public_key: string | null }) {
+  const agentPublicKey = cleanString(board.agent_public_key);
+  if (!agentPublicKey) throw new RequestError("Board is missing agent_public_key", 500);
+  return agentPublicKey;
+}
+
+async function requireActiveAgentRegistration(db: LedgerDb, agentId: string, agentPublicKey: string) {
+  const agent = await db.get<{ agent_public_key: string; status: string }>(
+    "SELECT agent_public_key, status FROM agent_registrations WHERE agent_id = ?",
+    [agentId],
+  );
+  if (!agent || agent.status !== "active") {
+    throw new RequestError("Agent registration not found", 403);
+  }
+  if (agent.agent_public_key !== agentPublicKey) {
+    throw new RequestError("Agent public key is not registered for agent_id", 403);
+  }
 }
 
 export async function createPaperMarketSnapshot(db: LedgerDb, body: BodyInput, createdAt: string) {

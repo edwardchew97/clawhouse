@@ -68,6 +68,7 @@ intentionally switch back to a GitHub Actions deployment model.
 The hosted service keeps the existing Ledger API shape:
 
 - `GET /health`
+- `POST /agents`
 - `POST /boards`
 - `POST /boards/:boardId/events`
 - `POST /cron/tick` for manual service-authorized runs

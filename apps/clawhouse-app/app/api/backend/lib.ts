@@ -21,8 +21,15 @@ export function getBackendConfig() {
   return {
     baseUrl,
     defaultBoardId: firstEnv(["CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID"]) ?? defaultBoardId,
-    readToken: firstEnv(["CLAWHOUSE_LEDGER_READ_TOKEN"]),
   };
+}
+
+export function ledgerAdminAuthorizationHeader() {
+  const token = firstEnv(["CLAWHOUSE_LEDGER_ADMIN_TOKEN", "AGENT_BOARD_LEDGER_ADMIN_TOKEN"]);
+  if (!token) {
+    throw new BackendConfigError("CLAWHOUSE_LEDGER_ADMIN_TOKEN is not configured");
+  }
+  return `Bearer ${token}`;
 }
 
 export function publicBackendConfig() {
@@ -42,13 +49,10 @@ export function requireBoardId(value: string | null) {
 }
 
 export async function fetchBackendJson<T>(path: string, options: BackendFetchOptions = {}) {
-  const { baseUrl, readToken } = getBackendConfig();
+  const { baseUrl } = getBackendConfig();
   const headers = new Headers(options.headers);
   if (options.body !== undefined && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
-  }
-  if (readToken && !headers.has("x-clawhouse-read-token")) {
-    headers.set("x-clawhouse-read-token", readToken);
   }
 
   const response = await fetch(`${baseUrl}${path}`, {
@@ -72,12 +76,17 @@ export function backendError(error: unknown) {
   if (error instanceof BackendHttpError) {
     return NextResponse.json({ ok: false, error: error.message, status: error.status }, { status: error.status });
   }
+  if (error instanceof BackendConfigError) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
 
   console.error(error);
   return NextResponse.json({ ok: false, error: "Backend proxy failed" }, { status: 502 });
 }
 
 class BackendInputError extends Error {}
+
+class BackendConfigError extends Error {}
 
 class BackendHttpError extends Error {
   constructor(public readonly status: number, message: string) {

@@ -6,6 +6,7 @@ import { KeyPair, type KeyPairString } from "@near-js/crypto";
 import {
   generateNearWallet,
   inspectNearWallet,
+  signAgentBoardLedgerAgentRequest,
   type NearWalletPublicInfo,
 } from "../../../tools/near-wallet/src/wallet";
 import { canonicalPaperAuthPayload } from "../src/paper-trading";
@@ -65,6 +66,7 @@ async function runPaperTradingFlow(
   const paperAccountId = options.paperAccountId || (options.boardId ? `${options.boardId}-paper` : `paper-workbench-${runId}`);
   const agentId = options.agentId || "ironclaw-paper-workbench";
 
+  await ensureAgentRegistration(options, wallet, agentId);
   const account = await ensurePaperAccount(options, wallet, paperAccountId, agentId, runId);
   expectSuccess(checks, "service creates or reuses paper account", account);
 
@@ -351,14 +353,68 @@ async function servicePostJson(options: Options, path: string, body: JsonRecord)
   if (!options.serviceToken) {
     throw new Error("Missing ledgerAdminToken input or AGENT_BOARD_LEDGER_ADMIN_TOKEN for service-authorized paper writes");
   }
+  const rawBody = JSON.stringify(body);
+  const headers = {
+    "content-type": "application/json",
+    authorization: `Bearer ${options.serviceToken}`,
+  };
+  if (path === "/paper/accounts") {
+    const agentId = requiredJsonString(body.agent_id, "agent_id");
+    const agentPublicKey = requiredJsonString(body.agent_public_key, "agent_public_key");
+    const signed = await signAgentBoardLedgerAgentRequest({
+      keyFile: options.keyFile,
+      method: "POST",
+      path,
+      body: rawBody,
+      purpose: "paper_account_registration",
+      boardId: jsonString(body.board_id),
+      agentId,
+      agentPublicKey,
+    });
+    Object.assign(headers, signed.headers);
+  }
   return await requestJsonResult(options.baseUrl, path, {
+    method: "POST",
+    headers,
+    body: rawBody,
+  });
+}
+
+async function ensureAgentRegistration(options: Options, wallet: NearWalletPublicInfo, agentId: string) {
+  if (!options.serviceToken) {
+    throw new Error("Missing ledgerAdminToken input or AGENT_BOARD_LEDGER_ADMIN_TOKEN for service-authorized agent registration");
+  }
+  const body = {
+    agent_id: agentId,
+    agent_public_key: wallet.publicKey,
+    metadata: {
+      source: "acceptance-workbench-paper-trading",
+    },
+  };
+  const rawBody = JSON.stringify(body);
+  const signed = await signAgentBoardLedgerAgentRequest({
+    keyFile: options.keyFile,
+    method: "POST",
+    path: "/agents",
+    body: rawBody,
+    purpose: "agent_registration",
+    boardId: null,
+    agentId,
+    agentPublicKey: wallet.publicKey,
+  });
+  const result = await requestJsonResult(options.baseUrl, "/agents", {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${options.serviceToken}`,
+      ...signed.headers,
     },
-    body: JSON.stringify(body),
+    body: rawBody,
   });
+  if (!result.responseOk || result.json?.ok === false) {
+    throw new Error(`Ledger returned ${result.status} for POST /agents: ${result.text}`);
+  }
+  return result;
 }
 
 async function ensurePaperAccount(
@@ -553,6 +609,16 @@ function resolvePath(value: string) {
 
 function optionalString(value: string | undefined) {
   return value && value.trim() !== "" ? value.trim() : undefined;
+}
+
+function jsonString(value: unknown) {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+function requiredJsonString(value: unknown, name: string) {
+  const normalized = jsonString(value);
+  if (!normalized) throw new Error(`Missing ${name}`);
+  return normalized;
 }
 
 function numberOption(value: string | undefined, fallback: number, name: string) {

@@ -65,14 +65,16 @@ reads local ignored env files.
 
 1. `GET /health`
 2. `GET /health` with local Bruno script side effect: generate paper signer
-3. `POST /paper/accounts`
-4. `POST /paper/market-snapshots/hyperliquid`
-5. `POST /paper/orders`
-6. `GET /paper/accounts/:paper_account_id`
-7. `GET /paper/leaderboard`
-8. `GET /paper/orders/:order_id/replay`
-9. `POST /paper/accounts/:paper_account_id/risk-check`
-10. `POST /paper/liquidation-monitor/tick`
+3. `POST /agents` with service bearer auth plus Agent-signed registration
+4. `POST /paper/accounts` with service bearer auth plus Agent-signed
+   `paper_account_registration`
+5. `POST /paper/market-snapshots/hyperliquid`
+6. `POST /paper/orders`
+7. `GET /paper/accounts/:paper_account_id`
+8. `GET /paper/leaderboard`
+9. `GET /paper/orders/:order_id/replay`
+10. `POST /paper/accounts/:paper_account_id/risk-check`
+11. `POST /paper/liquidation-monitor/tick`
 
 Open the Body tab before sending these requests if you want to inspect or edit
 the payload:
@@ -80,7 +82,9 @@ the payload:
 - `00 Prepare Local Paper Signer`: no API body; generates local Bruno runtime
   vars for `paper_signer_id`, `paper_signer_secret_key`, and
   `paper_agent_public_key`
-- `01 Create Paper Account`: `paper_account_id`, `agent_id`,
+- `01 Register Paper Agent`: `agent_id`, `agent_public_key`, `metadata`; signs
+  the request with `paper_signer_secret_key`
+- `02 Create Paper Account`: `paper_account_id`, `agent_id`,
   `agent_public_key`, `starting_balance_usd`, `allowed_markets`, `metadata`
 - `01 Get Hyperliquid Current Price`: `market_type`, `coins`
 - `01 Submit Signed IOC Paper Order`: `paper_account_id`, `client_order_id`,
@@ -99,12 +103,14 @@ default order is an IOC market-like order: it omits `limit_px` and uses
 This folder covers the current backend truth for key-gated Agent reasoning:
 
 1. `GET /health` with local Bruno script side effect: generate a board wallet
-2. `POST /boards` with service bearer auth plus wallet-signed board registration
-3. `POST /boards/:board_id/events` with the board wallet signature and a
+2. `POST /agents` with service bearer auth plus Agent-signed registration
+3. `POST /boards` with service bearer auth plus wallet-signed and Agent-signed
+   board registration
+4. `POST /boards/:board_id/events` with the board wallet signature and a
    holder-only `reason`
-4. `GET /boards/:board_id/events` without a read token, expected to return 403
-5. `POST /boards/:board_id/read-access/checks` to create a local manual read token
-6. `GET /boards/:board_id/events` with `x-clawhouse-read-token`, expected to
+5. `GET /boards/:board_id/events` without a read token, expected to return 403
+6. `POST /boards/:board_id/read-access/checks` to create a local manual read token
+7. `GET /boards/:board_id/events` with `x-clawhouse-read-token`, expected to
    return the holder-only reason
 
 The `Create Holder Read Token` request defaults to `holder_read_access_mode:
@@ -112,4 +118,6 @@ manual` so the local collection can run without a live key market. Change
 `holder_read_access_mode` to `live-key-market` to call
 `POST /boards/:board_id/read-access/near-key-market` instead. Live mode requires
 real `near_rpc_url`, `key_contract_id`, and `holder_account_id` values, and the
-final read succeeds only when the backend sees a positive key balance.
+final read succeeds only when the backend sees a positive key balance. The live
+holder-gate request does not choose `agent_id`; Ledger derives it from the
+registered board.
