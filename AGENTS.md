@@ -74,6 +74,11 @@ When reporting a product or onboarding flow, write the exact action chain first.
   template changes; do not leave the version unchanged after a content change.
 - Also sync related public onboarding files when changed: `agents/openai.yaml`
   and reset/runtime docs referenced by the public manifest or prompt.
+- Prefer `bun run onboarding-kit:sync -- --publish --verify` for public kit
+  syncs. Run it without `--publish` first for a dry-run diff. The script clones
+  or updates `edwardchew97/clawhouse-onboarding-kit`, copies the allowlisted
+  public files, validates manifest hashes and raw URL allowlists, commits only
+  with `--publish`, and verifies raw GitHub URLs only with `--verify`.
 - Verification must include reading the public raw URL:
   `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md`.
 - Final reports for onboarding skill changes must state the public kit commit or
