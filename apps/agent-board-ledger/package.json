@@ -6,6 +6,7 @@
     "dev": "bun run src/server.ts",
     "db:migrate:neon": "bun scripts/migrate-neon.ts",
     "db:check:neon": "bun scripts/check-neon.ts",
+    "vercel:build": "bun scripts/vercel-build.ts",
     "vercel:runtime-check": "bun scripts/check-vercel-runtime.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
