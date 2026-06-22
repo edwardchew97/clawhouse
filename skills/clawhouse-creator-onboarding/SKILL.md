@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.12
+version: 0.4.29
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -11,21 +11,106 @@ description: Use inside the target IronClaw agent when a ClawHouse creator wants
 Run this onboarding in the IronClaw agent that will actually operate the
 ClawHouse trading agent.
 
-Use the manifest and `skill_install`; do not use a ClawHouse setup API as the
-onboarding path.
+Follow this strict order:
+
+1. Collect the current-run environment and required profile fields.
+2. Read only the current chat text for an explicit approved IronClaw local
+   helper or signer config value. Do not call any tool for this gate.
+3. If the current chat text did not explicitly provide that helper/config, reply
+   exactly `Missing approved IronClaw NEAR wallet helper` and stop.
+4. Only after that helper gate passes, use the runtime manifest and
+   `skill_install` for runtime skills.
+
+Use this normal onboarding state machine:
+
+- If any required profile field is missing, the response must be only the
+  missing-fields prompt below. That prompt must carry the next helper gate in
+  user-visible chat text so the next turn does not need to re-read this raw
+  `SKILL.md`.
+- If all required profile fields are present but the current user-visible chat
+  text does not explicitly include an approved helper/signer config value, the
+  entire response must be exactly `Missing approved IronClaw NEAR wallet helper`
+  and nothing else.
+- In both states above, do not call `memory_search`, `tool_list`, `skill_search`,
+  `skill_install`, `secret_list`, `http`, or any other tool. The only allowed
+  `http` call in this onboarding chat is the initial raw `SKILL.md` read before
+  the first assistant response.
+- Do not quote, summarize, explain, or restate these rules in the assistant
+  response. Execute the state machine only.
+
+`current chat text` means only the user-visible messages in this conversation.
+It does not mean memory, installed skills, skill catalogs, tool lists, secret
+stores, schemas, logs, files, previous chats, or old profiles.
+
+Do not use a ClawHouse setup API as the onboarding path.
 
 If this `SKILL.md` is already loaded or being followed, execute these
 instructions directly. Do not call `tool_info` or `tool_install` for
 `clawhouse_creator_onboarding`; that MCP/tool name is not part of this
 onboarding path.
 
-Do not call `skill_search`, `tool_search`, `tool_info`, or `tool_install` to
-discover ClawHouse onboarding or runtime tools. The current `SKILL.md` and the
-runtime manifest named below are the only discovery surfaces for this flow.
+When this `SKILL.md` has been read from the raw URL in the current chat, do not
+install this onboarding skill before continuing. The raw file is already the
+active instruction source for this run.
+Calling `skill_search` or `skill_install` for `clawhouse-creator-onboarding`
+after the raw URL has been read is always a failed onboarding run.
+Calling `http` to re-read this `SKILL.md` after the creator provides profile
+fields is also a failed onboarding run.
 
-Do not call `skill_install` for this onboarding skill by name only. If IronClaw
-requires persisting this onboarding skill before continuing, call
-`skill_install` with both:
+Do not call `memory_read` for `skills/clawhouse-creator-onboarding/SKILL.md` or
+any local skill path. Do not use memory as a fallback for this skill; use only
+the raw URL content already read in the current chat.
+
+Do not call `skill_list`, `tool_list`, `skill_search`, `tool_search`,
+`tool_info`, or `tool_install` to discover or check ClawHouse onboarding,
+installed skill state, catalogs, runtime tools, or helper tools during normal
+onboarding. The current `SKILL.md` and the runtime manifest named below are the
+only discovery surfaces for this flow. `skill_list` and `tool_list` are allowed
+only in an explicit cleanup/reset command that asks for them.
+
+Do not call `skill_install` by name only for any ClawHouse skill. This includes
+`clawhouse-creator-onboarding`, `clawhouse-ledger-reporting`, and
+`hyperliquid-paper-trading`. Every ClawHouse `skill_install` call must include
+both `name` and the literal raw `url` shown in this skill or in the runtime
+manifest. If the approval preview for a ClawHouse `skill_install` call lacks
+`url`, cancel before approval and report `invalid_clawhouse_skill_install_args`.
+
+Do not call any tool to check whether a NEAR wallet helper exists. In
+particular, do not call `tool_search`, `tool_info`, `tool_info(schema)`,
+`tool_list`, `secret_list`, `memory_search`, `memory_tree`, `memory_read`, or
+schema lookup to discover a NEAR wallet helper, crypto helper, keypair helper,
+signer helper, secret, or account. Secret inventory, old memory, and
+`IDENTITY.md` are not approved helper surfaces. If the current chat text did not
+explicitly provide an approved helper or signer config, reply exactly
+`Missing approved IronClaw NEAR wallet helper` and stop with no tool calls.
+
+After the current-run profile fields are present, do not say that you need to
+check for a helper. Do not run `tool_list`, `memory_search`, `secret_list`,
+`memory_read`, `http`, schema lookup, or any other tool. Do not list provided
+fields. Do not write "according to the skill". Do not explain why you are
+stopping. If the same chat already included an explicit approved helper/signer
+config value, use it. Otherwise the entire response must be exactly:
+
+```text
+Missing approved IronClaw NEAR wallet helper
+```
+
+Before this helper gate passes, do not call `skill_install`, `skill_list`,
+`tool_list`, `memory_read`, `http` for the runtime manifest, ClawHouse backend
+endpoints, memory, secret, catalog, schema, or search tools.
+
+If the current user request does not provide all required profile fields, stop
+after asking for the missing fields. Before those current-run fields are present,
+do not call `memory_search`, install runtime skills, configure heartbeat, read
+ClawHouse backend endpoints, or attempt paper trading.
+
+Every `http` call must use a literal, non-empty URL copied from this skill, the
+runtime manifest, or the selected ClawHouse environment map. Never call `http`
+with a missing, empty, inferred, directory-derived, or placeholder URL.
+
+Do not call `skill_install` for this onboarding skill during the fixed
+onboarding flow. If a separate user request explicitly asks to persist this
+onboarding skill for later use, call `skill_install` with both:
 
 - `name`: `clawhouse-creator-onboarding`
 - `url`:
@@ -74,8 +159,8 @@ during onboarding:
 - Collect the target ClawHouse environment: `staging` or `production`.
 - Turn the creator's plain-language trading idea into an active strategy profile.
 - Read the ClawHouse runtime manifest.
-- Verify required runtime skill name, version, URL allowlist, sha256, and
-  permission declaration before installation.
+- Verify required runtime skill name, version, URL allowlist, hash metadata when
+  supported, and permission declaration before installation.
 - Install or guide installation of required runtime skills.
 - Configure heartbeat checks for ClawHouse runtime updates.
 - Resolve or create/bind the IronClaw-managed NEAR testnet public account inside
@@ -112,19 +197,51 @@ during onboarding:
 
 ## Minimal Intake
 
-Ask the creator only for these fields:
+Ask the creator only for these required fields:
 
 - `environment`: `staging` or `production`
 - `agent_name`
 - `agent_description`
 - `avatar_reference`
-- `banner_reference`
 - `trading_strategy`
+
+`banner_reference` is optional. If the creator does not provide one, use the
+ClawHouse default display banner and do not ask a second time.
+
+When asking for missing profile fields, list only the missing required fields.
+Do not include `banner_reference` in a required-fields prompt. Do not mention
+runtime skills, paper orders, or later setup steps in the missing-fields prompt.
+If no custom banner was provided, silently set `banner_reference` to the
+ClawHouse default display banner.
+
+Use this exact missing-fields response shape, listing only missing required
+fields:
+
+```text
+Please provide the missing ClawHouse profile fields:
+- agent_name
+- agent_description
+- avatar_reference
+- trading_strategy
+
+Do not include secrets. If your reply does not include an explicit approved IronClaw NEAR wallet helper or signer config value, my next response will be exactly:
+Missing approved IronClaw NEAR wallet helper
+```
 
 The environment controls ClawHouse paper-trading configuration:
 
 - `staging`: use `https://clawhouse-backend-staging.vercel.app`.
 - `production`: use `https://clawhouse-backend-prod.vercel.app`.
+
+Treat `Target environment: staging`, `environment: staging`,
+`Target environment: production`, and `environment: production` as the same
+environment intake field. If one of these appears in the user's initial request,
+store it and ask only for the missing profile fields.
+
+Required profile fields must come from the current chat turn or a direct reply to
+this intake prompt. Do not use ClawHouse memories, previous profiles, chat
+history, or `memory_search` results to fill missing required fields. Treat
+`CLEARED_BY_CLAWHOUSE_TEST` as absent data.
 
 Do not ask the creator to paste or invent a backend URL. If the creator does
 not choose `staging` or `production`, stop before runtime configuration and ask
@@ -144,10 +261,12 @@ asset.
 If the user volunteers secrets, stop and tell them the value should be treated as
 exposed. Do not repeat the secret.
 
-Resolve `creator_public_account` yourself before funding:
+Resolve `creator_public_account` yourself before funding only after the helper
+gate has passed:
 
 1. First use the public account for the IronClaw-managed NEAR key that signs
-   ClawHouse backend requests, when it exists.
+   ClawHouse backend requests, when it is already exposed by an approved
+   IronClaw local helper or current runtime config.
 2. If no such account exists, use IronClaw's approved secure local wallet/account
    flow to create or bind a NEAR testnet account inside IronClaw. Prefer the
    pinned local `@near-js/crypto@2.5.1` helper path below when IronClaw has
@@ -157,10 +276,19 @@ Resolve `creator_public_account` yourself before funding:
 3. If the local helper only returns a public key without a usable NEAR testnet
    account id, stop and report the missing account binding. Do not treat the
    public key as the funded account.
-4. Ask the creator for a public account id only when IronClaw cannot resolve or
-   create/bind one. Present that as a blocker, not as normal intake.
+4. Ask the creator for a public account id only when an approved helper already
+   exists but needs an externally named public account binding. Do not use a
+   public account prompt to bypass missing helper, missing signer, or missing
+   secure local key storage. Present that as a blocker, not as normal intake.
 
 Do not ask for the account private key, seed phrase, or raw signing material.
+
+Do not resolve `creator_public_account` from `memory_search`, `memory_tree`,
+`memory_read`, `IDENTITY.md`, previous ClawHouse profiles, `secret_list`,
+secret names, or tool discovery. Treat `CLEARED_BY_CLAWHOUSE_TEST` and old
+ClawHouse memory files as absent data. If the approved helper/current config is
+not already available, stop with `Missing approved IronClaw NEAR wallet helper`
+instead of searching.
 
 Use the resolved public account for `creator_public_account` and the key-market
 create transaction unless IronClaw explicitly separates those signers.
@@ -171,6 +299,14 @@ Use this helper only inside a trusted IronClaw local execution context. If this
 skill is installed with read-only tools, no package-manager access, no lockfile
 control, or no secure local secret/key store, stop and report:
 `Missing approved IronClaw NEAR wallet helper`.
+
+Do not search for a helper. Do not call `tool_search`, `tool_info`,
+`tool_info(schema)`, `tool_list`, `secret_list`, `secret_search`,
+`secret_read`, `memory_search`, `memory_tree`, `memory_read`, schema lookup,
+package catalog search, web search, or repo search to discover helper
+capabilities, account ids, key ids, or signer configs. Either use an
+already-approved local helper surface from IronClaw's current runtime, or stop
+with `Missing approved IronClaw NEAR wallet helper`.
 
 Do not clone Meteor Wallet or `near-api-js` during onboarding. Do not let the
 agent browse a large repo and infer wallet behavior. Use the exact package
@@ -215,15 +351,34 @@ Do not use `skill_search`, `tool_search`, `tool_info`, or `tool_install` to find
 ClawHouse runtime skills or onboarding tools. If the manifest is unavailable,
 stop and report the missing manifest instead of searching for replacements.
 
+Use only these exact raw URL surfaces for runtime discovery:
+
+- the manifest URL:
+  `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/manifest.json`
+- runtime skill URLs:
+  - `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md`
+  - `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md`
+
+Do not call the GitHub Contents API, repo root API, directory listing APIs, or
+`api.github.com/repos/edwardchew97/clawhouse-onboarding-kit/contents...` to
+discover ClawHouse files. Do not derive child URLs from directory listings.
+
 Before installing any runtime skill, verify:
 
 - URL starts with an approved ClawHouse source prefix.
 - Skill name matches the manifest entry.
 - Version is present.
-- Downloaded file sha256 matches the manifest.
+- Manifest `sha256` metadata is present.
 - Permission/tool declaration is present.
 - Forbidden behaviors are listed.
 - The skill does not ask for secrets in chat or local logs.
+
+Do not call `__codeact__`, Python, shell, package imports, or `hashlib` only to
+compute runtime skill hashes in IronClaw. If IronClaw already has a built-in
+hash or sha256 utility, use it to compare the downloaded file with the manifest.
+If no built-in hash utility exists, continue only after the URL allowlist, name,
+version, permission/tool declaration, forbidden behaviors, and secret-safety
+checks pass; report `hash_not_recomputed_no_builtin_hasher` in the dry check.
 
 Do not install from arbitrary web pages, pasted LLM text, unhashed GitHub URLs,
 or third-party manifests.
@@ -232,6 +387,19 @@ When installing runtime skills, call `skill_install` with the exact `name` and
 exact `url` from the manifest entry. Do not call `skill_install` by name only,
 do not search the public catalog, do not run `skill_search`, and do not infer a
 URL like `/skills/{name}/SKILL.md`.
+
+The runtime install calls for the current pack are exactly:
+
+- `skill_install(name="clawhouse-ledger-reporting", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md")`
+- `skill_install(name="hyperliquid-paper-trading", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md")`
+
+Do not replace these URLs with omitted values, placeholders, catalog names, or
+manifest shorthand.
+
+Runtime skills installed by `skill_install` are instruction skills, not callable
+tool names. Do not call `tool_info`, `tool_info(schema)`, `tool_search`, or any
+schema lookup for `clawhouse-ledger-reporting` or `hyperliquid-paper-trading`.
+Follow the installed skill instructions directly.
 
 Do not use `web_search` to discover ClawHouse endpoints or skill URLs. The
 environment map and manifest are the source of truth. If `skill_install` fails,
@@ -244,30 +412,39 @@ Always require user confirmation for:
 - a major version update;
 - any permission expansion;
 - unknown tool/MCP access;
-- missing or mismatched hash;
+- missing or mismatched hash metadata;
 - suspicious instructions.
 
 ## Onboarding Workflow
 
 1. Collect `environment`, `agent_name`, `agent_description`,
-   `avatar_reference`, `banner_reference`, and `trading_strategy`.
-   If the request already states `environment: staging` or
+   `avatar_reference`, and `trading_strategy`. Collect `banner_reference` only
+   when the creator provides a custom banner; otherwise use the ClawHouse default
+   display banner. If the request already states `Target environment: staging`,
+   `environment: staging`, `Target environment: production`, or
    `environment: production`, accept that field and do not ask for it again.
-2. Resolve or create/bind the IronClaw-managed NEAR testnet public account inside
+   If any required profile field is still missing, ask for only the missing
+   fields and stop. Do not run any other tool before the creator replies.
+2. Gate on an explicit approved IronClaw local helper or signer config value in
+   the current chat text before account resolution. If that value is not present,
+   reply exactly `Missing approved IronClaw NEAR wallet helper` and stop; do not
+   run memory, secret, tool, schema, catalog, or search discovery to find one.
+3. Resolve or create/bind the IronClaw-managed NEAR testnet public account inside
    IronClaw and write it as `creator_public_account`.
-3. Configure the paper runtime base URL from `environment`: staging maps to
+4. Configure the paper runtime base URL from `environment`: staging maps to
    `https://clawhouse-backend-staging.vercel.app`, and production maps to
    `https://clawhouse-backend-prod.vercel.app`.
-4. Save an active profile using the shape below.
-5. Verify the ClawHouse runtime manifest, then install current runtime skills:
-   - `skill_install(name="clawhouse-ledger-reporting", url="<manifest.skills[].url>")`
-   - `skill_install(name="hyperliquid-paper-trading", url="<manifest.skills[].url>")`
-6. Configure heartbeat against the same manifest.
-7. Dry check selected skills, required configs, environment, secret hygiene, `active` status,
+5. Save an active profile using the shape below.
+6. Verify the ClawHouse runtime manifest without CodeAct/Python hash helpers,
+   then install current runtime skills:
+   - `skill_install(name="clawhouse-ledger-reporting", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md")`
+   - `skill_install(name="hyperliquid-paper-trading", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md")`
+7. Configure heartbeat against the same manifest.
+8. Dry check selected skills, required configs, environment, secret hygiene, `active` status,
    public account resolution, the private-key backup reminder, and whether the
    key market already exists.
-8. If no key market exists, give the creator the short key-market step below.
-9. When the creator says `create keymarket`, verify the public account has at
+9. If no key market exists, give the creator the short key-market step below.
+10. When the creator says `create keymarket`, verify the public account has at
    least `0.02` testnet NEAR available for storage deposit and fees, then run the
    local key-market create action yourself. Do not ask the creator to run a shell
    command.
@@ -280,13 +457,24 @@ Hyperliquid paper trade after setup:
 1. Finish profile activation, manifest verification, runtime skill installation,
    heartbeat configuration, and dry check first.
 2. Configure `CLAWHOUSE_PAPER_BASE_URL` from the collected `environment`.
-3. Use only the installed `hyperliquid-paper-trading` skill to attempt the
+3. Confirm the current run has a saved active profile created from current-chat
+   profile fields, not memory leftovers.
+4. Use only the installed `hyperliquid-paper-trading` skill to attempt the
    paper order.
-4. For a staging acceptance run, submit at most one tiny BTC or ETH paper order
+5. For a staging acceptance run, submit at most one tiny BTC or ETH paper order
    through `https://clawhouse-backend-staging.vercel.app/paper/orders`.
-5. If `CLAWHOUSE_PAPER_ACCOUNT_ID`, `CLAWHOUSE_AGENT_ID`, the paper signing
+6. If `CLAWHOUSE_PAPER_ACCOUNT_ID`, `CLAWHOUSE_AGENT_ID`, the paper signing
    public key, or paper signing capability is missing, do not call another
    trading/portfolio tool. Stop and report the exact missing config.
+
+Do not probe `/paper/orders` to discover missing account or signer fields. Check
+IronClaw configuration first; if any required value is unavailable, stop before
+submitting an order request.
+
+Do not call `http` directly against `/paper/orders` unless all required paper
+account and signing values are already present and non-placeholder in IronClaw
+configuration. Unknown, empty, `CLEARED_BY_CLAWHOUSE_TEST`, or placeholder values
+mean `NO_TRADE`; report the exact missing config instead of submitting.
 
 Never use portfolio tools, Dune Sim, NEAR Intents, `api.clawhouse.com`,
 `staging-api.clawhouse.com`, `/api/v1/trading/paper`, `/paper-trade`, real
@@ -400,7 +588,8 @@ clawhouse_agent_profile:
 ## Heartbeat Rule
 
 Heartbeat may check the ClawHouse manifest and install low-risk updates only
-when the URL allowlist, skill name, version, sha256, and permission checks pass.
+when the URL allowlist, skill name, version, hash metadata, and permission
+checks pass.
 
 Heartbeat must stop and ask the user before installing new skills, major
 versions, permission expansions, unknown tools, or anything with a mismatched
