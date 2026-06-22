@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.29
+version: 0.4.30
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -224,7 +224,7 @@ Please provide the missing ClawHouse profile fields:
 - avatar_reference
 - trading_strategy
 
-Do not include secrets. If your reply does not include an explicit approved IronClaw NEAR wallet helper or signer config value, my next response will be exactly:
+Do not include secrets. After your reply, I will use only the visible chat text and call no tools. If your reply does not include an explicit approved IronClaw NEAR wallet helper or signer config value, my entire next response will be exactly:
 Missing approved IronClaw NEAR wallet helper
 ```
 
