@@ -150,10 +150,9 @@ export default function Page() {
                 <button data-amount="10" type="button">10</button>
               </div>
               <div className="quote">
-                <div className="quote-line"><span>Quote price</span><b id="quotePrice">--</b></div>
-                <div className="quote-line"><span>Estimated total</span><b id="quoteTotal">--</b></div>
-                <div className="quote-line"><span>Execution</span><b>Key market contract</b></div>
-                <div className="quote-line"><span>Unlocks</span><b id="quoteUnlock">Holder room</b></div>
+                <div className="quote-line"><span>You pay</span><b id="quotePay">--</b></div>
+                <div className="quote-line"><span>You receive</span><b id="quoteReceive">--</b></div>
+                <div className="quote-line"><span>Average price per key</span><b id="quoteAverage">--</b></div>
               </div>
               <button className="primary" id="tradeButton" type="button">Connect Wallet</button>
             </section>

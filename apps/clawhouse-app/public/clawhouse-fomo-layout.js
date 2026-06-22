@@ -231,6 +231,19 @@ function keyPriceLabel(agent) {
   return liveQuote?.total_cost_near ? nearLabel(liveQuote.total_cost_near) : "--";
 }
 
+function keyAmountLabel(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "--";
+  return `${numeric} Key`;
+}
+
+function averageKeyPriceLabel(totalNear, amount) {
+  const numericTotal = Number(totalNear);
+  const numericAmount = Number(amount);
+  if (!Number.isFinite(numericTotal) || !Number.isFinite(numericAmount) || numericAmount <= 0) return "--";
+  return nearLabel(numericTotal / numericAmount);
+}
+
 function holderCount(agent) {
   const liveSupply = chainApplies(agent) ? asNumber(chainState.state?.agent?.supply) : null;
   if (liveSupply !== null) return liveSupply;
@@ -889,16 +902,6 @@ function renderKeyActivity(agent) {
 function keyActivityRows(agent) {
   const rows = [];
   const trades = keyActivityTrades(agent);
-  const latestTxHash = chainState.lastTxHash;
-
-  if (latestTxHash && !trades.some((trade) => trade.tx_hash === latestTxHash)) {
-    rows.push({
-      title: chainState.statusTitle || "Key trade complete",
-      detail: `Tx ${shortHash(latestTxHash)}`,
-      side: "NearBlocks",
-      linkUrl: chainState.explorerUrl,
-    });
-  }
 
   for (const trade of trades) {
     rows.push({
@@ -942,9 +945,16 @@ function renderTicket(agent) {
   const busy = Boolean(chainState.pending);
   const quote = chainApplies(agent) && chainState.quoteSide === tradeSide ? chainState.quote : null;
   const chainTotal = tradeSide === "sell" ? quote?.payout_near : quote?.total_cost_near;
-  byId("quotePrice").textContent = chainTotal ? nearLabel(chainTotal) : keyPriceLabel(agent);
-  byId("quoteTotal").textContent = chainTotal ? nearLabel(chainTotal) : "--";
-  byId("quoteUnlock").textContent = balance && balance > 0 ? "Additional room weight" : "Holder room";
+  if (tradeSide === "sell") {
+    byId("quotePay").textContent = keyAmountLabel(amount);
+    byId("quoteReceive").textContent = chainTotal ? nearLabel(chainTotal) : "--";
+  } else {
+    byId("quotePay").textContent = chainTotal ? nearLabel(chainTotal) : keyPriceLabel(agent);
+    byId("quoteReceive").textContent = keyAmountLabel(amount);
+  }
+  byId("quoteAverage").textContent = chainTotal
+    ? averageKeyPriceLabel(chainTotal, amount)
+    : (tradeSide === "buy" && amount === 1 ? keyPriceLabel(agent) : "--");
   const tradeButton = byId("tradeButton");
   if (tradeButton) {
     tradeButton.textContent = busy
