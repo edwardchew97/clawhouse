@@ -177,8 +177,12 @@ export default function Page() {
             </section>
 
             <section className="panel key-activity">
-              <div className="panel-title">Key Trading Activity</div>
-              <div className="panel-sub">NEAR testnet key market</div>
+              <div className="key-activity-head">
+                <div>
+                  <div className="panel-title">Key Trading Activity</div>
+                  <div className="panel-sub">NEAR testnet key market</div>
+                </div>
+              </div>
               <div className="activity-list key-activity-list" id="keyActivityList">
                 <div className="backend-empty">
                   <span>Reading key market</span>
