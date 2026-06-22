@@ -1,5 +1,5 @@
 meta {
-  name: 01 Refresh Live Hyperliquid Snapshot
+  name: 01 Get Hyperliquid Current Price
   type: http
   seq: 1
 }
@@ -15,24 +15,49 @@ headers {
 }
 
 body:json {
-  {}
+  {
+    "market_type": "{{market_type}}",
+    "coins": ["{{coin}}"]
+  }
 }
 
 script:pre-request {
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
   function requireLocalDev() {
-    const baseUrl = String(bru.getEnvVar("base_url") || "");
-    if (String(bru.getEnvVar("local_runtime_only")) !== "true") {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
       throw new Error("local_runtime_only must be true for this collection.");
     }
     if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
       throw new Error("This collection is locked to local runtime URLs.");
     }
   }
-  const adminToken = bru.getEnvVar("admin_token") || bru.getProcessEnv("AGENT_BOARD_LEDGER_ADMIN_TOKEN");
-  if (!adminToken) throw new Error("Missing admin_token. Set AGENT_BOARD_LEDGER_ADMIN_TOKEN.");
+
+  function unresolved(item) {
+    return item === undefined || item === null || item === "" || String(item).includes("{{");
+  }
+
+  function requestBody() {
+    const current = req.getBody();
+    if (!current) return {};
+    if (typeof current === "string") return JSON.parse(current);
+    return current;
+  }
+
   requireLocalDev();
-  req.setHeader("authorization", `Bearer ${adminToken}`);
-  req.setBody({ coins: [String(bru.getEnvVar("coin") || "BTC").toUpperCase()] });
+  const body = requestBody();
+  if (unresolved(body.market_type)) body.market_type = String(value("market_type", "perp"));
+  if (!Array.isArray(body.coins) || body.coins.some(unresolved)) {
+    body.coins = [String(value("coin", "BTC")).toUpperCase()];
+  }
+
+  const adminToken = value("admin_token", bru.getProcessEnv("AGENT_BOARD_LEDGER_ADMIN_TOKEN"));
+  if (adminToken) req.setHeader("authorization", `Bearer ${adminToken}`);
+  req.setHeader("x-clawhouse-bruno-gold-mode", "true");
+  req.setBody(body);
 }
 
 script:post-response {
@@ -42,6 +67,15 @@ script:post-response {
     bru.setVar("last_snapshot_id", snapshot.id);
     bru.setVar("snapshot_coin", snapshot.coin);
     bru.setVar("snapshot_source", snapshot.source);
+    bru.setVar("current_mark_px", snapshot.mark_px);
+    if (snapshot.book && Array.isArray(snapshot.book.asks) && snapshot.book.asks[0]) {
+      bru.setVar("current_best_ask_px", snapshot.book.asks[0].px);
+      bru.setVar("current_ask_size", snapshot.book.asks[0].sz);
+    }
+    if (snapshot.book && Array.isArray(snapshot.book.bids) && snapshot.book.bids[0]) {
+      bru.setVar("current_best_bid_px", snapshot.book.bids[0].px);
+      bru.setVar("current_bid_size", snapshot.book.bids[0].sz);
+    }
   }
 }
 
@@ -51,8 +85,10 @@ tests {
     expect(res.getStatus()).to.equal(201);
     expect(body.ok).to.equal(true);
     expect(body.source).to.equal("hyperliquid");
-    expect(body.snapshots[0].coin).to.equal(String(bru.getEnvVar("coin") || "BTC").toUpperCase());
+    expect(body.snapshots[0].coin).to.equal(String(bru.getVar("snapshot_coin")));
     expect(body.snapshots[0].book.asks.length).to.be.greaterThan(0);
     expect(body.snapshots[0].book.bids.length).to.be.greaterThan(0);
+    expect(bru.getVar("current_best_ask_px")).to.not.equal(undefined);
+    expect(bru.getVar("current_best_bid_px")).to.not.equal(undefined);
   });
 }

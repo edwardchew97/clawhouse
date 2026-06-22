@@ -11,8 +11,12 @@ get {
 }
 
 script:pre-request {
-  const baseUrl = String(bru.getEnvVar("base_url") || "");
-  if (String(bru.getEnvVar("local_runtime_only")) !== "true") {
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  const baseUrl = String(value("base_url", ""));
+  if (String(value("local_runtime_only", "")) !== "true") {
     throw new Error("local_runtime_only must be true for this collection.");
   }
   if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {

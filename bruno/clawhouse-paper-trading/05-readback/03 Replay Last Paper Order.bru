@@ -11,9 +11,13 @@ get {
 }
 
 script:pre-request {
-  const orderId = bru.getVar("last_order_id") || bru.getEnvVar("last_order_id");
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  const orderId = value("last_order_id", "");
   if (!orderId) throw new Error("Missing last_order_id. Run Submit Signed IOC Paper Order first.");
-  req.setUrl(`${bru.getEnvVar("base_url")}/paper/orders/${orderId}/replay`);
+  req.setUrl(`${value("base_url", "http://127.0.0.1:4321")}/paper/orders/${orderId}/replay`);
 }
 
 tests {

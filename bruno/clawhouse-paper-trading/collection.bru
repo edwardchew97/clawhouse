@@ -1,7 +1,6 @@
-vars {
+vars:pre-request {
   base_url: http://127.0.0.1:4321
   local_runtime_only: true
-  admin_token: {{process.env.AGENT_BOARD_LEDGER_ADMIN_TOKEN}}
   agent_id: regdgen.testnet
   paper_signer_id: bruno-gold-local-signer
   paper_account_prefix: regdgen-local-paper
@@ -15,7 +14,3 @@ vars {
   max_slippage_bps: 100
   paper_order_reason: Bruno gold mode signed paper order using live Hyperliquid data.
 }
-
-vars:secret [
-  admin_token
-]
