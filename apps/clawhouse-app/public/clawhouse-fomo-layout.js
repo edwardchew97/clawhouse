@@ -170,35 +170,6 @@ function clearQuote() {
   };
 }
 
-function tradeStatus() {
-  if (chainState.statusTitle || chainState.statusBody) {
-    return {
-      tone: chainState.statusTone || "idle",
-      title: chainState.statusTitle || "Ready",
-      body: chainState.statusBody || "Connect Wallet"
-    };
-  }
-  if (chainState.pending) {
-    return {
-      tone: "pending",
-      title: "Waiting for wallet",
-      body: "Keep the NEAR wallet window open until it returns a result."
-    };
-  }
-  if (chainState.error) {
-    return {
-      tone: "error",
-      title: "Key market read failed",
-      body: chainState.error
-    };
-  }
-  return {
-    tone: chainState.accountId ? "success" : "idle",
-    title: chainState.accountId ? "Wallet ready" : "Ready",
-    body: chainState.accountId ? `${shortAccount(chainState.accountId)} connected.` : "Connect Wallet"
-  };
-}
-
 function hashName(name) {
   return [...name].reduce((hash, char) => Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0, 2166136261);
 }
@@ -1009,7 +980,6 @@ function renderTicket(agent) {
     walletButton.classList.toggle("connected", Boolean(chainState.accountId));
     walletButton.disabled = busy;
   }
-  renderTradeStatus();
   renderBackendStatus();
 }
 
@@ -1019,19 +989,6 @@ function statusButtonText() {
   if (chainState.phase === "signing") return "Confirm in wallet...";
   if (chainState.phase === "refreshing") return "Refreshing balance...";
   return "Working...";
-}
-
-function renderTradeStatus() {
-  const status = tradeStatus();
-  const container = byId("tradeStatus");
-  if (!container) return;
-  container.className = `trade-status ${status.tone}`;
-  byId("tradeStatusTitle").textContent = status.title;
-  setTextWithOptionalLink(
-    byId("tradeStatusBody"),
-    status.body,
-    status.tone === "success" && chainState.lastTxHash ? chainState.explorerUrl : null
-  );
 }
 
 function renderBackendStatus() {
