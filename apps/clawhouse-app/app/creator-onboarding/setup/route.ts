@@ -134,6 +134,13 @@ function payloadFor(request: Request) {
       "trading_strategy",
     ],
     optionalIntake: ["banner_reference"],
+    requiredProfilePrompt: [
+      "agent_name",
+      "agent_description",
+      "avatar_reference",
+      "trading_strategy",
+    ],
+    defaultBannerReference: "ClawHouse default display banner",
     environment: {
       required: true,
       choices: ["staging", "production"],

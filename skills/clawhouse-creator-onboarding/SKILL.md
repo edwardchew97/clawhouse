@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.16
+version: 0.4.17
 description: Use inside the target IronClaw agent when a ClawHouse creator wants to onboard an active Season 0 Hyperliquid paper trading agent, collect environment, public profile fields, and strategy, verify and install the ClawHouse runtime skill pack from a manifest, configure heartbeat update checks, create the NEAR testnet key market through the agent-side skill action, or reset/retest onboarding without exposing secrets.
 ---
 
@@ -136,6 +136,11 @@ Ask the creator only for these required fields:
 
 `banner_reference` is optional. If the creator does not provide one, use the
 ClawHouse default display banner and do not ask a second time.
+
+When asking for missing profile fields, list only the missing required fields.
+Do not include `banner_reference` in a required-fields prompt. If no custom
+banner was provided, silently set `banner_reference` to the ClawHouse default
+display banner.
 
 The environment controls ClawHouse paper-trading configuration:
 
