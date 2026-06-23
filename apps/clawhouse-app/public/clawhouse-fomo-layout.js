@@ -1515,11 +1515,21 @@ function renderBackendStatus() {
   byId("backendUrl").textContent = backend.url;
 }
 
-function setChartEmptyState(isEmpty, message = "", title = "Backend chart data unavailable") {
+function chartLoadingState(title, message) {
+  const text = `${title || ""} ${message || ""}`.toLowerCase();
+  return text.includes("loading") || text.includes("reading backend") || text.includes("checking");
+}
+
+function setChartEmptyState(isEmpty, message = "", title = "Backend chart data unavailable", loading = false) {
   const panel = byId("chartPanel");
   const overlay = byId("chartEmptyOverlay");
   if (!panel || !overlay) return;
+  const isLoading = isEmpty && (loading || chartLoadingState(title, message));
   panel.classList.toggle("is-empty", isEmpty);
+  panel.classList.toggle("is-loading", isLoading);
+  overlay.classList.toggle("is-loading", isLoading);
+  overlay.setAttribute("aria-busy", isLoading ? "true" : "false");
+  overlay.setAttribute("aria-label", isLoading ? "Loading chart data" : title);
   overlay.hidden = !isEmpty;
   if (!isEmpty) return;
   byId("chartEmptyTitle").textContent = title;
@@ -1654,9 +1664,9 @@ function tradingViewEventMarkers(model) {
       return {
         time: event.timeValue,
         position: event.chartValue >= 0 ? "aboveBar" : "belowBar",
-        color: visible ? (failed ? "#ff6a4a" : "#1ecb73") : "rgba(145, 151, 157, 0.78)",
+        color: visible ? (failed ? "#ff622e" : "#516af6") : "rgba(145, 151, 157, 0.78)",
         shape: failed ? "arrowDown" : "circle",
-        text: visible ? `E${index + 1}` : "",
+        text: "",
       };
     });
 }
@@ -1665,7 +1675,7 @@ function drawChart(agent) {
   const container = byId("pnlChart");
   const model = chartModel(agent);
   if (!container || !ensureTradingViewChart(container)) {
-    setChartEmptyState(true, "TradingView chart library is loading.", "Chart loading");
+    setChartEmptyState(true, "TradingView chart library is loading.", "Chart loading", true);
     byId("chartEvents").innerHTML = "";
     hidePriceMarker();
     window.clearTimeout(tradingViewRetryTimer);
@@ -1755,7 +1765,7 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
         data-chart-event="${event.id}"
         style="left:${x}px; top:${y}px"
         aria-label="${escapeHtml(visible ? event.title : "Locked backend event")}"
-      >E${eventIndex + 1}</button>
+      >Order ${eventIndex + 1}</button>
       <span class="event-label ${visible ? "" : "locked"}" style="left:${x}px; top:${labelY}px">
         ${escapeHtml(visible ? event.label : publicEventText(event))}
       </span>

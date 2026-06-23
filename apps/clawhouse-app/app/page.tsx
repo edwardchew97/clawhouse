@@ -114,6 +114,14 @@ export default function Page() {
               <div className="chart-events" id="chartEvents" />
               <div className="price-marker" id="priceMarker">backend</div>
               <div className="chart-empty-overlay" id="chartEmptyOverlay" hidden>
+                <div className="chart-loading-skeleton" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                </div>
                 <strong id="chartEmptyTitle">Connect Wallet</strong>
                 <span id="chartEmptyDetail">Connect Wallet to load holder-gated chart data.</span>
               </div>
