@@ -111,12 +111,19 @@ export default function Page() {
               <div className="price-marker" id="priceMarker">backend</div>
               <div className="chart-empty-overlay" id="chartEmptyOverlay" hidden>
                 <div className="chart-loading-skeleton" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
+                  <span className="chart-skeleton-axis y-a" />
+                  <span className="chart-skeleton-axis y-b" />
+                  <span className="chart-skeleton-axis x-a" />
+                  <svg className="chart-skeleton-line" viewBox="0 0 100 64" preserveAspectRatio="none">
+                    <polyline points="0,50 12,44 22,47 34,28 46,34 58,18 72,24 86,8 100,14" />
+                  </svg>
+                  <svg className="chart-skeleton-line shadow" viewBox="0 0 100 64" preserveAspectRatio="none">
+                    <polyline points="0,18 15,22 30,17 46,31 60,28 76,42 90,47 100,44" />
+                  </svg>
+                  <span className="chart-skeleton-price" />
+                  <span className="chart-skeleton-tick tick-a" />
+                  <span className="chart-skeleton-tick tick-b" />
+                  <span className="chart-skeleton-tick tick-c" />
                 </div>
                 <strong id="chartEmptyTitle">Connect Wallet</strong>
                 <span id="chartEmptyDetail">Connect Wallet to load holder-gated chart data.</span>

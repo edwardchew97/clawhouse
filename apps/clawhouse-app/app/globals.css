@@ -856,8 +856,8 @@
 
     .chart-empty-overlay.is-loading {
       border: 1px solid var(--fomo-border);
-      background: rgba(6, 5, 16, 0.74);
-      backdrop-filter: blur(12px);
+      background: rgba(3, 4, 8, 0.72);
+      backdrop-filter: blur(8px);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
 
@@ -865,9 +865,8 @@
       background:
         linear-gradient(rgba(203, 208, 235, 0.06) 1px, transparent 1px),
         linear-gradient(90deg, rgba(203, 208, 235, 0.055) 1px, transparent 1px),
-        radial-gradient(circle at 50% 0%, rgba(81, 106, 246, 0.14), transparent 36%),
         var(--fomo-bg);
-      background-size: 100% 22%, 8.33% 100%, auto, auto;
+      background-size: 100% 22%, 8.33% 100%, auto;
     }
 
     .chart-empty-overlay.is-loading > strong,
@@ -877,11 +876,11 @@
 
     .chart-loading-skeleton {
       position: absolute;
-      inset: 18px 18px 14px;
+      inset: 18px 28px 18px 28px;
       z-index: 1;
       display: none;
       overflow: hidden;
-      border-radius: 8px;
+      border-radius: 6px;
     }
 
     .chart-empty-overlay.is-loading .chart-loading-skeleton {
@@ -892,70 +891,102 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(100deg, transparent 0%, rgba(81, 106, 246, 0.0) 34%, rgba(203, 208, 235, 0.18) 50%, rgba(81, 106, 246, 0.0) 66%, transparent 100%);
+      background: linear-gradient(100deg, transparent 0%, rgba(203, 208, 235, 0) 38%, rgba(203, 208, 235, 0.07) 50%, rgba(203, 208, 235, 0) 62%, transparent 100%);
       transform: translateX(-120%);
       animation: chart-skeleton-shimmer 1350ms ease-in-out infinite;
     }
 
-    .chart-loading-skeleton i {
+    .chart-loading-skeleton span,
+    .chart-loading-skeleton svg {
       position: absolute;
       display: block;
-      border-radius: 999px;
-      background: rgba(203, 208, 235, 0.1);
-      box-shadow: 0 0 28px rgba(81, 106, 246, 0.08);
     }
 
-    .chart-loading-skeleton i:nth-child(1) {
-      left: 2%;
-      right: 78%;
-      top: 8%;
-      height: 10px;
-    }
-
-    .chart-loading-skeleton i:nth-child(2) {
-      left: 2%;
-      right: 88%;
-      top: 18%;
-      height: 7px;
-      opacity: 0.65;
-    }
-
-    .chart-loading-skeleton i:nth-child(3) {
-      left: 8%;
-      right: 8%;
-      top: 50%;
-      height: 2px;
-      transform: rotate(-8deg);
-      transform-origin: left center;
-      background: var(--fomo-accent-soft);
-    }
-
-    .chart-loading-skeleton i:nth-child(4) {
-      left: 14%;
-      right: 18%;
-      top: 60%;
-      height: 2px;
-      transform: rotate(9deg);
-      transform-origin: left center;
-      background: rgba(81, 106, 246, 0.11);
-    }
-
-    .chart-loading-skeleton i:nth-child(5) {
-      left: 2%;
-      right: 2%;
-      bottom: 10%;
-      height: 1px;
+    .chart-skeleton-axis {
       background: rgba(203, 208, 235, 0.08);
     }
 
-    .chart-loading-skeleton i:nth-child(6) {
+    .chart-skeleton-axis.y-a {
+      left: 0;
+      right: 0;
+      top: 28%;
+      height: 1px;
+    }
+
+    .chart-skeleton-axis.y-b {
+      left: 0;
+      right: 0;
+      top: 68%;
+      height: 1px;
+    }
+
+    .chart-skeleton-axis.x-a {
+      left: 0;
+      right: 0;
+      bottom: 10%;
+      height: 1px;
+    }
+
+    .chart-skeleton-line {
+      left: 6%;
+      top: 20%;
+      width: 86%;
+      height: 54%;
+      border-radius: 0;
+      background: none;
+      border: 0;
+      opacity: 0.74;
+      overflow: visible;
+    }
+
+    .chart-skeleton-line polyline {
+      fill: none;
+      stroke: rgba(81, 106, 246, 0.36);
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+      filter: drop-shadow(0 0 12px rgba(81, 106, 246, 0.18));
+    }
+
+    .chart-skeleton-line.shadow {
+      top: 46%;
+      opacity: 0.38;
+    }
+
+    .chart-skeleton-line.shadow polyline {
+      stroke: rgba(81, 106, 246, 0.2);
+    }
+
+    .chart-skeleton-price {
       right: 2%;
-      bottom: 16%;
-      width: 78px;
-      height: 24px;
+      top: 18%;
+      width: 74px;
+      height: 22px;
       border-radius: 999px;
-      background: rgba(81, 106, 246, 0.15);
-      border: 1px solid rgba(203, 208, 235, 0.12);
+      background: rgba(81, 106, 246, 0.14);
+      border: 1px solid rgba(203, 208, 235, 0.13);
+      box-shadow: 0 0 24px rgba(81, 106, 246, 0.1);
+    }
+
+    .chart-skeleton-tick {
+      bottom: 3%;
+      width: 36px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(203, 208, 235, 0.075);
+    }
+
+    .chart-skeleton-tick.tick-a {
+      left: 6%;
+    }
+
+    .chart-skeleton-tick.tick-b {
+      left: 45%;
+    }
+
+    .chart-skeleton-tick.tick-c {
+      right: 7%;
     }
 
     @keyframes chart-skeleton-shimmer {
