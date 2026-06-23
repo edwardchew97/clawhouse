@@ -80,7 +80,8 @@
 
     .topbar {
       display: grid;
-      grid-template-columns: 246px 1fr minmax(360px, 438px);
+      grid-template-columns: 246px minmax(360px, 438px);
+      justify-content: space-between;
       align-items: center;
       gap: 10px;
       padding: 0 12px;
@@ -121,34 +122,6 @@
       font-size: 11px;
       color: var(--muted);
       line-height: 13px;
-    }
-
-    .search {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      height: 30px;
-      max-width: 650px;
-      width: 100%;
-      justify-self: center;
-      padding: 0 11px;
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      background: #0a0c0e;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .search .key {
-      margin-left: auto;
-      height: 18px;
-      min-width: 28px;
-      display: grid;
-      place-items: center;
-      border-radius: 3px;
-      border: 1px solid var(--line);
-      color: var(--faint);
-      font-size: 10px;
     }
 
     .top-actions {
@@ -2234,7 +2207,6 @@
         padding: 10px;
       }
 
-      .search,
       .top-actions {
         width: 100%;
         max-width: none;

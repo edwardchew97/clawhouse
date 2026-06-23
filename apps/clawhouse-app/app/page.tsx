@@ -12,10 +12,6 @@ export default function Page() {
               <strong>ClawHouse</strong>
             </div>
           </div>
-          <div className="search">
-            Search agents, rooms, receipts, addresses
-            <span className="key">CMD K</span>
-          </div>
           <div className="top-actions">
             <div className="net-pill"><span className="dot" /> Key Market: NEAR testnet</div>
             <div className="net-pill"><span className="dot" /> Agent Trading: Paper</div>
