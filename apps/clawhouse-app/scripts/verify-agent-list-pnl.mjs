@@ -16,6 +16,8 @@ const events = new Map();
 let clearCrosshairCalls = 0;
 let chartTimeCoordinateOffset = 0;
 let visibleLogicalRangeListener = null;
+const ticketTabs = new Map();
+const amountButtons = new Map();
 
 class FakeClassList {
   constructor() {
@@ -98,7 +100,7 @@ class FakeElement {
         const key = match[1];
         const button = this.chartEventButtons.get(key) ?? new FakeElement(`chart-event-${key}`);
         button.dataset.chartEvent = key;
-        button.textContent = match[2].replace(/<[^>]*>/g, "").trim();
+        button.textContent = match[2].match(/Order\s+\d+/)?.[0] ?? match[2].replace(/<[^>]*>/g, "").trim();
         nextButtons.set(key, button);
       }
       this.chartEventButtons = nextButtons;
@@ -205,6 +207,24 @@ function keyActivityFixture() {
       },
     ],
   };
+}
+
+function ticketTab(side) {
+  if (!ticketTabs.has(side)) {
+    const tab = new FakeElement(`ticket-${side}`);
+    tab.dataset.side = side;
+    ticketTabs.set(side, tab);
+  }
+  return ticketTabs.get(side);
+}
+
+function amountButton(amount) {
+  if (!amountButtons.has(amount)) {
+    const button = new FakeElement(`amount-${amount}`);
+    button.dataset.amount = amount;
+    amountButtons.set(amount, button);
+  }
+  return amountButtons.get(amount);
 }
 
 function paperActivityFixture() {
@@ -379,6 +399,35 @@ function rangeFilteredPaperActivityFixture() {
   };
 }
 
+function keyStateFixture(agentId, holderBalance) {
+  return {
+    agent: {
+      agent_id: agentId,
+      supply: "11",
+      reserve_near: "2.5",
+    },
+    holder_balance: holderBalance,
+    next_buy_price: {
+      total_cost_near: "0.1958",
+    },
+  };
+}
+
+function maxBuyFixture(agentId, accountId, amount) {
+  return {
+    ok: true,
+    agent_id: agentId,
+    account_id: accountId,
+    maxBuy: {
+      amount,
+      quote: {
+        total_cost_near: "1.3706",
+      },
+      attached_deposit_near: "1.3906",
+    },
+  };
+}
+
 function selectedBackend(boardId, totalPnlPct, paperActivity = null) {
   return {
     ok: true,
@@ -491,8 +540,13 @@ context.window = {
         timeScale() {
           return {
             fitContent() {},
-            timeToCoordinate() {
-              return 260 + chartTimeCoordinateOffset;
+            timeToCoordinate(value) {
+              const numeric = Number(value);
+              if (!Number.isFinite(numeric)) return 260 + chartTimeCoordinateOffset;
+              const start = Date.parse("2026-06-23T11:10:00.000Z") / 1000;
+              const end = Date.parse("2026-06-23T12:45:00.000Z") / 1000;
+              const progress = (numeric - start) / (end - start);
+              return 180 + progress * 90 + chartTimeCoordinateOffset;
             },
             subscribeVisibleLogicalRangeChange(listener) {
               visibleLogicalRangeListener = listener;
@@ -535,32 +589,52 @@ context.document = {
       return element("chartEvents").querySelectorAll(selector);
     }
     if (selector === ".ticket-tab") {
-      return ["buy", "sell"].map((side) => {
-        const tab = new FakeElement(`ticket-${side}`);
-        tab.dataset.side = side;
-        return tab;
-      });
+      return ["buy", "sell"].map(ticketTab);
     }
     if (selector === "[data-amount]") {
-      return ["1", "2", "5", "10"].map((amount) => {
-        const button = new FakeElement(`amount-${amount}`);
-        button.dataset.amount = amount;
-        return button;
-      });
+      return ["1", "2", "5", "10", "max"].map(amountButton);
     }
     return [];
   },
 };
 
 context.fetch = async (path) => {
-  if (path !== "/api/agents") throw new Error(`Unexpected fetch: ${path}`);
+  const url = new URL(path, "http://localhost");
+  if (url.pathname === "/api/key-market/state") {
+    const agentId = url.searchParams.get("agentId");
+    return jsonResponse({
+      ok: true,
+      state: keyStateFixture(agentId, agentId === "codex_main_20260620" ? "3" : "0"),
+    });
+  }
+  if (url.pathname === "/api/key-market/quote") {
+    const side = url.searchParams.get("side");
+    return jsonResponse({
+      ok: true,
+      quote: side === "sell"
+        ? { payout_near: "0.5874" }
+        : { total_cost_near: "0.1958" },
+      protection: {},
+    });
+  }
+  if (url.pathname === "/api/key-market/activity") {
+    return jsonResponse({ ok: true, agent_id: url.searchParams.get("agentId"), trades: [] });
+  }
+  if (url.pathname === "/api/key-market/max-buy") {
+    return jsonResponse(maxBuyFixture(url.searchParams.get("agentId"), url.searchParams.get("accountId"), "7"));
+  }
+  if (url.pathname !== "/api/agents") throw new Error(`Unexpected fetch: ${path}`);
+  return jsonResponse({ ok: true, agents });
+};
+
+function jsonResponse(body) {
   return {
     ok: true,
     async json() {
-      return { ok: true, agents };
+      return body;
     },
   };
-};
+}
 
 vm.createContext(context);
 const agentChange = new Promise((resolve) => {
@@ -607,7 +681,13 @@ assert(selectedRows.length === 1 && selectedRows[0]?.key === "ledger-lane-flow",
 
 const codexRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "codex_main_20260620");
 codexRow.click();
-context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0.25, paperActivityFixture()), activity: keyActivityFixture() });
+context.window.ClawHouseDemo.setChainState({
+  accountId: "buyer.testnet",
+  state: keyStateFixture("codex_main_20260620", "3"),
+  maxBuy: maxBuyFixture("codex_main_20260620", "buyer.testnet", "7"),
+  backend: selectedBackend("codex_board", 0.25, paperActivityFixture()),
+  activity: keyActivityFixture(),
+});
 assert(element("activityPanelTitle").textContent === "Key Trading Activity", "Paper agents should keep the key trading activity header.");
 assert(element("activityPanelSub").textContent === "NEAR testnet key market", "Key activity header should stay on the NEAR key market source.");
 assert(element("keyActivityList").innerHTML.includes("2 keys"), "Key activity list should render the bought key amount.");
@@ -618,6 +698,15 @@ assert(!element("keyActivityList").innerHTML.includes("$100.00"), "Key activity 
 assert(!element("keyActivityList").innerHTML.includes("REJ"), "Key activity list should hide rejected paper orders.");
 assert(!element("keyActivityList").innerHTML.includes("stale_market_data"), "Key activity list should hide rejected paper order reasons.");
 assert(element("positionTitle").textContent === "Paper Positions", "Paper agents should render paper positions instead of key balance position.");
+assert(element("ticketOwnedKeys").textContent === "3 Key", "Trade ticket should show the holder key balance even when Paper Positions replaces the position card.");
+assert(element("ticketMaxBuy").textContent === "Max buy 7 Key", "Buy ticket should show the maximum buy amount read from the wallet balance quote.");
+ticketTab("sell").click();
+amountButton("max").click();
+assert(element("keyAmount").value === "3", "Sell Max should fill the current holder key balance.");
+assert(element("ticketMaxBuy").textContent === "Sellable 3 Key", "Sell ticket should label the max amount as the sellable key balance.");
+ticketTab("buy").click();
+amountButton("max").click();
+assert(element("keyAmount").value === "7", "Buy Max should fill the computed maximum buy amount.");
 assert(element("positionSub").textContent.includes("2026-06-23T11:10:05Z"), "Paper position subtitle should render latest risk UTC time.");
 assert(element("chartSub").textContent.includes("paper net worth"), "Paper chart subtitle should identify the paper net worth source.");
 const paperChart = context.window.ClawHouseDemo.getChartModel();
