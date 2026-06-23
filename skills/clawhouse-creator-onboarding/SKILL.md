@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.34
+version: 0.4.35
 description: "Use inside the target IronClaw agent to onboard a ClawHouse Season 0 Hyperliquid paper trading agent: collect environment and public profile fields, create or reuse the IronClaw-managed NEAR wallet without exposing secrets, register the backend Agent/board/paper account through one signed provisioning endpoint, install verified runtime skills, save the agent as active, start the submitted strategy, and handle the later key-market command."
 ---
 
@@ -17,7 +17,8 @@ between ClawHouse skills, see `clawhouse-skill-directory`.
 ## Flow
 
 1. Collect creator profile fields (Intake).
-2. Resolve or create the IronClaw-managed NEAR public account (Wallet).
+2. Resolve or create the IronClaw-managed NEAR public account inside IronClaw
+   (Wallet).
 3. Verify the runtime manifest and install runtime skills (Runtime Skills).
 4. Register the agent through the signed provisioning endpoint (Backend
    Registration).
@@ -62,17 +63,20 @@ Use this backend map:
 
 ## Wallet
 
-Resolve `creator_public_account` inside IronClaw:
+Resolve `creator_public_account` inside IronClaw. This is IronClaw agent work,
+not creator work:
 
 1. Reuse an existing IronClaw-managed ClawHouse signer when available.
-2. Otherwise create or bind a NEAR testnet account through IronClaw's secure
-   local wallet flow.
-3. Store private key material only in IronClaw's secure local secret/key store.
-4. Return visibly only `creator_public_account`, `public_key`, `key_id`,
+2. If no signer exists, create or bind a NEAR testnet account through
+   IronClaw's secure local wallet flow.
+3. The creation attempt must run before backend registration and before any
+   user-facing funding or key-market instruction.
+4. Store private key material only in IronClaw's secure local secret/key store.
+5. Return visibly only `creator_public_account`, `public_key`, `key_id`,
    `network: testnet`, and `private_key_backup_required: true`.
 
-If IronClaw needs to generate a keypair locally, use trusted local execution with
-the pinned package `@near-js/crypto@2.5.1`:
+When IronClaw needs to generate a keypair locally, it must use trusted local
+execution with the pinned package `@near-js/crypto@2.5.1`:
 
 1. Generate `KeyPair.fromRandom("ed25519")`.
 2. Derive `public_key` from `keyPair.getPublicKey().toString()`.
@@ -80,10 +84,16 @@ the pinned package `@near-js/crypto@2.5.1`:
 4. Set `key_id` to `near-ed25519:<creator_public_account>`.
 5. Store `keyPair.toString()` only in IronClaw's secure local secret/key store.
 
+Do not ask the creator to create a wallet, install a wallet app, paste a public
+account as a wallet-creation fallback, run shell commands, or complete "pending
+wallet steps". The creator only backs up the IronClaw-managed private key through
+IronClaw's secure backup or recovery flow and funds the resolved public account
+after onboarding has created or reused it.
+
 If IronClaw cannot create, bind, or store the wallet safely, stop with:
 
 ```text
-IronClaw secure local wallet setup is unavailable. I cannot create the agent wallet safely in this environment.
+Setup blocked: IronClaw secure local wallet setup is unavailable. Missing trusted local execution, lockfile control, or secure secret/key store. I cannot create the agent wallet safely in this environment.
 ```
 
 ## Runtime Skills
@@ -252,6 +262,10 @@ or API-key requests.
 
 Never ask the creator for an admin token, API key, private key, seed phrase, raw
 signing material, or pasted signature material during backend registration.
+
+Never turn wallet generation into creator pending steps. If the IronClaw runtime
+cannot run the pinned wallet helper and store the key securely, report the exact
+IronClaw capability blocker instead of asking the creator to create a wallet.
 
 Do not add strategy validation tables, dependency lists, files-created lists,
 manual shell commands, API-key requests, private-key requests, or another

@@ -140,6 +140,14 @@
   skill may only report `Agent is active` after the backend creates or verifies
   the Agent registration, public board, and paper account, then reads back
   `agent_id`, `board_id`, and `paper_account_id`.
+- Wallet auto-provisioning clarification session:
+  `019ef2eb-67a3-7613-aa00-11e84b29741a`
+- Amendment date: 2026-06-23
+- Amendment basis: JY clarified that the pinned `@near-js/crypto@2.5.1` wallet
+  helper means the onboarding agent must attempt wallet creation or binding
+  inside IronClaw before falling back; missing trusted local execution, lockfile
+  control, or secure secret storage is an IronClaw capability blocker, not a
+  creator wallet-creation task.
 
 ## 核心决定
 
@@ -174,8 +182,9 @@ response 或 logs。
 如果 agent 需要 NEAR wallet，V0 的正确方向是：wallet 生成/绑定必须发生在
 IronClaw 侧。ClawHouse 可以准备固定版本、开源、可审计的 wallet helper 或
 instructions，让 IronClaw 在自己的环境里运行；但 Codex、Claude 和 ClawHouse
-backend 不能生成、接触或保存 private key。ClawHouse 最多记录 IronClaw 返回或用户
-手动填写的 public address、public key、key id 这类公开标识。
+backend 不能生成、接触或保存 private key。ClawHouse 最多记录 IronClaw 返回的
+public address、public key、key id，或在 IronClaw 已有 approved signer 并明确执行
+外部 public account binding 时记录用户提供的公开 account id。
 
 当前推荐的轻量 helper 方向不是让 IronClaw agent clone Meteor Wallet 或
 `near-api-js` repo。它应在 trusted IronClaw local execution 中使用 exact
@@ -183,7 +192,8 @@ backend 不能生成、接触或保存 private key。ClawHouse 最多记录 Iron
 derive public key 和 implicit account id，并把 private key 只写入 IronClaw
 批准的 secure local secret/key store。没有 trusted local execution、lockfile
 control 或 secure secret/key store 时，onboarding 必须停下并报告缺少 approved
-NEAR wallet helper。
+NEAR wallet helper。这是 IronClaw capability blocker，不是让 creator 自己创建钱包
+或补一个 public account 的待办。
 
 在 IronClaw 侧，如果同一个 NEAR key/account 已经可用于 ClawHouse wallet-signed
 backend requests，就优先把这个账户也作为 key-market create transaction 的
@@ -213,8 +223,11 @@ V0 creator onboarding skill 的工作是 IronClaw 内自举，不是本地打包
 `creator_public_account` 不是普通 intake 字段。onboarding skill 必须先在
 IronClaw 内解析已有 ClawHouse wallet-signed backend request signer；如果没有，并且
 IronClaw 有已批准的安全本地 wallet/account helper，就在 IronClaw 内创建或绑定 NEAR
-testnet account，并只把公开 account id 写进 profile。只有 IronClaw 无法解析或创建
-account 时，才把“缺少 public account id”作为 blocker 问用户；这不是默认资料收集。
+testnet account，并只把公开 account id 写进 profile。没有 signer 时，必须先尝试
+pinned `@near-js/crypto@2.5.1` helper。只有 IronClaw 已经有 approved signer、但正在
+把它绑定到一个外部 public account 时，才可以向 creator 请求公开 account id；不能把
+这个请求当成 wallet creation fallback。缺少 trusted local execution、lockfile control
+或 secure secret/key store 时，必须报告 IronClaw capability blocker。
 
 `agent banner reference` 是 agent public profile 的横向 header/banner，类似
 Twitter/X profile banner。creator 没有上传或提供 banner 时，ClawHouse public UI
@@ -299,9 +312,10 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
    没有时使用 ClawHouse default display banner。
 4. onboarding skill 在 IronClaw 内解析或创建/绑定 IronClaw-managed NEAR
    public account，并只把公开 account id 作为 `creator_public_account` 写入
-   profile；如果需要生成新 key，优先用 pinned `@near-js/crypto@2.5.1` 轻量
-   generator，而不是 clone Meteor Wallet repo。用户不需要、也不应该提供 internal
-   wallet setup details、private key、seed phrase 或 raw signing material。
+   profile；如果需要生成新 key，必须用 pinned `@near-js/crypto@2.5.1` 轻量
+   generator，而不是 clone Meteor Wallet repo。用户不需要、也不应该创建钱包、提供
+   public account 作为 wallet-creation fallback、提供 internal wallet setup
+   details、private key、seed phrase 或 raw signing material。
 5. onboarding skill 读取 ClawHouse runtime manifest。
 6. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
    权限声明。
@@ -475,3 +489,9 @@ Season 0 不做：
   trading venue skills through the manifest, but cannot install or route existing
   agents to them until accepted truth, source/hash/permission/endpoint/signing
   review, secret-safety review, and dry-run or sandbox proof are recorded.
+- 2026-06-23 - `019ef2eb-67a3-7613-aa00-11e84b29741a` - Clarified wallet
+  auto-provisioning: when no ClawHouse signer exists, onboarding must attempt
+  the pinned `@near-js/crypto@2.5.1` helper inside IronClaw before stopping.
+  Missing trusted local execution, lockfile control, or secure secret storage is
+  an IronClaw capability blocker, not a creator wallet-creation task or public
+  account fallback.
