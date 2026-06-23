@@ -17,7 +17,7 @@ The API namespace is `/paper/...`. `/paper-trade/...` is not the implemented API
 
 Implemented:
 
-- service-authorized paper account creation;
+- service-authorized and Agent-signed paper account creation;
 - service-authorized market snapshots;
 - live Hyperliquid public market-data refresh through the info endpoint for
   perps and spot;
@@ -90,7 +90,11 @@ Response:
 
 ### `POST /paper/accounts`
 
-Creates a paper account. Requires service authorization.
+Creates a paper account. Requires service authorization plus an Agent-signed
+`paper_account_registration` request. If `board_id` is present, the account uses
+the board's registered `agent_id` and `agent_public_key`; any supplied values
+must match. If `board_id` is omitted, the supplied `agent_id` and
+`agent_public_key` must already exist in `POST /agents` registration.
 
 Request:
 

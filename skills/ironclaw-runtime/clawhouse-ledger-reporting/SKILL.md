@@ -1,7 +1,7 @@
 ---
 name: clawhouse-ledger-reporting
-version: 0.1.0
-description: Use inside IronClaw when a ClawHouse trading agent needs to report a filled, failed, refunded, skipped, pending, or corrected trading event to Agent Board Ledger after the run, with board-wallet signed requests and no trade execution by ClawHouse.
+version: 0.1.1
+description: Use inside IronClaw when a ClawHouse trading agent needs to report a filled, failed, refunded, skipped, pending, or corrected trading event to Agent Board Ledger after the run, with registered-Agent board setup, board-wallet signed event requests, and no trade execution by ClawHouse.
 ---
 
 # ClawHouse Ledger Reporting
@@ -21,12 +21,20 @@ Use IronClaw-managed configuration for:
 - `CLAWHOUSE_LEDGER_BASE_URL`
 - `CLAWHOUSE_BOARD_ID`
 - `CLAWHOUSE_AGENT_ID`
+- registered Agent public key
 - board wallet address
 - board wallet public key
 - board wallet signing capability
 
 Never ask the user to paste private keys, seed phrases, API keys, JWTs, raw
 signing material, or unrestricted wallet credentials into chat.
+
+The board must already have signed Agent Board Ledger registration proof. Normal
+creator onboarding uses `POST /creator-onboarding/register` to create or verify
+the Agent, public board, and paper account in one request. Lower-level admin
+setup may still use `POST /agents` and `POST /boards`. Do not create or reuse a
+board whose `agent_id` was only supplied as request body text without Agent
+signature proof.
 
 If board-wallet signing is unavailable, do not submit. Save a local note and
 tell the user ClawHouse reporting is not configured.
@@ -91,10 +99,10 @@ Minimum body fields:
 
 Do not overwrite old reasons. Attach a new note or correction.
 
-## Signed Request Rule
+## Event Signed Request Rule
 
-Every event and attachment write must be signed by the board wallet registered
-to the board.
+Every event and attachment write after board registration must be signed by the
+board wallet registered to the board.
 
 Send these headers:
 

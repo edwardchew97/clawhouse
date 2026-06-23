@@ -180,11 +180,12 @@ function cleanEnv(value: string | undefined) {
 
 export function migrate(db: Database) {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS boards (
-      id TEXT PRIMARY KEY,
-      agent_id TEXT NOT NULL,
-      wallet_address TEXT NOT NULL,
-      public_key TEXT NOT NULL,
+	    CREATE TABLE IF NOT EXISTS boards (
+	      id TEXT PRIMARY KEY,
+	      agent_id TEXT NOT NULL,
+	      agent_public_key TEXT,
+	      wallet_address TEXT NOT NULL,
+	      public_key TEXT NOT NULL,
       chain TEXT DEFAULT 'near',
       venue_namespace TEXT DEFAULT 'near-intents',
       tracking_started_at TEXT,
@@ -198,16 +199,37 @@ export function migrate(db: Database) {
       created_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS auth_nonces (
-      id TEXT PRIMARY KEY,
-      board_id TEXT NOT NULL,
+	    CREATE TABLE IF NOT EXISTS auth_nonces (
+	      id TEXT PRIMARY KEY,
+	      board_id TEXT NOT NULL,
       wallet_address TEXT NOT NULL,
       nonce TEXT NOT NULL,
       timestamp TEXT NOT NULL,
       body_hash TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      UNIQUE(board_id, wallet_address, nonce)
-    );
+	      UNIQUE(board_id, wallet_address, nonce)
+	    );
+
+	    CREATE TABLE IF NOT EXISTS agent_registrations (
+	      agent_id TEXT PRIMARY KEY,
+	      agent_public_key TEXT NOT NULL,
+	      status TEXT NOT NULL DEFAULT 'active',
+	      metadata_json TEXT,
+	      created_at TEXT NOT NULL,
+	      updated_at TEXT NOT NULL
+	    );
+
+	    CREATE TABLE IF NOT EXISTS agent_auth_nonces (
+	      id TEXT PRIMARY KEY,
+	      agent_id TEXT NOT NULL,
+	      agent_public_key TEXT NOT NULL,
+	      purpose TEXT NOT NULL,
+	      nonce TEXT NOT NULL,
+	      timestamp TEXT NOT NULL,
+	      body_hash TEXT NOT NULL,
+	      created_at TEXT NOT NULL,
+	      UNIQUE(agent_id, agent_public_key, purpose, nonce)
+	    );
 
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
@@ -233,6 +255,15 @@ export function migrate(db: Database) {
     CREATE INDEX IF NOT EXISTS events_client_event_idx ON events(board_id, client_event_id);
     CREATE INDEX IF NOT EXISTS events_tx_hash_idx ON events(board_id, tx_hash);
     CREATE INDEX IF NOT EXISTS events_intent_idx ON events(board_id, intent_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS events_client_event_unique_idx
+      ON events(board_id, client_event_id)
+      WHERE client_event_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS events_tx_hash_unique_idx
+      ON events(board_id, tx_hash)
+      WHERE tx_hash IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS events_intent_unique_idx
+      ON events(board_id, intent_id)
+      WHERE intent_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS attachments (
       id TEXT PRIMARY KEY,
@@ -638,8 +669,9 @@ export function migrate(db: Database) {
     END;
   `);
 
-  ensureColumn(db, "boards", "chain", "TEXT DEFAULT 'near'");
-  ensureColumn(db, "boards", "venue_namespace", "TEXT DEFAULT 'near-intents'");
+	  ensureColumn(db, "boards", "chain", "TEXT DEFAULT 'near'");
+	  ensureColumn(db, "boards", "agent_public_key", "TEXT");
+	  ensureColumn(db, "boards", "venue_namespace", "TEXT DEFAULT 'near-intents'");
   ensureColumn(db, "boards", "tracking_started_at", "TEXT");
   ensureColumn(db, "boards", "owner_wallet_address", "TEXT");
   ensureColumn(db, "boards", "funding_source", "TEXT");
@@ -666,7 +698,13 @@ export function migrate(db: Database) {
   ensureColumn(db, "paper_audit_events", "ingest_sequence", "INTEGER");
   ensureColumn(db, "paper_orders", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
   ensureColumn(db, "paper_fills", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
-  ensureColumn(db, "paper_positions", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
+	  ensureColumn(db, "paper_positions", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
+
+	  db.exec(`
+	    UPDATE boards
+	      SET agent_public_key = public_key
+	      WHERE agent_public_key IS NULL OR agent_public_key = '';
+	  `);
 
   if (hasColumn(db, "pnl_snapshots", "starting_value_usd")) {
     db.exec(`
@@ -686,9 +724,9 @@ export function migrate(db: Database) {
          cash_balance_usd, status, allowed_markets_json, metadata_json, created_at, updated_at)
         SELECT
           'paper_legacy_' || id,
-          id,
-          agent_id,
-          public_key,
+	          id,
+	          agent_id,
+	          COALESCE(NULLIF(agent_public_key, ''), public_key),
           COALESCE(NULLIF(base_currency, ''), 'USD'),
           starting_value_usd,
           starting_value_usd,

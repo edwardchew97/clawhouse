@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openSqliteLedgerDb, type SqliteLedgerDb } from "../src/db";
-import { sha256Hex } from "../src/auth";
+import { canonicalAgentAuthPayload, sha256Hex } from "../src/auth";
 import { canonicalPaperAuthPayload } from "../src/paper-trading";
 import { createApp } from "../src/server";
 
@@ -143,6 +143,7 @@ describe("paper-trading input validation", () => {
   });
 
   test("rejects starting_balance_usd <= 0 on account creation", async () => {
+    await registerAgent();
     const res = await postJson("/paper/accounts", {
       paper_account_id: "paper-neg", agent_id: "ironclaw",
       agent_public_key: wallet.publicKey, starting_balance_usd: -5,
@@ -821,12 +822,51 @@ describe("paper-trading idempotency & precision", () => {
 // Helpers
 // ============================================================================
 async function registerPaperAccount(overrides: Record<string, unknown> = {}) {
+  await registerAgent();
   const res = await postJson("/paper/accounts", {
     paper_account_id: "paper-1", agent_id: "ironclaw", agent_public_key: wallet.publicKey,
     starting_balance_usd: 1000, allowed_markets: ["BTC", "ETH"], ...overrides,
   });
   expect(res.status).toBe(201);
   return (await json<{ account: Record<string, any> }>(res)).account;
+}
+
+async function registerAgent() {
+  const body = {
+    agent_id: "ironclaw",
+    agent_public_key: wallet.publicKey,
+    metadata: { source: "paper-edge-test" },
+  };
+  const rawBody = JSON.stringify(body);
+  const timestamp = currentNow.getTime().toString();
+  const nonce = crypto.randomUUID();
+  const bodyHash = sha256Hex(rawBody);
+  const payload = canonicalAgentAuthPayload({
+    purpose: "agent_registration",
+    method: "POST",
+    path: "/agents",
+    bodyHash,
+    timestamp,
+    nonce,
+    agentId: "ironclaw",
+    agentPublicKey: wallet.publicKey,
+    boardId: null,
+  });
+  const signature = wallet.keyPair.sign(new TextEncoder().encode(payload)).signature;
+  const res = await app.fetch(new Request("http://ledger.test/agents", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${adminToken}`,
+      "x-clawhouse-agent-public-key": wallet.publicKey,
+      "x-clawhouse-agent-timestamp": timestamp,
+      "x-clawhouse-agent-nonce": nonce,
+      "x-clawhouse-agent-body-sha256": bodyHash,
+      "x-clawhouse-agent-signature": Buffer.from(signature).toString("base64url"),
+    },
+    body: rawBody,
+  }));
+  expect(res.status).toBe(201);
 }
 
 async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
@@ -838,11 +878,44 @@ async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
 }
 
 async function postJson(path: string, body: Record<string, unknown>) {
+  const rawBody = JSON.stringify(body);
+  const headers: Record<string, string> = { "content-type": "application/json", authorization: `Bearer ${adminToken}` };
+  if (path === "/paper/accounts") {
+    const timestamp = currentNow.getTime().toString();
+    const nonce = crypto.randomUUID();
+    const bodyHash = sha256Hex(rawBody);
+    const payload = canonicalAgentAuthPayload({
+      purpose: "paper_account_registration",
+      method: "POST",
+      path,
+      bodyHash,
+      timestamp,
+      nonce,
+      agentId: requiredBodyString(body.agent_id ?? body.agentId, "agent_id"),
+      agentPublicKey: requiredBodyString(body.agent_public_key ?? body.agentPublicKey, "agent_public_key"),
+      boardId: optionalBodyString(body.board_id ?? body.boardId),
+    });
+    const signature = wallet.keyPair.sign(new TextEncoder().encode(payload)).signature;
+    headers["x-clawhouse-agent-public-key"] = wallet.publicKey;
+    headers["x-clawhouse-agent-timestamp"] = timestamp;
+    headers["x-clawhouse-agent-nonce"] = nonce;
+    headers["x-clawhouse-agent-body-sha256"] = bodyHash;
+    headers["x-clawhouse-agent-signature"] = Buffer.from(signature).toString("base64url");
+  }
   return await app.fetch(new Request(`http://ledger.test${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${adminToken}` },
-    body: JSON.stringify(body),
+    headers,
+    body: rawBody,
   }));
+}
+
+function requiredBodyString(value: unknown, name: string) {
+  if (typeof value !== "string" || value.trim() === "") throw new Error(`Missing ${name} in test body`);
+  return value.trim();
+}
+
+function optionalBodyString(value: unknown) {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
 async function rawPaperPost(path: string, rawBody: string) {

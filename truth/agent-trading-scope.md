@@ -112,6 +112,12 @@ replace Scope V0 key trading.
   the creator to back up that key through IronClaw's secure local backup or
   recovery flow before funding, without exposing private key material to
   ClawHouse, Codex, chat, Workbench, tool output, or logs.
+- Backend registration amendment session:
+  `019ef28a-c641-7eb2-a2a5-9bafa8ed67b9`
+- Amendment date: 2026-06-23
+- Amendment basis: JY approved a single signed creator-onboarding backend
+  provisioning endpoint. The onboarding skill must read back `agent_id`,
+  `board_id`, and `paper_account_id` before reporting the IronClaw agent active.
 
 ## One Sentence
 
@@ -237,10 +243,12 @@ The ClawHouse onboarding skill runs inside the target IronClaw agent. It should:
 - verify required runtime skill URL allowlist, name, version, sha256 hash, and
   permission declaration;
 - install or guide the user through installing the required runtime skills;
+- register or verify the backend Agent, public board, and paper account through
+  the single signed creator-onboarding provisioning endpoint;
 - write the active strategy/profile inside IronClaw memory/workspace;
 - configure heartbeat checks for future runtime manifest updates;
-- run dry checks and leave the agent `active` when the required runtime skills,
-  creator public account, and safety checks pass;
+- run dry checks and leave the agent `active` when backend registration readback,
+  the required runtime skills, creator public account, and safety checks pass;
 - create the NEAR testnet key market through the agent-side skill/local runner
   when the creator says `create keymarket` and the public account has at least
   `0.02` testnet NEAR.
@@ -605,9 +613,10 @@ The first Agent Trading slice is done only when:
 - no OutLayer, real order submission, custody, copy trading, or user-funded
   autonomous trading is required;
 - IronClaw-side onboarding can verify and install the required ClawHouse runtime
-  skills from a hash-pinned manifest, save the agent as active, and create the
-  key market through an agent-side action without requiring ClawHouse backend to
-  execute for or activate the agent.
+  skills from a hash-pinned manifest, read back `agent_id`, `board_id`, and
+  `paper_account_id` from ClawHouse backend, save the agent as active, and create
+  the key market through an agent-side action without requiring ClawHouse backend
+  to execute trades or create the key market for the agent.
 
 ## Open Decisions
 
@@ -702,3 +711,7 @@ The first Agent Trading slice is done only when:
   backend requests and NEAR testnet key-market creation, with an onboarding
   backup reminder that keeps private key material out of ClawHouse, Codex, chat,
   Workbench, tool output, and logs.
+- 2026-06-23 - `019ef28a-c641-7eb2-a2a5-9bafa8ed67b9` - Added backend-visible
+  activation to Agent Trading onboarding: the onboarding skill uses one signed
+  creator-onboarding provisioning endpoint and must read back `agent_id`,
+  `board_id`, and `paper_account_id` before reporting active.

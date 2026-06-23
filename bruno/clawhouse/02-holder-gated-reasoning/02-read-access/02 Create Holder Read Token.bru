@@ -125,7 +125,6 @@ script:pre-request {
   if (mode === "live-key-market") {
     const keyContractId = String(value("key_contract_id", ""));
     const rpcUrl = String(value("near_rpc_url", ""));
-    const agentId = String(value("ledger_agent_id", value("agent_id", "regdgen.testnet")));
     if (!keyContractId || !rpcUrl) {
       throw new Error("live-key-market mode requires key_contract_id and near_rpc_url.");
     }
@@ -133,7 +132,6 @@ script:pre-request {
     body.rpc_url = rpcUrl;
     body.key_contract_id = keyContractId;
     body.holder_account_id = holderAccountId;
-    body.agent_id = agentId;
     body.access_level = "key_holder_detail";
     body.read_token = readToken;
     body.expires_at = expiresAt;

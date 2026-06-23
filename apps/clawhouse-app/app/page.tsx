@@ -104,18 +104,18 @@ export default function Page() {
                   </div>
                 </div>
                 <div className="range">
-                  <button>1H</button>
-                  <button className="active">24H</button>
-                  <button>7D</button>
-                  <button>ALL</button>
+                  <button data-chart-range="1h" type="button" aria-pressed="false">1H</button>
+                  <button className="active" data-chart-range="24h" type="button" aria-pressed="true">24H</button>
+                  <button data-chart-range="7d" type="button" aria-pressed="false">7D</button>
+                  <button data-chart-range="all" type="button" aria-pressed="false">ALL</button>
                 </div>
               </div>
               <canvas id="pnlChart" />
               <div className="chart-events" id="chartEvents" />
               <div className="price-marker" id="priceMarker">backend</div>
               <div className="chart-empty-overlay" id="chartEmptyOverlay" hidden>
-                <strong id="chartEmptyTitle">Backend chart data unavailable</strong>
-                <span id="chartEmptyDetail">Reading staging backend for this agent.</span>
+                <strong id="chartEmptyTitle">Connect Wallet</strong>
+                <span id="chartEmptyDetail">Connect Wallet to load holder-gated chart data.</span>
               </div>
             </section>
 
@@ -177,8 +177,12 @@ export default function Page() {
             </section>
 
             <section className="panel key-activity">
-              <div className="panel-title">Key Trading Activity</div>
-              <div className="panel-sub">NEAR testnet key market</div>
+              <div className="key-activity-head">
+                <div>
+                  <div className="panel-title">Key Trading Activity</div>
+                  <div className="panel-sub">NEAR testnet key market</div>
+                </div>
+              </div>
               <div className="activity-list key-activity-list" id="keyActivityList">
                 <div className="backend-empty">
                   <span>Reading key market</span>
@@ -195,7 +199,7 @@ export default function Page() {
 
       <div className="modal-backdrop" id="eventModal" hidden>
         <section className="event-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-          <button className="modal-close" id="modalClose" aria-label="Close event detail">Done</button>
+          <button className="modal-close" id="modalClose" aria-label="Close event detail">Close</button>
           <div className="receipt-hero">
             <div className="receipt-title">
               <span className="lock-kicker" id="modalKicker">Agent event</span>
@@ -209,37 +213,38 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="execution-rail">
+          <div className="trade-breakdown" aria-label="Trade breakdown">
             <div>
-              <label>Network</label>
-              <strong id="modalNetwork">near</strong>
+              <label>Trade</label>
+              <strong id="modalAction">--</strong>
+            </div>
+            <div>
+              <label>Direction</label>
+              <strong id="modalDirection">--</strong>
             </div>
             <div>
               <label>Venue</label>
               <strong id="modalVenue">hyperliquid-paper</strong>
             </div>
-            <div>
-              <label>Agent action</label>
-              <strong id="modalAction">--</strong>
-            </div>
-          </div>
-
-          <div className="event-path" id="modalPath" aria-label="Event execution path">
-            <span><b>01</b>Signal</span>
-            <span><b>02</b>Route check</span>
-            <span><b>03</b>Paper trade</span>
           </div>
 
           <div className="receipt-body">
             <div className="reason-panel">
-              <h3>Agent reasoning</h3>
+              <h3>Why</h3>
               <p id="modalReason" />
             </div>
             <aside className="source-panel">
-              <h3>Data sources</h3>
+              <h3>Evidence</h3>
               <div className="source-list" id="modalSources" />
             </aside>
           </div>
+
+          <section className="comment-panel" aria-labelledby="modalCommentsTitle">
+            <div>
+              <h3 id="modalCommentsTitle">Comments</h3>
+              <p>Not available yet. Ships later.</p>
+            </div>
+          </section>
         </section>
       </div>
 

@@ -153,7 +153,7 @@
         {
           "id": "agentRegistration.ledger.createBoard",
           "name": "Register Agent Board",
-          "description": "Registers the approved agent in Agent Board Ledger with a wallet-signed board registration proof.",
+          "description": "Registers the approved Agent, public board, and paper account through one creator-onboarding backend request with both wallet and Agent-signed proofs.",
           "type": "script",
           "access": "protected",
           "command": "bun",
@@ -182,12 +182,12 @@
             "mnemonic"
           ],
           "runningNotes": [
-            "Calling the real POST /boards backend API with both service authorization and wallet signature headers.",
-            "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN configured in the local runtime environment.",
+            "Calling the real POST /creator-onboarding/register backend API with wallet signature headers and Agent signature headers.",
+            "The backend creates or verifies the Agent registration, public board, and paper account in one provisioning request.",
             "Reusing the local Workbench wallet artifact from Generate Agent Ledger Key Pair; if that step was skipped, this script creates one locally.",
-            "Leave ledgerBoardId empty if you want the backend to generate an id.",
+            "Leave ledgerBoardId empty if you want the registration script to generate a local board id before signing.",
             "Run Generate Agent Ledger Key Pair first to auto-fill a fresh test ledgerAgentId, or edit ledgerAgentId to intentionally reuse an agent id.",
-            "ledgerAgentId must match the key market agentId created earlier, otherwise App discovery and key-market readback point at different agents.",
+            "ledgerAgentId must match the key market agentId created earlier, and the Agent public key must match the registered Agent key.",
             "The returned board id is stored as ledgerBoardId for the later API calls."
           ],
           "inputs": {
@@ -206,6 +206,7 @@
             "ledgerBoardId": "response.json.boardId",
             "agentId": "response.json.agentId",
             "ledgerAgentId": "response.json.agentId",
+            "ledgerAgentPublicKey": "response.json.agentRegistration.agent_public_key",
             "ledgerWalletAddress": "response.json.wallet.walletAddress",
             "ledgerPublicKey": "response.json.wallet.publicKey",
             "ledgerKeyId": "response.json.wallet.keyId",
@@ -1458,6 +1459,50 @@
           }
         },
         {
+          "id": "userBuysKey.app.walletReadToken",
+          "name": "Unlock Reasoning With Wallet Proof",
+          "description": "Uses the same App route as the browser flow: request a read-access challenge, sign it with the test user's NEAR key, and exchange it for a short-lived Ledger read token.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "scripts/workbench-read-token.ts",
+            "--app-url",
+            "{{clawhouseAppBaseUrl}}",
+            "--board-id",
+            "{{ledgerBoardId}}",
+            "--holder-account-id",
+            "{{testUserAccountId}}",
+            "--network-id",
+            "testnet"
+          ],
+          "cwd": "{{repoRoot}}/apps/clawhouse-app",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Calling POST /api/backend/read-token/nonce on the ClawHouse App.",
+            "Signing the returned NEP-413 challenge with the configured test user account.",
+            "Calling POST /api/backend/read-token; the App verifies the wallet signature before it asks Ledger to issue the holder read token.",
+            "This is the browser unlock path, not a direct service-token bypass."
+          ],
+          "inputs": {
+            "clawhouseAppBaseUrl": "",
+            "ledgerBoardId": "",
+            "testUserAccountId": ""
+          },
+          "setVars": {
+            "ledgerReadToken": "response.json.readToken",
+            "ledgerReadTokenExpiresAt": "response.json.expiresAt",
+            "appHolderGateResult": "response.json.access.access_result"
+          }
+        },
+        {
           "id": "userBuysKey.ledger.nearKeyMarketReadAccess",
           "name": "Create Live Key-Holder Read Token",
           "description": "Checks the buyer's live NEAR key-market holder balance and issues a holder read token whose later reads re-check the key balance.",
@@ -1472,7 +1517,6 @@
           "body": {
             "rpc_url": "{{nearRpcUrl}}",
             "key_contract_id": "{{contractId}}",
-            "agent_id": "{{agentId}}",
             "holder_account_id": "{{testUserAccountId}}",
             "access_level": "key_holder_detail",
             "read_token": "{{ledgerReadToken}}",
@@ -1480,6 +1524,7 @@
           },
           "runningNotes": [
             "Calling the real Ledger /read-access/near-key-market endpoint.",
+            "Ledger derives agent_id from the registered board; the request body must not choose a different Agent.",
             "Ledger checks key.balance_of/get_balance on the key-market contract before issuing the read token.",
             "Later holder-gated reads use the token but re-check the live key balance, so a sold-out holder should stop reading."
           ],
@@ -1690,7 +1735,6 @@
           "body": {
             "rpc_url": "{{nearRpcUrl}}",
             "key_contract_id": "{{contractId}}",
-            "agent_id": "{{agentId}}",
             "holder_account_id": "{{testUserAccountId}}",
             "access_level": "{{ledgerAccessLevel}}",
             "read_token": "{{ledgerReadToken}}",
@@ -1701,6 +1745,7 @@
           },
           "runningNotes": [
             "Calling the real POST /boards/:id/read-access/near-key-market endpoint.",
+            "Ledger derives agent_id from the registered board; the request body must not choose a different Agent.",
             "The backend reads the NEAR key-market contract through RPC and grants access only when holder balance is positive.",
             "If access is granted, ledgerReadToken is required so later holder-gated read steps can use it."
           ],
@@ -2449,7 +2494,7 @@
             "Calling the real local backend; the step fails if the service is not running.",
             "The backend must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAdminToken.",
             "Creating or reusing a local Workbench signing wallet and sending signed /paper/orders requests.",
-            "Creating a service-authorized paper account and market snapshots.",
+            "Creating a service-authorized and Agent-signed paper account plus service-authorized market snapshots.",
             "Submitting IOC, GTC, ALO, reduce-only, and isolated-margin paper orders.",
             "Verifying liquidation, paper leaderboard, and replay proof from backend state."
           ],
@@ -2769,13 +2814,13 @@
           "body": {
             "rpc_url": "{{nearRpcUrl}}",
             "key_contract_id": "{{contractId}}",
-            "agent_id": "{{agentId}}",
             "holder_account_id": "{{testUserAccountId}}",
             "access_level": "key_holder_detail",
             "read_token": "{{ledgerReadToken}}"
           },
           "runningNotes": [
             "Calling the same live Ledger /read-access/near-key-market endpoint used after buy.",
+            "Ledger derives agent_id from the registered board; the request body must not choose a different Agent.",
             "Ledger checks key.balance_of/get_balance through NEAR RPC.",
             "Expected after selling below holder threshold: access_result is denied and no new holder read token is granted."
           ],
@@ -3695,7 +3740,7 @@
             "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAdminToken.",
             "Passing ledgerAdminToken through the Workbench script environment, not through command-line arguments.",
             "Creating or reusing a local Workbench signing wallet and sending only public key metadata plus paper-order signatures.",
-            "Creating a service-authorized paper account and service-authorized Hyperliquid-style market snapshots.",
+            "Creating a service-authorized and Agent-signed paper account plus service-authorized Hyperliquid-style market snapshots.",
             "Submitting agent-signed IOC, GTC, ALO, reduce-only, and isolated-margin paper orders.",
             "Running a service-authorized risk check after an adverse mark and verifying isolated liquidation.",
             "Reading the paper-labeled leaderboard and replay proof through the public HTTP APIs."

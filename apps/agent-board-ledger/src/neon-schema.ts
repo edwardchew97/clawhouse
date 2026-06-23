@@ -1,9 +1,10 @@
 export const neonSchemaStatements = [
   `
-    CREATE TABLE IF NOT EXISTS boards (
-      id TEXT PRIMARY KEY,
-      agent_id TEXT NOT NULL,
-      wallet_address TEXT NOT NULL,
+	    CREATE TABLE IF NOT EXISTS boards (
+	      id TEXT PRIMARY KEY,
+	      agent_id TEXT NOT NULL,
+	      agent_public_key TEXT,
+	      wallet_address TEXT NOT NULL,
       public_key TEXT NOT NULL,
       chain TEXT DEFAULT 'near',
       venue_namespace TEXT DEFAULT 'near-intents',
@@ -18,20 +19,43 @@ export const neonSchemaStatements = [
       created_at TEXT NOT NULL
     )
   `,
-  `
-    CREATE TABLE IF NOT EXISTS auth_nonces (
-      id TEXT PRIMARY KEY,
+	  `
+	    CREATE TABLE IF NOT EXISTS auth_nonces (
+	      id TEXT PRIMARY KEY,
       board_id TEXT NOT NULL,
       wallet_address TEXT NOT NULL,
       nonce TEXT NOT NULL,
       timestamp TEXT NOT NULL,
       body_hash TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      UNIQUE(board_id, wallet_address, nonce)
-    )
-  `,
-  `
-    CREATE TABLE IF NOT EXISTS events (
+	      UNIQUE(board_id, wallet_address, nonce)
+	    )
+	  `,
+	  `
+	    CREATE TABLE IF NOT EXISTS agent_registrations (
+	      agent_id TEXT PRIMARY KEY,
+	      agent_public_key TEXT NOT NULL,
+	      status TEXT NOT NULL DEFAULT 'active',
+	      metadata_json TEXT,
+	      created_at TEXT NOT NULL,
+	      updated_at TEXT NOT NULL
+	    )
+	  `,
+	  `
+	    CREATE TABLE IF NOT EXISTS agent_auth_nonces (
+	      id TEXT PRIMARY KEY,
+	      agent_id TEXT NOT NULL,
+	      agent_public_key TEXT NOT NULL,
+	      purpose TEXT NOT NULL,
+	      nonce TEXT NOT NULL,
+	      timestamp TEXT NOT NULL,
+	      body_hash TEXT NOT NULL,
+	      created_at TEXT NOT NULL,
+	      UNIQUE(agent_id, agent_public_key, purpose, nonce)
+	    )
+	  `,
+	  `
+	    CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
       board_id TEXT NOT NULL REFERENCES boards(id),
       agent_id TEXT NOT NULL,
@@ -55,6 +79,9 @@ export const neonSchemaStatements = [
   "CREATE INDEX IF NOT EXISTS events_client_event_idx ON events(board_id, client_event_id)",
   "CREATE INDEX IF NOT EXISTS events_tx_hash_idx ON events(board_id, tx_hash)",
   "CREATE INDEX IF NOT EXISTS events_intent_idx ON events(board_id, intent_id)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS events_client_event_unique_idx ON events(board_id, client_event_id) WHERE client_event_id IS NOT NULL",
+  "CREATE UNIQUE INDEX IF NOT EXISTS events_tx_hash_unique_idx ON events(board_id, tx_hash) WHERE tx_hash IS NOT NULL",
+  "CREATE UNIQUE INDEX IF NOT EXISTS events_intent_unique_idx ON events(board_id, intent_id) WHERE intent_id IS NOT NULL",
   `
     CREATE TABLE IF NOT EXISTS attachments (
       id TEXT PRIMARY KEY,
@@ -427,9 +454,10 @@ export const neonSchemaStatements = [
       UNIQUE(network_id, tx_hash)
     )
   `,
-  "CREATE INDEX IF NOT EXISTS key_market_trades_agent_created_idx ON key_market_trades(network_id, contract_id, agent_id, created_at)",
-  "CREATE INDEX IF NOT EXISTS key_market_trades_trader_created_idx ON key_market_trades(network_id, trader_id, created_at)",
-  "ALTER TABLE boards ADD COLUMN IF NOT EXISTS chain TEXT DEFAULT 'near'",
+	  "CREATE INDEX IF NOT EXISTS key_market_trades_agent_created_idx ON key_market_trades(network_id, contract_id, agent_id, created_at)",
+	  "CREATE INDEX IF NOT EXISTS key_market_trades_trader_created_idx ON key_market_trades(network_id, trader_id, created_at)",
+	  "ALTER TABLE boards ADD COLUMN IF NOT EXISTS agent_public_key TEXT",
+	  "ALTER TABLE boards ADD COLUMN IF NOT EXISTS chain TEXT DEFAULT 'near'",
   "ALTER TABLE boards ADD COLUMN IF NOT EXISTS venue_namespace TEXT DEFAULT 'near-intents'",
   "ALTER TABLE boards ADD COLUMN IF NOT EXISTS tracking_started_at TEXT",
   "ALTER TABLE boards ADD COLUMN IF NOT EXISTS owner_wallet_address TEXT",
@@ -480,10 +508,10 @@ export const neonSchemaStatements = [
           (id, board_id, agent_id, agent_public_key, base_currency, starting_balance_usd,
            cash_balance_usd, status, allowed_markets_json, metadata_json, created_at, updated_at)
           SELECT
-            ''paper_legacy_'' || id,
-            id,
-            agent_id,
-            public_key,
+	            ''paper_legacy_'' || id,
+	            id,
+	            agent_id,
+	            COALESCE(NULLIF(agent_public_key, ''''), public_key),
             COALESCE(NULLIF(base_currency, ''''), ''USD''),
             starting_value_usd,
             starting_value_usd,
@@ -503,8 +531,9 @@ export const neonSchemaStatements = [
   `,
   "ALTER TABLE pnl_snapshots DROP COLUMN IF EXISTS starting_value_usd",
   "ALTER TABLE boards DROP COLUMN IF EXISTS starting_value_usd",
-  "UPDATE boards SET chain = 'near' WHERE chain IS NULL OR chain = ''",
-  "UPDATE boards SET venue_namespace = 'near-intents' WHERE venue_namespace IS NULL OR venue_namespace = ''",
+	  "UPDATE boards SET chain = 'near' WHERE chain IS NULL OR chain = ''",
+	  "UPDATE boards SET agent_public_key = public_key WHERE agent_public_key IS NULL OR agent_public_key = ''",
+	  "UPDATE boards SET venue_namespace = 'near-intents' WHERE venue_namespace IS NULL OR venue_namespace = ''",
   "UPDATE boards SET tracking_started_at = created_at WHERE tracking_started_at IS NULL OR tracking_started_at = ''",
   "UPDATE events SET reported_at = created_at WHERE (reported_at IS NULL OR reported_at = '') AND event_type != 'discovered_without_reason'",
   `
