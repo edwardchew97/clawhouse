@@ -109,6 +109,11 @@ const runtimeExecution = {
   ],
   heartbeatSystem: {
     driver: "heartbeat_system",
+    owner: "target_agent_runtime",
+    examples: ["OpenClaw", "Hermes", "IronClaw"],
+    notOwnedBy: ["ClawHouse"],
+    description:
+      "Use the target agent runtime's own Heartbeat System when that runtime provides one.",
     requiredWhenAvailable: true,
     owns: ["paper_strategy_loop", "health_check"],
   },
@@ -132,14 +137,14 @@ const runtimeExecution = {
   safety:
     "Automation and scheduled tasks may read the runtime-managed operation key only through the approved local or Claude private secret store. They must never print, echo, upload, or log private key material.",
   stopIfUnavailable:
-    "Setup blocked: ClawHouse runtime execution schedule is unavailable.",
+    "Setup blocked: selected runtime execution schedule is unavailable.",
 };
 
 // Keep this text matched with skills/clawhouse-creator-onboarding/SKILL.md.
 function completionTemplate(creatorPublicAccount: string) {
   return [
     "Paper agent is active.",
-    "ClawHouse has scheduled or started this paper strategy.",
+    "The selected runtime has scheduled or started this paper strategy.",
     "",
     "Agent:",
     "- name: <agent_name>",
@@ -243,7 +248,7 @@ function payloadFor(request: Request) {
     runtimeExecution,
     status: "active",
     message:
-      "Paper agent is active. ClawHouse has scheduled or started the submitted paper strategy.",
+      "Paper agent is active. The selected runtime has scheduled or started the submitted paper strategy.",
     intake: [
       "environment",
       "agent_name",

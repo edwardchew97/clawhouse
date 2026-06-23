@@ -16,11 +16,15 @@ The directory picks the runtime mode and routes to creator onboarding, backend
 request signing, Hyperliquid paper trading, board ledger reporting, and optional
 key-market setup.
 
-Runtime execution uses this priority: if a Heartbeat System exists, it runs the
-paper loop. If there is no Heartbeat System and the runtime is Codex, use Codex
-Automation. If there is no Heartbeat System and the runtime is Claude, use a
-Claude scheduled task with approved private secret storage. Other runtimes are
-not supported yet.
+Runtime execution uses this priority: if the target agent runtime has its own
+Heartbeat System, for example OpenClaw, Hermes, or IronClaw, that runtime system
+runs the paper loop. If there is no Heartbeat System and the runtime is Codex,
+use Codex Automation. If there is no Heartbeat System and the runtime is Claude,
+use a Claude scheduled task with approved private secret storage. Other runtimes
+are not supported yet.
+
+Heartbeat System is not a ClawHouse-hosted service. It is a target-runtime
+capability.
 
 Do not paste a wallet private key or seed phrase. Do not send mainnet NEAR.
 Key-market creation is optional; paper onboarding succeeds without it.

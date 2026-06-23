@@ -1,6 +1,8 @@
-# ClawHouse Runtime Heartbeat
+# Target Runtime Heartbeat Routine for ClawHouse
 
-Use this as the ClawHouse heartbeat routine inside the target IronClaw agent.
+Use this as the target runtime heartbeat routine for ClawHouse tasks inside an
+IronClaw-style agent runtime. The Heartbeat System is provided by the target
+runtime, not by ClawHouse.
 
 ## Rule
 
