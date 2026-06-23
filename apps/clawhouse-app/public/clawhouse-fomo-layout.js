@@ -1798,17 +1798,35 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
     if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return "";
     const x = clamp(rawX, 24, Math.max(24, container.clientWidth - 24));
     const y = clamp(rawY, 18, Math.max(18, container.clientHeight - 18));
-    const labelY = y < 78 ? y + 28 : y - 46;
+    const featured = activeEventId === event.id || (!activeEventId && eventIndex === model.events.length - 1);
+    const cardX = clamp(x, 160, Math.max(160, container.clientWidth - 160));
+    const cardY = y < 156 ? y + 30 : y - 118;
     return `
       <button
         class="event-marker ${visible ? "" : "locked"} ${activeEventId === event.id ? "active" : ""}"
         data-chart-event="${event.id}"
+        data-initials="${escapeHtml(agent.initials || initialsFor(agentTitle(agent)))}"
         style="left:${x}px; top:${y}px"
         aria-label="${escapeHtml(visible ? event.title : "Locked backend event")}"
       >Order ${eventIndex + 1}</button>
-      <span class="event-label ${visible ? "" : "locked"}" style="left:${x}px; top:${labelY}px">
-        ${escapeHtml(visible ? event.label : publicEventText(event))}
-      </span>
+      <button
+        class="chart-event-card ${visible ? "" : "locked"} ${featured ? "featured" : ""}"
+        data-chart-card-event="${event.id}"
+        style="left:${cardX}px; top:${cardY}px"
+        aria-label="${escapeHtml(visible ? `${agentTitle(agent)} ${event.title}` : "Locked backend event")}"
+      >
+        <span class="chart-event-head">
+          <span class="chart-event-avatar" aria-hidden="true">${agentIcon(agent)}</span>
+          <strong>${escapeHtml(agentTitle(agent))}</strong>
+          <span class="tag">${escapeHtml(visible ? eventTag(event) : "locked")}</span>
+          <time>${escapeHtml(event.time)}</time>
+        </span>
+        <span class="chart-event-reason">${escapeHtml(visible ? compactReason(event.reason) : publicEventText(event))}</span>
+        <span class="chart-event-action">
+          <span>Action</span>
+          <strong>${escapeHtml(visible ? event.action : "Buy 1 key to unlock")}</strong>
+        </span>
+      </button>
     `;
   }).join("");
   byId("chartEvents").innerHTML = eventHtml;
@@ -1816,6 +1834,11 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
   document.querySelectorAll("[data-chart-event]").forEach((button) => {
     button.addEventListener("click", () => {
       openEvent(button.dataset.chartEvent);
+    });
+  });
+  document.querySelectorAll("[data-chart-card-event]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openEvent(button.dataset.chartCardEvent);
     });
   });
 }
