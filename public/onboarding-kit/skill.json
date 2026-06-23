@@ -1,7 +1,7 @@
 {
   "name": "clawhouse-skill-directory",
-  "version": "0.9.2",
-  "description": "Start ClawHouse onboarding from the Skill Directory, choose the runtime mode, register a paper-trading agent, schedule the runtime loop, and optionally create a NEAR testnet key market without exposing private keys.",
+  "version": "0.9.3",
+  "description": "Start ClawHouse onboarding from the Skill Directory, choose the runtime mode, register a paper-trading agent, schedule the loop through a target-runtime Heartbeat System, Codex Automation, or Claude scheduled task, and optionally create a NEAR testnet key market without exposing private keys.",
   "homepage": "https://github.com/edwardchew97/clawhouse-onboarding-kit",
   "install": "Read https://edwardchew97.github.io/clawhouse-onboarding-kit/skill.md and install clawhouse-skill-directory inside the target agent runtime.",
   "metadata": {
@@ -16,6 +16,7 @@
         "claude-scheduled-task",
         "unsupported"
       ],
+      "heartbeat_system_owner": "target-runtime-capability",
       "key_market": "optional",
       "user_installs_only_skill": true,
       "runtime_manifest": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/manifest.json"
