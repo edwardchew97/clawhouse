@@ -35,7 +35,6 @@ let chainState = {
   activity: null,
   activityError: null,
   backend: null,
-  readToken: null,
   readAccess: null,
   readAccessError: null,
   error: null
@@ -74,7 +73,7 @@ const chainBalance = (agent) => {
 const holderBalance = (agent) => chainBalance(agent);
 const readAccessApplies = (agent) => {
   const access = chainState.readAccess;
-  if (!access || !chainState.readToken) return false;
+  if (!access) return false;
   const boardId = agent.boardId || agent.id;
   const expiresAt = Date.parse(access.expiresAt || "");
   return access.boardId === boardId

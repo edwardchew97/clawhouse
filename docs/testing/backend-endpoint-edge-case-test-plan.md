@@ -1025,9 +1025,10 @@ Edge cases:
 - Backend non-OK JSON error returns same status and message.
 - Backend non-JSON error text is exposed as error text.
 - Network failure returns `502`.
-- The app proxy must not inject a global config read token. It only forwards a
-  request-scoped `x-clawhouse-read-token` produced by wallet-proof read-token
-  exchange.
+- The app proxy must not inject a global config read token. Browser requests use
+  the HttpOnly holder read cookie produced by the wallet-proof exchange; the app
+  proxy unwraps that cookie server-side and forwards the read token to Ledger
+  only as a server-to-server `x-clawhouse-read-token` header.
 
 ### A06: `GET /api/backend/board`
 

@@ -1461,7 +1461,7 @@
         {
           "id": "userBuysKey.app.walletReadToken",
           "name": "Unlock Reasoning With Wallet Proof",
-          "description": "Uses the same App route as the browser flow: request a read-access challenge, sign it with the test user's NEAR key, and exchange it for a short-lived Ledger read token.",
+          "description": "Uses the same App proof route as the browser flow: request a read-access challenge, sign it with the test user's NEAR key, and exchange it for holder-gated access. Browser requests receive HttpOnly cookies; this script opts into the raw Ledger read token for Workbench follow-up API calls.",
           "type": "script",
           "access": "protected",
           "command": "bun",
@@ -1489,7 +1489,8 @@
             "Calling POST /api/backend/read-token/nonce on the ClawHouse App.",
             "Signing the returned NEP-413 challenge with the configured test user account.",
             "Calling POST /api/backend/read-token; the App verifies the wallet signature before it asks Ledger to issue the holder read token.",
-            "This is the browser unlock path, not a direct service-token bypass."
+            "The browser path stores access in HttpOnly cookies. This script sends an explicit client header so Workbench can capture the raw read token for later Ledger API calls.",
+            "This is the wallet-proof unlock path, not a direct service-token bypass."
           ],
           "inputs": {
             "clawhouseAppBaseUrl": "",

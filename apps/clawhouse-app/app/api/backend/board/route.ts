@@ -3,9 +3,15 @@ import {
   backendError,
   fetchBackendJson,
   getBackendConfig,
+  ledgerAdminAuthorizationHeader,
   publicBackendConfig,
   requireBoardId,
 } from "../lib";
+import {
+  clearHolderReadCookie,
+  holderReadCookieName,
+  readHolderReadCookie,
+} from "../read-token/lib";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +20,20 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const boardId = requireBoardId(searchParams.get("boardId") ?? getBackendConfig().defaultBoardId);
     const path = `/boards/${encodeURIComponent(boardId)}`;
-    const readToken = request.headers.get("x-clawhouse-read-token")?.trim();
+    let clearReadCookie = false;
+    let readToken = "";
+    if (request.headers.get("cookie")?.includes(`${holderReadCookieName}=`)) {
+      try {
+        const holderReadCookie = readHolderReadCookie(request, ledgerAdminAuthorizationHeader());
+        if (holderReadCookie?.boardId === boardId) {
+          readToken = holderReadCookie.readToken;
+        } else if (holderReadCookie) {
+          clearReadCookie = true;
+        }
+      } catch {
+        clearReadCookie = true;
+      }
+    }
     const detailOptions = readToken ? { headers: { "x-clawhouse-read-token": readToken } } : undefined;
 
     const [board, events, portfolio, pnl, balanceChanges, prices, paperLeaderboard] = await Promise.allSettled([
@@ -27,7 +46,7 @@ export async function GET(request: Request) {
       fetchBackendJson("/paper/leaderboard"),
     ]);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       ok: board.status === "fulfilled",
       config: publicBackendConfig(),
       boardId,
@@ -48,6 +67,9 @@ export async function GET(request: Request) {
         paperLeaderboard: settledError(paperLeaderboard),
       },
     });
+    if (clearReadCookie) clearHolderReadCookie(response);
+    response.headers.set("cache-control", "no-store");
+    return response;
   } catch (error) {
     return backendError(error);
   }
