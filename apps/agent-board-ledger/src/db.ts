@@ -42,15 +42,26 @@ export function readRuntimeDatabaseUrl(env = process.env) {
     ?? cleanEnv(env.ledgerDatabaseUrl);
 }
 
-export async function openRuntimeLedgerDb(env = process.env): Promise<LedgerDb> {
+type OpenNeonLedgerDb = (databaseUrl: string) => LedgerDb;
+
+export async function openRuntimeLedgerDb(env = process.env, openNeonDb: OpenNeonLedgerDb = openNeonLedgerDb): Promise<LedgerDb> {
   const databaseUrl = readRuntimeDatabaseUrl(env);
   if (!databaseUrl) {
     throw new Error("Missing AGENT_BOARD_LEDGER_DATABASE_URL, DATABASE_URL, or ledgerDatabaseUrl; runtime storage must use Neon/Postgres");
   }
 
-  const db = openNeonLedgerDb(databaseUrl);
-  await migrateNeonLedgerDb(db);
-  return db;
+  return openNeonDb(databaseUrl);
+}
+
+export async function openMigratedRuntimeLedgerDb(env = process.env, openNeonDb: OpenNeonLedgerDb = openNeonLedgerDb): Promise<LedgerDb> {
+  const db = await openRuntimeLedgerDb(env, openNeonDb);
+  try {
+    await migrateNeonLedgerDb(db);
+    return db;
+  } catch (error) {
+    await db.close();
+    throw error;
+  }
 }
 
 export function openNeonLedgerDb(databaseUrl: string): LedgerDb {
