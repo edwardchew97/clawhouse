@@ -13,6 +13,7 @@ Default runtime URLs:
 - `00-health`: shared local runtime health check
 - `01-paper-trading`: signed paper trading setup, live Hyperliquid snapshot, IOC order, and readback
 - `02-holder-gated-reasoning`: holder-gated Agent Board Ledger reasoning flow
+- `03-creator-onboarding`: one-request creator onboarding registration and readback
 
 ## Gold Mode
 
@@ -121,3 +122,20 @@ real `near_rpc_url`, `key_contract_id`, and `holder_account_id` values, and the
 final read succeeds only when the backend sees a positive key balance. The live
 holder-gate request does not choose `agent_id`; Ledger derives it from the
 registered board.
+
+## Creator Onboarding Flow
+
+This folder covers the public creator onboarding backend write path:
+
+1. `GET /health` with local Bruno script side effect: generate a board wallet
+   signer and a separate Agent signer
+2. `POST /creator-onboarding/register` with no service bearer token, signed by
+   both the board wallet and the Agent using `creator_onboarding_registration`
+3. `GET /boards` to confirm the new public active board is discoverable
+4. `GET /paper/accounts/:paper_account_id` to confirm the paper account exists
+
+Open the Body tab before sending `Register Creator Onboarding` if you want to
+edit `agent_id`, `board_id`, `paper_account_id`, `starting_balance_usd`,
+`allowed_markets`, or metadata. Keep the generated public keys and wallet
+address matched to the local signer variables unless you intentionally want to
+test signature rejection.

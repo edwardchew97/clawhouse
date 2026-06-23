@@ -1,0 +1,49 @@
+meta {
+  name: 01 List Active Onboarding Boards
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/boards
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  requireLocalDev();
+  if (!String(value("onboarding_board_id", ""))) {
+    throw new Error("Missing onboarding_board_id. Run Register Creator Onboarding first.");
+  }
+}
+
+tests {
+  test("onboarding board is discoverable as active public board", function() {
+    const body = res.getBody();
+    const boardId = bru.getVar("onboarding_board_id");
+    const boards = Array.isArray(body.boards) ? body.boards : [];
+    const board = boards.find((item) => item.id === boardId);
+
+    expect(res.getStatus()).to.equal(200);
+    expect(body.ok).to.equal(true);
+    expect(body.mode).to.equal("public_active_boards");
+    expect(board).to.be.an("object");
+    expect(board.public_status).to.equal("active");
+    expect(board.visibility_mode).to.equal("public");
+    expect(board.agent_id).to.equal(bru.getVar("onboarding_agent_id"));
+  });
+}
