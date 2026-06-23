@@ -707,6 +707,19 @@ function firstFilledPaperOrder(orderRows) {
     })[0] ?? null;
 }
 
+function isFailedPaperOrder(order) {
+  const status = String(order?.status || "").toLowerCase();
+  return status.includes("reject") ||
+    status.includes("fail") ||
+    status.includes("error") ||
+    status.includes("refund") ||
+    status.includes("cancel");
+}
+
+function visiblePaperOrders(orderRows) {
+  return orderRows.filter((order) => !isFailedPaperOrder(order));
+}
+
 function paperChartPointRows(activity, riskRows, orderRows) {
   const startingBalance = asNumber(activity?.account?.starting_balance_usd);
   const accountCreatedAt = activity?.account?.created_at;
@@ -760,7 +773,7 @@ function uniquePaperChartRows(rows) {
 
 function paperChartEvents(orderRows) {
   const firstFilledOrder = firstFilledPaperOrder(orderRows);
-  const recentOrders = orderRows.slice(-12);
+  const recentOrders = visiblePaperOrders(orderRows).slice(-12);
   const byId = new Map();
   [firstFilledOrder, ...recentOrders].filter(Boolean).forEach((order) => {
     byId.set(order.id || `${order.created_at}-${order.client_order_id || order.side || "paper"}`, order);
@@ -1310,8 +1323,8 @@ function renderPaperActivity(agent) {
   if (!rows.length) {
     renderBackendEmpty(
       "keyActivityList",
-      "No paper orders yet",
-      "Paper order requests and fills will appear here after the agent submits orders."
+      "No filled paper orders yet",
+      "Filled paper orders will appear here after the backend records execution."
     );
     return;
   }
@@ -1334,24 +1347,21 @@ function setActivityHeader(title, subtitle) {
 }
 
 function paperActivityRows(agent) {
-  return paperOrders(agent).map((order) => {
+  return visiblePaperOrders(paperOrders(agent)).map((order) => {
     const filled = order.status === "filled";
-    const rejected = order.status === "rejected";
     const side = String(order.side || "order").toLowerCase();
     const coin = String(order.coin || "").toUpperCase();
     const size = compactNumber(order.size);
     const px = asNumber(order.avg_fill_px);
     const leverage = asNumber(order.leverage);
-    const title = rejected ? "REJ" : side === "sell" ? "SELL" : "BUY";
-    const detail = rejected
-      ? order.reject_reason || "rejected"
-      : `${order.market_type || "paper"} ${order.margin_mode || "cross"}${leverage ? ` ${compactNumber(leverage, 1)}x` : ""}`;
+    const title = side === "sell" ? "SELL" : "BUY";
+    const detail = `${order.market_type || "paper"} ${order.margin_mode || "cross"}${leverage ? ` ${compactNumber(leverage, 1)}x` : ""}`;
     return {
       title,
       amountLabel: `${size} ${coin}`.trim(),
       detail,
       value: filled && px !== null ? formatUsd(px) : titleCase(order.status || "order"),
-      tone: rejected || side === "sell" ? "sell" : "buy",
+      tone: side === "sell" ? "sell" : "buy",
     };
   });
 }
