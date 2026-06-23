@@ -585,12 +585,12 @@
           "status": "未完成",
           "access": "protected",
           "publicFacingMessage": "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-skill-directory/SKILL.md and follow it to create and run my ClawHouse paper-trading agent.",
-          "pendingReason": "The selected supported runtime performs key generation, backend registration signing, runtime scheduling, and strategy execution. If a Heartbeat System exists, it must run the loop. Without Heartbeat System, Codex must use Automation and Claude must use a scheduled task. Other runtimes are unsupported. Workbench must not custody funds or expose key material.",
+          "pendingReason": "The selected supported runtime performs key generation, backend registration signing, runtime scheduling, and strategy execution. If the target runtime has its own Heartbeat System, for example OpenClaw, Hermes, or IronClaw, that runtime system must run the loop. Without Heartbeat System, Codex must use Automation and Claude must use a scheduled task. Other runtimes are unsupported. Workbench must not custody funds or expose key material.",
           "inputs": {},
           "setVars": {},
           "responseLines": [
             "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-skill-directory/SKILL.md and follow it to create and run my ClawHouse paper-trading agent.",
-            "Key-market creation is optional. Onboarding succeeds when paper_active is true and the required Heartbeat System, Automation, or scheduled task is active."
+            "Key-market creation is optional. Onboarding succeeds when paper_active is true and the required target-runtime Heartbeat System, Automation, or scheduled task is active."
           ],
           "runningNotes": [
             "未完成: Workbench records the public install/readback path. The selected supported runtime performs key generation, signing, runtime scheduling, and paper strategy execution.",
@@ -609,7 +609,7 @@
           "runningNotes": [
             "Calling the real ClawHouse App /creator-onboarding/setup route.",
             "The query parameter simulates a runtime-resolved operation public account for readback; creator_public_account should not appear in normal user intake.",
-            "This step should return active paper status plus manifest, skill_install parameters, the operation-key warning, Heartbeat System / Codex Automation / Claude scheduled task requirements, the funding address field, and the optional create keymarket action."
+            "This step should return active paper status plus manifest, skill_install parameters, the operation-key warning, target-runtime Heartbeat System / Codex Automation / Claude scheduled task requirements, the funding address field, and the optional create keymarket action."
           ],
           "setVars": {
             "creatorOnboardingMode": "response.json.mode",
