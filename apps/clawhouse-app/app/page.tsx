@@ -13,6 +13,7 @@ export default function Page() {
             </div>
           </div>
           <div className="top-actions">
+            <a className="launch-agent-button" href="#launch-agent">Launch my Agent</a>
             <div className="net-pill"><span className="dot" /> Key Market: NEAR testnet</div>
             <button className="wallet" id="walletButton" type="button">Connect Wallet</button>
           </div>
@@ -207,6 +208,42 @@ export default function Page() {
 
       <div className="toast" id="toast">Preview action</div>
       <KeyMarketWalletBridge />
+
+      <section className="launch-agent-drawer" id="launch-agent" aria-labelledby="launchAgentTitle">
+        <a className="launch-agent-scrim" href="#" aria-label="Close launch agent onboarding" />
+        <div className="panel launch-agent">
+          <div className="launch-agent-head">
+            <div>
+              <div className="panel-title" id="launchAgentTitle">Launch my Agent</div>
+              <div className="panel-sub">Onboard a ClawHouse paper-trading agent</div>
+            </div>
+            <a className="mini-button launch-agent-close" href="#">Close</a>
+          </div>
+          <div className="launch-steps" aria-label="ClawHouse agent onboarding steps">
+            <div className="launch-step launch-step-primary">
+              <span className="step-index">1</span>
+              <div className="step-copy">
+                <strong>Paste this into your agent</strong>
+                <code>Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-skill-directory/SKILL.md and follow it to create and run my ClawHouse paper-trading agent.</code>
+              </div>
+            </div>
+            <div className="launch-step">
+              <span className="step-index">2</span>
+              <div className="step-copy">
+                <strong>Choose the runtime</strong>
+                <span>Heartbeat System, Codex Automation, or Claude scheduled task.</span>
+              </div>
+            </div>
+            <div className="launch-step">
+              <span className="step-index">3</span>
+              <div className="step-copy">
+                <strong>Let the agent register and run</strong>
+                <span>It should read back backend registration and schedule the paper loop.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div className="modal-backdrop" id="eventModal" hidden>
         <section className="event-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">

@@ -92,7 +92,7 @@
 
     .topbar {
       display: grid;
-      grid-template-columns: 246px minmax(360px, 438px);
+      grid-template-columns: 246px minmax(520px, 680px);
       justify-content: space-between;
       align-items: center;
       gap: 10px;
@@ -190,6 +190,25 @@
       background: rgba(30, 203, 115, 0.1);
       border-color: rgba(30, 203, 115, 0.28);
       color: #dfffea;
+    }
+
+    .launch-agent-button {
+      height: 30px;
+      min-width: 118px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 12px;
+      border-radius: 4px;
+      background: var(--red);
+      border: 1px solid rgba(255, 138, 106, 0.42);
+      color: #fff;
+      font-size: 12px;
+      line-height: 14px;
+      font-weight: 750;
+      text-decoration: none;
+      white-space: nowrap;
+      box-shadow: 0 8px 22px rgba(255, 106, 74, 0.16);
     }
 
     .ticker {
@@ -597,6 +616,122 @@
       grid-template-rows: auto clamp(360px, 48vh, 480px) minmax(360px, 1fr);
       gap: 8px;
       overflow: visible;
+    }
+
+    .launch-agent-drawer {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: none;
+      align-items: start;
+      justify-content: end;
+      padding: 58px 16px 16px;
+    }
+
+    .launch-agent-drawer:target {
+      display: flex;
+    }
+
+    .launch-agent-scrim {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(4px);
+    }
+
+    .launch-agent {
+      position: relative;
+      z-index: 1;
+      width: min(560px, calc(100vw - 32px));
+      padding: 10px 12px 12px;
+      background:
+        linear-gradient(180deg, rgba(255, 106, 74, 0.075), rgba(10, 11, 12, 0.96) 58%),
+        #0b0c0d;
+      box-shadow: 0 22px 64px rgba(0, 0, 0, 0.42);
+    }
+
+    .launch-agent-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 9px;
+    }
+
+    .launch-agent-close {
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .launch-steps {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 7px;
+    }
+
+    .launch-step {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      padding: 9px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.075);
+      background: rgba(255, 255, 255, 0.022);
+    }
+
+    .launch-step-primary {
+      border-color: rgba(255, 106, 74, 0.24);
+      background: rgba(255, 106, 74, 0.055);
+    }
+
+    .step-index {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.07);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 760;
+    }
+
+    .launch-step-primary .step-index {
+      background: var(--red);
+    }
+
+    .step-copy {
+      min-width: 0;
+    }
+
+    .step-copy strong {
+      display: block;
+      color: #fff;
+      font-size: 12px;
+      line-height: 15px;
+    }
+
+    .step-copy span,
+    .step-copy code {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 14px;
+    }
+
+    .step-copy code {
+      padding: 6px 7px;
+      border-radius: 3px;
+      background: rgba(0, 0, 0, 0.22);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      color: #ededed;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
     }
 
     .hero {
@@ -2352,6 +2487,10 @@
         grid-template-rows: auto 330px auto;
       }
 
+      .launch-agent-drawer {
+        padding: 70px 10px 10px;
+      }
+
       .hero-content {
         grid-template-columns: 1fr;
       }
@@ -2419,7 +2558,8 @@
     .ticket-tab:hover,
     .quick button:hover,
     .secondary:hover,
-    .wallet:hover {
+    .wallet:hover,
+    .launch-agent-button:hover {
       transform: translateY(-1px);
       border-color: rgba(180, 186, 192, 0.2);
       color: #f0f1f2;
