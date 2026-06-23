@@ -19,6 +19,7 @@ const publicKitRawPrefix =
 
 const copiedFiles = [
   "skills/clawhouse-skill-directory/SKILL.md",
+  "skills/clawhouse-skill-directory/agents/openai.yaml",
   "skills/clawhouse-creator-onboarding/SKILL.md",
   "skills/clawhouse-creator-onboarding/agents/openai.yaml",
   "skills/sign-clawhouse-backend-request/SKILL.md",
@@ -29,11 +30,21 @@ const copiedFiles = [
   "skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
 ];
 
+const rootCopiedFiles = [
+  { source: "public/onboarding-kit/skill.md", target: "skill.md" },
+  { source: "public/onboarding-kit/skill.json", target: "skill.json" },
+  { source: "public/onboarding-kit/INSTALL.md", target: "INSTALL.md" },
+];
+
 const retiredPaths = [
   "skills/ironclaw-runtime/near-intents-spot-value",
 ];
 
-const publicKitPaths = [...copiedFiles, ...retiredPaths];
+const publicKitPaths = [
+  ...copiedFiles,
+  ...rootCopiedFiles.map((file) => file.target),
+  ...retiredPaths,
+];
 
 const requiredRuntimeSkills = [
   "clawhouse-ledger-reporting",
@@ -59,10 +70,27 @@ async function syncOnboardingKit(options: Options) {
   const sourceSkill = await readFile(sourceSkillPath, "utf8");
   const previousVersion = previousSkill ? parseSkillVersion(previousSkill) : "";
   const sourceVersion = parseSkillVersion(sourceSkill);
+  const sourceDirectoryPath = join(repoRoot, "skills/clawhouse-skill-directory/SKILL.md");
+  const targetDirectoryPath = join(options.kitRepo, "skills/clawhouse-skill-directory/SKILL.md");
+  const previousDirectory = existsSync(targetDirectoryPath)
+    ? await readFile(targetDirectoryPath, "utf8")
+    : "";
+  const sourceDirectory = await readFile(sourceDirectoryPath, "utf8");
+  const previousDirectoryVersion = previousDirectory ? parseSkillVersion(previousDirectory) : "";
+  const sourceDirectoryVersion = parseSkillVersion(sourceDirectory);
 
   if (previousSkill && previousSkill !== sourceSkill && previousVersion === sourceVersion) {
     throw new Error(
       `Creator onboarding SKILL.md changed but version stayed ${sourceVersion}. Bump the frontmatter version before publishing.`,
+    );
+  }
+  if (
+    previousDirectory
+    && previousDirectory !== sourceDirectory
+    && previousDirectoryVersion === sourceDirectoryVersion
+  ) {
+    throw new Error(
+      `Skill Directory SKILL.md changed but version stayed ${sourceDirectoryVersion}. Bump the frontmatter version before publishing.`,
     );
   }
 
@@ -85,11 +113,14 @@ async function syncOnboardingKit(options: Options) {
       sourceVersion,
       changed: previousSkill !== sourceSkill,
     },
+    skillDirectory: {
+      previousVersion: previousDirectoryVersion || null,
+      sourceVersion: sourceDirectoryVersion,
+      changed: previousDirectory !== sourceDirectory,
+    },
     changed,
     status: status.stdout.trim().split("\n").filter(Boolean),
-    publicRootFiles: {
-      note: "Root skill.json, skill.md, and INSTALL.md are preserved unless source templates are added to the main repo.",
-    },
+    publicRootFiles: rootCopiedFiles.map((file) => file.target),
   });
 
   if (diff.stdout.trim()) {
@@ -178,6 +209,14 @@ async function copyAllowlist(kitRepo: string) {
     await copyFile(source, target);
   }
 
+  for (const file of rootCopiedFiles) {
+    const source = join(repoRoot, file.source);
+    const target = join(kitRepo, file.target);
+    await assertFile(source);
+    await mkdir(dirname(target), { recursive: true });
+    await copyFile(source, target);
+  }
+
   for (const path of retiredPaths) {
     await rm(join(kitRepo, path), { recursive: true, force: true });
   }
@@ -190,6 +229,12 @@ async function validateKit(kitRepo: string) {
     const target = join(kitRepo, file);
     const raw = await readFile(target, "utf8");
     errors.push(...secretScan(file, raw));
+  }
+
+  for (const file of rootCopiedFiles) {
+    const target = join(kitRepo, file.target);
+    const raw = await readFile(target, "utf8");
+    errors.push(...secretScan(file.target, raw));
   }
 
   const manifestPath = join(kitRepo, "skills/ironclaw-runtime/manifest.json");
@@ -255,17 +300,31 @@ async function verifyRawUrls() {
   for (const file of copiedFiles) {
     const local = await readFile(join(repoRoot, file), "utf8");
     const url = `${publicKitRawPrefix}${file}`;
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`Raw verification failed for ${url}: HTTP ${response.status}`);
+    const remote = await readRawUrl(url);
+    if (sha256(local) !== sha256(remote)) {
+      throw new Error(`Raw verification hash mismatch for ${url}`);
     }
-    const remote = await response.text();
+  }
+
+  for (const file of rootCopiedFiles) {
+    const local = await readFile(join(repoRoot, file.source), "utf8");
+    const url = `${publicKitRawPrefix}${file.target}`;
+    const remote = await readRawUrl(url);
     if (sha256(local) !== sha256(remote)) {
       throw new Error(`Raw verification hash mismatch for ${url}`);
     }
   }
 
   process.stdout.write("\nRaw URL verification passed.\n");
+}
+
+async function readRawUrl(url: string) {
+  const response = await run(
+    "curl",
+    ["-L", "--fail", "--silent", "--show-error", "--header", "Cache-Control: no-cache", url],
+    repoRoot,
+  );
+  return response.stdout;
 }
 
 function parseArgs(args: string[]): Options {
@@ -342,7 +401,7 @@ async function assertFile(path: string) {
 
 function parseSkillVersion(raw: string) {
   const match = raw.match(/^version:\s*([^\s]+)\s*$/m);
-  if (!match) throw new Error("Creator onboarding SKILL.md is missing frontmatter version");
+  if (!match) throw new Error("SKILL.md is missing frontmatter version");
   return match[1];
 }
 
