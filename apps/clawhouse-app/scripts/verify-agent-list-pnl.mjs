@@ -13,6 +13,7 @@ const agents = [
 
 const elements = new Map();
 const events = new Map();
+let clearCrosshairCalls = 0;
 
 class FakeClassList {
   constructor() {
@@ -299,6 +300,66 @@ function noFillPaperActivityFixture() {
   };
 }
 
+function rangeFilteredPaperActivityFixture() {
+  return {
+    ok: true,
+    account: {
+      id: "codex_board",
+      agent_id: "codex_main_20260620",
+      starting_balance_usd: 10000,
+      created_at: "2026-06-23T10:00:00.000Z",
+    },
+    positions: [{ coin: "BTC", signed_size: 0.02 }],
+    latest_risk: {
+      equity_usd: 20966.5,
+      total_notional_usd: 400,
+      created_at: "2026-06-23T13:03:00.000Z",
+    },
+    risk_snapshots: [
+      { equity_usd: 10000, created_at: "2026-06-23T12:45:00.000Z" },
+      { equity_usd: 20966.5, created_at: "2026-06-23T13:03:00.000Z" },
+    ],
+    orders: [
+      {
+        id: "paper_ord_old_fill",
+        client_order_id: "paper-client-old-fill",
+        market_type: "perp",
+        coin: "BTC",
+        side: "buy",
+        status: "filled",
+        size: 0.01,
+        avg_fill_px: 100,
+        margin_mode: "cross",
+        leverage: 2,
+        created_at: "2026-06-23T11:10:00.000Z",
+      },
+      {
+        id: "paper_ord_recent_fill",
+        client_order_id: "paper-client-recent-fill",
+        market_type: "perp",
+        coin: "BTC",
+        side: "buy",
+        status: "filled",
+        size: 0.01,
+        avg_fill_px: 110,
+        margin_mode: "cross",
+        leverage: 2,
+        created_at: "2026-06-23T12:45:00.000Z",
+      },
+    ],
+    fills: [{ id: "fill-old" }, { id: "fill-recent" }],
+    summary: {
+      total_orders: 2,
+      filled_orders: 2,
+      rejected_orders: 0,
+      total_fills: 2,
+      latest_order_at: "2026-06-23T12:45:00.000Z",
+      latest_fill_at: "2026-06-23T12:45:00.000Z",
+      latest_risk_at: "2026-06-23T13:03:00.000Z",
+    },
+  };
+}
+
 function selectedBackend(boardId, totalPnlPct, paperActivity = null) {
   return {
     ok: true,
@@ -325,6 +386,11 @@ function selectedBackend(boardId, totalPnlPct, paperActivity = null) {
 function rows() {
   return [...element("agentList").innerHTML.matchAll(/<button class="agent-row" data-agent="([^"]+)" data-agent-id="([^"]+)" data-selected="([^"]+)"[\s\S]*?<span class="agent-title"[^>]*>([^<]*)<\/span>[\s\S]*?<b class="agent-change[^"]*">([^<]*)<\/b>/g)]
     .map((match) => ({ key: match[1], id: match[2], selected: match[3], title: match[4], pnl: match[5] }));
+}
+
+function chartEventPosition(eventId) {
+  const match = element("chartEvents").innerHTML.match(new RegExp(`data-chart-event="${eventId}"[\\s\\S]*?style="left:([\\d.]+)px; top:([\\d.]+)px"`));
+  return match ? { left: Number(match[1]), top: Number(match[2]) } : null;
 }
 
 function assert(condition, message) {
@@ -388,8 +454,13 @@ context.window = {
         },
         update() {},
         applyOptions() {},
-        priceToCoordinate() {
-          return 148;
+        priceToCoordinate(value) {
+          const values = this.data.map((point) => point.value).filter(Number.isFinite);
+          if (values.length < 2) return 148;
+          const min = Math.min(...values);
+          const max = Math.max(...values);
+          if (max === min) return 148;
+          return 280 - ((value - min) / (max - min)) * 220;
         },
       };
       return {
@@ -405,6 +476,9 @@ context.window = {
               return 260;
             },
           };
+        },
+        clearCrosshairPosition() {
+          clearCrosshairCalls += 1;
         },
       };
     },
@@ -512,7 +586,7 @@ assert(selectedRows.length === 1 && selectedRows[0]?.key === "ledger-lane-flow",
 const codexRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "codex_main_20260620");
 codexRow.click();
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0.25, paperActivityFixture()) });
-assert(element("activityPanelTitle").textContent === "Paper Trading Activity", "Paper agents should render paper trading activity instead of key-market empty state.");
+assert(element("activityPanelTitle").textContent === "Key Trading Activity", "Paper agents should keep the key trading activity header.");
 assert(element("activityPanelSub").textContent.includes("1/16 filled orders"), "Paper activity header should expose filled/total order count.");
 assert(element("keyActivityList").innerHTML.includes("0.01 BTC"), "Paper activity list should render recent paper order size and coin.");
 assert(element("keyActivityList").innerHTML.includes("$100.00"), "Paper activity list should render filled paper order price.");
@@ -547,5 +621,22 @@ assert(noFillPaperChart.values.every((value) => value === 1000), "No-fill paper 
 assert(noFillPaperChart.events.length === 0, "No-fill paper chart should not render paper order markers.");
 assert(element("keyActivityList").innerHTML.includes("No filled paper orders yet"), "Rejected-only paper activity should render the no-filled-orders empty state.");
 assert(!element("keyActivityList").innerHTML.includes("stale_market_data"), "Rejected-only paper activity should hide rejected paper order reasons.");
+
+context.window.ClawHouseDemo.setChartRange("1h");
+context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0.25, rangeFilteredPaperActivityFixture()) });
+let rangeChart = context.window.ClawHouseDemo.getChartModel();
+assert(rangeChart.events.length === 1, "1H paper chart should only include order markers inside the active range.");
+assert(rangeChart.events[0]?.raw?.id === "paper_ord_recent_fill", "1H paper chart should not carry old filled orders into marker rendering.");
+assert(!element("chartEvents").innerHTML.includes("paper_ord_old_fill"), "Rendered 1H chart markers should not include old order ids.");
+const clearCrosshairBeforeRangeSwitch = clearCrosshairCalls;
+context.window.ClawHouseDemo.setChartRange("24h");
+assert(clearCrosshairCalls > clearCrosshairBeforeRangeSwitch, "Switching chart ranges should clear the stale crosshair marker.");
+rangeChart = context.window.ClawHouseDemo.getChartModel();
+assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_old_fill"), "24H paper chart may include old order markers after recalculating the range.");
+assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_recent_fill"), "24H paper chart should include recent order markers after recalculating the range.");
+assert(rangeChart.events.find((event) => event.raw?.id === "paper_ord_recent_fill")?.chartValue === 10000, "Paper order markers should use the net worth at or before the order time instead of snapping to a later high-water point.");
+assert(rangeChart.events.find((event) => event.raw?.id === "paper_ord_recent_fill")?.timeValue === Date.parse("2026-06-23T12:45:00.000Z") / 1000, "Paper order markers should render at the order time instead of the matched net worth point time.");
+assert(chartEventPosition("paper_ord_old_fill")?.top > 240, "Old 24H paper order marker should render on the lower $10k net worth line instead of floating near the current net worth line.");
+assert(chartEventPosition("paper_ord_recent_fill")?.top > 240, "Recent 24H paper order marker should render on the lower $10k net worth line instead of floating near the current net worth line.");
 
 console.log("agent discovery row P&L harness passed");

@@ -106,6 +106,7 @@ export function KeyMarketWalletBridge() {
   const initializeRef = useRef<Promise<void> | null>(null);
   const busyRef = useRef(false);
   const readAccessRef = useRef<ReadAccessState | null>(null);
+  const readAccessRequestRef = useRef<{ key: string; promise: Promise<ReadAccessState | null> } | null>(null);
   const clearSessionRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
@@ -149,6 +150,7 @@ export function KeyMarketWalletBridge() {
           walletRef.current = null;
           accountRef.current = null;
           readAccessRef.current = null;
+          readAccessRequestRef.current = null;
           void clearReadSession();
           renderChainState({
             accountId: null,
@@ -296,6 +298,7 @@ export function KeyMarketWalletBridge() {
         walletRef.current = null;
         accountRef.current = null;
         readAccessRef.current = null;
+        readAccessRequestRef.current = null;
         renderChainState({
           accountId: null,
           pending: false,
@@ -578,53 +581,69 @@ export function KeyMarketWalletBridge() {
         return cached;
       }
 
-      const sessionAccess = await restoreReadSession(boardId, account.accountId);
-      if (sessionAccess) return sessionAccess;
-
-      if (!wallet.manifest.features.signMessage) {
-        throw new Error("Selected wallet does not support signed room access.");
+      const requestKey = `${boardId}:${account.accountId}`;
+      if (readAccessRequestRef.current?.key === requestKey) {
+        return readAccessRequestRef.current.promise;
       }
 
-      renderChainState({
-        accountId: account.accountId,
-        pending: true,
-        phase: "unlocking",
-        statusTitle: "Confirm room access",
-        statusBody: "Sign a wallet message to unlock Agent reasoning.",
-        statusTone: "pending",
-      });
+      const requestPromise = (async () => {
+        const sessionAccess = await restoreReadSession(boardId, account.accountId);
+        if (sessionAccess) return sessionAccess;
 
-      const challengeResponse = await fetchJson<ReadTokenChallengeResponse>("/api/backend/read-token/nonce", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ boardId, holderAccountId: account.accountId }),
-      });
-      const signedMessage = await wallet.signMessage({
-        network: config.networkId,
-        signerId: account.accountId,
-        message: challengeResponse.challenge.message,
-        recipient: challengeResponse.challenge.recipient,
-        nonce: base64UrlToBytes(challengeResponse.challenge.nonce),
-      });
-      const readTokenResponse = await fetchJson<ReadTokenResponse>("/api/backend/read-token", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          challenge: challengeResponse.challenge.challenge,
-          signedMessage,
-        }),
-      });
+        if (!wallet.manifest.features.signMessage) {
+          throw new Error("Selected wallet does not support signed room access.");
+        }
 
-      if (!readTokenResponse.valid) {
-        readAccessRef.current = null;
-        return null;
+        renderChainState({
+          accountId: account.accountId,
+          pending: true,
+          phase: "unlocking",
+          statusTitle: "Confirm room access",
+          statusBody: "Sign a wallet message to unlock Agent reasoning.",
+          statusTone: "pending",
+        });
+
+        const challengeResponse = await fetchJson<ReadTokenChallengeResponse>("/api/backend/read-token/nonce", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ boardId, holderAccountId: account.accountId }),
+        });
+        const signedMessage = await wallet.signMessage({
+          network: config.networkId,
+          signerId: account.accountId,
+          message: challengeResponse.challenge.message,
+          recipient: challengeResponse.challenge.recipient,
+          nonce: base64UrlToBytes(challengeResponse.challenge.nonce),
+        });
+        const readTokenResponse = await fetchJson<ReadTokenResponse>("/api/backend/read-token", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            challenge: challengeResponse.challenge.challenge,
+            signedMessage,
+          }),
+        });
+
+        if (!readTokenResponse.valid) {
+          readAccessRef.current = null;
+          return null;
+        }
+        readAccessRef.current = {
+          boardId,
+          holderAccountId: account.accountId,
+          expiresAt: readTokenResponse.expiresAt,
+        };
+        return readAccessRef.current;
+      })();
+      readAccessRequestRef.current = { key: requestKey, promise: requestPromise };
+
+      try {
+        return await requestPromise;
+      } finally {
+        if (readAccessRequestRef.current?.promise === requestPromise) {
+          readAccessRequestRef.current = null;
+        }
       }
-      readAccessRef.current = {
-        boardId,
-        holderAccountId: account.accountId,
-        expiresAt: readTokenResponse.expiresAt,
-      };
-      return readAccessRef.current;
     }
 
     async function restoreReadSession(boardId: string, holderAccountId: string) {
