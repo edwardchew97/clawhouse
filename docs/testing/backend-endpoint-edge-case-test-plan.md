@@ -37,9 +37,6 @@ Scope notes:
 - `truth/` is the accepted product boundary. Agent Board Ledger is the board
   history/read surface. Hyperliquid-style paper trading owns paper order
   intake, matching, margin, liquidation, leaderboard, and replay proof.
-- `docs/references/` is historical context only. Do not create tests for old
-  unimplemented arena, copy-trading, `/api/rooms/*`, `/api/agents/*`, or
-  `/api/intents/*` routes unless source code later implements them.
 - Smart-contract methods under `agent-key-market/` are not HTTP backend
   endpoints. They are only represented here through the ClawHouse app
   key-market read APIs.
@@ -1028,9 +1025,10 @@ Edge cases:
 - Backend non-OK JSON error returns same status and message.
 - Backend non-JSON error text is exposed as error text.
 - Network failure returns `502`.
-- The app proxy must not inject a global config read token. It only forwards a
-  request-scoped `x-clawhouse-read-token` produced by wallet-proof read-token
-  exchange.
+- The app proxy must not inject a global config read token. Browser requests use
+  the HttpOnly holder read cookie produced by the wallet-proof exchange; the app
+  proxy unwraps that cookie server-side and forwards the read token to Ledger
+  only as a server-to-server `x-clawhouse-read-token` header.
 
 ### A06: `GET /api/backend/board`
 
