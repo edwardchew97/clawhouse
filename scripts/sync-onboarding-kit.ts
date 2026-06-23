@@ -18,8 +18,10 @@ const publicKitRawPrefix =
   "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/";
 
 const copiedFiles = [
+  "skills/clawhouse-skill-directory/SKILL.md",
   "skills/clawhouse-creator-onboarding/SKILL.md",
   "skills/clawhouse-creator-onboarding/agents/openai.yaml",
+  "skills/sign-clawhouse-backend-request/SKILL.md",
   "skills/ironclaw-runtime/HEARTBEAT.template.md",
   "skills/ironclaw-runtime/RESET.md",
   "skills/ironclaw-runtime/manifest.json",
@@ -372,9 +374,16 @@ function statusEntries(raw: string) {
       status: line.slice(0, 2),
       path: line.slice(3).replace(/^.* -> /, ""),
     }))
-    .filter((entry) =>
-      publicKitPaths.some((allowed) => entry.path === allowed || entry.path.startsWith(`${allowed}/`)),
-    );
+    .filter((entry) => isPublicKitPath(entry.path));
+}
+
+function isPublicKitPath(path: string) {
+  const normalizedPath = path.replace(/\/+$/, "");
+  return publicKitPaths.some((allowed) =>
+    normalizedPath === allowed
+    || normalizedPath.startsWith(`${allowed}/`)
+    || allowed.startsWith(`${normalizedPath}/`)
+  );
 }
 
 function stringField(record: JsonRecord, key: string) {
