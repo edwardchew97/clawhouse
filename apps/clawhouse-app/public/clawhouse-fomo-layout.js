@@ -1686,9 +1686,14 @@ function ensureTradingViewChart(container) {
 }
 
 function clearTradingViewChart() {
+  clearChartCrosshair();
   if (pnlTradingViewSeries) pnlTradingViewSeries.setData([]);
   if (pnlTradingViewMarkers) pnlTradingViewMarkers.setMarkers([]);
   lastPnlChartModel = null;
+}
+
+function clearChartCrosshair() {
+  pnlTradingViewChart?.clearCrosshairPosition?.();
 }
 
 function tradingViewEventMarkers() {
@@ -2085,6 +2090,7 @@ function setChartRange(range) {
   activeChartRange = nextRange;
   activeEventId = null;
   chartAnimationPending = true;
+  clearChartCrosshair();
   syncChartRangeButtons();
   renderHero(selectedAgent());
   renderRoom(selectedAgent());
