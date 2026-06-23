@@ -175,25 +175,6 @@ export default function Page() {
               <button className="primary" id="tradeButton" type="button">Connect Wallet</button>
             </section>
 
-            <section className="panel position">
-              <div className="panel-title" id="positionTitle">Your Key Position</div>
-              <div className="panel-sub" id="positionSub">Key balance only, not copy-trade portfolio</div>
-              <div className="position-grid">
-                <div className="stat">
-                  <label id="posKeysLabel">Keys</label>
-                  <strong id="posKeys">--</strong>
-                </div>
-                <div className="stat">
-                  <label id="posEntryLabel">Entry</label>
-                  <strong id="posEntry">-</strong>
-                </div>
-                <div className="stat">
-                  <label id="posExitLabel">Exit</label>
-                  <strong id="posExit">-</strong>
-                </div>
-              </div>
-            </section>
-
             <section className="panel key-activity">
               <div className="key-activity-head">
                 <div>

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const script = fs.readFileSync(new URL("../public/clawhouse-fomo-layout.js", import.meta.url), "utf8");
+const pageSource = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
 const agents = [
   agent("terminal_chad6", "terminal_chad6", 0.12, 5),
@@ -697,8 +698,7 @@ assert(!element("keyActivityList").innerHTML.includes("0.01 BTC"), "Key activity
 assert(!element("keyActivityList").innerHTML.includes("$100.00"), "Key activity list should not be replaced by paper order fill price.");
 assert(!element("keyActivityList").innerHTML.includes("REJ"), "Key activity list should hide rejected paper orders.");
 assert(!element("keyActivityList").innerHTML.includes("stale_market_data"), "Key activity list should hide rejected paper order reasons.");
-assert(element("positionTitle").textContent === "Paper Positions", "Paper agents should render paper positions instead of key balance position.");
-assert(element("ticketOwnedKeys").textContent === "3 Key", "Trade ticket should show the holder key balance even when Paper Positions replaces the position card.");
+assert(element("ticketOwnedKeys").textContent === "3 Key", "Trade ticket should show the holder key balance for a paper-backed agent.");
 assert(element("ticketMaxBuy").textContent === "Max buy 7 Key", "Buy ticket should show the maximum buy amount read from the wallet balance quote.");
 ticketTab("sell").click();
 amountButton("max").click();
@@ -707,7 +707,7 @@ assert(element("ticketMaxBuy").textContent === "Sellable 3 Key", "Sell ticket sh
 ticketTab("buy").click();
 amountButton("max").click();
 assert(element("keyAmount").value === "7", "Buy Max should fill the computed maximum buy amount.");
-assert(element("positionSub").textContent.includes("2026-06-23T11:10:05Z"), "Paper position subtitle should render latest risk UTC time.");
+assert(!pageSource.includes("positionTitle"), "The position panel should not be present in the page markup.");
 assert(element("chartSub").textContent.includes("paper net worth"), "Paper chart subtitle should identify the paper net worth source.");
 const paperChart = context.window.ClawHouseDemo.getChartModel();
 assert(paperChart.valueKind === "usd", "Paper chart should use USD net worth values instead of percent values.");
