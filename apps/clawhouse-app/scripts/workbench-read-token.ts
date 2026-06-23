@@ -38,7 +38,7 @@ async function main() {
   });
   const response = await requestJson<Record<string, unknown>>(options.appUrl, "/api/backend/read-token", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-clawhouse-client": "script" },
     body: JSON.stringify({
       challenge: challenge.challenge.challenge,
       signedMessage: {

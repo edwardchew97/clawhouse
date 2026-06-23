@@ -1,8 +1,12 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import type { NextResponse } from "next/server";
 import { baseDecode } from "near-api-js";
 
 const challengeMaxAgeMs = 5 * 60 * 1000;
-const readTokenTtlMs = 10 * 60 * 1000;
+const readTokenTtlMs = 12 * 60 * 60 * 1000;
+const walletSessionTtlMs = 30 * 24 * 60 * 60 * 1000;
+export const holderReadCookieName = "clawhouse_holder_read";
+export const walletSessionCookieName = "clawhouse_wallet_session";
 
 export type ReadAccessChallengePayload = {
   v: 1;
@@ -14,12 +18,32 @@ export type ReadAccessChallengePayload = {
   nonce: string;
   issuedAt: string;
   expiresAt: string;
+  walletSessionExpiresAt: string;
 };
 
 export type SignedNearMessage = {
   accountId: string;
   publicKey: string;
   signature: string;
+};
+
+export type HolderReadCookiePayload = {
+  v: 1;
+  purpose: "holder_read_cookie";
+  boardId: string;
+  holderAccountId: string;
+  readToken: string;
+  issuedAt: string;
+  expiresAt: string;
+};
+
+export type WalletSessionPayload = {
+  v: 1;
+  purpose: "wallet_session";
+  accountId: string;
+  publicKey: string;
+  issuedAt: string;
+  expiresAt: string;
 };
 
 export class ReadTokenInputError extends Error {}
@@ -34,6 +58,7 @@ export function createReadAccessChallenge(input: {
   const now = input.now ?? new Date();
   const issuedAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + challengeMaxAgeMs).toISOString();
+  const walletSessionExpiresAt = new Date(now.getTime() + walletSessionTtlMs).toISOString();
   const nonce = randomBytes(32).toString("base64url");
   const message = JSON.stringify({
     domain: "clawhouse.app",
@@ -43,6 +68,7 @@ export function createReadAccessChallenge(input: {
     holder_account_id: input.holderAccountId,
     issued_at: issuedAt,
     expires_at: expiresAt,
+    wallet_session_expires_at: walletSessionExpiresAt,
   });
   const payload: ReadAccessChallengePayload = {
     v: 1,
@@ -54,6 +80,7 @@ export function createReadAccessChallenge(input: {
     nonce,
     issuedAt,
     expiresAt,
+    walletSessionExpiresAt,
   };
 
   return {
@@ -83,6 +110,9 @@ export function verifyReadAccessChallenge(token: string, secret: string, now = n
   requireAccountIdValue(payload.holderAccountId);
   requireNonEmpty(payload.recipient, "recipient");
   requireNonEmpty(payload.message, "message");
+  if (!Number.isFinite(Date.parse(payload.walletSessionExpiresAt))) {
+    throw new ReadTokenInputError("Invalid read-access challenge");
+  }
   decodeNonce(payload.nonce);
   return payload;
 }
@@ -162,6 +192,99 @@ export function newReadToken() {
   return `clawhouse_read_${randomBytes(32).toString("base64url")}`;
 }
 
+export function createHolderReadCookie(input: {
+  boardId: string;
+  holderAccountId: string;
+  readToken: string;
+  expiresAt: string;
+  secret: string;
+  now?: Date;
+}) {
+  const now = input.now ?? new Date();
+  const payload: HolderReadCookiePayload = {
+    v: 1,
+    purpose: "holder_read_cookie",
+    boardId: requireBoardIdValue(input.boardId),
+    holderAccountId: requireAccountIdValue(input.holderAccountId),
+    readToken: requireNonEmpty(input.readToken, "readToken"),
+    issuedAt: now.toISOString(),
+    expiresAt: requireNonEmpty(input.expiresAt, "expiresAt"),
+  };
+  if (!Number.isFinite(Date.parse(payload.expiresAt))) {
+    throw new ReadTokenInputError("Invalid expiresAt");
+  }
+  return {
+    ...payload,
+    cookie: signPayload(payload, input.secret),
+  };
+}
+
+export function createWalletSessionCookie(input: {
+  accountId: string;
+  publicKey: string;
+  secret: string;
+  expiresAt?: string;
+  now?: Date;
+}) {
+  const now = input.now ?? new Date();
+  const expiresAt = input.expiresAt ?? new Date(now.getTime() + walletSessionTtlMs).toISOString();
+  if (!Number.isFinite(Date.parse(expiresAt))) {
+    throw new ReadTokenInputError("Invalid wallet session expiry");
+  }
+  const payload: WalletSessionPayload = {
+    v: 1,
+    purpose: "wallet_session",
+    accountId: requireAccountIdValue(input.accountId),
+    publicKey: requirePublicKeyValue(input.publicKey),
+    issuedAt: now.toISOString(),
+    expiresAt,
+  };
+  return {
+    ...payload,
+    cookie: signPayload(payload, input.secret),
+  };
+}
+
+export function readHolderReadCookie(request: Request, secret: string, now = new Date()) {
+  const value = readCookieValue(request, holderReadCookieName);
+  if (!value) return null;
+  return verifyHolderReadCookie(value, secret, now);
+}
+
+export function readWalletSessionCookie(request: Request, secret: string, now = new Date()) {
+  const value = readCookieValue(request, walletSessionCookieName);
+  if (!value) return null;
+  return verifyWalletSessionCookie(value, secret, now);
+}
+
+export function setHolderReadCookie(
+  response: NextResponse,
+  cookie: Pick<HolderReadCookiePayload, "expiresAt"> & { cookie: string },
+) {
+  response.cookies.set(holderReadCookieName, cookie.cookie, {
+    ...baseCookieOptions(),
+    expires: new Date(cookie.expiresAt),
+  });
+}
+
+export function setWalletSessionCookie(
+  response: NextResponse,
+  cookie: Pick<WalletSessionPayload, "expiresAt"> & { cookie: string },
+) {
+  response.cookies.set(walletSessionCookieName, cookie.cookie, {
+    ...baseCookieOptions(),
+    expires: new Date(cookie.expiresAt),
+  });
+}
+
+export function clearHolderReadCookie(response: NextResponse) {
+  response.cookies.set(holderReadCookieName, "", expiredCookieOptions());
+}
+
+export function clearWalletSessionCookie(response: NextResponse) {
+  response.cookies.set(walletSessionCookieName, "", expiredCookieOptions());
+}
+
 export function signingRecipient(request: Request) {
   const configured = process.env.CLAWHOUSE_READ_ACCESS_SIGNING_RECIPIENT?.trim();
   if (configured) return configured;
@@ -169,8 +292,47 @@ export function signingRecipient(request: Request) {
 }
 
 function signChallenge(payload: ReadAccessChallengePayload, secret: string) {
+  return signPayload(payload, secret);
+}
+
+function verifyHolderReadCookie(value: string, secret: string, now: Date) {
+  const payload = verifySignedPayload<HolderReadCookiePayload>(value, secret);
+  if (payload.v !== 1 || payload.purpose !== "holder_read_cookie") {
+    throw new ReadTokenInputError("Invalid holder read cookie");
+  }
+  requireBoardIdValue(payload.boardId);
+  requireAccountIdValue(payload.holderAccountId);
+  requireNonEmpty(payload.readToken, "readToken");
+  if (Date.parse(payload.expiresAt) <= now.getTime()) {
+    throw new ReadTokenInputError("Holder read cookie expired");
+  }
+  return payload;
+}
+
+function verifyWalletSessionCookie(value: string, secret: string, now: Date) {
+  const payload = verifySignedPayload<WalletSessionPayload>(value, secret);
+  if (payload.v !== 1 || payload.purpose !== "wallet_session") {
+    throw new ReadTokenInputError("Invalid wallet session");
+  }
+  requireAccountIdValue(payload.accountId);
+  requirePublicKeyValue(payload.publicKey);
+  if (Date.parse(payload.expiresAt) <= now.getTime()) {
+    throw new ReadTokenInputError("Wallet session expired");
+  }
+  return payload;
+}
+
+function signPayload(payload: unknown, secret: string) {
   const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
   return `${encoded}.${hmac(encoded, secret)}`;
+}
+
+function verifySignedPayload<T>(value: string, secret: string) {
+  const [encoded, signature] = value.split(".");
+  if (!encoded || !signature) throw new ReadTokenInputError("Invalid signed cookie");
+  const expected = hmac(encoded, secret);
+  if (!safeEqual(signature, expected)) throw new ReadTokenInputError("Invalid signed cookie");
+  return parseJson<T>(Buffer.from(encoded, "base64url").toString("utf8"));
 }
 
 function hmac(value: string, secret: string) {
@@ -189,4 +351,37 @@ function parseJson<T>(value: string) {
   } catch {
     throw new ReadTokenInputError("Invalid read-access challenge");
   }
+}
+
+function readCookieValue(request: Request, name: string) {
+  const header = request.headers.get("cookie");
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const [rawName, ...rawValue] = part.trim().split("=");
+    if (rawName !== name) continue;
+    const value = rawValue.join("=");
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+  return null;
+}
+
+function baseCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+  };
+}
+
+function expiredCookieOptions() {
+  return {
+    ...baseCookieOptions(),
+    expires: new Date(0),
+    maxAge: 0,
+  };
 }

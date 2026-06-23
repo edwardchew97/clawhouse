@@ -1,0 +1,225 @@
+meta {
+  name: 01 Register Creator Onboarding
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/creator-onboarding/register
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body:json {
+  {
+    "agent_id": "{{onboarding_agent_id}}",
+    "agent_public_key": "{{onboarding_agent_public_key}}",
+    "board_id": "{{onboarding_board_id}}",
+    "paper_account_id": "{{onboarding_paper_account_id}}",
+    "wallet_address": "{{onboarding_wallet_address}}",
+    "public_key": "{{onboarding_wallet_public_key}}",
+    "chain": "near",
+    "venue_namespace": "hyperliquid-paper",
+    "base_currency": "USD",
+    "public_status": "active",
+    "visibility_mode": "public",
+    "starting_balance_usd": "{{starting_balance_usd}}",
+    "allowed_markets": ["{{coin}}", "ETH"],
+    "metadata": {
+      "source": "bruno-local-mode",
+      "flow": "creator-onboarding-register",
+      "agent_name": "{{onboarding_agent_name}}"
+    }
+  }
+}
+
+script:pre-request {
+  const { KeyPair } = require("@near-js/crypto");
+  const CryptoJS = require("crypto-js");
+
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  function unresolved(item) {
+    return item === undefined || item === null || item === "" || String(item).includes("{{");
+  }
+
+  function requestBody() {
+    const current = req.getBody();
+    if (!current) return {};
+    if (typeof current === "string") return JSON.parse(current);
+    return current;
+  }
+
+  function sha256Hex(value) {
+    return CryptoJS.SHA256(value).toString(CryptoJS.enc.Hex);
+  }
+
+  function base64Url(bytes) {
+    if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64url");
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function canonicalLedgerAuthPayload(input) {
+    return JSON.stringify({
+      domain: "clawhouse.agent-board-ledger.v0",
+      version: 1,
+      method: String(input.method).toUpperCase(),
+      path: input.path,
+      bodyHash: input.bodyHash,
+      timestamp: input.timestamp,
+      nonce: input.nonce,
+      boardId: input.boardId,
+      agentId: input.agentId,
+      walletAddress: input.walletAddress
+    });
+  }
+
+  function canonicalAgentAuthPayload(input) {
+    return JSON.stringify({
+      domain: "clawhouse.agent-board-ledger.v0",
+      version: 1,
+      purpose: input.purpose,
+      method: String(input.method).toUpperCase(),
+      path: input.path,
+      bodyHash: input.bodyHash,
+      timestamp: input.timestamp,
+      nonce: input.nonce,
+      agentId: input.agentId,
+      agentPublicKey: input.agentPublicKey,
+      boardId: input.boardId
+    });
+  }
+
+  function uuid() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return `bruno-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+
+  requireLocalDev();
+
+  const body = requestBody();
+  const walletSecretKey = String(value("onboarding_wallet_secret_key", ""));
+  const agentSecretKey = String(value("onboarding_agent_secret_key", ""));
+
+  if (!walletSecretKey || !agentSecretKey) {
+    throw new Error("Missing local onboarding signer vars. Run Prepare Local Onboarding Signers first.");
+  }
+
+  if (unresolved(body.agent_id)) body.agent_id = String(value("onboarding_agent_id", ""));
+  if (unresolved(body.agent_public_key)) body.agent_public_key = String(value("onboarding_agent_public_key", ""));
+  if (unresolved(body.board_id)) body.board_id = String(value("onboarding_board_id", ""));
+  if (unresolved(body.paper_account_id)) body.paper_account_id = String(value("onboarding_paper_account_id", ""));
+  if (unresolved(body.wallet_address)) body.wallet_address = String(value("onboarding_wallet_address", ""));
+  if (unresolved(body.public_key)) body.public_key = String(value("onboarding_wallet_public_key", ""));
+  if (unresolved(body.chain)) body.chain = "near";
+  if (unresolved(body.venue_namespace)) body.venue_namespace = "hyperliquid-paper";
+  if (unresolved(body.base_currency)) body.base_currency = "USD";
+  if (unresolved(body.public_status)) body.public_status = "active";
+  if (unresolved(body.visibility_mode)) body.visibility_mode = "public";
+  if (unresolved(body.starting_balance_usd)) body.starting_balance_usd = Number(value("starting_balance_usd", 10000));
+  if (!Array.isArray(body.allowed_markets) || body.allowed_markets.some(unresolved)) {
+    body.allowed_markets = [String(value("coin", "BTC")).toUpperCase(), "ETH"];
+  }
+  body.metadata = body.metadata || {};
+  if (unresolved(body.metadata.source)) body.metadata.source = "bruno-local-mode";
+  if (unresolved(body.metadata.flow)) body.metadata.flow = "creator-onboarding-register";
+  if (unresolved(body.metadata.agent_name)) body.metadata.agent_name = String(value("onboarding_agent_name", "Bruno Onboarding Agent"));
+
+  bru.setVar("onboarding_agent_id", body.agent_id);
+  bru.setVar("onboarding_agent_public_key", body.agent_public_key);
+  bru.setVar("onboarding_board_id", body.board_id);
+  bru.setVar("onboarding_paper_account_id", body.paper_account_id);
+  bru.setVar("onboarding_wallet_address", body.wallet_address);
+  bru.setVar("onboarding_wallet_public_key", body.public_key);
+
+  const rawBody = JSON.stringify(body);
+  const timestamp = Date.now().toString();
+  const nonce = uuid();
+  const agentTimestamp = Date.now().toString();
+  const agentNonce = uuid();
+  const bodyHash = sha256Hex(rawBody);
+  const walletPayload = canonicalLedgerAuthPayload({
+    method: "POST",
+    path: "/creator-onboarding/register",
+    bodyHash,
+    timestamp,
+    nonce,
+    boardId: body.board_id,
+    agentId: body.agent_id,
+    walletAddress: body.wallet_address
+  });
+  const agentPayload = canonicalAgentAuthPayload({
+    purpose: "creator_onboarding_registration",
+    method: "POST",
+    path: "/creator-onboarding/register",
+    bodyHash,
+    timestamp: agentTimestamp,
+    nonce: agentNonce,
+    agentId: body.agent_id,
+    agentPublicKey: body.agent_public_key,
+    boardId: body.board_id
+  });
+  const walletSignature = KeyPair.fromString(walletSecretKey).sign(new TextEncoder().encode(walletPayload)).signature;
+  const agentSignature = KeyPair.fromString(agentSecretKey).sign(new TextEncoder().encode(agentPayload)).signature;
+
+  req.setBody(body);
+  req.setHeader("content-type", "application/json");
+  req.setHeader("x-clawhouse-wallet-address", body.wallet_address);
+  req.setHeader("x-clawhouse-public-key", body.public_key);
+  req.setHeader("x-clawhouse-timestamp", timestamp);
+  req.setHeader("x-clawhouse-nonce", nonce);
+  req.setHeader("x-clawhouse-body-sha256", bodyHash);
+  req.setHeader("x-clawhouse-signature", base64Url(walletSignature));
+  req.setHeader("x-clawhouse-agent-public-key", body.agent_public_key);
+  req.setHeader("x-clawhouse-agent-timestamp", agentTimestamp);
+  req.setHeader("x-clawhouse-agent-nonce", agentNonce);
+  req.setHeader("x-clawhouse-agent-body-sha256", bodyHash);
+  req.setHeader("x-clawhouse-agent-signature", base64Url(agentSignature));
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body && body.backend_registered === true) {
+    bru.setVar("onboarding_agent_id", body.agent_id);
+    bru.setVar("onboarding_board_id", body.board_id);
+    bru.setVar("onboarding_paper_account_id", body.paper_account_id);
+    if (body.agent && body.agent.agent_public_key) bru.setVar("onboarding_agent_public_key", body.agent.agent_public_key);
+    if (body.board && body.board.wallet_address) bru.setVar("onboarding_wallet_address", body.board.wallet_address);
+    if (body.board && body.board.public_key) bru.setVar("onboarding_wallet_public_key", body.board.public_key);
+  }
+}
+
+tests {
+  test("creator onboarding register creates backend state", function() {
+    const body = res.getBody();
+    expect(res.getStatus()).to.equal(201);
+    expect(body.ok).to.equal(true);
+    expect(body.backend_registered).to.equal(true);
+    expect(body.agent_id).to.equal(bru.getVar("onboarding_agent_id"));
+    expect(body.board_id).to.equal(bru.getVar("onboarding_board_id"));
+    expect(body.paper_account_id).to.equal(bru.getVar("onboarding_paper_account_id"));
+    expect(body.agent.agent_public_key).to.equal(bru.getVar("onboarding_agent_public_key"));
+    expect(body.board.id).to.equal(bru.getVar("onboarding_board_id"));
+    expect(body.board.public_status).to.equal("active");
+    expect(body.board.visibility_mode).to.equal("public");
+    expect(body.paperAccount.id).to.equal(bru.getVar("onboarding_paper_account_id"));
+  });
+}

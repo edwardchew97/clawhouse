@@ -26,6 +26,10 @@ const requiredFiles = [
   "02-holder-gated-reasoning/02-read-access/01 Read Reasoning Without Token.bru",
   "02-holder-gated-reasoning/02-read-access/02 Create Holder Read Token.bru",
   "02-holder-gated-reasoning/02-read-access/03 Read Reasoning With Token.bru",
+  "03-creator-onboarding/00-register/00 Prepare Local Onboarding Signers.bru",
+  "03-creator-onboarding/00-register/01 Register Creator Onboarding.bru",
+  "03-creator-onboarding/01-readback/01 List Active Onboarding Boards.bru",
+  "03-creator-onboarding/01-readback/02 Read Onboarding Paper Account.bru",
 ];
 
 const missing = requiredFiles.filter((file) => !exists(join(collectionDir, file)));
@@ -41,6 +45,7 @@ const requestFiles = walk(collectionDir).filter((file) => (
 const requestText = requestFiles.map((file) => [file, readFileSync(file, "utf8")] as const);
 const joined = requestText.map(([_, text]) => text).join("\n");
 const paperAccountRequest = readFileSync(join(collectionDir, "01-paper-trading/01-paper-account/02 Create Paper Account.bru"), "utf8");
+const onboardingRequest = readFileSync(join(collectionDir, "03-creator-onboarding/00-register/01 Register Creator Onboarding.bru"), "utf8");
 
 if (joined.includes("/paper/market-snapshots\n") || joined.includes("/paper/market-snapshots\"")) {
   fail("Collection must not call the manual paper market snapshot endpoint.");
@@ -83,6 +88,18 @@ if (!joined.includes("/read-access/checks") || !joined.includes("/read-access/ne
 }
 if (!joined.includes("x-clawhouse-read-token")) {
   fail("Holder-gated reasoning readback must use x-clawhouse-read-token.");
+}
+if (!onboardingRequest.includes("/creator-onboarding/register") || !onboardingRequest.includes("creator_onboarding_registration")) {
+  fail("Creator onboarding request must call POST /creator-onboarding/register with creator_onboarding_registration Agent purpose.");
+}
+if (!onboardingRequest.includes("x-clawhouse-wallet-address") || !onboardingRequest.includes("x-clawhouse-agent-signature")) {
+  fail("Creator onboarding request must include both board-wallet and Agent signature headers.");
+}
+if (onboardingRequest.includes("authorization")) {
+  fail("Creator onboarding request must not set service bearer authorization.");
+}
+if (!onboardingRequest.includes("backend_registered") || !onboardingRequest.includes("paperAccount")) {
+  fail("Creator onboarding request must assert backend_registered and paper account readback ids.");
 }
 const oldCollectionFiles = [
   "collection.bru",
@@ -145,6 +162,9 @@ console.log(JSON.stringify({
     "holder-gated reasoning flow registers an Agent and board, writes an event, checks denied reads, creates read access, and reads with a token",
     "holder-gated requests use local Bruno ledger wallet and Agent signatures",
     "holder-gated requests include manual and live key-market read-access paths",
+    "creator onboarding calls one-request register with board-wallet and Agent signatures",
+    "creator onboarding register does not require service bearer authorization",
+    "creator onboarding readback covers public board discovery and paper account state",
   ],
 }, null, 2));
 

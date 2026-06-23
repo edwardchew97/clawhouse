@@ -1,0 +1,66 @@
+meta {
+  name: 00 Prepare Local Onboarding Signers
+  type: http
+  seq: 0
+}
+
+get {
+  url: {{base_url}}/health
+  body: none
+  auth: none
+}
+
+script:pre-request {
+  const { KeyPair, keyToImplicitAddress } = require("@near-js/crypto");
+
+  function value(name, fallback) {
+    return bru.getVar(name) || bru.getEnvVar(name) || bru.getCollectionVar(name) || fallback;
+  }
+
+  function requireLocalDev() {
+    const baseUrl = String(value("base_url", ""));
+    if (String(value("local_runtime_only", "")) !== "true") {
+      throw new Error("local_runtime_only must be true for this collection.");
+    }
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\b/.test(baseUrl)) {
+      throw new Error("This collection is locked to local runtime URLs.");
+    }
+  }
+
+  requireLocalDev();
+
+  const boardKeyPair = KeyPair.fromRandom("ed25519");
+  const agentKeyPair = KeyPair.fromRandom("ed25519");
+  const boardPublicKey = boardKeyPair.getPublicKey();
+  const agentPublicKey = agentKeyPair.getPublicKey();
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const agentPrefix = String(value("onboarding_agent_prefix", "bruno-onboarding-agent"));
+  const boardPrefix = String(value("onboarding_board_prefix", "bruno-onboarding-board"));
+  const paperAccountPrefix = String(value("onboarding_paper_account_prefix", "bruno-onboarding-paper"));
+
+  bru.setVar("onboarding_run_id", runId);
+  bru.setVar("onboarding_agent_id", `${agentPrefix}-${runId}`);
+  bru.setVar("onboarding_board_id", `${boardPrefix}-${runId}`);
+  bru.setVar("onboarding_paper_account_id", `${paperAccountPrefix}-${runId}`);
+  bru.setVar("onboarding_wallet_address", keyToImplicitAddress(boardPublicKey));
+  bru.setVar("onboarding_wallet_secret_key", boardKeyPair.toString());
+  bru.setVar("onboarding_wallet_public_key", boardPublicKey.toString());
+  bru.setVar("onboarding_agent_secret_key", agentKeyPair.toString());
+  bru.setVar("onboarding_agent_public_key", agentPublicKey.toString());
+}
+
+tests {
+  test("local onboarding signers are generated inside Bruno", function() {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.ok).to.equal(true);
+    expect(bru.getVar("onboarding_agent_id")).to.be.a("string");
+    expect(bru.getVar("onboarding_board_id")).to.be.a("string");
+    expect(bru.getVar("onboarding_paper_account_id")).to.be.a("string");
+    expect(bru.getVar("onboarding_wallet_address")).to.match(/^[a-f0-9]{64}$/);
+    expect(bru.getVar("onboarding_wallet_secret_key")).to.match(/^ed25519:/);
+    expect(bru.getVar("onboarding_wallet_public_key")).to.match(/^ed25519:/);
+    expect(bru.getVar("onboarding_agent_secret_key")).to.match(/^ed25519:/);
+    expect(bru.getVar("onboarding_agent_public_key")).to.match(/^ed25519:/);
+  });
+}

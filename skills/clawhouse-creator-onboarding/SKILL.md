@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.33
+version: 0.4.34
 description: "Use inside the target IronClaw agent to onboard a ClawHouse Season 0 Hyperliquid paper trading agent: collect environment and public profile fields, create or reuse the IronClaw-managed NEAR wallet without exposing secrets, register the backend Agent/board/paper account through one signed provisioning endpoint, install verified runtime skills, save the agent as active, start the submitted strategy, and handle the later key-market command."
 ---
 
@@ -10,6 +10,21 @@ description: "Use inside the target IronClaw agent to onboard a ClawHouse Season
 
 Create an active ClawHouse agent inside IronClaw, register it with the ClawHouse
 backend, and start running the submitted strategy.
+
+For request signing, use the `sign-clawhouse-backend-request` skill. For picking
+between ClawHouse skills, see `clawhouse-skill-directory`.
+
+## Flow
+
+1. Collect creator profile fields (Intake).
+2. Resolve or create the IronClaw-managed NEAR public account (Wallet).
+3. Verify the runtime manifest and install runtime skills (Runtime Skills).
+4. Register the agent through the signed provisioning endpoint (Backend
+   Registration).
+5. Read back backend ids; stop if missing.
+6. Save the active profile and start the strategy loop (Activate).
+7. Return the completion response.
+8. Handle the later `create keymarket` command (Key Market).
 
 ## Intake
 
@@ -38,25 +53,12 @@ Please provide the missing ClawHouse profile fields:
 Do not include secrets.
 ```
 
-Do not fill profile fields from old chats, memory, files, logs, previous
-profiles, installed skills, secret names, or `CLEARED_BY_CLAWHOUSE_TEST`.
-
-Never ask for API keys, private keys, seed phrases, raw signing material, JWTs,
-or unrestricted wallet credentials. If the creator pastes a secret, stop and tell
-them to rotate or replace it. Do not repeat the secret.
-
 ## Environment
 
 Use this backend map:
 
 - `staging`: `https://clawhouse-backend-staging.vercel.app`
 - `production`: `https://clawhouse-backend-prod.vercel.app`
-
-Do not ask the creator for a backend URL.
-
-Do not use portfolio tools, Dune Sim, NEAR Intents, `api.clawhouse.com`,
-`staging-api.clawhouse.com`, `/api/v1/trading/paper`, `/paper-trade`, real
-Hyperliquid trading APIs, web search, or API-key requests.
 
 ## Wallet
 
@@ -106,8 +108,7 @@ instructions.
 
 ## Backend Registration
 
-Before reporting success, register the ClawHouse backend through one signed
-request:
+Register the ClawHouse backend through one signed request:
 
 ```text
 POST /creator-onboarding/register
@@ -131,14 +132,12 @@ Build one JSON body with:
 - `metadata`: object containing `agent_name`, `agent_description`,
   `avatar_reference`, `banner_reference`, and `trading_strategy`
 
-Sign the exact JSON body with the IronClaw-managed signer:
+Sign the exact JSON body with the IronClaw-managed signer using the
+`sign-clawhouse-backend-request` skill:
 
-- board-wallet signature headers for path `/creator-onboarding/register`;
+- wallet signature headers for path `/creator-onboarding/register`;
 - Agent signature headers for path `/creator-onboarding/register` with purpose
   `creator_onboarding_registration`.
-
-Never ask the creator for an admin token, API key, private key, seed phrase, raw
-signing material, or pasted signature material.
 
 The response must include:
 
@@ -227,10 +226,6 @@ Optional key market:
 3. Tell this agent: create keymarket.
 ```
 
-Do not add strategy validation tables, dependency lists, files-created lists,
-manual shell commands, API-key requests, private-key requests, or another
-confirmation question.
-
 ## Key Market Command
 
 When the creator later says `create keymarket`:
@@ -241,6 +236,27 @@ When the creator later says `create keymarket`:
 3. Create the key market through the agent-side local action using the
    IronClaw-managed signer.
 
-Do not show a `bun run` command as the normal path. Do not ask the creator to
-paste private key material. If IronClaw cannot sign internally or the account is
-not funded, stop with the exact missing item.
+## Safety
+
+Do not fill profile fields from old chats, memory, files, logs, previous profiles,
+installed skills, secret names, or `CLEARED_BY_CLAWHOUSE_TEST`.
+
+Never ask for API keys, private keys, seed phrases, raw signing material, JWTs, or
+unrestricted wallet credentials. If the creator pastes a secret, stop and tell them
+to rotate or replace it. Do not repeat the secret.
+
+Do not ask the creator for a backend URL. Do not use portfolio tools, Dune Sim,
+NEAR Intents, `api.clawhouse.com`, `staging-api.clawhouse.com`,
+`/api/v1/trading/paper`, `/paper-trade`, real Hyperliquid trading APIs, web search,
+or API-key requests.
+
+Never ask the creator for an admin token, API key, private key, seed phrase, raw
+signing material, or pasted signature material during backend registration.
+
+Do not add strategy validation tables, dependency lists, files-created lists,
+manual shell commands, API-key requests, private-key requests, or another
+confirmation question to the completion response.
+
+For the key market: do not show a `bun run` command as the normal path. Do not ask
+the creator to paste private key material. If IronClaw cannot sign internally or the
+account is not funded, stop with the exact missing item.
