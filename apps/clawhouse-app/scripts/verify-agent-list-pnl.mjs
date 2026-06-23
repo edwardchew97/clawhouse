@@ -15,9 +15,38 @@ const elements = new Map();
 const events = new Map();
 
 class FakeClassList {
-  add() {}
-  remove() {}
-  toggle() {}
+  constructor() {
+    this.values = new Set();
+  }
+
+  add(...names) {
+    names.forEach((name) => this.values.add(name));
+  }
+
+  remove(...names) {
+    names.forEach((name) => this.values.delete(name));
+  }
+
+  toggle(name, force) {
+    if (force === true) {
+      this.values.add(name);
+      return true;
+    }
+    if (force === false) {
+      this.values.delete(name);
+      return false;
+    }
+    if (this.values.has(name)) {
+      this.values.delete(name);
+      return false;
+    }
+    this.values.add(name);
+    return true;
+  }
+
+  contains(name) {
+    return this.values.has(name);
+  }
 }
 
 class FakeElement {
@@ -40,6 +69,10 @@ class FakeElement {
     this.scrollWidth = 800;
     this.children = [];
     this.rows = new Map();
+    this.chartEventButtons = new Map();
+    this.clientWidth = 640;
+    this.clientHeight = 320;
+    this.offsetTop = 0;
     this._innerHTML = "";
   }
 
@@ -55,6 +88,17 @@ class FakeElement {
         nextRows.set(key, row);
       }
       this.rows = nextRows;
+    }
+    if (this.id === "chartEvents") {
+      const nextButtons = new Map();
+      for (const match of this._innerHTML.matchAll(/<button[\s\S]*?data-chart-event="([^"]+)"[\s\S]*?>([\s\S]*?)<\/button>/g)) {
+        const key = match[1];
+        const button = this.chartEventButtons.get(key) ?? new FakeElement(`chart-event-${key}`);
+        button.dataset.chartEvent = key;
+        button.textContent = match[2].replace(/<[^>]*>/g, "").trim();
+        nextButtons.set(key, button);
+      }
+      this.chartEventButtons = nextButtons;
     }
   }
 
@@ -87,8 +131,9 @@ class FakeElement {
   }
 
   querySelectorAll(selector) {
-    if (this.id !== "agentList" || selector !== "[data-agent]") return [];
-    return [...this.rows.values()];
+    if (this.id === "agentList" && selector === "[data-agent]") return [...this.rows.values()];
+    if (this.id === "chartEvents" && selector === "[data-chart-event]") return [...this.chartEventButtons.values()];
+    return [];
   }
 
   getBoundingClientRect() {
@@ -299,6 +344,10 @@ const context = {
     return 1;
   },
   clearTimeout() {},
+  ResizeObserver: class ResizeObserver {
+    observe() {}
+    disconnect() {}
+  },
   CustomEvent: class CustomEvent {
     constructor(type) {
       this.type = type;
@@ -326,6 +375,48 @@ context.window = {
   matchMedia() {
     return { matches: true };
   },
+  ResizeObserver: context.ResizeObserver,
+  LightweightCharts: {
+    AreaSeries: "AreaSeries",
+    ColorType: { Solid: "solid" },
+    CrosshairMode: { Normal: "normal" },
+    createChart() {
+      const series = {
+        data: [],
+        setData(data) {
+          this.data = data;
+        },
+        update() {},
+        applyOptions() {},
+        priceToCoordinate() {
+          return 148;
+        },
+      };
+      return {
+        addSeries() {
+          return series;
+        },
+        applyOptions() {},
+        resize() {},
+        timeScale() {
+          return {
+            fitContent() {},
+            timeToCoordinate() {
+              return 260;
+            },
+          };
+        },
+      };
+    },
+    createSeriesMarkers() {
+      return {
+        markers: [],
+        setMarkers(markers) {
+          this.markers = markers;
+        },
+      };
+    },
+  },
 };
 
 context.document = {
@@ -337,10 +428,16 @@ context.document = {
     return new FakeElement(id);
   },
   getElementById: element,
-  querySelector() {
+  querySelector(selector) {
+    if (selector === ".center" || selector === ".right" || selector === ".main") {
+      return element(selector.slice(1));
+    }
     return null;
   },
   querySelectorAll(selector) {
+    if (selector === "[data-chart-event]") {
+      return element("chartEvents").querySelectorAll(selector);
+    }
     if (selector === ".ticket-tab") {
       return ["buy", "sell"].map((side) => {
         const tab = new FakeElement(`ticket-${side}`);
@@ -375,6 +472,10 @@ const agentChange = new Promise((resolve) => {
 });
 vm.runInContext(script, context, { filename: "clawhouse-fomo-layout.js" });
 await agentChange;
+
+context.window.ClawHouseDemo.setChainState({ backend: null });
+assert(element("chartEmptyOverlay").classList.contains("is-loading"), "Chart backend loading state should render the skeleton overlay.");
+assert(element("chartPanel").classList.contains("is-loading"), "Chart panel should expose a loading class for skeleton styling.");
 
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("terminal_chad6", 0.99) });
 let rendered = rows();
@@ -430,6 +531,11 @@ assert(paperChart.points.every((point, index) => index === 0 || point.time > pap
 assert(paperChart.events.some((event) => event.raw?.id === "paper_ord_first_fill" && event.raw?.status === "filled"), "Paper chart should keep the first filled order marker even after many later rejected orders.");
 assert(paperChart.events.length === 1, "Paper chart should hide rejected paper order markers.");
 assert(paperChart.events.every((event) => event.raw?.status !== "rejected"), "Paper chart events should not include rejected paper orders.");
+const paperOrderButton = element("chartEvents").querySelectorAll("[data-chart-event]")[0];
+assert(paperOrderButton?.textContent === "Order 1", "Paper chart should render a visible clickable order marker.");
+element("eventModal").hidden = true;
+paperOrderButton.click();
+assert(element("eventModal").hidden === false, "Clicking a paper order marker should open the order detail modal.");
 
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0, noFillPaperActivityFixture()) });
 const noFillPaperChart = context.window.ClawHouseDemo.getChartModel();
