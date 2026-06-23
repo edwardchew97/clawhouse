@@ -99,11 +99,47 @@ const walletProvisioning = {
     "This agent will create and store its own NEAR testnet private key. Do not paste your wallet private key. Do not send mainnet NEAR. Only send small testnet NEAR to the generated public account. If the private key appears in chat, logs, Workbench, MCP output, or repo files, treat it as exposed and rotate it.",
 };
 
+const runtimeExecution = {
+  requiredBeforePaperActive: true,
+  codexLocal: {
+    driver: "codex_automation",
+    required: true,
+    nameTemplate: "clawhouse-<agent_id>-paper-loop",
+    owns: ["paper_strategy_loop", "health_check"],
+  },
+  cloudScheduled: {
+    driver: "cloud_scheduled_task",
+    required: true,
+    nameTemplate: "clawhouse-<agent_id>-paper-loop",
+    owns: ["paper_strategy_loop", "health_check"],
+    requiresApprovedPrivateSecretStore: true,
+  },
+  ironclaw: {
+    driver: "ironclaw_job",
+    required: true,
+    owns: ["paper_strategy_loop", "heartbeat"],
+  },
+  claudeCodeLocal: {
+    driver: "local_loop",
+    required: true,
+    useScheduledTaskWhenAvailable: true,
+    owns: ["paper_strategy_loop", "health_check"],
+  },
+  webOnly: {
+    driver: "none",
+    activeOnboardingAllowed: false,
+  },
+  safety:
+    "Automation and scheduled tasks may read the runtime-managed operation key only through the approved local or Cloud secret store. They must never print, echo, upload, or log private key material.",
+  stopIfUnavailable:
+    "Setup blocked: ClawHouse runtime execution schedule is unavailable.",
+};
+
 // Keep this text matched with skills/clawhouse-creator-onboarding/SKILL.md.
 function completionTemplate(creatorPublicAccount: string) {
   return [
     "Paper agent is active.",
-    "ClawHouse is running this paper strategy.",
+    "ClawHouse has scheduled or started this paper strategy.",
     "",
     "Agent:",
     "- name: <agent_name>",
@@ -119,6 +155,8 @@ function completionTemplate(creatorPublicAccount: string) {
     "- key_id: <key_id>",
     "- key_market_active: false",
     "- key_market_optional: true",
+    "- execution_driver: <execution_driver>",
+    "- schedule_active: true",
     "",
     "Optional key market:",
     `1. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
@@ -191,14 +229,22 @@ function payloadFor(request: Request) {
     ok: true,
     route: "/creator-onboarding/setup",
     mode: "supported-runtime-onboarding",
-    runtimeModes: ["ironclaw", "codex-local", "claude-code-local", "web-only"],
+    runtimeModes: [
+      "ironclaw",
+      "codex-local",
+      "cloud-scheduled",
+      "claude-code-local",
+      "web-only",
+    ],
     userInstallsOnlySkill: true,
     noSignerDaemon: true,
     noPolicyEngine: true,
     webOnlyMode:
       "Claude.ai and other web-only environments are instructions-only and cannot generate, store, or use key material.",
+    runtimeExecution,
     status: "active",
-    message: "Paper agent is active. ClawHouse is running the submitted paper strategy.",
+    message:
+      "Paper agent is active. ClawHouse has scheduled or started the submitted paper strategy.",
     intake: [
       "environment",
       "agent_name",
@@ -295,8 +341,16 @@ function payloadFor(request: Request) {
     installTrading: tradingInstall,
     agentState: {
       status: "active",
-      strategyRuntime: "running",
+      strategyRuntime: "scheduled_or_running",
       runtimeOwner: "selected supported runtime",
+      scheduleRequired: true,
+      scheduleActive: true,
+      executionDrivers: [
+        "codex_automation",
+        "cloud_scheduled_task",
+        "ironclaw_job",
+        "local_loop",
+      ],
       canSubmitPaperOrders: true,
       canSubmitReasoning: true,
       keyMarketStatus: "optional_not_created",
