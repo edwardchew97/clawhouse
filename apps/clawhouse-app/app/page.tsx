@@ -110,7 +110,7 @@ export default function Page() {
                   <button data-chart-range="all" type="button" aria-pressed="false">ALL</button>
                 </div>
               </div>
-              <canvas id="pnlChart" />
+              <div id="pnlChart" aria-label="Agent P&L chart" />
               <div className="chart-events" id="chartEvents" />
               <div className="price-marker" id="priceMarker">backend</div>
               <div className="chart-empty-overlay" id="chartEmptyOverlay" hidden>
@@ -248,6 +248,7 @@ export default function Page() {
         </section>
       </div>
 
+      <Script src="/vendor/lightweight-charts.standalone.production.js" strategy="beforeInteractive" />
       <Script src="/clawhouse-fomo-layout.js" strategy="afterInteractive" />
     </>
   );

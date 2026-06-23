@@ -506,12 +506,14 @@ function eventReferenceLabel(event) {
   return `Intent ${shortHash(event.intent_id)}.`;
 }
 
-function normalizeBackendEvent(event, index, agent, valueIndex) {
+function normalizeBackendEvent(event, index, agent, valueIndex, point) {
   const status = event.status_claim || event.event_type || "event";
   const metadata = eventMetadata(event);
   return {
     id: event.id || event.client_event_id || event.tx_hash || `backend-event-${index}`,
     index: valueIndex,
+    timeValue: point?.time ?? null,
+    chartValue: point?.value ?? null,
     title: metadata.title || titleCase(event.event_type || status),
     label: status,
     time: formatBackendTime(event.reported_at || event.created_at),
@@ -587,12 +589,55 @@ function normalizeSeries(values) {
   return numeric.map((value) => ((value - first) / Math.abs(first)) * 100);
 }
 
+function chartPointTime(row, index, total, startTime, endTime) {
+  const parsed = rowTimestamp(row);
+  if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
+  const ratio = total > 1 ? index / (total - 1) : 1;
+  return Math.round(startTime + (endTime - startTime) * ratio);
+}
+
+function chartPointsForValues(values, rows = []) {
+  const range = chartRangeMeta();
+  const spanSeconds = Math.max(60, (range.hours || Math.max(24, values.length - 1)) * 60 * 60);
+  const knownTimes = rows.map((row) => {
+    const parsed = rowTimestamp(row);
+    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
+  });
+  const finiteTimes = knownTimes.filter((time) => time !== null);
+  const endTime = finiteTimes[finiteTimes.length - 1] ?? Math.floor(Date.now() / 1000);
+  const startTime = finiteTimes[0] ?? endTime - spanSeconds;
+  const fallbackEndTime = Math.max(endTime, startTime + Math.max(1, values.length - 1));
+  const usedTimes = new Set();
+  let previousTime = null;
+  return values.map((value, index) => {
+    let time = chartPointTime(rows[index], index, values.length, startTime, fallbackEndTime);
+    if (previousTime !== null && time <= previousTime) time = previousTime + 1;
+    while (usedTimes.has(time)) time += 1;
+    usedTimes.add(time);
+    previousTime = time;
+    return { time, value };
+  });
+}
+
+function nearestChartPointIndex(points, row, fallbackIndex, totalRows) {
+  if (!points.length) return 0;
+  const parsed = rowTimestamp(row);
+  if (!Number.isFinite(parsed)) {
+    return Math.min(points.length - 1, Math.round((fallbackIndex / Math.max(1, totalRows - 1)) * (points.length - 1)));
+  }
+  const target = Math.floor(parsed / 1000);
+  return points.reduce((bestIndex, point, index) => (
+    Math.abs(point.time - target) < Math.abs(points[bestIndex].time - target) ? index : bestIndex
+  ), 0);
+}
+
 function chartModel(agent) {
   const range = chartRangeMeta();
   const rangePrefix = `${range.label} / `;
   if (!chainState.accountId) {
     return {
       values: [],
+      points: [],
       events: [],
       tone: "wallet",
       title: "Connect Wallet",
@@ -600,20 +645,22 @@ function chartModel(agent) {
     };
   }
   if (!chainState.backend || !backendApplies(agent)) {
-    return { values: [], events: [], tone: "idle", title: "Backend chart loading", message: `${rangePrefix}Reading backend for this agent.` };
+    return { values: [], points: [], events: [], tone: "idle", title: "Backend chart loading", message: `${rangePrefix}Reading backend for this agent.` };
   }
   if (!chainState.backend.ok) {
-    return { values: [], events: [], tone: "error", title: "Backend chart unavailable", message: `${rangePrefix}${backendErrorMessage()}` };
+    return { values: [], points: [], events: [], tone: "error", title: "Backend chart unavailable", message: `${rangePrefix}${backendErrorMessage()}` };
   }
 
   const events = filterRowsForChartRange(sortedByObservedAt(backendEvents(agent)));
   const prices = filterRowsForChartRange(sortedByObservedAt(backendPrices(agent))).filter((row) => asNumber(row.price_usd) !== null);
   const balanceChanges = filterRowsForChartRange(sortedByObservedAt(backendBalanceChanges(agent)));
   let values = [];
+  let pointRows = [];
   let source = "backend events";
 
   if (prices.length >= 2) {
     values = normalizeSeries(prices.map((row) => row.price_usd));
+    pointRows = prices;
     source = "backend price snapshots";
   } else if (balanceChanges.length >= 2) {
     let cumulative = 0;
@@ -621,25 +668,27 @@ function chartModel(agent) {
       cumulative += asNumber(row.delta_value_usd) ?? 0;
       return cumulative;
     });
+    pointRows = balanceChanges;
     source = "backend balance changes";
   } else {
     const latestPnl = backendPnl(agent);
     if (latestPnl !== null) {
       values = [0, latestPnl];
+      pointRows = [null, chainState.backend?.pnl?.latest || null];
       source = "backend latest P&L";
     }
   }
 
   const safeValues = values.length >= 2 ? values : [];
+  const points = safeValues.length >= 2 ? chartPointsForValues(safeValues, pointRows) : [];
   const normalizedEvents = events.map((event, index) => {
-    const valueIndex = safeValues.length > 1
-      ? Math.min(safeValues.length - 1, Math.round((index / Math.max(1, events.length - 1)) * (safeValues.length - 1)))
-      : 0;
-    return normalizeBackendEvent(event, index, agent, valueIndex);
+    const valueIndex = nearestChartPointIndex(points, event, index, events.length);
+    return normalizeBackendEvent(event, index, agent, valueIndex, points[valueIndex]);
   });
 
   return {
     values: safeValues,
+    points,
     events: normalizedEvents,
     tone: "success",
     title: safeValues.length ? undefined : "No chart data yet",
@@ -1119,159 +1168,6 @@ function renderBackendStatus() {
   byId("backendUrl").textContent = backend.url;
 }
 
-function chartGeometry(values, rect) {
-  const minValue = Math.min(...values, 0);
-  const maxValue = Math.max(...values, 0);
-  const spread = Math.max(1, maxValue - minValue);
-  const paddedMin = minValue - spread * 0.12;
-  const paddedMax = maxValue + spread * 0.12;
-  const tickStep = niceTickStep(paddedMax - paddedMin, 5);
-  const min = Math.floor(paddedMin / tickStep) * tickStep;
-  const max = Math.ceil(paddedMax / tickStep) * tickStep;
-  const left = 48;
-  const right = 18;
-  const top = 24;
-  const bottom = 30;
-  const width = Math.max(1, rect.width - left - right);
-  const height = Math.max(1, rect.height - top - bottom);
-  const ticks = [];
-  for (let tick = min; tick <= max + tickStep / 2; tick += tickStep) ticks.push(tick);
-  return {
-    left,
-    right,
-    top,
-    bottom,
-    rightX: rect.width - right,
-    bottomY: rect.height - bottom,
-    width,
-    height,
-    min,
-    max,
-    ticks,
-    yFor: (value) => top + (1 - (value - min) / (max - min)) * height,
-    xFor: (index) => left + (values.length > 1 ? index / (values.length - 1) : 1) * width
-  };
-}
-
-function niceTickStep(range, targetIntervals) {
-  const rough = Math.max(0.1, range / targetIntervals);
-  const power = 10 ** Math.floor(Math.log10(rough));
-  const fraction = rough / power;
-  if (fraction <= 1) return power;
-  if (fraction <= 2) return 2 * power;
-  if (fraction <= 5) return 5 * power;
-  return 10 * power;
-}
-
-function drawChart(agent, progress = 1) {
-  const canvas = byId("pnlChart");
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-  const ctx = canvas.getContext("2d");
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, rect.width, rect.height);
-
-  const model = chartModel(agent);
-  const values = model.values;
-  if (values.length < 2) {
-    drawEmptyChart(ctx, rect, model.message);
-    setChartEmptyState(true, model.message, model.title);
-    byId("chartEvents").innerHTML = "";
-    hidePriceMarker();
-    return;
-  }
-  setChartEmptyState(false);
-
-  const geo = chartGeometry(values, rect);
-  const zeroY = geo.yFor(0);
-  const trend = values[values.length - 1] - values[0];
-  drawChartAxes(ctx, geo, values);
-
-  ctx.strokeStyle = "rgba(255,255,255,0.09)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(geo.left, zeroY);
-  ctx.lineTo(geo.rightX, zeroY);
-  ctx.stroke();
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(geo.left, geo.top, geo.width * Math.max(0, Math.min(1, progress)), geo.height);
-  ctx.clip();
-
-  const gradient = ctx.createLinearGradient(0, geo.top, 0, geo.bottomY);
-  if (trend >= 0) {
-    gradient.addColorStop(0, "rgba(30,203,115,0.34)");
-    gradient.addColorStop(1, "rgba(30,203,115,0)");
-  } else {
-    gradient.addColorStop(0, "rgba(255,106,74,0.3)");
-    gradient.addColorStop(1, "rgba(255,106,74,0)");
-  }
-
-  ctx.beginPath();
-  values.forEach((value, index) => {
-    const x = geo.xFor(index);
-    const y = geo.yFor(value);
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.lineTo(geo.xFor(values.length - 1), geo.bottomY);
-  ctx.lineTo(geo.xFor(0), geo.bottomY);
-  ctx.closePath();
-  ctx.fillStyle = gradient;
-  ctx.fill();
-
-  ctx.beginPath();
-  values.forEach((value, index) => {
-    const x = geo.xFor(index);
-    const y = geo.yFor(value);
-    if (index === 0) ctx.moveTo(x, y);
-    else {
-      const prevX = geo.xFor(index - 1);
-      const prevY = geo.yFor(values[index - 1]);
-      const midX = (prevX + x) / 2;
-      ctx.bezierCurveTo(midX, prevY, midX, y, x, y);
-    }
-  });
-  ctx.strokeStyle = trend >= 0 ? "#1ecb73" : "#ff6a4a";
-  ctx.lineWidth = 2.4;
-  ctx.shadowColor = trend >= 0 ? "rgba(30,203,115,0.38)" : "rgba(255,106,74,0.38)";
-  ctx.shadowBlur = 12;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-
-  for (let i = 0; i < values.length - 1; i += 1) {
-    const barWidth = Math.max(3, geo.width / values.length / 2.4);
-    const x = geo.xFor(i) - barWidth / 2;
-    const barHeight = 12 + Math.abs(values[i + 1] - values[i]) * 9;
-    ctx.fillStyle = values[i + 1] >= values[i] ? "rgba(30,203,115,0.28)" : "rgba(255,106,74,0.28)";
-    ctx.fillRect(x, geo.bottomY - barHeight, barWidth, barHeight);
-  }
-
-  values.forEach((value, index) => {
-    if (index % 5 !== 0 && index !== values.length - 1) return;
-    ctx.beginPath();
-    ctx.arc(geo.xFor(index), geo.yFor(value), index === values.length - 1 ? 4.5 : 3, 0, Math.PI * 2);
-    ctx.fillStyle = trend >= 0 ? "#1ecb73" : "#ff6a4a";
-    ctx.fill();
-    ctx.strokeStyle = "#030405";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  });
-
-  ctx.restore();
-  updatePriceMarker(canvas, model, geo);
-  if (progress >= 1) renderChartEvents(agent, rect, model);
-  else byId("chartEvents").innerHTML = "";
-}
-
-function drawEmptyChart(ctx, rect, message) {
-  const geo = chartGeometry([-10, 0, 10], rect);
-  drawChartAxes(ctx, geo, [-10, 0, 10]);
-}
-
 function setChartEmptyState(isEmpty, message = "", title = "Backend chart data unavailable") {
   const panel = byId("chartPanel");
   const overlay = byId("chartEmptyOverlay");
@@ -1289,55 +1185,159 @@ function axisPctLabel(value) {
   return `${display > 0 ? "+" : ""}${display}%`;
 }
 
-function drawChartAxes(ctx, geo, values) {
-  ctx.save();
-  ctx.lineWidth = 1;
-  ctx.font = "500 10px system-ui, sans-serif";
-  ctx.textBaseline = "middle";
-  ctx.textAlign = "right";
-  geo.ticks.forEach((tick) => {
-    const y = geo.yFor(tick);
-    ctx.strokeStyle = "rgba(255,255,255,0.055)";
-    ctx.beginPath();
-    ctx.moveTo(geo.left, y);
-    ctx.lineTo(geo.rightX, y);
-    ctx.stroke();
-    ctx.fillStyle = "rgba(255,255,255,0.42)";
-    ctx.fillText(axisPctLabel(tick), geo.left - 8, y);
+let pnlTradingViewChart = null;
+let pnlTradingViewSeries = null;
+let pnlTradingViewMarkers = null;
+let pnlTradingViewResizeObserver = null;
+let lastPnlChartModel = null;
+let tradingViewRetryTimer = 0;
+
+function chartTrend(model) {
+  const values = model.values || [];
+  if (values.length < 2) return 0;
+  return values[values.length - 1] - values[0];
+}
+
+function chartToneColors(model) {
+  return chartTrend(model) >= 0
+    ? { line: "#1ecb73", top: "rgba(30, 203, 115, 0.34)", bottom: "rgba(30, 203, 115, 0)" }
+    : { line: "#ff6a4a", top: "rgba(255, 106, 74, 0.3)", bottom: "rgba(255, 106, 74, 0)" };
+}
+
+function resizeTradingViewChart(container) {
+  if (!pnlTradingViewChart) return;
+  pnlTradingViewChart.resize(
+    Math.max(1, Math.floor(container.clientWidth)),
+    Math.max(1, Math.floor(container.clientHeight))
+  );
+}
+
+function ensureTradingViewChart(container) {
+  if (pnlTradingViewChart && pnlTradingViewSeries && pnlTradingViewMarkers) return true;
+  const tradingView = window.LightweightCharts;
+  if (!tradingView?.createChart || !tradingView?.AreaSeries || !tradingView?.createSeriesMarkers) return false;
+
+  pnlTradingViewChart = tradingView.createChart(container, {
+    width: Math.max(1, Math.floor(container.clientWidth)),
+    height: Math.max(1, Math.floor(container.clientHeight)),
+    layout: {
+      background: { type: tradingView.ColorType.Solid, color: "transparent" },
+      textColor: "rgba(255, 255, 255, 0.42)",
+      fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+      fontSize: 10,
+    },
+    localization: {
+      priceFormatter: axisPctLabel,
+    },
+    grid: {
+      vertLines: { color: "rgba(255, 255, 255, 0.045)" },
+      horzLines: { color: "rgba(255, 255, 255, 0.055)" },
+    },
+    rightPriceScale: {
+      borderVisible: false,
+      scaleMargins: { top: 0.16, bottom: 0.18 },
+    },
+    timeScale: {
+      borderVisible: false,
+      timeVisible: true,
+      secondsVisible: false,
+      fixLeftEdge: true,
+      fixRightEdge: true,
+    },
+    crosshair: {
+      mode: tradingView.CrosshairMode.Normal,
+      vertLine: { color: "rgba(255, 255, 255, 0.14)", labelVisible: false },
+      horzLine: { color: "rgba(255, 255, 255, 0.14)", labelVisible: true },
+    },
+    handleScale: {
+      axisPressedMouseMove: false,
+    },
   });
 
-  ctx.strokeStyle = "rgba(255,255,255,0.12)";
-  ctx.beginPath();
-  ctx.moveTo(geo.left, geo.top);
-  ctx.lineTo(geo.left, geo.bottomY);
-  ctx.lineTo(geo.rightX, geo.bottomY);
-  ctx.stroke();
-
-  ctx.fillStyle = "rgba(255,255,255,0.52)";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.fillText("P&L %", geo.left, 8);
-
-  const lastIndex = values.length - 1;
-  const xTicks = lastIndex > 1
-    ? [
-      { index: 0, label: "start" },
-      { index: Math.round(lastIndex / 2), label: "mid" },
-      { index: lastIndex, label: "latest" },
-    ]
-    : [
-      { index: 0, label: "start" },
-      { index: lastIndex, label: "latest" },
-    ];
-
-  ctx.textBaseline = "top";
-  xTicks.forEach((tick) => {
-    const x = geo.xFor(tick.index);
-    ctx.textAlign = tick.index === 0 ? "left" : tick.index === lastIndex ? "right" : "center";
-    ctx.fillStyle = "rgba(255,255,255,0.42)";
-    ctx.fillText(tick.label, x, geo.bottomY + 9);
+  pnlTradingViewSeries = pnlTradingViewChart.addSeries(tradingView.AreaSeries, {
+    lineColor: "#1ecb73",
+    topColor: "rgba(30, 203, 115, 0.34)",
+    bottomColor: "rgba(30, 203, 115, 0)",
+    lineWidth: 2,
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: true,
+    crosshairMarkerRadius: 4,
+    priceFormat: {
+      type: "custom",
+      formatter: axisPctLabel,
+      minMove: 0.01,
+    },
   });
-  ctx.restore();
+
+  pnlTradingViewMarkers = tradingView.createSeriesMarkers(pnlTradingViewSeries, [], { zOrder: "top" });
+  pnlTradingViewResizeObserver = new ResizeObserver(() => {
+    resizeTradingViewChart(container);
+    if (lastPnlChartModel) {
+      updatePriceMarker(lastPnlChartModel);
+      renderChartEvents(selectedAgent(), null, lastPnlChartModel);
+    }
+  });
+  pnlTradingViewResizeObserver.observe(container);
+  return true;
+}
+
+function clearTradingViewChart() {
+  if (pnlTradingViewSeries) pnlTradingViewSeries.setData([]);
+  if (pnlTradingViewMarkers) pnlTradingViewMarkers.setMarkers([]);
+  lastPnlChartModel = null;
+}
+
+function tradingViewEventMarkers(model) {
+  const unlocked = isUnlocked(selectedAgent());
+  return model.events
+    .filter((event) => event.timeValue !== null && event.chartValue !== null)
+    .map((event, index) => {
+      const status = String(event.raw?.status_claim || event.label || "").toLowerCase();
+      const failed = status.includes("fail") || status.includes("reject") || status.includes("refund");
+      return {
+        time: event.timeValue,
+        position: event.chartValue >= 0 ? "aboveBar" : "belowBar",
+        color: unlocked ? (failed ? "#ff6a4a" : "#1ecb73") : "rgba(145, 151, 157, 0.78)",
+        shape: failed ? "arrowDown" : "circle",
+        text: unlocked ? `E${index + 1}` : "",
+      };
+    });
+}
+
+function drawChart(agent) {
+  const container = byId("pnlChart");
+  const model = chartModel(agent);
+  if (!container || !ensureTradingViewChart(container)) {
+    setChartEmptyState(true, "TradingView chart library is loading.", "Chart loading");
+    byId("chartEvents").innerHTML = "";
+    hidePriceMarker();
+    window.clearTimeout(tradingViewRetryTimer);
+    tradingViewRetryTimer = window.setTimeout(() => drawChart(selectedAgent()), 150);
+    return;
+  }
+
+  if (model.points.length < 2) {
+    clearTradingViewChart();
+    setChartEmptyState(true, model.message, model.title);
+    byId("chartEvents").innerHTML = "";
+    hidePriceMarker();
+    return;
+  }
+
+  setChartEmptyState(false);
+  lastPnlChartModel = model;
+  const colors = chartToneColors(model);
+  pnlTradingViewSeries.applyOptions({
+    lineColor: colors.line,
+    topColor: colors.top,
+    bottomColor: colors.bottom,
+  });
+  pnlTradingViewSeries.setData(model.points);
+  pnlTradingViewMarkers.setMarkers(tradingViewEventMarkers(model));
+  pnlTradingViewChart.timeScale().fitContent();
+  updatePriceMarker(model);
+  renderChartEvents(agent, null, model);
 }
 
 function hidePriceMarker() {
@@ -1345,47 +1345,41 @@ function hidePriceMarker() {
   marker.hidden = true;
 }
 
-function updatePriceMarker(canvas, model, geo) {
+function updatePriceMarker(model) {
   const marker = byId("priceMarker");
+  const container = byId("pnlChart");
   const latest = model.values[model.values.length - 1];
+  const y = pnlTradingViewSeries?.priceToCoordinate(latest);
   marker.hidden = false;
   marker.textContent = signedPct(latest);
   marker.style.background = latest >= 0 ? "var(--green)" : "var(--red)";
   marker.style.color = latest >= 0 ? "#03140b" : "#230702";
   marker.style.boxShadow = latest >= 0 ? "0 0 24px rgba(32, 239, 131, 0.28)" : "0 0 24px rgba(255, 106, 74, 0.26)";
-  marker.style.top = `${canvas.offsetTop + geo.yFor(latest)}px`;
+  if (container && Number.isFinite(y)) marker.style.top = `${container.offsetTop + y}px`;
 }
-
-let chartAnimationFrame = 0;
 
 function animateChart(agent) {
-  window.cancelAnimationFrame(chartAnimationFrame);
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    drawChart(agent);
-    return;
-  }
-
-  const startedAt = performance.now();
-  const duration = 920;
-  const tick = (now) => {
-    const linear = Math.min(1, (now - startedAt) / duration);
-    const eased = 1 - Math.pow(1 - linear, 3);
-    drawChart(agent, eased);
-    if (linear < 1) chartAnimationFrame = window.requestAnimationFrame(tick);
-  };
-  chartAnimationFrame = window.requestAnimationFrame(tick);
+  drawChart(agent);
 }
 
-function renderChartEvents(agent, rect, model = chartModel(agent)) {
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function renderChartEvents(agent, _rect, model = chartModel(agent)) {
   const unlocked = isUnlocked(agent);
-  if (model.values.length < 2 || !model.events.length) {
+  const container = byId("pnlChart");
+  if (model.points.length < 2 || !model.events.length || !container || !pnlTradingViewChart || !pnlTradingViewSeries) {
     byId("chartEvents").innerHTML = "";
     return;
   }
-  const geo = chartGeometry(model.values, rect);
   const eventHtml = model.events.map((event, eventIndex) => {
-    const x = geo.xFor(event.index);
-    const y = geo.yFor(model.values[event.index]);
+    if (event.timeValue === null || event.chartValue === null) return "";
+    const rawX = pnlTradingViewChart.timeScale().timeToCoordinate(event.timeValue);
+    const rawY = pnlTradingViewSeries.priceToCoordinate(event.chartValue);
+    if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return "";
+    const x = clamp(rawX, 24, Math.max(24, container.clientWidth - 24));
+    const y = clamp(rawY, 18, Math.max(18, container.clientHeight - 18));
     const labelY = y < 78 ? y + 28 : y - 46;
     return `
       <button
@@ -1418,10 +1412,11 @@ function openEvent(eventId) {
     showToast("Buy 1 key and sign wallet proof to unlock Agent reasoning.");
     return;
   }
-  const event = chartModel(agent).events.find((item) => item.id === eventId);
+  const model = lastPnlChartModel || chartModel(agent);
+  const event = model.events.find((item) => item.id === eventId);
   if (!event) return;
   activeEventId = event.id;
-  renderChartEvents(agent, byId("pnlChart").getBoundingClientRect());
+  renderChartEvents(agent, null, model);
   renderBackendEventModal(agent, event);
   byId("eventModal").hidden = false;
 }
