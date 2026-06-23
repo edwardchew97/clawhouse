@@ -671,18 +671,24 @@ export function KeyMarketWalletBridge() {
       window.ClawHouseDemo?.showToast(message, options);
     }
 
+    const restoreFromUi = () => {
+      void ensureConnector().then(() => {
+        if (accountRef.current) void refreshWalletRead("ui-ready");
+      });
+    };
+
     const refreshFromUi = () => {
       if (accountRef.current) void refreshWalletRead("ui-change");
     };
 
     document.addEventListener("click", captureClick, true);
-    window.addEventListener("clawhouse:ready", refreshFromUi);
+    window.addEventListener("clawhouse:ready", restoreFromUi);
     window.addEventListener("clawhouse:agent-change", refreshFromUi);
 
     return () => {
       disposed = true;
       document.removeEventListener("click", captureClick, true);
-      window.removeEventListener("clawhouse:ready", refreshFromUi);
+      window.removeEventListener("clawhouse:ready", restoreFromUi);
       window.removeEventListener("clawhouse:agent-change", refreshFromUi);
     };
   }, []);
