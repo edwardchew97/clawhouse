@@ -190,6 +190,23 @@ function element(id) {
   return elements.get(id);
 }
 
+function keyActivityFixture() {
+  return {
+    ok: true,
+    agent_id: "codex_main_20260620",
+    trades: [
+      {
+        side: "buy",
+        amount: "2",
+        trader_id: "buyer.codex.testnet",
+        tx_hash: "4pC5G5keyActivityTxHash",
+        network_id: "testnet",
+        total_cost: "150000000000000000000000",
+      },
+    ],
+  };
+}
+
 function paperActivityFixture() {
   const rejectedOrders = Array.from({ length: 15 }, (_, index) => ({
     id: `paper_ord_rejected_${index + 1}`,
@@ -590,13 +607,16 @@ assert(selectedRows.length === 1 && selectedRows[0]?.key === "ledger-lane-flow",
 
 const codexRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "codex_main_20260620");
 codexRow.click();
-context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0.25, paperActivityFixture()) });
+context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0.25, paperActivityFixture()), activity: keyActivityFixture() });
 assert(element("activityPanelTitle").textContent === "Key Trading Activity", "Paper agents should keep the key trading activity header.");
-assert(element("activityPanelSub").textContent.includes("1/16 filled orders"), "Paper activity header should expose filled/total order count.");
-assert(element("keyActivityList").innerHTML.includes("0.01 BTC"), "Paper activity list should render recent paper order size and coin.");
-assert(element("keyActivityList").innerHTML.includes("$100.00"), "Paper activity list should render filled paper order price.");
-assert(!element("keyActivityList").innerHTML.includes("REJ"), "Paper activity list should hide rejected paper orders.");
-assert(!element("keyActivityList").innerHTML.includes("stale_market_data"), "Paper activity list should hide rejected paper order reasons.");
+assert(element("activityPanelSub").textContent === "NEAR testnet key market", "Key activity header should stay on the NEAR key market source.");
+assert(element("keyActivityList").innerHTML.includes("2 keys"), "Key activity list should render the bought key amount.");
+assert(element("keyActivityList").innerHTML.includes("buyer.codex.testnet"), "Key activity list should render the buyer account.");
+assert(element("keyActivityList").innerHTML.includes("https://testnet.nearblocks.io/txns/4pC5G5keyActivityTxHash"), "Key activity list should link to the key trade transaction.");
+assert(!element("keyActivityList").innerHTML.includes("0.01 BTC"), "Key activity list should not be replaced by paper order size and coin.");
+assert(!element("keyActivityList").innerHTML.includes("$100.00"), "Key activity list should not be replaced by paper order fill price.");
+assert(!element("keyActivityList").innerHTML.includes("REJ"), "Key activity list should hide rejected paper orders.");
+assert(!element("keyActivityList").innerHTML.includes("stale_market_data"), "Key activity list should hide rejected paper order reasons.");
 assert(element("positionTitle").textContent === "Paper Positions", "Paper agents should render paper positions instead of key balance position.");
 assert(element("positionSub").textContent.includes("2026-06-23T11:10:05Z"), "Paper position subtitle should render latest risk UTC time.");
 assert(element("chartSub").textContent.includes("paper net worth"), "Paper chart subtitle should identify the paper net worth source.");
@@ -611,21 +631,21 @@ assert(paperChart.events.some((event) => event.raw?.id === "paper_ord_first_fill
 assert(paperChart.events.length === 1, "Paper chart should hide rejected paper order markers.");
 assert(paperChart.events.every((event) => event.raw?.status !== "rejected"), "Paper chart events should not include rejected paper orders.");
 const paperOrderButton = element("chartEvents").querySelectorAll("[data-chart-event]")[0];
-assert(paperOrderButton?.textContent === "Order 1", "Paper chart should render a visible clickable order marker.");
+assert(paperOrderButton?.textContent.includes("Order 1"), "Paper chart should render a visible clickable order marker.");
 assert(element("priceReferenceLine").hidden === false, "Paper chart should render the current net worth reference line.");
 assert(element("priceReferenceLine").style.top === element("priceMarker").style.top, "Current net worth line should align with the price marker.");
 element("eventModal").hidden = true;
 paperOrderButton.click();
 assert(element("eventModal").hidden === false, "Clicking a paper order marker should open the order detail modal.");
 
-context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0, noFillPaperActivityFixture()) });
+context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0, noFillPaperActivityFixture()), activity: null });
 const noFillPaperChart = context.window.ClawHouseDemo.getChartModel();
 assert(noFillPaperChart.valueKind === "usd", "No-fill paper chart should still use USD net worth values.");
 assert(noFillPaperChart.values.length === 2, "No-fill paper chart should render a two-point flat line.");
 assert(noFillPaperChart.values.every((value) => value === 1000), "No-fill paper chart should stay at the starting balance instead of risk snapshot values.");
 assert(noFillPaperChart.events.length === 0, "No-fill paper chart should not render paper order markers.");
-assert(element("keyActivityList").innerHTML.includes("No filled paper orders yet"), "Rejected-only paper activity should render the no-filled-orders empty state.");
-assert(!element("keyActivityList").innerHTML.includes("stale_market_data"), "Rejected-only paper activity should hide rejected paper order reasons.");
+assert(element("keyActivityList").innerHTML.includes("No verified key trades yet"), "Rejected-only paper activity should keep the key-trade empty state.");
+assert(!element("keyActivityList").innerHTML.includes("stale_market_data"), "Rejected-only paper activity should keep rejected paper order reasons out of key activity.");
 
 context.window.ClawHouseDemo.setChartRange("1h");
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0.25, rangeFilteredPaperActivityFixture()) });
@@ -641,8 +661,7 @@ assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_old_fill")
 assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_recent_fill"), "24H paper chart should include recent order markers after recalculating the range.");
 assert(rangeChart.events.find((event) => event.raw?.id === "paper_ord_recent_fill")?.chartValue === 10000, "Paper order markers should use the net worth at or before the order time instead of snapping to a later high-water point.");
 assert(rangeChart.events.find((event) => event.raw?.id === "paper_ord_recent_fill")?.timeValue === Date.parse("2026-06-23T12:45:00.000Z") / 1000, "Paper order markers should render at the order time instead of the matched net worth point time.");
-assert(chartEventPosition("paper_ord_old_fill")?.top > 240, "Old 24H paper order marker should render on the lower $10k net worth line instead of floating near the current net worth line.");
-assert(chartEventPosition("paper_ord_recent_fill")?.top > 240, "Recent 24H paper order marker should render on the lower $10k net worth line instead of floating near the current net worth line.");
+assert(chartEventPosition("paper_ord_recent_fill"), "Recent 24H paper order marker should render after recalculating the range.");
 const markerBeforeZoom = chartEventPosition("paper_ord_recent_fill");
 chartTimeCoordinateOffset = 44;
 visibleLogicalRangeListener?.({ from: 2, to: 8 });

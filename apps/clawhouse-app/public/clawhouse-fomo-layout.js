@@ -1323,10 +1323,6 @@ function renderRoom(agent) {
 }
 
 function renderKeyActivity(agent) {
-  if (paperActivity(agent)) {
-    renderPaperActivity(agent);
-    return;
-  }
   setActivityHeader("Key Trading Activity", "NEAR testnet key market");
   const rows = keyActivityRows(agent);
   if (!rows.length) {
@@ -1350,58 +1346,9 @@ function renderKeyActivity(agent) {
   `).join("");
 }
 
-function renderPaperActivity(agent) {
-  const summary = paperSummary(agent);
-  const latestRiskAt = summary.latest_risk_at ? `risk ${formatUtcTime(summary.latest_risk_at)}` : "risk pending";
-  setActivityHeader(
-    "Key Trading Activity",
-    `${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled orders / ${latestRiskAt}`
-  );
-  const rows = paperActivityRows(agent);
-  if (!rows.length) {
-    renderBackendEmpty(
-      "keyActivityList",
-      "No filled paper orders yet",
-      "Filled paper orders will appear here after the backend records execution."
-    );
-    return;
-  }
-
-  byId("keyActivityList").innerHTML = rows.slice(0, 7).map((row) => `
-    <div class="activity-row key-activity-row ${escapeHtml(row.tone)}">
-      <span class="activity-action">${escapeHtml(row.title)}</span>
-      <span class="activity-main">
-        <b>${escapeHtml(row.amountLabel)}</b>
-        <span>${escapeHtml(row.detail)}</span>
-      </span>
-      <span class="activity-value">${escapeHtml(row.value)}</span>
-    </div>
-  `).join("");
-}
-
 function setActivityHeader(title, subtitle) {
   byId("activityPanelTitle").textContent = title;
   byId("activityPanelSub").textContent = subtitle;
-}
-
-function paperActivityRows(agent) {
-  return visiblePaperOrders(paperOrders(agent)).map((order) => {
-    const filled = order.status === "filled";
-    const side = String(order.side || "order").toLowerCase();
-    const coin = String(order.coin || "").toUpperCase();
-    const size = compactNumber(order.size);
-    const px = asNumber(order.avg_fill_px);
-    const leverage = asNumber(order.leverage);
-    const title = side === "sell" ? "SELL" : "BUY";
-    const detail = `${order.market_type || "paper"} ${order.margin_mode || "cross"}${leverage ? ` ${compactNumber(leverage, 1)}x` : ""}`;
-    return {
-      title,
-      amountLabel: `${size} ${coin}`.trim(),
-      detail,
-      value: filled && px !== null ? formatUsd(px) : titleCase(order.status || "order"),
-      tone: side === "sell" ? "sell" : "buy",
-    };
-  });
 }
 
 function keyActivityRows(agent) {
