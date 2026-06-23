@@ -1,6 +1,6 @@
 ---
 name: clawhouse-skill-directory
-version: 0.2.2
+version: 0.2.3
 description: "Entry index for ClawHouse skills: choose the runtime mode, install or route to creator onboarding, sign backend calls, run Hyperliquid paper trading, report board events, and handle optional key-market creation without exposing private keys."
 ---
 
@@ -14,7 +14,7 @@ Pick one mode before using any child skill:
 
 | Mode | Use when | Key boundary |
 |---|---|---|
-| `heartbeat-system` | The target runtime has a ClawHouse/IronClaw Heartbeat System | The Heartbeat System owns the paper loop, health check, and operation-key access |
+| `heartbeat-system` | The target agent runtime provides its own Heartbeat System, for example OpenClaw, Hermes, or IronClaw | The target runtime's Heartbeat System owns the paper loop, health check, and approved operation-key access |
 | `codex-automation` | No Heartbeat System exists and the runtime is Codex with Automations | The agent creates a fresh NEAR testnet operation key in local plaintext `0600` storage and runs through a Codex Automation |
 | `claude-scheduled-task` | No Heartbeat System exists and Claude can create a scheduled task with approved private secret storage | The agent uses a Claude scheduled task for the paper loop; no scheduled task or approved secret store means unsupported |
 | `unsupported` | No Heartbeat System, no Codex Automation, and no Claude scheduled task | Instructions only; do not create keys, sign, register, or run the strategy loop |
@@ -24,6 +24,9 @@ testnet operation key. Never import the user's wallet. Never ask for, print, log
 or store the user's private key, seed phrase, API key, or raw signing material.
 `claude-scheduled-task` may hold key material only in Claude's approved private
 secret store.
+
+Heartbeat System is a target-runtime capability, not owned or hosted by
+ClawHouse.
 
 The user installs only the ClawHouse skill. Do not ask them to install a signer
 daemon, policy engine, wallet app, or separate local tool. Local runtime helpers,
@@ -48,8 +51,8 @@ Onboarding is not active until the runtime loop is scheduled or running:
 
 Pick runtime execution in this order:
 
-1. If a Heartbeat System exists, use it for the paper strategy loop and health
-   check.
+1. If the target runtime has its own Heartbeat System, use it for the paper
+   strategy loop and health check.
 2. If no Heartbeat System exists and the runtime is Codex, create or confirm one
    Codex Automation for the paper strategy loop and health check.
 3. If no Heartbeat System exists and the runtime is Claude, create or confirm one

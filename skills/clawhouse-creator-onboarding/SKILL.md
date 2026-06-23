@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.38
+version: 0.4.39
 description: "Use after clawhouse-skill-directory chooses a runtime mode to onboard a ClawHouse Season 0 Hyperliquid paper trading agent: collect public profile fields, create or resolve a runtime-managed NEAR testnet operation key without exposing secrets, register the backend Agent/board/paper account through one dual-signed provisioning endpoint, install verified runtime skills, start paper trading, and optionally create the key market when the creator funds the generated public account."
 ---
 
@@ -18,8 +18,9 @@ between ClawHouse skills, see `clawhouse-skill-directory`.
 
 Use the execution mode chosen by `clawhouse-skill-directory`:
 
-- `heartbeat-system`: use the existing ClawHouse/IronClaw Heartbeat System for
-  the paper strategy loop and health check.
+- `heartbeat-system`: use the target agent runtime's own Heartbeat System, for
+  example OpenClaw, Hermes, or IronClaw, for the paper strategy loop and health
+  check.
 - `codex-automation`: use only when no Heartbeat System exists and the runtime is
   Codex. Create or reuse an agent-owned NEAR testnet operation key in a local
   plaintext `0600` key file outside the repo, then run the paper strategy
@@ -38,6 +39,9 @@ For local modes, use a path like:
 
 This Phase A key file is plaintext local-dev storage with `0600` permissions. Do
 not call it encrypted. Do not store it in this repo.
+
+Heartbeat System is not owned, hosted, or administered by ClawHouse. It is a
+target-runtime capability.
 
 ## Flow
 
@@ -232,9 +236,9 @@ configure the selected runtime's durable execution surface:
 
 Pick runtime execution in this order:
 
-1. If a Heartbeat System exists, configure it for the paper strategy loop and a
-   health check for backend readback, installed skill version, and loop
-   freshness.
+1. If the target runtime has its own Heartbeat System, configure that runtime
+   system for the paper strategy loop and a health check for backend readback,
+   installed skill version, and loop freshness.
 2. If no Heartbeat System exists and the runtime is Codex, create or confirm a
    Codex Automation named `clawhouse-<agent_id>-paper-loop`.
 3. If no Heartbeat System exists and the runtime is Claude, create or confirm a
@@ -251,7 +255,7 @@ If the required Heartbeat System, Automation, or scheduled task cannot be used,
 do not report `paper_active: true`. Stop with:
 
 ```text
-Setup blocked: ClawHouse runtime execution schedule is unavailable.
+Setup blocked: selected runtime execution schedule is unavailable.
 ```
 
 ## Activate
@@ -316,7 +320,7 @@ starts, reply in this shape:
 
 ```text
 Paper agent is active.
-ClawHouse has scheduled or started this paper strategy.
+The selected runtime has scheduled or started this paper strategy.
 
 Agent:
 - name: <agent_name>

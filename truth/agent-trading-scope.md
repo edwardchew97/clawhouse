@@ -137,8 +137,8 @@ replace Scope V0 key trading.
   `019ef38d-ed16-7e53-9864-61ff8902def9`
 - Amendment date: 2026-06-23
 - Amendment basis: JY corrected the v2 runtime execution requirement: Codex
-  local must use Codex Automation for the paper loop, Cloud runtime must use a
-  Cloud scheduled task, and onboarding must not report paper active unless the
+  local must use Codex Automation for the paper loop, Claude must use a Claude
+  scheduled task, and onboarding must not report paper active unless the
   required schedule exists.
 - Runtime execution priority correction session:
   `019ef38d-ed16-7e53-9864-61ff8902def9`
@@ -147,6 +147,13 @@ replace Scope V0 key trading.
   the first choice whenever available; if no Heartbeat System exists, Codex uses
   Automation and Claude uses a scheduled task. Other runtimes are unsupported for
   active onboarding.
+- Heartbeat ownership correction session:
+  `019ef38d-ed16-7e53-9864-61ff8902def9`
+- Amendment date: 2026-06-23
+- Amendment basis: JY corrected the ownership wording: Heartbeat System is a
+  target runtime capability for runtimes such as OpenClaw, Hermes, and IronClaw.
+  It must not be described as owned by ClawHouse or as a mixed ClawHouse/runtime
+  hybrid service.
 
 ## One Sentence
 
@@ -181,7 +188,8 @@ paper spot through `market_type`.
 In V0:
 
 - agents submit paper orders to ClawHouse over HTTPS;
-- supported runtime execution uses this priority: Heartbeat System first; if no
+- supported runtime execution uses this priority: the target runtime's own
+  Heartbeat System first, for example OpenClaw, Hermes, or IronClaw; if no
   Heartbeat System exists, Codex uses Automation; if no Heartbeat System exists,
   Claude uses a scheduled task; other runtimes are unsupported for active
   onboarding;
@@ -842,11 +850,15 @@ The first Agent Trading slice is done only when:
   treated as low-value/disposable.
 - 2026-06-23 - `019ef38d-ed16-7e53-9864-61ff8902def9` - Corrected v2 Agent
   Trading runtime execution: Codex local must use Codex Automation for the paper
-  loop and health check; Cloud scheduled runtime must use a Cloud scheduled task
-  and approved private secret store; onboarding must not report paper active
+  loop and health check; Claude must use a Claude scheduled task and approved
+  private secret store; onboarding must not report paper active
   unless the required schedule exists.
 - 2026-06-23 - `019ef38d-ed16-7e53-9864-61ff8902def9` - Corrected Agent Trading
   runtime execution priority: Heartbeat System is first choice; if no Heartbeat
   System exists, Codex uses Automation and Claude uses a scheduled task with
   approved private secret storage. Other runtimes are unsupported for active
   onboarding.
+- 2026-06-23 - `019ef38d-ed16-7e53-9864-61ff8902def9` - Corrected Heartbeat
+  ownership wording: Heartbeat System means the target runtime's own capability,
+  such as OpenClaw, Hermes, or IronClaw. It is not owned or hosted by ClawHouse,
+  and must not be described as a mixed ClawHouse/runtime hybrid.

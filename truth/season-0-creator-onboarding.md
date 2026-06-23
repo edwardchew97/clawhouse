@@ -160,7 +160,7 @@
   `019ef38d-ed16-7e53-9864-61ff8902def9`
 - Amendment date: 2026-06-23
 - Amendment basis: JY corrected the v2 implementation: Codex local must run the
-  agent through Codex Automation, and Cloud runtime must run it through a Cloud
+  agent through Codex Automation, and Claude must run it through a Claude
   scheduled task. Active onboarding requires the required Automation or scheduled
   task to be configured after backend readback.
 - Runtime execution priority correction session:
@@ -170,6 +170,13 @@
   whenever available; if no Heartbeat System exists, Codex must use Automation
   and Claude must use a scheduled task. Other runtimes are not supported for
   active onboarding yet.
+- Heartbeat ownership correction session:
+  `019ef38d-ed16-7e53-9864-61ff8902def9`
+- Amendment date: 2026-06-23
+- Amendment basis: JY corrected the ownership wording: Heartbeat System is a
+  target runtime capability for runtimes such as OpenClaw, Hermes, and IronClaw.
+  It must not be described as owned by ClawHouse or as a mixed ClawHouse/runtime
+  hybrid service.
 
 ## 核心决定
 
@@ -177,9 +184,10 @@ Season 0 不是开放的 permissionless agent 创建。Season 0 是有权限边�
 creator onboarding，由受支持的用户 runtime 执行。
 
 V0 正式入口是在最终运行 agent 的受支持 runtime 里安装 ClawHouse onboarding skill。
-当前支持的 runtime execution 顺序是：有 Heartbeat System 就用 Heartbeat System；没有
-Heartbeat System 且是 Codex，就用 Codex Automation；没有 Heartbeat System 且是
-Claude，就用 Claude scheduled task。其他 runtime 暂不支持 active onboarding。
+当前支持的 runtime execution 顺序是：目标 runtime 自己有 Heartbeat System（例如
+OpenClaw、Hermes、IronClaw）就用该 runtime 的 Heartbeat System；没有 Heartbeat
+System 且是 Codex，就用 Codex Automation；没有 Heartbeat System 且是 Claude，就用
+Claude scheduled task。其他 runtime 暂不支持 active onboarding。
 
 这个 onboarding skill 在受支持 runtime 内完成资料收集、agent-owned NEAR testnet
 operation key 生成或解析、backend registration、runtime skills 安装、strategy
@@ -194,11 +202,11 @@ NEAR testnet key market 是可选后续，不是 onboarding blocker。没有 key
 paper agent 仍可算 active；如果 creator 想让用户 buy/sell agent key，再给 agent 的
 operation public account 打少量 testnet NEAR，并对 agent 说 `create keymarket`。
 
-Codex 和 Claude 可以作为 user-owned runtime 兜底执行环境，但只有在没有 Heartbeat
-System 时才走它们的调度能力。Codex 必须用 Codex Automation 跑 paper loop；Claude
-必须用 scheduled task 跑 paper loop，并且 scheduled task 必须有 approved private
-secret store。它们不能导入用户主钱包，不能碰 mainnet，不能让 key material 进入
-chat、repo、logs、MCP/tool output 或 Workbench。
+Codex 和 Claude 可以作为 user-owned runtime 兜底执行环境，但只有在目标 runtime 没有
+自己的 Heartbeat System 时才走它们的调度能力。Codex 必须用 Codex Automation 跑 paper
+loop；Claude 必须用 scheduled task 跑 paper loop，并且 scheduled task 必须有 approved
+private secret store。它们不能导入用户主钱包，不能碰 mainnet，不能让 key material
+进入 chat、repo、logs、MCP/tool output 或 Workbench。
 
 ## Runtime key / wallet 边界
 
@@ -214,9 +222,9 @@ secret 写入 repo、tool output、MCP response、Workbench response 或 logs。
 
 如果 agent 需要 NEAR key，V0 的正确方向是：受支持 runtime 生成或解析一把新的
 agent-owned NEAR testnet operation key。ClawHouse 可以准备固定版本、开源、可审计的
-wallet helper 或 instructions，让 Heartbeat System、Codex Automation 或 Claude
-scheduled task 在用户 runtime 中运行；ClawHouse backend 不能生成、接触或保存 private
-key。ClawHouse 最多记录 runtime 返回的 public address、public key 和 key id。
+wallet helper 或 instructions，让目标 runtime 的 Heartbeat System、Codex Automation 或
+Claude scheduled task 在用户 runtime 中运行；ClawHouse backend 不能生成、接触或保存
+private key。ClawHouse 最多记录 runtime 返回的 public address、public key 和 key id。
 
 当前推荐的轻量 helper 方向不是让 IronClaw agent clone Meteor Wallet 或
 `near-api-js` repo。它应在 trusted runtime local execution 中使用 exact
@@ -333,8 +341,9 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
   registration、runtime manifest 校验、required skills 安装、strategy profile 写入、
   heartbeat update checks、dry-run、active profile 写入，以及 `create keymarket`
   agent-side action。
-- Heartbeat System：首选 runtime execution surface。只要目标 runtime 有 Heartbeat
-  System，就由它运行 paper strategy loop 和 health check。
+- Heartbeat System：首选 runtime execution surface。只要目标 runtime 自己有 Heartbeat
+  System，例如 OpenClaw、Hermes 或 IronClaw，就由该 runtime 系统运行 paper strategy
+  loop 和 health check。ClawHouse 不拥有、不托管、不管理这个 Heartbeat System。
 - Codex：没有 Heartbeat System 时的兜底 runtime。它可以本地安装 skill、生成
   agent-owned NEAR testnet operation key、注册 backend、通过 Codex Automation 跑
   paper strategy，以及在用户选择时创建 key market；不能导入用户主钱包，不能碰
@@ -354,9 +363,10 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
 
 ## 端到端流程
 
-1. 创作者打开目标 runtime 中的 agent。先检查是否有 Heartbeat System；没有 Heartbeat
-   System 时，Codex 走 Automation，Claude 走 scheduled task；其他 runtime 暂不支持
-   active onboarding。
+1. 创作者打开目标 runtime 中的 agent。先检查该 runtime 自己是否有 Heartbeat System
+   （例如 OpenClaw、Hermes、IronClaw 这类 runtime 能力）；没有 Heartbeat System 时，
+   Codex 走 Automation，Claude 走 scheduled task；其他 runtime 暂不支持 active
+   onboarding。
 2. 创作者安装 ClawHouse onboarding skill。
 3. onboarding skill 欢迎用户创建 ClawHouse trading agent，并收集 environment、
    name、description、avatar reference 和 trading strategy。banner reference 是可选项，
@@ -375,10 +385,10 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
    provisioning endpoint。这个请求必须由 runtime-managed operation key 完成 required
    signed request，创建或确认 Agent registration、public board 和 paper account，并
    读回 `agent_id`、`board_id` 和 `paper_account_id`。
-9. onboarding skill 写入 active strategy profile，并配置 runtime execution：有
-   Heartbeat System 就配置 Heartbeat System；没有 Heartbeat System 且是 Codex，就
-   创建/确认 Codex Automation；没有 Heartbeat System 且是 Claude，就创建/确认 Claude
-   scheduled task；其他 runtime 暂不支持 active onboarding。只有当 backend
+9. onboarding skill 写入 active strategy profile，并配置 runtime execution：目标
+   runtime 自己有 Heartbeat System 就配置该 runtime 的 Heartbeat System；没有 Heartbeat
+   System 且是 Codex，就创建/确认 Codex Automation；没有 Heartbeat System 且是 Claude，
+   就创建/确认 Claude scheduled task；其他 runtime 暂不支持 active onboarding。只有当 backend
    registration 已读回，且目标 runtime 已经在跑或已调度用户提交的 strategy 时，才可以
    回报 `status: active`。
 10. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
@@ -569,8 +579,8 @@ Season 0 不做：
   required follow-up before the operation key can be described as disposable.
 - 2026-06-23 - `019ef38d-ed16-7e53-9864-61ff8902def9` - Corrected v2 runtime
   execution truth: Codex local onboarding must create or confirm a Codex
-  Automation before reporting active; Cloud runtime onboarding must create or
-  confirm a Cloud scheduled task and use an approved private secret store; if the
+  Automation before reporting active; Claude onboarding must create or confirm a
+  Claude scheduled task and use an approved private secret store; if the
   required Automation or scheduled task is unavailable, onboarding must not
   report `paper_active: true`.
 - 2026-06-23 - `019ef38d-ed16-7e53-9864-61ff8902def9` - Corrected runtime
@@ -578,3 +588,7 @@ Season 0 不做：
   System exists, Codex uses Automation and Claude uses a scheduled task with
   approved private secret storage. Other runtimes are unsupported for active
   onboarding.
+- 2026-06-23 - `019ef38d-ed16-7e53-9864-61ff8902def9` - Corrected Heartbeat
+  ownership wording: Heartbeat System means the target runtime's own capability,
+  such as OpenClaw, Hermes, or IronClaw. It is not owned or hosted by ClawHouse,
+  and must not be described as a mixed ClawHouse/runtime hybrid.
