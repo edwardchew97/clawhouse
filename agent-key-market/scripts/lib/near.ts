@@ -9,6 +9,7 @@ import {
 } from "near-api-js";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { isAbsolute, resolve } from "node:path";
 
 const DEFAULT_TGAS = "100";
 
@@ -145,7 +146,37 @@ function requiredEnv(names: string[]): string {
   return value;
 }
 
-async function readPrivateKey(env: Env): Promise<KeyPairString> {
+export async function readPrivateKey(env: Env): Promise<KeyPairString> {
+  const operationKeyFile = firstEnv([
+    "CLAWHOUSE_OPERATION_KEY_FILE",
+    "NEAR_KEY_FILE",
+    "keyFile",
+  ]);
+  if (operationKeyFile) {
+    const keyFile = resolveLocalPath(operationKeyFile);
+    const raw = await readFile(keyFile, "utf8").catch(() => {
+      throw new Error(`Missing operation key file: ${keyFile}`);
+    });
+    const credential = JSON.parse(raw) as {
+      account_id?: string;
+      accountId?: string;
+      private_key?: string;
+      privateKey?: string;
+    };
+    const accountId = credential.account_id ?? credential.accountId;
+    if (accountId && accountId !== env.accountId) {
+      throw new Error(
+        `Operation key file account_id ${accountId} does not match ACCOUNT_ID ${env.accountId}`,
+      );
+    }
+    const privateKey = credential.private_key ?? credential.privateKey;
+    if (!privateKey) {
+      throw new Error(`No private key found in operation key file: ${keyFile}`);
+    }
+
+    return privateKey as KeyPairString;
+  }
+
   const privateKeyFromEnv = firstEnv(["NEAR_PRIVATE_KEY", "testUserPrivateKey"]);
   if (privateKeyFromEnv) {
     return privateKeyFromEnv as KeyPairString;
@@ -167,6 +198,12 @@ async function readPrivateKey(env: Env): Promise<KeyPairString> {
   }
 
   return privateKey as KeyPairString;
+}
+
+function resolveLocalPath(value: string): string {
+  if (value === "~") return homedir();
+  if (value.startsWith("~/")) return resolve(homedir(), value.slice(2));
+  return isAbsolute(value) ? value : resolve(process.cwd(), value);
 }
 
 function firstEnv(names: string[]): string | undefined {

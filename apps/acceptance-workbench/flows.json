@@ -5,7 +5,7 @@
     {
       "id": "agent-registration-story",
       "name": "Agent Registration",
-      "purpose": "Acceptance story for the agent registration path: generate keypack, register the board, create the key market, verify board, price, and discovery readbacks, with optional helper steps for onboarding setup, funding, and health checks.",
+      "purpose": "Acceptance story for the agent registration path: generate keypack, register the board and paper account, optionally create the key market, and verify board, price, and discovery readbacks, with helper steps for onboarding setup, funding, and health checks.",
       "steps": [
         {
           "id": "agentRegistration.ledger.generateWallet",
@@ -578,44 +578,53 @@
         },
         {
           "optional": true,
-          "id": "agentRegistration.pending.ironclawCreatorOnboarding",
-          "name": "IronClaw Creator Onboarding",
-          "description": "The creator should start from the official IronClaw onboarding and produce a ClawHouse-approved agent package. 未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
+          "id": "agentRegistration.pending.skillDirectoryOnboarding",
+          "name": "Skill Directory Creator Onboarding",
+          "description": "The creator should start from the official Skill Directory, choose a supported runtime, create or reuse the agent-owned NEAR testnet operation key, register backend paper state, and optionally create a key market. 未完成: Workbench records the public install/readback path; the runtime itself performs key generation and strategy execution.",
           "type": "pending",
           "status": "未完成",
           "access": "protected",
-          "publicFacingMessage": "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent.",
-          "pendingReason": "The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet.",
+          "publicFacingMessage": "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-skill-directory/SKILL.md and follow it to create and run my ClawHouse paper-trading agent.",
+          "pendingReason": "The selected supported runtime performs local key generation, backend registration signing, and strategy execution. Workbench must not custody funds or expose key material.",
           "inputs": {},
           "setVars": {},
           "responseLines": [
-            "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md and follow it to create and run my ClawHouse trading agent."
+            "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-skill-directory/SKILL.md and follow it to create and run my ClawHouse paper-trading agent.",
+            "Key-market creation is optional. Onboarding succeeds when paper_active is true."
           ],
           "runningNotes": [
-            "未完成: The repo truth says official onboarding is IronClaw-side; production hosting, installer, and signature verification are not implemented in this Workbench yet."
+            "未完成: Workbench records the public install/readback path. The selected supported runtime performs key generation, signing, and paper strategy execution.",
+            "Never paste private keys, seed phrases, API keys, or raw signing material into Workbench."
           ]
         },
         {
           "optional": true,
           "id": "agentRegistration.creatorOnboarding.setupReadback",
           "name": "GET /creator-onboarding/setup",
-          "description": "Calls the ClawHouse App compatibility readback for IronClaw-side onboarding. It returns active agent status, the manifest, required skill_install parameters, the secure private-key backup reminder, the resolved public funding account, and the agent-side key-market action; it does not store secrets or create wallets.",
+          "description": "Calls the ClawHouse App compatibility readback for supported-runtime onboarding. It returns active paper-agent status, runtime modes, manifest, required skill_install parameters, operation-key warning, the resolved public funding account, and the optional agent-side key-market action; it does not store secrets or create wallets.",
           "type": "http",
           "access": "public",
           "method": "GET",
           "url": "{{clawhouseAppBaseUrl}}/creator-onboarding/setup?creatorPublicAccount={{testUserAccountId}}",
           "runningNotes": [
             "Calling the real ClawHouse App /creator-onboarding/setup route.",
-            "The query parameter simulates an IronClaw-resolved public account for readback; creator_public_account should not appear in normal user intake.",
-            "This step should return active status plus manifest, skill_install parameters, the secure backup reminder, the funding address field, and the create keymarket action."
+            "The query parameter simulates a runtime-resolved operation public account for readback; creator_public_account should not appear in normal user intake.",
+            "This step should return active paper status plus manifest, skill_install parameters, the operation-key warning, the funding address field, and the optional create keymarket action."
           ],
           "setVars": {
             "creatorOnboardingMode": "response.json.mode",
             "creatorOnboardingStatus": "response.json.status",
+            "creatorOnboardingUserInstallsOnlySkill": "response.json.userInstallsOnlySkill",
             "creatorOnboardingManifestUrl": "response.json.manifest.url",
             "creatorOnboardingCompletionTemplate": "response.json.completion.template",
             "creatorPublicAccountUserIntake": "response.json.creatorPublicAccount.userIntake",
             "creatorPublicAccountSource": "response.json.creatorPublicAccount.source",
+            "operationKeyProvisioningActor": "response.json.operationKeyProvisioning.actor",
+            "operationKeyProvisioningCreatorActionRequired": "response.json.operationKeyProvisioning.creatorActionRequired",
+            "operationKeyProvisioningMustAttemptPinnedHelper": "response.json.operationKeyProvisioning.mustAttemptPinnedHelperBeforeStop",
+            "operationKeyProvisioningPinnedHelper": "response.json.operationKeyProvisioning.pinnedHelper.package",
+            "operationKeyProvisioningPinnedHelperVersion": "response.json.operationKeyProvisioning.pinnedHelper.version",
+            "operationKeyProvisioningStopIfUnavailable": "response.json.operationKeyProvisioning.stopIfUnavailable",
             "keyMarketFundingAmountNear": "response.json.keyMarketSetup.fundingAmountNear",
             "keyMarketFundingAddress": "response.json.keyMarketSetup.fundTo",
             "keyMarketContractId": "response.json.keyMarketSetup.contractId",
@@ -626,11 +635,11 @@
           "optional": true,
           "id": "agentRegistration.key.fundCreator",
           "name": "Fund Creator Account",
-          "description": "Manual funding gate before key-market creation. Back up the IronClaw-managed NEAR private key through IronClaw's secure backup or recovery flow, then send 0.02 testnet NEAR to the resolved creator public account; never paste private keys into Workbench or chat.",
+          "description": "Manual funding gate before optional key-market creation. Send 0.02 testnet NEAR to the resolved operation public account only if the creator wants a key market; never paste private keys into Workbench or chat.",
           "type": "pending",
           "status": "manual",
           "access": "protected",
-          "pendingReason": "Private-key backup and funding must happen in the user's NEAR testnet wallet or IronClaw-managed signing environment. Workbench records the instruction; it does not custody funds or secrets.",
+          "pendingReason": "Funding must happen outside Workbench. Workbench records the instruction; it does not custody funds or secrets. Before beneficiary routing, creating a key market makes the operation key valuable because it receives creator fees.",
           "inputs": {
             "keyMarketFundingAmountNear": "0.02",
             "creatorPublicAccount": "{{testUserAccountId}}"
@@ -639,14 +648,14 @@
             "keyMarketFundingAmountNear"
           ],
           "responseLines": [
-            "Back up the NEAR private key using IronClaw's secure backup or recovery flow before funding.",
-            "Send 0.02 testnet NEAR to the resolved creator public account.",
-            "Use the same IronClaw-managed account that signs ClawHouse backend requests when it is available.",
+            "Send 0.02 testnet NEAR to the resolved operation public account only if you want a key market.",
+            "Use the same runtime-managed operation account that signs ClawHouse backend requests when it is available.",
+            "Before beneficiary routing, creating a key market makes this operation key valuable because it receives creator fees.",
             "Do not paste a NEAR private key or seed phrase into chat."
           ],
           "runningNotes": [
-            "This is a manual backup and funding gate before the real NEAR create transaction.",
-            "The following Create Agent Key Market step signs with the configured test user account or local NEAR credentials."
+            "This is a manual funding gate before the optional real NEAR create transaction.",
+            "The following Create Agent Key Market step signs with the runtime-managed operation key file or local NEAR credentials."
           ]
         },
         {
