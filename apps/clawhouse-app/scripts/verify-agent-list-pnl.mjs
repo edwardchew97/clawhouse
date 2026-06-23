@@ -14,6 +14,8 @@ const agents = [
 const elements = new Map();
 const events = new Map();
 let clearCrosshairCalls = 0;
+let chartTimeCoordinateOffset = 0;
+let visibleLogicalRangeListener = null;
 
 class FakeClassList {
   constructor() {
@@ -473,7 +475,10 @@ context.window = {
           return {
             fitContent() {},
             timeToCoordinate() {
-              return 260;
+              return 260 + chartTimeCoordinateOffset;
+            },
+            subscribeVisibleLogicalRangeChange(listener) {
+              visibleLogicalRangeListener = listener;
             },
           };
         },
@@ -638,5 +643,11 @@ assert(rangeChart.events.find((event) => event.raw?.id === "paper_ord_recent_fil
 assert(rangeChart.events.find((event) => event.raw?.id === "paper_ord_recent_fill")?.timeValue === Date.parse("2026-06-23T12:45:00.000Z") / 1000, "Paper order markers should render at the order time instead of the matched net worth point time.");
 assert(chartEventPosition("paper_ord_old_fill")?.top > 240, "Old 24H paper order marker should render on the lower $10k net worth line instead of floating near the current net worth line.");
 assert(chartEventPosition("paper_ord_recent_fill")?.top > 240, "Recent 24H paper order marker should render on the lower $10k net worth line instead of floating near the current net worth line.");
+const markerBeforeZoom = chartEventPosition("paper_ord_recent_fill");
+chartTimeCoordinateOffset = 44;
+visibleLogicalRangeListener?.({ from: 2, to: 8 });
+const markerAfterZoom = chartEventPosition("paper_ord_recent_fill");
+assert(markerAfterZoom?.left === markerBeforeZoom.left + 44, "Paper order marker x position should refresh when chart zoom or pan changes the visible range.");
+assert(markerAfterZoom?.top === markerBeforeZoom.top, "Paper order marker y position should stay pinned to the same net worth line after chart zoom or pan.");
 
 console.log("agent discovery row P&L harness passed");

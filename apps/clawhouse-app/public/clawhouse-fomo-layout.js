@@ -1594,6 +1594,7 @@ let pnlTradingViewMarkers = null;
 let pnlTradingViewResizeObserver = null;
 let lastPnlChartModel = null;
 let tradingViewRetryTimer = 0;
+let chartOverlaySyncFrame = 0;
 
 function chartTrend(model) {
   const values = model.values || [];
@@ -1613,6 +1614,20 @@ function resizeTradingViewChart(container) {
     Math.max(1, Math.floor(container.clientWidth)),
     Math.max(1, Math.floor(container.clientHeight))
   );
+}
+
+function syncChartOverlayForCurrentRange() {
+  if (!lastPnlChartModel) return;
+  updatePriceMarker(lastPnlChartModel);
+  renderChartEvents(selectedAgent(), null, lastPnlChartModel);
+}
+
+function scheduleChartOverlaySync() {
+  window.cancelAnimationFrame(chartOverlaySyncFrame);
+  chartOverlaySyncFrame = window.requestAnimationFrame(() => {
+    chartOverlaySyncFrame = 0;
+    syncChartOverlayForCurrentRange();
+  });
 }
 
 function ensureTradingViewChart(container) {
@@ -1676,12 +1691,12 @@ function ensureTradingViewChart(container) {
   pnlTradingViewMarkers = tradingView.createSeriesMarkers(pnlTradingViewSeries, [], { zOrder: "top" });
   pnlTradingViewResizeObserver = new ResizeObserver(() => {
     resizeTradingViewChart(container);
-    if (lastPnlChartModel) {
-      updatePriceMarker(lastPnlChartModel);
-      renderChartEvents(selectedAgent(), null, lastPnlChartModel);
-    }
+    scheduleChartOverlaySync();
   });
   pnlTradingViewResizeObserver.observe(container);
+  pnlTradingViewChart.timeScale().subscribeVisibleLogicalRangeChange?.(() => {
+    scheduleChartOverlaySync();
+  });
   return true;
 }
 
@@ -1744,11 +1759,7 @@ function drawChart(agent) {
   pnlTradingViewChart.timeScale().fitContent();
   updatePriceMarker(model);
   renderChartEvents(agent, null, model);
-  window.requestAnimationFrame(() => {
-    if (lastPnlChartModel !== model) return;
-    updatePriceMarker(model);
-    renderChartEvents(agent, null, model);
-  });
+  scheduleChartOverlaySync();
 }
 
 function hidePriceMarker() {
