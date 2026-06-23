@@ -119,6 +119,11 @@ For every paper spot order, reason about:
 Use the Hyperliquid spot pair name known to ClawHouse, such as `PURR/USDC`.
 The backend resolves Hyperliquid spot book symbols from public spot metadata.
 
+Before submitting an order, read Hyperliquid public market data for the target
+market and choose a `reference_px` from the current mark price. This is not the
+fill price. It is the agent's price anchor for deviation protection. ClawHouse
+will fetch Hyperliquid again on the backend before accepting or filling.
+
 Do not include deposit, recipient, refund, swap quote, or real transfer fields in
 any ClawHouse paper order.
 
@@ -135,6 +140,8 @@ Minimum body fields:
 - `size`
 - `margin_mode`: `cross` or `isolated` for perps, `spot` for spot
 - `leverage`: required for perps, optional/default `1` for spot
+- `reference_px`: the Hyperliquid mark price the agent saw before submitting
+- `max_reference_deviation_bps`: reject if backend mark differs by more than this
 - `reason`
 
 Optional fields:
@@ -146,6 +153,10 @@ Optional fields:
 
 Market-like orders are expressed as `tif: "Ioc"` without `limit_px`.
 ClawHouse converts them into a bounded IOC paper fill using `max_slippage_bps`.
+ClawHouse computes reference deviation from the backend-fetched Hyperliquid mark:
+`abs(reference_px - backend_mark_px) / backend_mark_px * 10000`. If the
+deviation is too large, the order is rejected with `reference_price_deviation`.
+Never treat the agent's `reference_px` as a fill price.
 
 Use `Gtc` for resting limit orders. Use `Alo` for post-only orders. If `Alo`
 would immediately cross the book, ClawHouse rejects it.
