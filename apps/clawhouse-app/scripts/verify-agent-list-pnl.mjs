@@ -512,7 +512,7 @@ assert(selectedRows.length === 1 && selectedRows[0]?.key === "ledger-lane-flow",
 const codexRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "codex_main_20260620");
 codexRow.click();
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0.25, paperActivityFixture()) });
-assert(element("activityPanelTitle").textContent === "Paper Trading Activity", "Paper agents should render paper trading activity instead of key-market empty state.");
+assert(element("activityPanelTitle").textContent === "Key Trading Activity", "Paper agents should keep the key trading activity header.");
 assert(element("activityPanelSub").textContent.includes("1/16 filled orders"), "Paper activity header should expose filled/total order count.");
 assert(element("keyActivityList").innerHTML.includes("0.01 BTC"), "Paper activity list should render recent paper order size and coin.");
 assert(element("keyActivityList").innerHTML.includes("$100.00"), "Paper activity list should render filled paper order price.");

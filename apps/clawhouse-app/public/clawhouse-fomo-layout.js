@@ -1316,7 +1316,7 @@ function renderPaperActivity(agent) {
   const summary = paperSummary(agent);
   const latestRiskAt = summary.latest_risk_at ? `risk ${formatUtcTime(summary.latest_risk_at)}` : "risk pending";
   setActivityHeader(
-    "Paper Trading Activity",
+    "Key Trading Activity",
     `${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled orders / ${latestRiskAt}`
   );
   const rows = paperActivityRows(agent);
