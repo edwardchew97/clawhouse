@@ -1718,21 +1718,36 @@ function drawChart(agent) {
 
 function hidePriceMarker() {
   const marker = byId("priceMarker");
+  const line = byId("priceReferenceLine");
   marker.hidden = true;
+  if (line) line.hidden = true;
 }
 
 function updatePriceMarker(model) {
   const marker = byId("priceMarker");
+  const line = byId("priceReferenceLine");
   const container = byId("pnlChart");
   const latest = model.values[model.values.length - 1];
   const y = pnlTradingViewSeries?.priceToCoordinate(latest);
   const trend = chartTrend(model);
+  const color = trend >= 0 ? "var(--green)" : "var(--red)";
+  const textColor = trend >= 0 ? "#03140b" : "#230702";
+  const glow = trend >= 0 ? "rgba(32, 239, 131, 0.2)" : "rgba(255, 106, 74, 0.22)";
   marker.hidden = false;
   marker.textContent = chartValueLabel(model, latest);
-  marker.style.background = trend >= 0 ? "var(--green)" : "var(--red)";
-  marker.style.color = trend >= 0 ? "#03140b" : "#230702";
+  marker.style.background = color;
+  marker.style.color = textColor;
   marker.style.boxShadow = trend >= 0 ? "0 0 24px rgba(32, 239, 131, 0.28)" : "0 0 24px rgba(255, 106, 74, 0.26)";
-  if (container && Number.isFinite(y)) marker.style.top = `${container.offsetTop + y}px`;
+  if (line) {
+    line.hidden = false;
+    line.style.setProperty("--price-reference-color", color);
+    line.style.setProperty("--price-reference-glow", glow);
+  }
+  if (container && Number.isFinite(y)) {
+    const top = `${container.offsetTop + y}px`;
+    marker.style.top = top;
+    if (line) line.style.top = top;
+  }
 }
 
 function animateChart(agent) {
