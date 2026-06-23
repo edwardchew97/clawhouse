@@ -143,13 +143,27 @@ function element(id) {
 }
 
 function paperActivityFixture() {
+  const rejectedOrders = Array.from({ length: 15 }, (_, index) => ({
+    id: `paper_ord_rejected_${index + 1}`,
+    client_order_id: `paper-client-rejected-${index + 1}`,
+    market_type: "perp",
+    coin: index % 2 === 0 ? "ETH" : "BTC",
+    side: index % 2 === 0 ? "sell" : "buy",
+    status: "rejected",
+    reject_reason: "stale_market_data",
+    size: 0.01,
+    margin_mode: "cross",
+    leverage: 2,
+    created_at: new Date(Date.parse("2026-06-23T11:11:00.000Z") + index * 60_000).toISOString(),
+  }));
+
   return {
     ok: true,
     account: {
       id: "codex_board",
       agent_id: "codex_main_20260620",
       starting_balance_usd: 1000,
-      created_at: "2026-06-23T11:08:05.000Z",
+      created_at: "2026-06-23T11:00:00.000Z",
     },
     positions: [
       { coin: "BTC", signed_size: 0.01 },
@@ -161,13 +175,13 @@ function paperActivityFixture() {
       created_at: "2026-06-23T11:10:05.000Z",
     },
     risk_snapshots: [
-      { equity_usd: 1000, created_at: "2026-06-23T11:08:05.000Z" },
+      { equity_usd: 999, created_at: "2026-06-23T11:05:00.000Z" },
       { equity_usd: 1002, created_at: "2026-06-23T11:10:05.000Z" },
     ],
     orders: [
       {
-        id: "paper_ord_3",
-        client_order_id: "paper-client-3",
+        id: "paper_ord_first_fill",
+        client_order_id: "paper-client-first-fill",
         market_type: "perp",
         coin: "BTC",
         side: "buy",
@@ -176,44 +190,52 @@ function paperActivityFixture() {
         avg_fill_px: 100,
         margin_mode: "cross",
         leverage: 2,
-        created_at: "2026-06-23T11:10:15.000Z",
+        created_at: "2026-06-23T11:10:00.000Z",
       },
-      {
-        id: "paper_ord_2",
-        client_order_id: "paper-client-2",
-        market_type: "perp",
-        coin: "ETH",
-        side: "sell",
-        status: "filled",
-        size: 0.02,
-        avg_fill_px: 200,
-        margin_mode: "cross",
-        leverage: 2,
-        created_at: "2026-06-23T11:09:15.000Z",
-      },
-      {
-        id: "paper_ord_1",
-        client_order_id: "paper-client-1",
-        market_type: "perp",
-        coin: "BTC",
-        side: "buy",
-        status: "rejected",
-        reject_reason: "stale_market_data",
-        size: 0.01,
-        margin_mode: "cross",
-        leverage: 2,
-        created_at: "2026-06-23T11:08:15.000Z",
-      },
+      ...rejectedOrders,
     ],
-    fills: [{ id: "fill-1" }, { id: "fill-2" }],
+    fills: [{ id: "fill-1" }],
     summary: {
-      total_orders: 3,
-      filled_orders: 2,
-      rejected_orders: 1,
-      total_fills: 2,
-      latest_order_at: "2026-06-23T11:10:15.000Z",
-      latest_fill_at: "2026-06-23T11:10:15.000Z",
+      total_orders: 16,
+      filled_orders: 1,
+      rejected_orders: 15,
+      total_fills: 1,
+      latest_order_at: "2026-06-23T11:25:00.000Z",
+      latest_fill_at: "2026-06-23T11:10:00.000Z",
       latest_risk_at: "2026-06-23T11:10:05.000Z",
+    },
+  };
+}
+
+function noFillPaperActivityFixture() {
+  return {
+    ok: true,
+    account: {
+      id: "codex_board",
+      agent_id: "codex_main_20260620",
+      starting_balance_usd: 1000,
+      created_at: "2026-06-23T11:00:00.000Z",
+    },
+    positions: [],
+    latest_risk: {
+      equity_usd: 1001,
+      total_notional_usd: 0,
+      created_at: "2026-06-23T11:02:00.000Z",
+    },
+    risk_snapshots: [
+      { equity_usd: 999, created_at: "2026-06-23T11:01:00.000Z" },
+      { equity_usd: 1001, created_at: "2026-06-23T11:02:00.000Z" },
+    ],
+    orders: [],
+    fills: [],
+    summary: {
+      total_orders: 0,
+      filled_orders: 0,
+      rejected_orders: 0,
+      total_fills: 0,
+      latest_order_at: null,
+      latest_fill_at: null,
+      latest_risk_at: "2026-06-23T11:02:00.000Z",
     },
   };
 }
@@ -376,7 +398,7 @@ const codexRow = element("agentList").querySelectorAll("[data-agent]").find((row
 codexRow.click();
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0.25, paperActivityFixture()) });
 assert(element("activityPanelTitle").textContent === "Paper Trading Activity", "Paper agents should render paper trading activity instead of key-market empty state.");
-assert(element("activityPanelSub").textContent.includes("2/3 filled orders"), "Paper activity header should expose filled/total order count.");
+assert(element("activityPanelSub").textContent.includes("1/16 filled orders"), "Paper activity header should expose filled/total order count.");
 assert(element("keyActivityList").innerHTML.includes("0.01 BTC"), "Paper activity list should render recent paper order size and coin.");
 assert(element("keyActivityList").innerHTML.includes("$100.00"), "Paper activity list should render filled paper order price.");
 assert(element("positionTitle").textContent === "Paper Positions", "Paper agents should render paper positions instead of key balance position.");
@@ -384,6 +406,18 @@ assert(element("positionSub").textContent.includes("2026-06-23T11:10:05Z"), "Pap
 assert(element("chartSub").textContent.includes("paper net worth"), "Paper chart subtitle should identify the paper net worth source.");
 const paperChart = context.window.ClawHouseDemo.getChartModel();
 assert(paperChart.valueKind === "usd", "Paper chart should use USD net worth values instead of percent values.");
-assert(paperChart.values[0] === 1000 && paperChart.values[1] === 1002, "Paper chart values should be raw equity_usd net worth values.");
+assert(paperChart.values[0] === 1000, "Paper chart should begin at the account starting balance.");
+assert(paperChart.values[1] === 1000, "Paper chart should stay flat until the first filled order.");
+assert(paperChart.values.at(-1) === 1002, "Paper chart should use post-fill equity_usd net worth after the first fill.");
+assert(!paperChart.values.includes(999), "Paper chart should ignore risk snapshots before the first filled order.");
+assert(paperChart.points.every((point, index) => index === 0 || point.time > paperChart.points[index - 1].time), "Paper chart points should be strictly time-ordered.");
+assert(paperChart.events.some((event) => event.raw?.id === "paper_ord_first_fill" && event.raw?.status === "filled"), "Paper chart should keep the first filled order marker even after many later rejected orders.");
+
+context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0, noFillPaperActivityFixture()) });
+const noFillPaperChart = context.window.ClawHouseDemo.getChartModel();
+assert(noFillPaperChart.valueKind === "usd", "No-fill paper chart should still use USD net worth values.");
+assert(noFillPaperChart.values.length === 2, "No-fill paper chart should render a two-point flat line.");
+assert(noFillPaperChart.values.every((value) => value === 1000), "No-fill paper chart should stay at the starting balance instead of risk snapshot values.");
+assert(noFillPaperChart.events.length === 0, "No-fill paper chart should not render paper order markers.");
 
 console.log("agent discovery row P&L harness passed");
