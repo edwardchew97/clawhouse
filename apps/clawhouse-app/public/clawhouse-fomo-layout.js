@@ -124,7 +124,7 @@ function initialsFor(value) {
 function displayNameForAgent(name, id) {
   const value = String(name || id || "Agent").trim();
   if (!value) return "Agent";
-  if (!isIdentifierLike(value) && value !== id) return value;
+  if (value !== id) return value;
 
   const words = value
     .split(/[\s_\-./]+/g)
