@@ -1181,28 +1181,31 @@
       width: 24px;
       height: 24px;
       display: grid;
-      align-items: center;
-      justify-content: center;
+      place-items: center;
       transform: translate(-50%, -50%);
       border-radius: 999px;
-      border: 1px solid rgba(255, 198, 160, 0.76);
-      background:
-        radial-gradient(circle at 35% 30%, rgba(255, 233, 214, 0.9) 0 10%, rgba(255, 177, 122, 0.72) 11% 24%, transparent 25%),
-        linear-gradient(145deg, #ff9360 0%, #ff7348 56%, #dc5234 100%);
+      border: 1px solid rgba(238, 242, 255, 0.22);
+      background: #08090b;
       color: transparent;
       padding: 0;
       font-size: 0;
       line-height: 0;
-      overflow: visible;
+      overflow: hidden;
       box-shadow:
-        0 0 0 1px rgba(3, 4, 5, 0.9),
-        0 0 0 4px rgba(255, 117, 65, 0.09),
-        0 7px 14px rgba(0, 0, 0, 0.28),
-        inset 0 1px 0 rgba(255, 255, 255, 0.22);
+        0 0 0 2px rgba(3, 4, 5, 0.82),
+        0 6px 14px rgba(0, 0, 0, 0.34);
       pointer-events: auto;
       touch-action: manipulation;
       z-index: 2;
       transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 140ms ease, border-color 140ms ease;
+    }
+
+    .event-marker-avatar,
+    .event-marker .agent-icon,
+    .event-marker svg {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
 
     .event-marker::before {
@@ -1215,23 +1218,21 @@
 
     .event-marker.active {
       transform: translate(-50%, -50%) scale(1.06);
-      border-color: rgba(255, 220, 198, 0.9);
+      border-color: rgba(238, 242, 255, 0.55);
       box-shadow:
-        0 0 0 1px rgba(3, 4, 5, 0.9),
-        0 0 0 5px rgba(255, 117, 65, 0.13),
-        0 9px 18px rgba(0, 0, 0, 0.32),
-        inset 0 1px 0 rgba(255, 255, 255, 0.26);
+        0 0 0 2px rgba(3, 4, 5, 0.86),
+        0 0 0 4px rgba(105, 167, 245, 0.12),
+        0 8px 18px rgba(0, 0, 0, 0.38);
     }
 
     @media (hover: hover) and (pointer: fine) {
       .event-marker:hover {
         transform: translate(-50%, -50%) scale(1.06);
-        border-color: rgba(255, 220, 198, 0.9);
+        border-color: rgba(238, 242, 255, 0.55);
         box-shadow:
-          0 0 0 1px rgba(3, 4, 5, 0.9),
-          0 0 0 5px rgba(255, 117, 65, 0.13),
-          0 9px 18px rgba(0, 0, 0, 0.32),
-          inset 0 1px 0 rgba(255, 255, 255, 0.26);
+          0 0 0 2px rgba(3, 4, 5, 0.86),
+          0 0 0 4px rgba(105, 167, 245, 0.12),
+          0 8px 18px rgba(0, 0, 0, 0.38);
       }
     }
 
