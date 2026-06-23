@@ -487,6 +487,9 @@ export function migrate(db: Database) {
       margin_mode TEXT NOT NULL,
       leverage REAL NOT NULL,
       max_slippage_bps REAL NOT NULL,
+      reference_px REAL,
+      max_reference_deviation_bps REAL,
+      reference_deviation_bps REAL,
       status TEXT NOT NULL,
       reject_reason TEXT,
       reason TEXT,
@@ -697,6 +700,9 @@ export function migrate(db: Database) {
   ensureColumn(db, "paper_risk_snapshots", "ingest_sequence", "INTEGER");
   ensureColumn(db, "paper_audit_events", "ingest_sequence", "INTEGER");
   ensureColumn(db, "paper_orders", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
+  ensureColumn(db, "paper_orders", "reference_px", "REAL");
+  ensureColumn(db, "paper_orders", "max_reference_deviation_bps", "REAL");
+  ensureColumn(db, "paper_orders", "reference_deviation_bps", "REAL");
   ensureColumn(db, "paper_fills", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
 	  ensureColumn(db, "paper_positions", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
 

@@ -66,6 +66,17 @@ export async function refreshHyperliquidPaperMarketSnapshots(
   );
 }
 
+export async function refreshHyperliquidPaperMarketSnapshot(
+  db: LedgerDb,
+  fetchLike: FetchLike,
+  env: RuntimeEnv,
+  marketType: MarketType,
+  coin: string,
+  createdAt: string,
+) {
+  return await refreshHyperliquidPaperMarketSnapshotsForCoins(db, fetchLike, env, marketType, [coin], createdAt);
+}
+
 export async function runPaperLiquidationMonitor(
   db: LedgerDb,
   fetchLike: FetchLike,
