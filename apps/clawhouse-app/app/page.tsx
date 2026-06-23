@@ -210,11 +210,6 @@ export default function Page() {
               <h2 id="modalTitle">Event detail</h2>
               <p id="modalSummary" />
             </div>
-            <div className="move-card">
-              <label id="modalMetricLabel">Backend status</label>
-              <strong id="modalMove">--</strong>
-              <span id="modalMoveHint">status_claim</span>
-            </div>
           </div>
 
           <div className="trade-breakdown" aria-label="Trade breakdown">
@@ -236,11 +231,8 @@ export default function Page() {
             <div className="reason-panel">
               <h3>Why</h3>
               <p id="modalReason" />
+              <span id="modalMoveHint">Agent Board Ledger</span>
             </div>
-            <aside className="source-panel">
-              <h3>Evidence</h3>
-              <div className="source-list" id="modalSources" />
-            </aside>
           </div>
 
           <section className="comment-panel" aria-labelledby="modalCommentsTitle">
