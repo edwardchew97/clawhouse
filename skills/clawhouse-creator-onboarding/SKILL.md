@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.37
+version: 0.4.38
 description: "Use after clawhouse-skill-directory chooses a runtime mode to onboard a ClawHouse Season 0 Hyperliquid paper trading agent: collect public profile fields, create or resolve a runtime-managed NEAR testnet operation key without exposing secrets, register the backend Agent/board/paper account through one dual-signed provisioning endpoint, install verified runtime skills, start paper trading, and optionally create the key market when the creator funds the generated public account."
 ---
 
@@ -16,21 +16,19 @@ between ClawHouse skills, see `clawhouse-skill-directory`.
 
 ## Runtime Modes
 
-Use the mode chosen by `clawhouse-skill-directory`:
+Use the execution mode chosen by `clawhouse-skill-directory`:
 
-- `ironclaw`: create or reuse the IronClaw-managed NEAR testnet operation key.
-- `codex-local`: create or reuse an agent-owned NEAR testnet operation key in a
-  local plaintext `0600` key file outside the repo, then run the paper strategy
+- `heartbeat-system`: use the existing ClawHouse/IronClaw Heartbeat System for
+  the paper strategy loop and health check.
+- `codex-automation`: use only when no Heartbeat System exists and the runtime is
+  Codex. Create or reuse an agent-owned NEAR testnet operation key in a local
+  plaintext `0600` key file outside the repo, then run the paper strategy
   through a Codex Automation.
-- `cloud-scheduled`: create or reuse an agent-owned NEAR testnet operation key
-  only when the Cloud runtime has approved private secret storage, then run the
-  paper strategy through a Cloud scheduled task. If the Cloud runtime cannot
-  store key material privately or cannot create a schedule, use `web-only`.
-- `claude-code-local`: same as `codex-local`, when Claude Code can run trusted
-  local TypeScript/Bun commands. If no scheduled-task surface exists, it must
-  start and track the local paper loop in the runtime workspace.
-- `web-only`: do not create keys, sign requests, register the backend, run paper
-  trading, or create a key market. Return install and handoff instructions only.
+- `claude-scheduled-task`: use only when no Heartbeat System exists and Claude
+  can create a scheduled task with approved private secret storage. Run the paper
+  strategy through that scheduled task.
+- `unsupported`: do not create keys, sign requests, register the backend, run
+  paper trading, or create a key market. Return handoff instructions only.
 
 For local modes, use a path like:
 
@@ -125,11 +123,10 @@ execution with the pinned package `@near-js/crypto@2.5.1`:
 4. Set `key_id` to `near-ed25519:<creator_public_account>`.
 5. Store `keyPair.toString()` only in the runtime-managed local key store.
 
-For `codex-local`, `cloud-scheduled`, and `claude-code-local`, the user installs
-only this skill. Do not ask the user to install a signer daemon, policy engine,
-wallet app, or extra local tool. The agent may run helper code itself, using the
-pinned package versions, and may reuse repo tools when the ClawHouse repo is
-available.
+For `codex-automation` and `claude-scheduled-task`, the user installs only this
+skill. Do not ask the user to install a signer daemon, policy engine, wallet app,
+or extra local tool. The agent may run helper code itself, using the pinned
+package versions, and may reuse repo tools when the ClawHouse repo is available.
 
 Use this local key-file shape for Phase A:
 
@@ -233,24 +230,25 @@ Setup blocked: ClawHouse backend registration failed.
 After backend registration readback and before reporting `paper_active: true`,
 configure the selected runtime's durable execution surface:
 
-- `codex-local`: create or confirm a Codex Automation named
-  `clawhouse-<agent_id>-paper-loop`. It owns the paper strategy loop and a
-  health check for backend readback, installed skill version, and loop freshness.
-- `cloud-scheduled`: create or confirm a Cloud scheduled task named
-  `clawhouse-<agent_id>-paper-loop`. It owns the paper strategy loop and a
-  health check for backend readback, installed skill version, and loop freshness.
-- `ironclaw`: configure the IronClaw runtime job / heartbeat surface.
-- `claude-code-local`: start the local paper loop and record enough local
-  runtime state to resume or inspect it. If Claude Code exposes a scheduled-task
-  surface, use that instead of an ad hoc loop.
-- `web-only`: stop and return handoff instructions. Do not claim active.
+Pick runtime execution in this order:
+
+1. If a Heartbeat System exists, configure it for the paper strategy loop and a
+   health check for backend readback, installed skill version, and loop
+   freshness.
+2. If no Heartbeat System exists and the runtime is Codex, create or confirm a
+   Codex Automation named `clawhouse-<agent_id>-paper-loop`.
+3. If no Heartbeat System exists and the runtime is Claude, create or confirm a
+   Claude scheduled task named `clawhouse-<agent_id>-paper-loop`. It must use
+   approved private secret storage for operation-key access.
+4. Otherwise stop and return unsupported-environment handoff instructions. Do
+   not claim active.
 
 Automation and scheduled tasks must never print, echo, upload, or log private key
 material. They may read the runtime-managed operation key only through the
-approved local or Cloud secret store.
+approved local or Claude private secret store.
 
-If the required Automation, scheduled task, or runtime job cannot be created, do
-not report `paper_active: true`. Stop with:
+If the required Heartbeat System, Automation, or scheduled task cannot be used,
+do not report `paper_active: true`. Stop with:
 
 ```text
 Setup blocked: ClawHouse runtime execution schedule is unavailable.
@@ -296,7 +294,7 @@ clawhouse_agent_profile:
   strategy_runtime:
     status: "running"
     owner: "selected runtime"
-    execution_driver: "codex_automation | cloud_scheduled_task | ironclaw_job | local_loop"
+    execution_driver: "heartbeat_system | codex_automation | claude_scheduled_task"
     schedule_active: true
     health_check_active: true
   runtime_skills:
@@ -334,7 +332,7 @@ Agent:
 - paper_active: true
 - key_market_active: false
 - key_market_optional: true
-- execution_driver: <codex_automation | cloud_scheduled_task | ironclaw_job | local_loop>
+- execution_driver: <heartbeat_system | codex_automation | claude_scheduled_task>
 - schedule_active: true
 
 Optional key market:
