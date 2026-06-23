@@ -1,6 +1,6 @@
 import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openMigratedRuntimeLedgerDb, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAgentAuthPayload, canonicalAuthPayload, readAgentSignedHeaders, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
-import { refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
+import { refreshHyperliquidPaperMarketSnapshot, refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
 import { listKeyMarketTrades, reportKeyMarketTrade } from "./key-market.js";
 import { PaperAuthError, createPaperAccount, createPaperMarketSnapshot, readPaperAccount, readPaperLeaderboard, replayPaperOrder, runPaperRiskCheck, submitPaperOrder } from "./paper-trading.js";
 import type { AgentRegistrationRow, AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PaperAccountRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
@@ -197,7 +197,11 @@ export function createApp(options: AppOptions) {
           return json(await refreshHyperliquidPaperMarketSnapshots(db, rpcFetch, env, await readBody(request), now()), 201);
         }
         if (method === "POST" && path === "/paper/orders") {
-          return json(await submitPaperOrder(db, request, await readBody(request), path, now()), 201);
+          return json(await submitPaperOrder(db, request, await readBody(request), path, now(), {
+            refreshMarketData: async (tx, marketType, coin, createdAt) => {
+              await refreshHyperliquidPaperMarketSnapshot(tx, rpcFetch, env, marketType, coin, createdAt);
+            },
+          }), 201);
         }
         if (method === "POST" && path === "/paper/liquidation-monitor/tick") {
           assertServiceBearer(request.headers, adminToken);

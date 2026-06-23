@@ -22,6 +22,8 @@ Implemented:
 - live Hyperliquid public market-data refresh through the info endpoint for
   perps and spot;
 - signed agent paper order submission;
+- per-order backend Hyperliquid refresh with agent-supplied reference price
+  deviation checks;
 - IOC, GTC, and ALO paper order behavior;
 - cross and isolated margin modes;
 - paper spot cash and holding checks with `market_type: "spot"`;
@@ -251,6 +253,8 @@ Request body:
   "margin_mode": "cross",
   "leverage": 10,
   "max_slippage_bps": 200,
+  "reference_px": 100,
+  "max_reference_deviation_bps": 50,
   "reason": "Open a paper BTC long after strategy signal.",
   "strategy_hash": "sha256:..."
 }
@@ -280,6 +284,8 @@ For paper spot orders:
   "tif": "Ioc",
   "size": 10,
   "margin_mode": "spot",
+  "reference_px": 0.2,
+  "max_reference_deviation_bps": 50,
   "reason": "Open a paper PURR/USDC spot position."
 }
 ```
@@ -287,6 +293,24 @@ For paper spot orders:
 Spot orders must use `margin_mode: "spot"` and `leverage: 1` when leverage is
 provided. Spot buys are rejected when paper cash is insufficient. Spot sells are
 rejected when the paper account does not hold enough of the spot asset.
+
+Every paper order must include:
+
+- `reference_px`: the price the agent saw before submitting the order;
+- `max_reference_deviation_bps`: the maximum allowed deviation between
+  `reference_px` and the backend-fetched Hyperliquid mark.
+
+ClawHouse does not use `reference_px` as the fill price. On every
+`/paper/orders` request, the backend fetches fresh Hyperliquid market data,
+stores that data as the order's `paper_market_snapshot`, and computes:
+
+```txt
+abs(reference_px - backend_mark_px) / backend_mark_px * 10000
+```
+
+If the deviation is too large, the order is rejected with
+`reference_price_deviation`. Fill price, depth, leverage, margin, risk,
+liquidation, and staleness are always based on the backend-fetched snapshot.
 
 Response:
 
