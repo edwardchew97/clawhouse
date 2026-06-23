@@ -25,6 +25,12 @@ type ToastOptions = {
   durationMs?: number;
 };
 
+type ReadAccessState = {
+  boardId: string;
+  holderAccountId: string;
+  expiresAt: string;
+};
+
 type DemoChainState = {
   accountId?: string | null;
   contractId?: string;
@@ -40,12 +46,7 @@ type DemoChainState = {
   activity?: Record<string, unknown> | null;
   activityError?: string | null;
   backend?: Record<string, unknown> | null;
-  readToken?: string | null;
-  readAccess?: {
-    boardId: string;
-    holderAccountId: string;
-    expiresAt: string;
-  } | null;
+  readAccess?: ReadAccessState | null;
   readAccessError?: string | null;
   error?: string | null;
   statusTitle?: string;
@@ -80,8 +81,15 @@ type ReadTokenChallengeResponse = {
 };
 
 type ReadTokenResponse = {
-  readToken: string;
+  valid: boolean;
   expiresAt: string;
+};
+
+type ReadSessionResponse = {
+  valid: boolean;
+  boardId?: string;
+  holderAccountId?: string;
+  expiresAt?: string;
 };
 
 declare global {
@@ -97,12 +105,8 @@ export function KeyMarketWalletBridge() {
   const configRef = useRef<KeyMarketConfig | null>(null);
   const initializeRef = useRef<Promise<void> | null>(null);
   const busyRef = useRef(false);
-  const readTokenRef = useRef<{
-    boardId: string;
-    holderAccountId: string;
-    readToken: string;
-    expiresAt: string;
-  } | null>(null);
+  const readAccessRef = useRef<ReadAccessState | null>(null);
+  const clearSessionRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -144,12 +148,12 @@ export function KeyMarketWalletBridge() {
         connector.on("wallet:signOut", () => {
           walletRef.current = null;
           accountRef.current = null;
-          readTokenRef.current = null;
+          readAccessRef.current = null;
+          void clearReadSession();
           renderChainState({
             accountId: null,
             contractId: config.contractId,
             networkId: config.networkId,
-            readToken: null,
             readAccess: null,
             backend: null,
           });
@@ -175,6 +179,7 @@ export function KeyMarketWalletBridge() {
           contractId: configRef.current?.contractId,
           networkId: configRef.current?.networkId,
         });
+        if (accountRef.current) window.setTimeout(() => void refreshWalletRead("restore"), 0);
       } catch {
         renderChainState({
           accountId: null,
@@ -287,9 +292,10 @@ export function KeyMarketWalletBridge() {
       try {
         await connectorRef.current?.disconnect(walletRef.current ?? undefined);
       } finally {
+        await clearReadSession();
         walletRef.current = null;
         accountRef.current = null;
-        readTokenRef.current = null;
+        readAccessRef.current = null;
         renderChainState({
           accountId: null,
           pending: false,
@@ -299,7 +305,6 @@ export function KeyMarketWalletBridge() {
           statusTitle: "Wallet disconnected",
           statusBody: "Connect Wallet",
           statusTone: "idle",
-          readToken: null,
           readAccess: null,
           backend: null,
         });
@@ -515,10 +520,10 @@ export function KeyMarketWalletBridge() {
         fetchJson<Record<string, unknown>>(activityPath),
       ]);
       const state = stateResult.status === "fulfilled" ? stateResult.value.state : null;
-      const activeTokenResult = await Promise.allSettled([ensureReadToken(agent, state)]).then((results) => results[0]);
-      const activeToken = activeTokenResult.status === "fulfilled" ? activeTokenResult.value : null;
+      const activeAccessResult = await Promise.allSettled([ensureReadAccess(agent, state)]).then((results) => results[0]);
+      const activeAccess = activeAccessResult.status === "fulfilled" ? activeAccessResult.value : null;
       const backendResult = await Promise.allSettled([
-        fetchBackendBoard(agent, activeToken?.readToken ?? null),
+        fetchBackendBoard(agent),
       ]).then((results) => results[0]);
 
       renderChainState({
@@ -534,37 +539,36 @@ export function KeyMarketWalletBridge() {
         activity: activityResult.status === "fulfilled" ? activityResult.value : null,
         activityError: firstRejectedMessage([activityResult]),
         backend: backendResult.status === "fulfilled" ? backendResult.value : { ok: false, error: firstRejectedMessage([backendResult]) },
-        readToken: activeToken?.readToken ?? null,
-        readAccess: activeToken ? {
-          boardId: activeToken.boardId,
-          holderAccountId: activeToken.holderAccountId,
-          expiresAt: activeToken.expiresAt,
+        readAccess: activeAccess ? {
+          boardId: activeAccess.boardId,
+          holderAccountId: activeAccess.holderAccountId,
+          expiresAt: activeAccess.expiresAt,
         } : null,
-        readAccessError: activeTokenResult.status === "rejected"
-          ? errorMessage(activeTokenResult.reason, "Room access signature failed.")
+        readAccessError: activeAccessResult.status === "rejected"
+          ? errorMessage(activeAccessResult.reason, "Room access signature failed.")
           : null,
         error: firstRejectedMessage([stateResult, quoteResult]),
       });
     }
 
-    async function ensureReadToken(agent: DemoAgent, state: Record<string, unknown> | null) {
+    async function ensureReadAccess(agent: DemoAgent, state: Record<string, unknown> | null) {
       const account = accountRef.current;
       const wallet = walletRef.current;
       if (!account || !wallet || !state) {
-        readTokenRef.current = null;
+        readAccessRef.current = null;
         return null;
       }
 
       const balance = Number(state.holder_balance);
       if (!Number.isFinite(balance) || balance <= 0) {
-        readTokenRef.current = null;
+        readAccessRef.current = null;
         return null;
       }
 
       const boardId = agent.boardId ?? agent.id;
       const config = configRef.current;
       if (!config) throw new Error("Key-market config is unavailable.");
-      const cached = readTokenRef.current;
+      const cached = readAccessRef.current;
       if (
         cached
         && cached.boardId === boardId
@@ -573,6 +577,9 @@ export function KeyMarketWalletBridge() {
       ) {
         return cached;
       }
+
+      const sessionAccess = await restoreReadSession(boardId, account.accountId);
+      if (sessionAccess) return sessionAccess;
 
       if (!wallet.manifest.features.signMessage) {
         throw new Error("Selected wallet does not support signed room access.");
@@ -608,13 +615,52 @@ export function KeyMarketWalletBridge() {
         }),
       });
 
-      readTokenRef.current = {
+      if (!readTokenResponse.valid) {
+        readAccessRef.current = null;
+        return null;
+      }
+      readAccessRef.current = {
         boardId,
         holderAccountId: account.accountId,
-        readToken: readTokenResponse.readToken,
         expiresAt: readTokenResponse.expiresAt,
       };
-      return readTokenRef.current;
+      return readAccessRef.current;
+    }
+
+    async function restoreReadSession(boardId: string, holderAccountId: string) {
+      const session = await fetchJson<ReadSessionResponse>(
+        `/api/backend/read-token/session?boardId=${encodeURIComponent(boardId)}&holderAccountId=${encodeURIComponent(holderAccountId)}`,
+      );
+      if (!session.valid || !session.boardId || !session.holderAccountId || !session.expiresAt) {
+        readAccessRef.current = null;
+        return null;
+      }
+      const restored = {
+        boardId: session.boardId,
+        holderAccountId: session.holderAccountId,
+        expiresAt: session.expiresAt,
+      };
+      if (
+        restored.boardId !== boardId
+        || restored.holderAccountId !== holderAccountId
+        || Date.parse(restored.expiresAt) <= Date.now() + 30_000
+      ) {
+        readAccessRef.current = null;
+        return null;
+      }
+      readAccessRef.current = restored;
+      return restored;
+    }
+
+    async function clearReadSession() {
+      if (clearSessionRef.current) return clearSessionRef.current;
+      clearSessionRef.current = fetch("/api/backend/read-token/session", { method: "DELETE" })
+        .catch(() => undefined)
+        .then(() => undefined)
+        .finally(() => {
+          clearSessionRef.current = null;
+        });
+      return clearSessionRef.current;
     }
 
     function renderChainState(state: DemoChainState) {
@@ -630,11 +676,13 @@ export function KeyMarketWalletBridge() {
     };
 
     document.addEventListener("click", captureClick, true);
+    window.addEventListener("clawhouse:ready", refreshFromUi);
     window.addEventListener("clawhouse:agent-change", refreshFromUi);
 
     return () => {
       disposed = true;
       document.removeEventListener("click", captureClick, true);
+      window.removeEventListener("clawhouse:ready", refreshFromUi);
       window.removeEventListener("clawhouse:agent-change", refreshFromUi);
     };
   }, []);
@@ -650,10 +698,9 @@ async function reportKeyMarketActivity(body: Record<string, string>) {
   });
 }
 
-async function fetchBackendBoard(agent: DemoAgent, readToken: string | null) {
+async function fetchBackendBoard(agent: DemoAgent) {
   const boardId = agent.boardId ?? agent.id;
-  const headers = readToken ? { "x-clawhouse-read-token": readToken } : undefined;
-  return fetchJson<Record<string, unknown>>(`/api/backend/board?boardId=${encodeURIComponent(boardId)}`, { headers });
+  return fetchJson<Record<string, unknown>>(`/api/backend/board?boardId=${encodeURIComponent(boardId)}`);
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {

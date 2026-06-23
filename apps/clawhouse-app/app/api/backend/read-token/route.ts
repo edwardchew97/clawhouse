@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { verifyMessage } from "near-api-js/nep413";
-import { backendError, fetchBackendJson, ledgerAdminAuthorizationHeader } from "../lib";
-import { getKeyMarketConfig, getProvider } from "../../key-market/lib";
+import { backendError, ledgerAdminAuthorizationHeader } from "../lib";
+import { getProvider } from "../../key-market/lib";
+import { createHolderReadGrant } from "./grant";
 import {
   ReadTokenInputError,
+  createHolderReadCookie,
+  createWalletSessionCookie,
   decodeNonce,
   decodeSignature,
-  newReadToken,
   normalizeSignedMessage,
-  readAccessTokenExpiry,
   requireNonEmpty,
+  setHolderReadCookie,
+  setWalletSessionCookie,
   verifyReadAccessChallenge,
 } from "./lib";
 
@@ -38,36 +41,45 @@ export async function POST(request: Request) {
       provider: getProvider(),
     });
 
-    const { contractId, nodeUrl } = getKeyMarketConfig();
-    const readToken = newReadToken();
-    const expiresAt = readAccessTokenExpiry();
-    const access = await fetchBackendJson(`/boards/${encodeURIComponent(challenge.boardId)}/read-access/near-key-market`, {
-      method: "POST",
-      headers: { authorization },
-      body: {
-        holder_account_id: challenge.holderAccountId,
-        key_contract_id: contractId,
-        rpc_url: nodeUrl,
-        read_token: readToken,
-        access_level: "key_holder_detail",
-        expires_at: expiresAt,
-        metadata: {
-          source: "clawhouse-app-wallet-nep413",
-          signed_account_id: signedMessage.accountId,
-          signed_public_key: signedMessage.publicKey,
-          challenge_issued_at: challenge.issuedAt,
-        },
+    const walletSession = createWalletSessionCookie({
+      accountId: signedMessage.accountId,
+      publicKey: signedMessage.publicKey,
+      secret: authorization,
+      expiresAt: challenge.walletSessionExpiresAt,
+    });
+    const grant = await createHolderReadGrant({
+      boardId: challenge.boardId,
+      holderAccountId: challenge.holderAccountId,
+      authorization,
+      metadata: {
+        source: "clawhouse-app-wallet-nep413",
+        signed_account_id: signedMessage.accountId,
+        signed_public_key: signedMessage.publicKey,
+        challenge_issued_at: challenge.issuedAt,
+        wallet_session_expires_at: walletSession.expiresAt,
       },
     });
-
-    return NextResponse.json({
+    const holderReadCookie = createHolderReadCookie({
+      boardId: challenge.boardId,
+      holderAccountId: challenge.holderAccountId,
+      readToken: grant.readToken,
+      expiresAt: grant.expiresAt,
+      secret: authorization,
+    });
+    const includeRawReadToken = request.headers.get("x-clawhouse-client") === "script";
+    const response = NextResponse.json({
       ok: true,
       boardId: challenge.boardId,
       holderAccountId: challenge.holderAccountId,
-      readToken,
-      expiresAt,
-      access,
+      valid: grant.granted,
+      expiresAt: grant.expiresAt,
+      access: grant.access,
+      ...(includeRawReadToken ? { readToken: grant.readToken } : {}),
     });
+    response.headers.set("cache-control", "no-store");
+    setWalletSessionCookie(response, walletSession);
+    if (grant.granted) setHolderReadCookie(response, holderReadCookie);
+    return response;
   } catch (error) {
     if (error instanceof ReadTokenInputError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
