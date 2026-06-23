@@ -112,6 +112,7 @@ export default function Page() {
               </div>
               <div id="pnlChart" aria-label="Agent P&L chart" />
               <div className="chart-events" id="chartEvents" />
+              <div className="price-reference-line" id="priceReferenceLine" hidden />
               <div className="price-marker" id="priceMarker">backend</div>
               <div className="chart-empty-overlay" id="chartEmptyOverlay" hidden>
                 <div className="chart-loading-skeleton" aria-hidden="true">
