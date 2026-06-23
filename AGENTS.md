@@ -63,6 +63,12 @@ When reporting a product or onboarding flow, write the exact action chain first.
   private keys, seed phrases, or raw signing material in chat, Workbench output,
   or logs.
 
+## Final Replies
+
+- Keep final replies as short as possible: what changed and current state.
+- Do not include a tests/proof section or command list unless verification
+  failed, was skipped, or JY explicitly asks for it.
+
 ## Public Onboarding Kit Sync
 
 - Any change to `skills/clawhouse-creator-onboarding/SKILL.md` must be synced to
@@ -81,8 +87,6 @@ When reporting a product or onboarding flow, write the exact action chain first.
   with `--publish`, and verifies raw GitHub URLs only with `--verify`.
 - Verification must include reading the public raw URL:
   `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md`.
-- Final reports for onboarding skill changes must state the public kit commit or
-  explain why the sync could not be completed.
 
 ## Main Checkout and Worktree Discipline
 
@@ -102,7 +106,6 @@ When reporting a product or onboarding flow, write the exact action chain first.
 - Allowed main-checkout exceptions: read-only inspection; `git status`, `git diff`, verification, and cleanup audit; tiny repo hygiene changes explicitly requested by JY; fast-forwarding `dev` after an approved PR merge; and explicit branch-promotion work from `dev` to `staging` or `main`.
 - Name task branches by Linear issue key when one exists, otherwise by a short purpose. Keep one worktree/branch per code-backed issue or task unless JY explicitly approves a shared branch or stacked PR plan.
 - Do not leave untracked draft files in the main checkout. Temporary artifacts belong under ignored paths such as `work/` or `artifacts/`; source/product artifacts must belong to a branch and PR.
-- Final reports for writing tasks must state the worktree path, branch name, PR link or reason no PR was made, and any remaining dirty/untracked files.
 
 ## Worktree Closeout Gate
 
@@ -117,8 +120,6 @@ When reporting a product or onboarding flow, write the exact action chain first.
 
 - For every code-backed feature, bug fix, or behavior change, update `apps/acceptance-workbench/flows.json`, the Workbench UI, or the Workbench runner whenever the changed behavior can be verified through a real request, script, or readback flow.
 - Workbench coverage must be PM-verifiable: inputs stay editable, steps run only when JY clicks Send or Open Debug Thread, and outputs must come from the real local/API/contract path rather than simulated success data.
-- When a code change is already covered by an existing Workbench flow, final reports must name the existing flow/step used for verification.
-- When Workbench coverage is not added for a code change, final reports must explicitly state why, such as internal-only code, no PM-visible behavior, already-covered behavior, or unavailable external credentials/infrastructure.
 - Do not add Workbench flows for documentation-only changes unless JY explicitly asks for a docs acceptance path.
 
 ## Imported Claude Cowork project instructions
@@ -149,8 +150,6 @@ itself.
 - If a legacy `truth/` file has no reliable source metadata, do not invent
   history. Add source/change-log entries only for the current edit and mark older
   provenance as unknown when needed.
-- Final reports for tasks that touch `truth/` must name the touched truth files
-  and the session ID(s) logged in them.
 
 ## Product Truth Routing
 
