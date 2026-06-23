@@ -121,6 +121,14 @@ const runtimeExecution = {
     driver: "codex_automation",
     requiredWhenNoHeartbeatSystem: true,
     nameTemplate: "clawhouse-<agent_id>-paper-loop",
+    preferredKind: "heartbeat",
+    destination: "thread",
+    threadPolicy:
+      "Attach the automation to one dedicated ClawHouse thread and reuse that thread for later runs.",
+    avoidByDefault:
+      "Do not create a detached workspace cron automation by default, because it can create a new Chat for every run.",
+    detachedCronAllowedOnlyWhen:
+      "The creator explicitly asks for standalone per-run Chat output or the Codex environment cannot support thread heartbeat automations.",
     owns: ["paper_strategy_loop", "health_check"],
   },
   claudeScheduledTask: {

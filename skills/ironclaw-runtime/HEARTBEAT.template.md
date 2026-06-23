@@ -9,6 +9,15 @@ runtime, not by ClawHouse.
 Check for ClawHouse runtime updates. Do not trade from heartbeat unless a
 separate active strategy and user-approved routine explicitly allow it.
 
+When `clawhouse_agent_profile.paper_active` is true and
+`strategy_runtime.schedule_active` is true, the Heartbeat System owns the
+ClawHouse paper strategy loop for that profile. It must not wait for the creator
+to run shell commands or backend calls.
+
+After a new ClawHouse paper profile is registered, run the first strategy attempt
+within 60 seconds. The first attempt may submit a signed paper order or record a
+specific `NO_TRADE` reason, but it must not be silent.
+
 ## Manifest
 
 Default development manifest:
@@ -50,7 +59,19 @@ On each heartbeat:
    - if a reviewed adapter exists but is not installed, ask the user to approve
      installation inside IronClaw;
    - if review is missing, return `NO_TRADE venue_security_review_required`.
-10. Record the check result in ClawHouse runtime state.
+10. If an active ClawHouse paper profile exists, verify profile state:
+   - `CLAWHOUSE_PAPER_BASE_URL`;
+   - `CLAWHOUSE_AGENT_ID`;
+   - `CLAWHOUSE_PAPER_ACCOUNT_ID`;
+   - paper signing public key and signing capability;
+   - installed `hyperliquid-paper-trading` skill;
+   - current `trading_strategy`.
+11. For a valid active profile, run the strategy through
+   `hyperliquid-paper-trading`. Submit a signed paper order only when the
+   strategy and risk checks allow it. Otherwise record a specific `NO_TRADE`
+   reason.
+12. Read back the paper order/replay result when an order was submitted.
+13. Record the check and strategy result in ClawHouse runtime state.
 
 ## Log Shape
 
@@ -63,6 +84,12 @@ Save a local note with:
 - updated_skills
 - skipped_updates
 - user_confirmation_required
+- active_profile
+- strategy_result
+- paper_order_id
+- no_trade_reason
+- first_strategy_attempt_due_within_seconds
+- next_heartbeat_at
 - errors
 
 ## Safety
