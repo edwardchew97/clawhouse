@@ -882,7 +882,7 @@ function chartModel(agent) {
 
   const safeValues = values.length >= 2 ? values : [];
   const points = safeValues.length >= 2 ? chartPointsForValues(safeValues, pointRows) : [];
-  const chartEvents = activity ? paperChartEvents(allPaperOrders) : events.slice(-40);
+  const chartEvents = activity ? paperChartEvents(events) : events.slice(-40);
   const normalizedEvents = chartEvents.map((event, index) => {
     const valueIndex = nearestChartPointIndex(points, event, index, chartEvents.length);
     return activity
@@ -900,6 +900,12 @@ function chartModel(agent) {
     valueKind,
     message: safeValues.length ? `${range.label} ${source}` : `No chartable backend series in ${range.label}.`,
   };
+}
+
+function chartPointTimeBounds(points) {
+  const times = points.map((point) => point.time).filter(Number.isFinite);
+  if (!times.length) return null;
+  return { min: Math.min(...times), max: Math.max(...times) };
 }
 
 function backendLabel() {
@@ -1768,12 +1774,15 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
     byId("chartEvents").innerHTML = "";
     return;
   }
+  const timeBounds = chartPointTimeBounds(model.points);
   const eventHtml = model.events.map((event, eventIndex) => {
     if (event.timeValue === null || event.chartValue === null) return "";
+    if (timeBounds && (event.timeValue < timeBounds.min || event.timeValue > timeBounds.max)) return "";
     const visible = unlocked || event.public === true;
     const rawX = pnlTradingViewChart.timeScale().timeToCoordinate(event.timeValue);
     const rawY = pnlTradingViewSeries.priceToCoordinate(event.chartValue);
     if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return "";
+    if (rawX < 0 || rawX > container.clientWidth || rawY < 0 || rawY > container.clientHeight) return "";
     const x = clamp(rawX, 24, Math.max(24, container.clientWidth - 24));
     const y = clamp(rawY, 18, Math.max(18, container.clientHeight - 18));
     const featured = activeEventId === event.id;
@@ -2051,18 +2060,22 @@ function syncChartRangeButtons() {
 
 document.querySelectorAll("[data-chart-range]").forEach((button) => {
   button.addEventListener("click", () => {
-    const nextRange = CHART_RANGES[button.dataset.chartRange] ? button.dataset.chartRange : "24h";
-    if (nextRange === activeChartRange) return;
-    activeChartRange = nextRange;
-    activeEventId = null;
-    chartAnimationPending = true;
-    syncChartRangeButtons();
-    renderHero(selectedAgent());
-    renderRoom(selectedAgent());
-    syncContentColumns();
-    dispatchUiEvent("clawhouse:chart-range-change");
+    setChartRange(button.dataset.chartRange);
   });
 });
+
+function setChartRange(range) {
+  const nextRange = CHART_RANGES[range] ? range : "24h";
+  if (nextRange === activeChartRange) return;
+  activeChartRange = nextRange;
+  activeEventId = null;
+  chartAnimationPending = true;
+  syncChartRangeButtons();
+  renderHero(selectedAgent());
+  renderRoom(selectedAgent());
+  syncContentColumns();
+  dispatchUiEvent("clawhouse:chart-range-change");
+}
 
 const agentSortControl = byId("agentSort");
 if (agentSortControl) {
@@ -2165,6 +2178,7 @@ window.ClawHouseDemo = {
   getKeyAmount: () => byId("keyAmount")?.value || "1",
   getChartRange: () => activeChartRange,
   getChartModel: () => chartModel(selectedAgent()),
+  setChartRange,
   setChainState,
   showToast
 };
