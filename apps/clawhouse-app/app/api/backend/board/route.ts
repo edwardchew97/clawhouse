@@ -7,6 +7,7 @@ import {
   publicBackendConfig,
   requireBoardId,
 } from "../lib";
+import { paperAccountIdForBoard } from "./paper-activity";
 import {
   clearHolderReadCookie,
   holderReadCookieName,
@@ -45,18 +46,27 @@ export async function GET(request: Request) {
       fetchBackendJson(`${path}/prices`, detailOptions),
       fetchBackendJson("/paper/leaderboard"),
     ]);
+    const boardValue = settledValue(board);
+    const paperLeaderboardValue = settledValue(paperLeaderboard);
+    const paperAccountId = paperAccountIdForBoard(boardValue, paperLeaderboardValue, boardId);
+    const paperActivity = paperAccountId
+      ? await Promise.allSettled([
+          fetchBackendJson(`/paper/accounts/${encodeURIComponent(paperAccountId)}/activity?limit=120`),
+        ]).then((results) => results[0])
+      : null;
 
     const response = NextResponse.json({
       ok: board.status === "fulfilled",
       config: publicBackendConfig(),
       boardId,
-      board: settledValue(board),
+      board: boardValue,
       events: settledValue(events),
       portfolio: settledValue(portfolio),
       pnl: settledValue(pnl),
       balanceChanges: settledValue(balanceChanges),
       prices: settledValue(prices),
-      paperLeaderboard: settledValue(paperLeaderboard),
+      paperLeaderboard: paperLeaderboardValue,
+      paperActivity: paperActivity ? settledValue(paperActivity) : null,
       errors: {
         board: settledError(board),
         events: settledError(events),
@@ -65,6 +75,7 @@ export async function GET(request: Request) {
         balanceChanges: settledError(balanceChanges),
         prices: settledError(prices),
         paperLeaderboard: settledError(paperLeaderboard),
+        paperActivity: paperActivity ? settledError(paperActivity) : null,
       },
     });
     if (clearReadCookie) clearHolderReadCookie(response);

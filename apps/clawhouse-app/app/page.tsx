@@ -158,19 +158,19 @@ export default function Page() {
             </section>
 
             <section className="panel position">
-              <div className="panel-title">Your Key Position</div>
-              <div className="panel-sub">Key balance only, not copy-trade portfolio</div>
+              <div className="panel-title" id="positionTitle">Your Key Position</div>
+              <div className="panel-sub" id="positionSub">Key balance only, not copy-trade portfolio</div>
               <div className="position-grid">
                 <div className="stat">
-                  <label>Keys</label>
+                  <label id="posKeysLabel">Keys</label>
                   <strong id="posKeys">--</strong>
                 </div>
                 <div className="stat">
-                  <label>Entry</label>
+                  <label id="posEntryLabel">Entry</label>
                   <strong id="posEntry">-</strong>
                 </div>
                 <div className="stat">
-                  <label>Exit</label>
+                  <label id="posExitLabel">Exit</label>
                   <strong id="posExit">-</strong>
                 </div>
               </div>
@@ -179,8 +179,8 @@ export default function Page() {
             <section className="panel key-activity">
               <div className="key-activity-head">
                 <div>
-                  <div className="panel-title">Key Trading Activity</div>
-                  <div className="panel-sub">NEAR testnet key market</div>
+                  <div className="panel-title" id="activityPanelTitle">Key Trading Activity</div>
+                  <div className="panel-sub" id="activityPanelSub">NEAR testnet key market</div>
                 </div>
               </div>
               <div className="activity-list key-activity-list" id="keyActivityList">

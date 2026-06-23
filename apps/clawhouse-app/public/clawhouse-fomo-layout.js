@@ -41,6 +41,7 @@ let chainState = {
 };
 
 const TICKER_PX_PER_SECOND = 18;
+const BACKEND_REFRESH_MS = 60_000;
 const CHART_RANGES = {
   "1h": { label: "1H", hours: 1 },
   "24h": { label: "24H", hours: 24 },
@@ -379,6 +380,40 @@ function paperLeaderboardRow(agent) {
   return rows.find((row) => row?.agent_id === agent.id) ?? null;
 }
 
+function paperActivity(agent) {
+  if (!backendApplies(agent) || !chainState.backend?.ok) return null;
+  const activity = chainState.backend?.paperActivity;
+  if (!activity?.ok || !activity.account) return null;
+  const row = paperLeaderboardRow(agent);
+  if (row?.paper_account_id && activity.account.id !== row.paper_account_id) return null;
+  if (activity.account.agent_id && activity.account.agent_id !== agent.id) return null;
+  return activity;
+}
+
+function paperOrders(agent) {
+  const orders = paperActivity(agent)?.orders;
+  return Array.isArray(orders) ? orders : [];
+}
+
+function paperFills(agent) {
+  const fills = paperActivity(agent)?.fills;
+  return Array.isArray(fills) ? fills : [];
+}
+
+function paperPositions(agent) {
+  const positions = paperActivity(agent)?.positions;
+  return Array.isArray(positions) ? positions : [];
+}
+
+function paperRiskSnapshots(agent) {
+  const snapshots = paperActivity(agent)?.risk_snapshots;
+  return Array.isArray(snapshots) ? snapshots : [];
+}
+
+function paperSummary(agent) {
+  return paperActivity(agent)?.summary ?? {};
+}
+
 function discoveryPnl(agent) {
   if (agent.pnl === null || agent.pnl === undefined || agent.pnl === "") return null;
   return asNumber(agent.pnl);
@@ -446,7 +481,34 @@ function formatBackendAmount(amount, asset) {
   return `${value}${asset ? ` ${asset}` : ""}`;
 }
 
+function formatUsd(value) {
+  const numeric = asNumber(value);
+  if (numeric === null) return "--";
+  return `$${numeric.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatUtcTime(value) {
+  if (!value) return "--";
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return String(value);
+  return new Date(parsed).toISOString().replace(".000Z", "Z");
+}
+
+function compactNumber(value, digits = 4) {
+  const numeric = asNumber(value);
+  if (numeric === null) return "--";
+  if (Math.abs(numeric) >= 100) return numeric.toFixed(0);
+  if (Math.abs(numeric) >= 1) return numeric.toFixed(2);
+  return numeric.toFixed(digits).replace(/0+$/, "").replace(/\.$/, "");
+}
+
 function formatBackendAction(event) {
+  if (isPaperTradeEvent(event) && event.coin && event.size) {
+    const action = titleCase(event.side || "order");
+    const amount = formatBackendAmount(event.size, event.coin);
+    const px = asNumber(event.avg_fill_px);
+    return px === null ? `${action} ${amount}` : `${action} ${amount} @ ${formatUsd(px)}`;
+  }
   const input = formatBackendAmount(event.amount_in, event.asset_in);
   const output = formatBackendAmount(event.amount_out, event.asset_out);
   if (input && output) return `${input} -> ${output}`;
@@ -527,6 +589,45 @@ function normalizeBackendEvent(event, index, agent, valueIndex, point) {
   };
 }
 
+function normalizePaperOrderEvent(order, index, agent, valueIndex, point) {
+  const status = order.status || "paper_order";
+  const coin = String(order.coin || "").toUpperCase();
+  const side = String(order.side || "order").toLowerCase();
+  const raw = {
+    ...order,
+    event_type: "paper_trade",
+    status_claim: status,
+    metadata: {
+      source: "paper_orders",
+      venue: "hyperliquid-paper",
+      market_type: order.market_type,
+      coin,
+      side,
+      leverage: order.leverage,
+    },
+  };
+  const title = `${coin || "Paper"} ${titleCase(side)}`;
+  const action = formatBackendAction(raw);
+  const reject = order.reject_reason ? ` Reject: ${order.reject_reason}.` : "";
+  return {
+    id: order.id || `paper-order-${index}`,
+    index: valueIndex,
+    timeValue: point?.time ?? null,
+    chartValue: point?.value ?? null,
+    title,
+    label: status,
+    time: formatBackendTime(order.created_at),
+    action,
+    move: status,
+    summary: `${action}. Backend paper order status: ${status}.${reject}`,
+    reason: order.reason || order.reject_reason || "No paper order reason was supplied.",
+    sources: backendEventSources(raw, agent),
+    raw,
+    backend: true,
+    public: true,
+  };
+}
+
 function backendEventSources(event, agent) {
   const sources = [
     `network: ${eventNetwork(event, agent)}`,
@@ -589,6 +690,14 @@ function normalizeSeries(values) {
   return numeric.map((value) => ((value - first) / Math.abs(first)) * 100);
 }
 
+function paperRiskPctValues(rows, startingBalance) {
+  const start = asNumber(startingBalance);
+  const equities = rows.map((row) => asNumber(row.equity_usd));
+  if (equities.some((value) => value === null)) return [];
+  if (start === null || start <= 0) return normalizeSeries(rows.map((row) => row.equity_usd));
+  return equities.map((value) => ((value - start) / start) * 100);
+}
+
 function chartPointTime(row, index, total, startTime, endTime) {
   const parsed = rowTimestamp(row);
   if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
@@ -634,7 +743,15 @@ function nearestChartPointIndex(points, row, fallbackIndex, totalRows) {
 function chartModel(agent) {
   const range = chartRangeMeta();
   const rangePrefix = `${range.label} / `;
-  if (!chainState.accountId) {
+  if (!chainState.backend || !backendApplies(agent)) {
+    return { values: [], points: [], events: [], tone: "idle", title: "Backend chart loading", message: `${rangePrefix}Reading backend for this agent.` };
+  }
+  if (!chainState.backend.ok) {
+    return { values: [], points: [], events: [], tone: "error", title: "Backend chart unavailable", message: `${rangePrefix}${backendErrorMessage()}` };
+  }
+
+  const activity = paperActivity(agent);
+  if (!chainState.accountId && !activity) {
     return {
       values: [],
       points: [],
@@ -644,21 +761,29 @@ function chartModel(agent) {
       message: `${rangePrefix}Connect Wallet to load holder-gated chart data.`,
     };
   }
-  if (!chainState.backend || !backendApplies(agent)) {
-    return { values: [], points: [], events: [], tone: "idle", title: "Backend chart loading", message: `${rangePrefix}Reading backend for this agent.` };
-  }
-  if (!chainState.backend.ok) {
-    return { values: [], points: [], events: [], tone: "error", title: "Backend chart unavailable", message: `${rangePrefix}${backendErrorMessage()}` };
-  }
 
-  const events = filterRowsForChartRange(sortedByObservedAt(backendEvents(agent)));
+  const paperRiskRows = activity
+    ? filterRowsForChartRange(sortedByObservedAt(paperRiskSnapshots(agent))).filter((row) => asNumber(row.equity_usd) !== null)
+    : [];
+  const events = activity
+    ? filterRowsForChartRange(sortedByObservedAt(paperOrders(agent)))
+    : filterRowsForChartRange(sortedByObservedAt(backendEvents(agent)));
   const prices = filterRowsForChartRange(sortedByObservedAt(backendPrices(agent))).filter((row) => asNumber(row.price_usd) !== null);
   const balanceChanges = filterRowsForChartRange(sortedByObservedAt(backendBalanceChanges(agent)));
   let values = [];
   let pointRows = [];
-  let source = "backend events";
+  let source = activity ? "paper risk timeline" : "backend events";
 
-  if (prices.length >= 2) {
+  if (paperRiskRows.length > 0) {
+    const startingBalance = asNumber(activity.account?.starting_balance_usd);
+    const firstRiskTime = rowTimestamp(paperRiskRows[0]);
+    const accountTime = rowTimestamp(activity.account);
+    const baseline = startingBalance !== null && Number.isFinite(accountTime) && (!Number.isFinite(firstRiskTime) || accountTime < firstRiskTime)
+      ? { created_at: activity.account.created_at, equity_usd: startingBalance }
+      : null;
+    pointRows = baseline ? [baseline, ...paperRiskRows] : paperRiskRows;
+    values = paperRiskPctValues(pointRows, startingBalance);
+  } else if (prices.length >= 2) {
     values = normalizeSeries(prices.map((row) => row.price_usd));
     pointRows = prices;
     source = "backend price snapshots";
@@ -681,9 +806,12 @@ function chartModel(agent) {
 
   const safeValues = values.length >= 2 ? values : [];
   const points = safeValues.length >= 2 ? chartPointsForValues(safeValues, pointRows) : [];
-  const normalizedEvents = events.map((event, index) => {
-    const valueIndex = nearestChartPointIndex(points, event, index, events.length);
-    return normalizeBackendEvent(event, index, agent, valueIndex, points[valueIndex]);
+  const chartEvents = events.slice(-40);
+  const normalizedEvents = chartEvents.map((event, index) => {
+    const valueIndex = nearestChartPointIndex(points, event, index, chartEvents.length);
+    return activity
+      ? normalizePaperOrderEvent(event, index, agent, valueIndex, points[valueIndex])
+      : normalizeBackendEvent(event, index, agent, valueIndex, points[valueIndex]);
   });
 
   return {
@@ -760,6 +888,36 @@ function errorMessage(error, fallback) {
 
 let keyMarketRefreshTimer = 0;
 let keyMarketRefreshId = 0;
+let backendRefreshTimer = 0;
+let backendRefreshId = 0;
+
+function scheduleBackendRefresh(reason, delayMs = 0) {
+  window.clearTimeout(backendRefreshTimer);
+  backendRefreshTimer = window.setTimeout(() => {
+    void refreshBackendRead(reason);
+  }, delayMs);
+}
+
+async function refreshBackendRead(_reason) {
+  const agent = selectedAgent();
+  const refreshId = ++backendRefreshId;
+  try {
+    const backend = await fetchJson(`/api/backend/board?boardId=${encodeURIComponent(agent.boardId || agent.id)}`);
+    if (refreshId !== backendRefreshId) return;
+    chainState = {
+      ...chainState,
+      backend,
+    };
+  } catch (error) {
+    if (refreshId !== backendRefreshId) return;
+    chainState = {
+      ...chainState,
+      backend: { ok: false, error: errorMessage(error, "Backend read failed.") },
+    };
+  }
+  render();
+  scheduleBackendRefresh("poll", BACKEND_REFRESH_MS);
+}
 
 function scheduleKeyMarketRefresh(reason, delayMs = 120) {
   window.clearTimeout(keyMarketRefreshTimer);
@@ -825,6 +983,7 @@ async function loadDiscoveryAgents() {
     };
     chartAnimationPending = true;
     render();
+    scheduleBackendRefresh("discovery", 0);
     scheduleKeyMarketRefresh("discovery", 0);
     dispatchUiEvent("clawhouse:agent-change");
   } catch (error) {
@@ -928,13 +1087,14 @@ function renderAgentList() {
     const title = agentTitle(agent);
     const pnlTone = pnl === null ? "empty" : pnl < 0 ? "down" : "up";
     const holders = holderCount(agent);
+    const rowTag = isPaperAgent(agent) ? "paper" : "key market";
     return `
     <button class="agent-row" data-agent="${escapeHtml(selectionKey)}" data-agent-id="${escapeHtml(agent.id)}" data-selected="${selected ? "true" : "false"}" aria-label="Open ${escapeHtml(title)}">
       <div class="avatar">${agentIcon(agent)}</div>
       <div class="agent-copy">
         <div class="agent-name">
           <span class="agent-title" title="${escapeHtml(agent.name)}">${escapeHtml(title)}</span>
-          <span class="tag">key market</span>
+          <span class="tag">${escapeHtml(rowTag)}</span>
         </div>
         <div class="agent-meta">${escapeHtml(agent.strategy)}</div>
         <div class="agent-stats">
@@ -954,6 +1114,7 @@ function renderAgentList() {
       chartAnimationPending = true;
       clearQuote();
       render();
+      scheduleBackendRefresh("agent-change", 0);
       scheduleKeyMarketRefresh("agent-change", 0);
       dispatchUiEvent("clawhouse:agent-change");
       animateAgentChange();
@@ -966,6 +1127,9 @@ function renderHero(agent) {
   const pnlSource = backendPnlSource(agent);
   const chart = chartModel(agent);
   const title = agentTitle(agent);
+  const activity = paperActivity(agent);
+  const summary = paperSummary(agent);
+  const latestRiskAt = summary.latest_risk_at || activity?.latest_risk?.created_at;
   byId("heroAvatar").innerHTML = agentIcon(agent);
   byId("heroBannerImage").src = agent.bannerUrl || DEFAULT_AGENT_BANNER_URL;
   byId("heroName").textContent = title;
@@ -975,14 +1139,18 @@ function renderHero(agent) {
   byId("statKey").textContent = keyPriceLabel(agent).replace(" tNEAR", "");
   const holders = holderCount(agent);
   byId("statHolders").textContent = holders === null ? "--" : holders.toLocaleString();
-  byId("statUpdate").textContent = chainApplies(agent) ? "testnet live" : backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
+  byId("statUpdate").textContent = latestRiskAt
+    ? formatUtcTime(latestRiskAt)
+    : chainApplies(agent) ? "testnet live" : backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
   byId("statGate").textContent = isUnlocked(agent) ? "Unlocked" : holderBalance(agent) > 0 ? "Sign proof" : "1 key";
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
   byId("miniTop").textContent = title;
   byId("miniMove").textContent = pnl === null ? "--" : signedPct(pnl);
   byId("leaderDataSource").textContent = pnlSource;
-  byId("chartSub").textContent = `${chart.message} / ${backendNetwork(agent)} / ${pnlSource} / key market ${chainApplies(agent) ? "live" : "checking"}`;
+  byId("chartSub").textContent = activity
+    ? `${chart.message} / ${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled orders / ${backendNetwork(agent)}`
+    : `${chart.message} / ${backendNetwork(agent)} / ${pnlSource} / key market ${chainApplies(agent) ? "live" : "checking"}`;
 }
 
 function publicEventText(event) {
@@ -1035,6 +1203,11 @@ function renderRoom(agent) {
 }
 
 function renderKeyActivity(agent) {
+  if (paperActivity(agent)) {
+    renderPaperActivity(agent);
+    return;
+  }
+  setActivityHeader("Key Trading Activity", "NEAR testnet key market");
   const rows = keyActivityRows(agent);
   if (!rows.length) {
     renderBackendEmpty(
@@ -1055,6 +1228,63 @@ function renderKeyActivity(agent) {
       <span class="activity-value">${row.linkUrl ? `<a href="${escapeHtml(row.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.side)}</a>` : escapeHtml(row.side)}</span>
     </div>
   `).join("");
+}
+
+function renderPaperActivity(agent) {
+  const summary = paperSummary(agent);
+  const latestRiskAt = summary.latest_risk_at ? `risk ${formatUtcTime(summary.latest_risk_at)}` : "risk pending";
+  setActivityHeader(
+    "Paper Trading Activity",
+    `${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled orders / ${latestRiskAt}`
+  );
+  const rows = paperActivityRows(agent);
+  if (!rows.length) {
+    renderBackendEmpty(
+      "keyActivityList",
+      "No paper orders yet",
+      "Paper order requests and fills will appear here after the agent submits orders."
+    );
+    return;
+  }
+
+  byId("keyActivityList").innerHTML = rows.slice(0, 7).map((row) => `
+    <div class="activity-row key-activity-row ${escapeHtml(row.tone)}">
+      <span class="activity-action">${escapeHtml(row.title)}</span>
+      <span class="activity-main">
+        <b>${escapeHtml(row.amountLabel)}</b>
+        <span>${escapeHtml(row.detail)}</span>
+      </span>
+      <span class="activity-value">${escapeHtml(row.value)}</span>
+    </div>
+  `).join("");
+}
+
+function setActivityHeader(title, subtitle) {
+  byId("activityPanelTitle").textContent = title;
+  byId("activityPanelSub").textContent = subtitle;
+}
+
+function paperActivityRows(agent) {
+  return paperOrders(agent).map((order) => {
+    const filled = order.status === "filled";
+    const rejected = order.status === "rejected";
+    const side = String(order.side || "order").toLowerCase();
+    const coin = String(order.coin || "").toUpperCase();
+    const size = compactNumber(order.size);
+    const px = asNumber(order.avg_fill_px);
+    const leverage = asNumber(order.leverage);
+    const title = rejected ? "REJ" : side === "sell" ? "SELL" : "BUY";
+    const detail = rejected
+      ? order.reject_reason || "rejected"
+      : `${order.market_type || "paper"} ${order.margin_mode || "cross"}${leverage ? ` ${compactNumber(leverage, 1)}x` : ""}`;
+    return {
+      title,
+      amountLabel: `${size} ${coin}`.trim(),
+      detail,
+      value: filled && px !== null ? formatUsd(px) : titleCase(order.status || "order"),
+      tone: rejected || side === "sell" ? "sell" : "buy",
+    };
+  });
 }
 
 function keyActivityRows(agent) {
@@ -1134,10 +1364,11 @@ function renderTicket(agent) {
     button.disabled = busy;
   });
   if (keyAmount) keyAmount.disabled = busy;
-  byId("posKeys").textContent = balance === null ? "--" : balance.toString();
-  byId("posEntry").textContent = "-";
-  byId("posExit").textContent = "-";
-  byId("posExit").className = "";
+  if (paperActivity(agent)) {
+    renderPaperPosition(agent);
+  } else {
+    renderKeyPosition(balance);
+  }
   byId("gateButton").textContent = isUnlocked(agent)
     ? "Room open"
     : balance && balance > 0
@@ -1150,6 +1381,43 @@ function renderTicket(agent) {
     walletButton.disabled = busy;
   }
   renderBackendStatus();
+}
+
+function renderKeyPosition(balance) {
+  byId("positionTitle").textContent = "Your Key Position";
+  byId("positionSub").textContent = "Key balance only, not copy-trade portfolio";
+  byId("posKeysLabel").textContent = "Keys";
+  byId("posEntryLabel").textContent = "Entry";
+  byId("posExitLabel").textContent = "Exit";
+  byId("posKeys").textContent = balance === null ? "--" : balance.toString();
+  byId("posEntry").textContent = "-";
+  byId("posExit").textContent = "-";
+  byId("posExit").className = "";
+}
+
+function renderPaperPosition(agent) {
+  const activity = paperActivity(agent);
+  const summary = paperSummary(agent);
+  const risk = activity?.latest_risk;
+  const positions = paperPositions(agent);
+  byId("positionTitle").textContent = "Paper Positions";
+  byId("positionSub").textContent = `${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled orders / ${formatUtcTime(summary.latest_risk_at || risk?.created_at)}`;
+  byId("posKeysLabel").textContent = "Equity";
+  byId("posKeys").textContent = formatUsd(risk?.equity_usd);
+
+  const first = positions[0];
+  const second = positions[1];
+  byId("posEntryLabel").textContent = first?.coin || "Position";
+  byId("posEntry").textContent = first ? paperPositionLabel(first) : "--";
+  byId("posExitLabel").textContent = second?.coin || "Notional";
+  byId("posExit").textContent = second ? paperPositionLabel(second) : formatUsd(risk?.total_notional_usd);
+  byId("posExit").className = "";
+}
+
+function paperPositionLabel(position) {
+  const size = asNumber(position.signed_size);
+  if (size === null) return "--";
+  return `${size > 0 ? "+" : ""}${compactNumber(size)} ${position.coin || ""}`.trim();
 }
 
 function statusButtonText() {
@@ -1293,14 +1561,15 @@ function tradingViewEventMarkers(model) {
   return model.events
     .filter((event) => event.timeValue !== null && event.chartValue !== null)
     .map((event, index) => {
+      const visible = unlocked || event.public === true;
       const status = String(event.raw?.status_claim || event.label || "").toLowerCase();
       const failed = status.includes("fail") || status.includes("reject") || status.includes("refund");
       return {
         time: event.timeValue,
         position: event.chartValue >= 0 ? "aboveBar" : "belowBar",
-        color: unlocked ? (failed ? "#ff6a4a" : "#1ecb73") : "rgba(145, 151, 157, 0.78)",
+        color: visible ? (failed ? "#ff6a4a" : "#1ecb73") : "rgba(145, 151, 157, 0.78)",
         shape: failed ? "arrowDown" : "circle",
-        text: unlocked ? `E${index + 1}` : "",
+        text: visible ? `E${index + 1}` : "",
       };
     });
 }
@@ -1375,6 +1644,7 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
   }
   const eventHtml = model.events.map((event, eventIndex) => {
     if (event.timeValue === null || event.chartValue === null) return "";
+    const visible = unlocked || event.public === true;
     const rawX = pnlTradingViewChart.timeScale().timeToCoordinate(event.timeValue);
     const rawY = pnlTradingViewSeries.priceToCoordinate(event.chartValue);
     if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return "";
@@ -1383,13 +1653,13 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
     const labelY = y < 78 ? y + 28 : y - 46;
     return `
       <button
-        class="event-marker ${unlocked ? "" : "locked"} ${activeEventId === event.id ? "active" : ""}"
+        class="event-marker ${visible ? "" : "locked"} ${activeEventId === event.id ? "active" : ""}"
         data-chart-event="${event.id}"
         style="left:${x}px; top:${y}px"
-        aria-label="${escapeHtml(unlocked ? event.title : "Locked backend event")}"
+        aria-label="${escapeHtml(visible ? event.title : "Locked backend event")}"
       >E${eventIndex + 1}</button>
-      <span class="event-label ${unlocked ? "" : "locked"}" style="left:${x}px; top:${labelY}px">
-        ${escapeHtml(unlocked ? event.label : publicEventText(event))}
+      <span class="event-label ${visible ? "" : "locked"}" style="left:${x}px; top:${labelY}px">
+        ${escapeHtml(visible ? event.label : publicEventText(event))}
       </span>
     `;
   }).join("");
@@ -1397,10 +1667,6 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
 
   document.querySelectorAll("[data-chart-event]").forEach((button) => {
     button.addEventListener("click", () => {
-      if (!isUnlocked(selectedAgent())) {
-        showToast("Buy 1 key and sign wallet proof to unlock Agent reasoning.");
-        return;
-      }
       openEvent(button.dataset.chartEvent);
     });
   });
@@ -1408,13 +1674,13 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
 
 function openEvent(eventId) {
   const agent = selectedAgent();
-  if (!isUnlocked(agent)) {
-    showToast("Buy 1 key and sign wallet proof to unlock Agent reasoning.");
-    return;
-  }
   const model = lastPnlChartModel || chartModel(agent);
   const event = model.events.find((item) => item.id === eventId);
   if (!event) return;
+  if (!isUnlocked(agent) && event.public !== true) {
+    showToast("Buy 1 key and sign wallet proof to unlock Agent reasoning.");
+    return;
+  }
   activeEventId = event.id;
   renderChartEvents(agent, null, model);
   renderBackendEventModal(agent, event);
