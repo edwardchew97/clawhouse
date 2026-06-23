@@ -31,13 +31,24 @@ On each heartbeat:
    - no instruction asks for secrets in chat, logs, or plain files.
 7. Stop and ask the user before installing:
    - a new skill;
+   - a new trading venue skill or venue adapter;
    - a major version update;
    - any permission expansion;
    - unknown tool or MCP access;
    - missing or mismatched hashes;
    - non-ClawHouse URLs;
+   - missing security review;
    - suspicious instructions.
-8. Record the check result in ClawHouse runtime state.
+8. For a new trading venue skill or venue adapter, require recorded ClawHouse
+   security review before installation. The review must cover source URL,
+   hash/signature, permissions/tools, network endpoints, signing scope, secret
+   handling, forbidden behaviors, and dry-run or sandbox proof.
+9. If a strategy asks for a venue that is not installed, inspect the manifest:
+   - if no verified adapter exists, return `NO_TRADE unsupported_venue`;
+   - if a reviewed adapter exists but is not installed, ask the user to approve
+     installation inside IronClaw;
+   - if review is missing, return `NO_TRADE venue_security_review_required`.
+10. Record the check result in ClawHouse runtime state.
 
 ## Log Shape
 

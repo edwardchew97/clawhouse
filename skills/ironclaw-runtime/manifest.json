@@ -2,10 +2,10 @@
   "schema": "clawhouse.runtime-pack.v0",
   "pack": {
     "name": "clawhouse-ironclaw-runtime",
-    "version": "0.4.1-dev",
+    "version": "0.4.2-dev",
     "distribution_status": "development",
     "source_branch": "public-onboarding-kit-main",
-    "updated_at": "2026-06-22",
+    "updated_at": "2026-06-23",
     "heartbeat_template_url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/HEARTBEAT.template.md",
     "reset_guide_url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/RESET.md"
   },
@@ -24,19 +24,34 @@
     ],
     "always_require_user_confirmation": [
       "new_skill",
+      "new_venue_adapter",
       "major_version_update",
       "permission_expansion",
       "unknown_tool_or_mcp",
       "missing_hash",
       "hash_mismatch",
       "url_not_allowlisted",
+      "missing_security_review",
       "suspicious_instruction"
+    ],
+    "new_skill_security_review_requires": [
+      "accepted_truth_update",
+      "source_repo_and_raw_url_verified",
+      "sha256_or_signature_verified",
+      "permissions_and_tools_reviewed",
+      "network_endpoints_reviewed",
+      "signing_scope_reviewed",
+      "secret_handling_reviewed",
+      "forbidden_behaviors_reviewed",
+      "dry_run_or_sandbox_proof_recorded",
+      "human_security_approval_recorded"
     ]
   },
   "skills": [
     {
       "name": "clawhouse-ledger-reporting",
       "version": "0.1.1",
+      "role": "reporting_adapter",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md",
       "sha256": "fe4523d322377ccee3788644996a9a8e7de6f6e30f90a71930fe454186fb01f0",
@@ -72,6 +87,7 @@
     {
       "name": "hyperliquid-paper-trading",
       "version": "0.3.4",
+      "role": "venue_adapter",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
       "sha256": "b85d77cbe1af1308e577182835d67288de7019d0f159c512e76c55955e3c4ec5",
@@ -108,6 +124,21 @@
       ],
       "routing": {
         "venue": "hyperliquid-paper",
+        "security_review": {
+          "status": "grandfathered_current_required_skill",
+          "basis": "accepted_current_v0_hyperliquid_paper_runtime",
+          "new_install_security_review_required_for_future_venue_adapters": true
+        },
+        "capabilities": [
+          "paper_perps",
+          "paper_spot",
+          "cross_margin",
+          "isolated_margin",
+          "leverage",
+          "shorts",
+          "liquidation",
+          "spot_cash_and_holding_checks"
+        ],
         "use_when": [
           "paper_perps",
           "paper_spot",

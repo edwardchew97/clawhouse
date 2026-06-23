@@ -112,6 +112,13 @@ replace Scope V0 key trading.
   the creator to back up that key through IronClaw's secure local backup or
   recovery flow before funding, without exposing private key material to
   ClawHouse, Codex, chat, Workbench, tool output, or logs.
+- Venue adapter security amendment session:
+  `019ef2b1-0083-78e2-96d5-c484a2725d0b`
+- Amendment date: 2026-06-23
+- Amendment basis: JY accepted the router/core/venue-adapter runtime shape for
+  future trading venues and added a non-negotiable rule that any newly
+  installable trading venue skill must pass sufficient security review before an
+  existing agent may install it or route trades to it.
 - Backend registration amendment session:
   `019ef28a-c641-7eb2-a2a5-9bafa8ed67b9`
 - Amendment date: 2026-06-23
@@ -225,13 +232,30 @@ ClawHouse provides a runtime skill pack for IronClaw:
   Hyperliquid-style paper orders, submit them to ClawHouse, read fills,
   positions, risk, liquidation, and replay proof, and stop when market/risk data
   is stale.
-- future trading skills: add one separate venue/value adapter per trading
-  pattern through the same manifest verification path before onboarding can
-  route agents to that pattern.
+- future trading skills: add one separate venue adapter per trading pattern
+  through the same manifest verification path before onboarding can route agents
+  to that pattern.
+
+The future runtime shape should stay split:
+
+- `clawhouse-paper-trading-router`: chooses the installed venue adapter from the
+  verified manifest and refuses unsupported venues.
+- `clawhouse-paper-order-core`: owns shared ClawHouse paper account, signed
+  request, idempotency, replay, and `NO_TRADE` rules.
+- venue adapters such as `hyperliquid-paper-trading`: own only one venue's
+  market semantics, risk vocabulary, and venue-specific decision rules.
 
 Current agents may route Hyperliquid paper perps and Hyperliquid paper spot to
 `hyperliquid-paper-trading`. Do not route real value movement or unsupported
 venues to that skill.
+
+New venue adapter skills are not low-risk updates. A new adapter must remain
+discovery-only until ClawHouse records a security review that covers source URL,
+hash/signature, permission and tool changes, network endpoints, signing scope,
+secret handling, forbidden behaviors, and at least one dry-run or sandbox proof.
+Heartbeat may notify the agent that a reviewed adapter exists, but it must not
+install or route to the adapter until the user approves installation inside
+IronClaw.
 
 Do not mix deposit, recipient, refund, swap quote, or real transfer fields into
 ClawHouse paper orders.
@@ -338,14 +362,19 @@ The manifest should declare:
 - skill URL;
 - sha256 hash;
 - whether the skill is required;
+- skill role such as router, core, reporting, or venue adapter;
+- routing venue, market types, and capabilities when the skill is a venue
+  adapter;
 - required permissions/tools;
 - forbidden behaviors;
+- security-review status for newly introduced skills or venue adapters;
 - whether the update may auto-install or requires user confirmation.
 
 Heartbeat may periodically check the manifest. It can only auto-install updates
 that pass URL allowlist, hash/signature, name, version, and permission checks.
-New skills, major version updates, permission expansion, unknown tools/MCPs, or
-suspicious content must stop for user confirmation.
+New skills, new venue adapters, major version updates, permission expansion,
+unknown tools/MCPs, missing security review, or suspicious content must stop for
+user confirmation. Missing security review is a hard blocker, not a warning.
 
 ## Non-Negotiable Product Rules
 
@@ -617,6 +646,9 @@ The first Agent Trading slice is done only when:
   `paper_account_id` from ClawHouse backend, save the agent as active, and create
   the key market through an agent-side action without requiring ClawHouse backend
   to execute trades or create the key market for the agent.
+- future non-Hyperliquid venue support has a manifest-level adapter path that
+  requires accepted truth and recorded security review before installation or
+  routing.
 
 ## Open Decisions
 
@@ -711,6 +743,12 @@ The first Agent Trading slice is done only when:
   backend requests and NEAR testnet key-market creation, with an onboarding
   backup reminder that keeps private key material out of ClawHouse, Codex, chat,
   Workbench, tool output, and logs.
+- 2026-06-23 - `019ef2b1-0083-78e2-96d5-c484a2725d0b` - Accepted the future
+  paper-trading runtime split into router, shared paper-order core, and separate
+  venue adapters. Added the security gate that any newly installable venue
+  adapter must have recorded source, hash/signature, permission, endpoint,
+  signing-scope, secret-handling, forbidden-behavior, and dry-run/sandbox review
+  before an existing agent can install or route to it.
 - 2026-06-23 - `019ef28a-c641-7eb2-a2a5-9bafa8ed67b9` - Added backend-visible
   activation to Agent Trading onboarding: the onboarding skill uses one signed
   creator-onboarding provisioning endpoint and must read back `agent_id`,
