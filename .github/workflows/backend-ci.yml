@@ -47,5 +47,8 @@ jobs:
       - name: Vercel runtime import check
         run: bun run vercel:runtime-check
 
+      - name: Vercel build migration script check
+        run: bun run vercel:build
+
       - name: Test
         run: bun test

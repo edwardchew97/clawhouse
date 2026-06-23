@@ -1,4 +1,4 @@
-import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openRuntimeLedgerDb, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
+import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openMigratedRuntimeLedgerDb, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAgentAuthPayload, canonicalAuthPayload, readAgentSignedHeaders, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
 import { refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
 import { listKeyMarketTrades, reportKeyMarketTrade } from "./key-market.js";
@@ -2343,7 +2343,7 @@ function isUniqueViolation(error: unknown) {
 if (import.meta.main) {
   const port = Number(process.env.AGENT_BOARD_LEDGER_PORT ?? 4321);
   try {
-    const db = await openRuntimeLedgerDb();
+    const db = await openMigratedRuntimeLedgerDb();
     const app = createApp({ db });
     Bun.serve({
       port,

@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "bun scripts/vercel-build.ts",
   "functions": {
     "api/**/*.ts": {
       "maxDuration": 60

@@ -63,6 +63,22 @@ GitHub Actions only runs tests:
 GitHub Actions does not deploy to Vercel. Do not add `VERCEL_TOKEN` unless we
 intentionally switch back to a GitHub Actions deployment model.
 
+## Schema Migrations
+
+Hosted requests must not run schema migrations. The Vercel build command runs
+`bun scripts/vercel-build.ts`, which runs the Neon migration only when
+`VERCEL_ENV=production`. Preview and local builds skip the migration.
+
+For manual operations, run:
+
+```bash
+bun run db:migrate:neon
+```
+
+Use `bun run db:check:neon` for read-only schema checks. Do not use public
+runtime endpoints such as `/health`, `/boards`, `/paper/...`, or `/api/cron` as
+a migration trigger.
+
 ## Routing
 
 The hosted service keeps the existing Ledger API shape:
