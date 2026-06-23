@@ -690,12 +690,10 @@ function normalizeSeries(values) {
   return numeric.map((value) => ((value - first) / Math.abs(first)) * 100);
 }
 
-function paperRiskPctValues(rows, startingBalance) {
-  const start = asNumber(startingBalance);
+function paperNetWorthValues(rows) {
   const equities = rows.map((row) => asNumber(row.equity_usd));
   if (equities.some((value) => value === null)) return [];
-  if (start === null || start <= 0) return normalizeSeries(rows.map((row) => row.equity_usd));
-  return equities.map((value) => ((value - start) / start) * 100);
+  return equities;
 }
 
 function chartPointTime(row, index, total, startTime, endTime) {
@@ -773,6 +771,7 @@ function chartModel(agent) {
   let values = [];
   let pointRows = [];
   let source = activity ? "paper risk timeline" : "backend events";
+  let valueKind = "pct";
 
   if (paperRiskRows.length > 0) {
     const startingBalance = asNumber(activity.account?.starting_balance_usd);
@@ -782,7 +781,9 @@ function chartModel(agent) {
       ? { created_at: activity.account.created_at, equity_usd: startingBalance }
       : null;
     pointRows = baseline ? [baseline, ...paperRiskRows] : paperRiskRows;
-    values = paperRiskPctValues(pointRows, startingBalance);
+    values = paperNetWorthValues(pointRows);
+    source = "paper net worth";
+    valueKind = "usd";
   } else if (prices.length >= 2) {
     values = normalizeSeries(prices.map((row) => row.price_usd));
     pointRows = prices;
@@ -806,7 +807,7 @@ function chartModel(agent) {
 
   const safeValues = values.length >= 2 ? values : [];
   const points = safeValues.length >= 2 ? chartPointsForValues(safeValues, pointRows) : [];
-  const chartEvents = events.slice(-40);
+  const chartEvents = events.slice(activity ? -12 : -40);
   const normalizedEvents = chartEvents.map((event, index) => {
     const valueIndex = nearestChartPointIndex(points, event, index, chartEvents.length);
     return activity
@@ -821,6 +822,7 @@ function chartModel(agent) {
     tone: "success",
     title: safeValues.length ? undefined : "No chart data yet",
     source,
+    valueKind,
     message: safeValues.length ? `${range.label} ${source}` : `No chartable backend series in ${range.label}.`,
   };
 }
@@ -1453,6 +1455,14 @@ function axisPctLabel(value) {
   return `${display > 0 ? "+" : ""}${display}%`;
 }
 
+function chartValueFormatter(model) {
+  return model?.valueKind === "usd" ? formatUsd : axisPctLabel;
+}
+
+function chartValueLabel(model, value) {
+  return chartValueFormatter(model)(value);
+}
+
 let pnlTradingViewChart = null;
 let pnlTradingViewSeries = null;
 let pnlTradingViewMarkers = null;
@@ -1601,6 +1611,16 @@ function drawChart(agent) {
     lineColor: colors.line,
     topColor: colors.top,
     bottomColor: colors.bottom,
+    priceFormat: {
+      type: "custom",
+      formatter: chartValueFormatter(model),
+      minMove: 0.01,
+    },
+  });
+  pnlTradingViewChart.applyOptions({
+    localization: {
+      priceFormatter: chartValueFormatter(model),
+    },
   });
   pnlTradingViewSeries.setData(model.points);
   pnlTradingViewMarkers.setMarkers(tradingViewEventMarkers(model));
@@ -1619,11 +1639,12 @@ function updatePriceMarker(model) {
   const container = byId("pnlChart");
   const latest = model.values[model.values.length - 1];
   const y = pnlTradingViewSeries?.priceToCoordinate(latest);
+  const trend = chartTrend(model);
   marker.hidden = false;
-  marker.textContent = signedPct(latest);
-  marker.style.background = latest >= 0 ? "var(--green)" : "var(--red)";
-  marker.style.color = latest >= 0 ? "#03140b" : "#230702";
-  marker.style.boxShadow = latest >= 0 ? "0 0 24px rgba(32, 239, 131, 0.28)" : "0 0 24px rgba(255, 106, 74, 0.26)";
+  marker.textContent = chartValueLabel(model, latest);
+  marker.style.background = trend >= 0 ? "var(--green)" : "var(--red)";
+  marker.style.color = trend >= 0 ? "#03140b" : "#230702";
+  marker.style.boxShadow = trend >= 0 ? "0 0 24px rgba(32, 239, 131, 0.28)" : "0 0 24px rgba(255, 106, 74, 0.26)";
   if (container && Number.isFinite(y)) marker.style.top = `${container.offsetTop + y}px`;
 }
 
@@ -2091,6 +2112,7 @@ window.ClawHouseDemo = {
   getTradeSide: () => tradeSide,
   getKeyAmount: () => byId("keyAmount")?.value || "1",
   getChartRange: () => activeChartRange,
+  getChartModel: () => chartModel(selectedAgent()),
   setChainState,
   showToast
 };
