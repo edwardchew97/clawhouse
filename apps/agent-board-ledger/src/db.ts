@@ -255,6 +255,15 @@ export function migrate(db: Database) {
     CREATE INDEX IF NOT EXISTS events_client_event_idx ON events(board_id, client_event_id);
     CREATE INDEX IF NOT EXISTS events_tx_hash_idx ON events(board_id, tx_hash);
     CREATE INDEX IF NOT EXISTS events_intent_idx ON events(board_id, intent_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS events_client_event_unique_idx
+      ON events(board_id, client_event_id)
+      WHERE client_event_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS events_tx_hash_unique_idx
+      ON events(board_id, tx_hash)
+      WHERE tx_hash IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS events_intent_unique_idx
+      ON events(board_id, intent_id)
+      WHERE intent_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS attachments (
       id TEXT PRIMARY KEY,

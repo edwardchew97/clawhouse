@@ -242,120 +242,121 @@ export async function submitPaperOrder(
   await assertPaperSignedRequest(db, request, body.raw, path, account, Date.parse(createdAt), createdAt);
   const bodyHash = sha256Hex(body.raw);
 
-  const existing = await db.get<PaperOrderRow>(
-    "SELECT * FROM paper_orders WHERE paper_account_id = ? AND client_order_id = ?",
-    [account.id, input.clientOrderId],
-  );
-  if (existing) {
-    if (existing.body_hash !== null && existing.body_hash !== bodyHash) {
-      throw new RequestError("client_order_id body mismatch", 409);
-    }
-    return { ok: true, idempotent: true, order: presentOrder(existing), fills: await listFills(db, existing.id) };
-  }
-
-  if (account.status !== "active") {
-    return await insertRejectedOrder(db, account, input, "paper_account_not_active", body.raw, createdAt);
-  }
-  if (!marketAllowed(account, input.marketType, input.coin)) {
-    return await insertRejectedOrder(db, account, input, "market_not_allowed", body.raw, createdAt);
-  }
-
-  if (input.marketType === "spot") {
-    const spotShapeRejectReason = validateSpotOrderShape(input);
-    if (spotShapeRejectReason) {
-      return await insertRejectedOrder(db, account, input, spotShapeRejectReason, body.raw, createdAt);
-    }
-  }
-  if (!input.reason) {
-    return await insertRejectedOrder(db, account, input, "reason_required", body.raw, createdAt);
-  }
-
-  const snapshot = await latestMarketSnapshot(db, input.marketType, input.coin);
-  if (!snapshot || marketIsStale(snapshot, Date.parse(createdAt))) {
-    return await insertRejectedOrder(db, account, input, "stale_market_data", body.raw, createdAt, snapshot?.id ?? null);
-  }
-  if (input.marketType === "perp" && snapshot.max_leverage !== null && input.leverage - snapshot.max_leverage > EPSILON) {
-    return await insertRejectedOrder(db, account, input, "leverage_exceeds_hyperliquid_max", body.raw, createdAt, snapshot.id);
-  }
-
-  const book = parseBook(snapshot.book_json);
-  if (input.tif === "Ioc" && input.limitPx === null && !input.maxSlippageBpsProvided) {
-    return await insertRejectedOrder(db, account, input, "max_slippage_bps_required", body.raw, createdAt, snapshot.id);
-  }
-  const effectiveLimit = effectiveLimitPx(input, book);
-  if (input.tif !== "Ioc" && input.limitPx === null) {
-    return await insertRejectedOrder(db, account, input, "limit_px_required_for_resting_order", body.raw, createdAt, snapshot.id);
-  }
-  if (input.tif === "Alo" && wouldCross(input.side, effectiveLimit, book)) {
-    return await insertRejectedOrder(db, account, input, "post_only_would_cross", body.raw, createdAt, snapshot.id);
-  }
-
-  const fillPlan = input.tif === "Alo" ? [] : planTakerFills(input.side, input.size, effectiveLimit, book);
-  const totalFillSize = roundQty(fillPlan.reduce((sum, fill) => sum + fill.size, 0));
-  const notional = sumNotional(fillPlan);
-  const fee = notional * DEFAULT_FEE_RATE;
-  const remainingSize = roundQty(input.size - totalFillSize);
-  const reduceOnlyRejectReason = input.reduceOnly
-    ? await validateReduceOnlyOrder(db, account.id, input, input.tif === "Ioc" ? totalFillSize : input.size)
-    : null;
-  if (reduceOnlyRejectReason) {
-    return await insertRejectedOrder(db, account, input, reduceOnlyRejectReason, body.raw, createdAt, snapshot.id);
-  }
-  if (input.marketType === "spot") {
-    const spotBalanceRejectReason = await validateSpotOrderBalances(
-      db,
-      account,
-      input,
-      input.tif === "Ioc" ? notional : input.size * effectiveLimit,
-      fee,
+  return await db.transaction(async (tx) => {
+    const lockedAccount = await requireLockedPaperAccount(tx, account.id);
+    const existing = await tx.get<PaperOrderRow>(
+      "SELECT * FROM paper_orders WHERE paper_account_id = ? AND client_order_id = ?",
+      [lockedAccount.id, input.clientOrderId],
     );
-    if (spotBalanceRejectReason) {
-      return await insertRejectedOrder(db, account, input, spotBalanceRejectReason, body.raw, createdAt, snapshot.id);
+    if (existing) {
+      if (existing.body_hash !== null && existing.body_hash !== bodyHash) {
+        throw new RequestError("client_order_id body mismatch", 409);
+      }
+      return { ok: true, idempotent: true, order: presentOrder(existing), fills: await listFills(tx, existing.id) };
     }
-  }
 
-  if (input.tif === "Ioc" && totalFillSize <= 0) {
-    return await insertRejectedOrder(db, account, input, "insufficient_depth", body.raw, createdAt, snapshot.id);
-  }
-  if (totalFillSize > 0) {
-    const marginRejectReason = await validateMarginAvailable(db, account, input, notional, fee, snapshot, createdAt);
-    if (marginRejectReason) {
-      return await insertRejectedOrder(db, account, input, marginRejectReason, body.raw, createdAt, snapshot.id);
+    if (lockedAccount.status !== "active") {
+      return await insertRejectedOrder(tx, lockedAccount, input, "paper_account_not_active", body.raw, createdAt);
     }
-  } else if (input.tif !== "Alo" && input.tif !== "Gtc") {
-    return await insertRejectedOrder(db, account, input, "insufficient_depth", body.raw, createdAt, snapshot.id);
-  }
+    if (!marketAllowed(lockedAccount, input.marketType, input.coin)) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "market_not_allowed", body.raw, createdAt);
+    }
 
-  const order: PaperOrderRow = {
-    id: newId("paper_ord"),
-    paper_account_id: account.id,
-    agent_id: account.agent_id,
-    client_order_id: input.clientOrderId,
-    market_type: input.marketType,
-    coin: input.coin,
-    side: input.side,
-    tif: input.tif,
-    limit_px: input.limitPx,
-    size: input.size,
-    remaining_size: input.tif === "Ioc" ? 0 : remainingSize,
-    reduce_only: input.reduceOnly ? 1 : 0,
-    margin_mode: input.marginMode,
-    leverage: input.leverage,
-    max_slippage_bps: input.maxSlippageBps,
-    status: orderStatus(input.tif, totalFillSize, remainingSize),
-    reject_reason: null,
-    reason: input.reason,
-    strategy_hash: input.strategyHash,
-    market_snapshot_id: snapshot.id,
-    avg_fill_px: totalFillSize > 0 ? notional / totalFillSize : null,
-    notional_usd: notional,
-    fee_usd: fee,
-    body_hash: sha256Hex(body.raw),
-    created_at: createdAt,
-    updated_at: createdAt,
-  };
+    if (input.marketType === "spot") {
+      const spotShapeRejectReason = validateSpotOrderShape(input);
+      if (spotShapeRejectReason) {
+        return await insertRejectedOrder(tx, lockedAccount, input, spotShapeRejectReason, body.raw, createdAt);
+      }
+    }
+    if (!input.reason) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "reason_required", body.raw, createdAt);
+    }
 
-  const fills = await db.transaction(async (tx) => {
+    const snapshot = await latestMarketSnapshot(tx, input.marketType, input.coin);
+    if (!snapshot || marketIsStale(snapshot, Date.parse(createdAt))) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "stale_market_data", body.raw, createdAt, snapshot?.id ?? null);
+    }
+    if (input.marketType === "perp" && snapshot.max_leverage !== null && input.leverage - snapshot.max_leverage > EPSILON) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "leverage_exceeds_hyperliquid_max", body.raw, createdAt, snapshot.id);
+    }
+
+    const book = parseBook(snapshot.book_json);
+    if (input.tif === "Ioc" && input.limitPx === null && !input.maxSlippageBpsProvided) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "max_slippage_bps_required", body.raw, createdAt, snapshot.id);
+    }
+    const effectiveLimit = effectiveLimitPx(input, book);
+    if (input.tif !== "Ioc" && input.limitPx === null) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "limit_px_required_for_resting_order", body.raw, createdAt, snapshot.id);
+    }
+    if (input.tif === "Alo" && wouldCross(input.side, effectiveLimit, book)) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "post_only_would_cross", body.raw, createdAt, snapshot.id);
+    }
+
+    const fillPlan = input.tif === "Alo" ? [] : planTakerFills(input.side, input.size, effectiveLimit, book);
+    const totalFillSize = roundQty(fillPlan.reduce((sum, fill) => sum + fill.size, 0));
+    const notional = sumNotional(fillPlan);
+    const fee = notional * DEFAULT_FEE_RATE;
+    const remainingSize = roundQty(input.size - totalFillSize);
+    const reduceOnlyRejectReason = input.reduceOnly
+      ? await validateReduceOnlyOrder(tx, lockedAccount.id, input, input.tif === "Ioc" ? totalFillSize : input.size)
+      : null;
+    if (reduceOnlyRejectReason) {
+      return await insertRejectedOrder(tx, lockedAccount, input, reduceOnlyRejectReason, body.raw, createdAt, snapshot.id);
+    }
+    if (input.marketType === "spot") {
+      const spotBalanceRejectReason = await validateSpotOrderBalances(
+        tx,
+        lockedAccount,
+        input,
+        input.tif === "Ioc" ? notional : input.size * effectiveLimit,
+        fee,
+      );
+      if (spotBalanceRejectReason) {
+        return await insertRejectedOrder(tx, lockedAccount, input, spotBalanceRejectReason, body.raw, createdAt, snapshot.id);
+      }
+    }
+
+    if (input.tif === "Ioc" && totalFillSize <= 0) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "insufficient_depth", body.raw, createdAt, snapshot.id);
+    }
+    if (totalFillSize > 0) {
+      const marginRejectReason = await validateMarginAvailable(tx, lockedAccount, input, notional, fee, snapshot, createdAt);
+      if (marginRejectReason) {
+        return await insertRejectedOrder(tx, lockedAccount, input, marginRejectReason, body.raw, createdAt, snapshot.id);
+      }
+    } else if (input.tif !== "Alo" && input.tif !== "Gtc") {
+      return await insertRejectedOrder(tx, lockedAccount, input, "insufficient_depth", body.raw, createdAt, snapshot.id);
+    }
+
+    const order: PaperOrderRow = {
+      id: newId("paper_ord"),
+      paper_account_id: lockedAccount.id,
+      agent_id: lockedAccount.agent_id,
+      client_order_id: input.clientOrderId,
+      market_type: input.marketType,
+      coin: input.coin,
+      side: input.side,
+      tif: input.tif,
+      limit_px: input.limitPx,
+      size: input.size,
+      remaining_size: input.tif === "Ioc" ? 0 : remainingSize,
+      reduce_only: input.reduceOnly ? 1 : 0,
+      margin_mode: input.marginMode,
+      leverage: input.leverage,
+      max_slippage_bps: input.maxSlippageBps,
+      status: orderStatus(input.tif, totalFillSize, remainingSize),
+      reject_reason: null,
+      reason: input.reason,
+      strategy_hash: input.strategyHash,
+      market_snapshot_id: snapshot.id,
+      avg_fill_px: totalFillSize > 0 ? notional / totalFillSize : null,
+      notional_usd: notional,
+      fee_usd: fee,
+      body_hash: bodyHash,
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+
     await insertOrder(tx, order);
     const insertedFills: PaperFillRow[] = [];
     for (const fill of fillPlan) {
@@ -378,18 +379,17 @@ export async function submitPaperOrder(
       await applyFillToPosition(tx, account.id, row, input.marketType, input.marginMode, input.leverage, createdAt);
       insertedFills.push(row);
     }
-    await appendPaperAuditEvent(tx, account.id, "paper_order", order.id, "paper_order_submitted", { input, order, fills: insertedFills }, createdAt);
-    const risk = await writeRiskAndLeaderboard(tx, account.id, snapshot.id, createdAt);
-    return { fills: insertedFills, risk };
-  });
+    await appendPaperAuditEvent(tx, lockedAccount.id, "paper_order", order.id, "paper_order_submitted", { input, order, fills: insertedFills }, createdAt);
+    const risk = await writeRiskAndLeaderboard(tx, lockedAccount.id, snapshot.id, createdAt);
 
-  return {
-    ok: true,
-    idempotent: false,
-    order: presentOrder(order),
-    fills: fills.fills.map(presentFill),
-    risk: fills.risk,
-  };
+    return {
+      ok: true,
+      idempotent: false,
+      order: presentOrder(order),
+      fills: insertedFills.map(presentFill),
+      risk,
+    };
+  });
 }
 
 export async function runPaperRiskCheck(db: LedgerDb, paperAccountId: string, createdAt: string) {
@@ -1119,6 +1119,17 @@ function marketAllowed(account: PaperAccountRow, marketType: MarketType, coin: s
 
 async function requirePaperAccount(db: LedgerDb, id: string) {
   const account = await db.get<PaperAccountRow>("SELECT * FROM paper_accounts WHERE id = ?", [id]);
+  if (!account) throw new RequestError("Paper account not found", 404);
+  return account;
+}
+
+async function requireLockedPaperAccount(db: LedgerDb, id: string) {
+  const account = await db.get<PaperAccountRow>(
+    db.provider === "neon-postgres"
+      ? "SELECT * FROM paper_accounts WHERE id = ? FOR UPDATE"
+      : "SELECT * FROM paper_accounts WHERE id = ?",
+    [id],
+  );
   if (!account) throw new RequestError("Paper account not found", 404);
   return account;
 }
