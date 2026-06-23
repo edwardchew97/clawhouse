@@ -1429,31 +1429,219 @@ function openEvent(eventId) {
 
 function renderBackendEventModal(agent, event) {
   const raw = event.raw || {};
-  byId("modalKicker").textContent = `${agent.name} / ${event.time}`;
-  byId("modalTitle").textContent = event.title;
-  byId("modalSummary").textContent = event.summary;
-  byId("modalMetricLabel").textContent = raw.status_claim ? "Backend status" : "Event type";
-  byId("modalMove").textContent = raw.status_claim || raw.event_type || "event";
-  byId("modalMove").className = String(raw.status_claim || "").toLowerCase().includes("fail") ? "red" : "green";
-  byId("modalMoveHint").textContent = raw.id || "Agent Board Ledger";
-  byId("modalNetwork").textContent = eventNetwork(raw, agent);
-  byId("modalVenue").textContent = eventVenue(raw, agent);
-  byId("modalAction").textContent = event.action;
+  const model = readableEventModel(raw, event, agent);
+  byId("modalKicker").textContent = `${agentTitle(agent)} / ${event.time}`;
+  byId("modalTitle").textContent = model.title;
+  byId("modalSummary").textContent = model.summary;
+  byId("modalMetricLabel").textContent = model.statusLabel;
+  byId("modalMove").textContent = model.status;
+  byId("modalMove").className = model.statusTone;
+  byId("modalMoveHint").textContent = model.receipt;
+  byId("modalTradeType").textContent = model.tradeType;
+  byId("modalTradeMode").textContent = model.tradeMode;
+  byId("modalSpend").textContent = model.spend;
+  byId("modalReceive").textContent = model.receive;
+  byId("modalDirection").textContent = model.direction;
+  byId("modalNetwork").textContent = model.network;
+  byId("modalVenue").textContent = model.venue;
+  byId("modalAction").textContent = model.action;
   byId("modalReason").textContent = event.reason;
-  byId("modalPath").innerHTML = eventPathItems(raw).map((item, index) => `
-    <span><b>${String(index + 1).padStart(2, "0")}</b>${escapeHtml(item)}</span>
-  `).join("");
+  renderModalReasonTags(model.tags);
+  renderModalPath(model.path);
   renderModalSources(event, agent);
 }
 
-function eventPathItems(event) {
+function readableEventModel(raw, event, agent) {
+  const status = raw.status_claim || raw.event_type || "event";
+  const tradeType = readableTradeType(raw);
+  const network = eventNetwork(raw, agent);
+  const venue = eventVenue(raw, agent);
+  const action = formatBackendAction(raw);
+  const spend = formatBackendAmount(raw.amount_in, raw.asset_in) || "--";
+  const receive = formatBackendAmount(raw.amount_out, raw.asset_out) || "--";
+  const direction = readableTradeDirection(raw);
+  const paper = isPaperTradeEvent(raw);
+  const receipt = raw.id ? `Receipt ${shortHash(raw.id)}` : eventReferenceLabel(raw) || "Agent Board Ledger";
+  const statusText = titleCase(status);
+
+  return {
+    title: event.title || tradeType,
+    summary: readableTradeSummary(raw, action, tradeType, statusText, venue),
+    statusLabel: raw.status_claim ? "Backend status" : "Event type",
+    status,
+    statusTone: failureStatus(status) ? "red" : "green",
+    receipt,
+    tradeType,
+    tradeMode: paper ? "Simulated venue; no live capital moved" : `${network} / ${venue}`,
+    spend,
+    receive,
+    direction,
+    network,
+    venue,
+    action,
+    tags: readableReasonTags(raw, tradeType, direction, statusText),
+    path: readableEventPath(raw, action, statusText, paper),
+  };
+}
+
+function readableTradeSummary(event, action, tradeType, statusText, venue) {
+  if (isPaperTradeEvent(event)) {
+    return `${tradeType} on ${venue}: ${action}. Backend recorded ${statusText.toLowerCase()}.`;
+  }
+  return `${tradeType}: ${action}. Backend recorded ${statusText.toLowerCase()}.`;
+}
+
+function readableTradeType(event) {
+  if (!isPaperTradeEvent(event)) return titleCase(event.event_type || "Backend event");
+  const market = eventMarketType(event);
+  if (market === "spot") return "Paper spot order";
+  if (market === "perp") return "Paper perp order";
+  return "Paper trade";
+}
+
+function eventMarketType(event) {
+  const metadata = eventMetadata(event);
+  const rawMarket = metadata.market_type || metadata.marketType || event.market_type || event.marketType;
+  if (rawMarket) return String(rawMarket).toLowerCase();
+  const reason = String(event.reason || "").toLowerCase();
+  if (reason.includes("perp")) return "perp";
+  if (reason.includes("spot")) return "spot";
+  return "";
+}
+
+function readableTradeDirection(event) {
+  const side = readableTradeSide(event);
+  const coin = eventCoin(event);
+  const leverage = eventLeverage(event);
+  if (side === "long" || side === "short") {
+    return [leverage, coin, side].filter(Boolean).join(" ") || titleCase(side);
+  }
+  if (side) return [titleCase(side), coin].filter(Boolean).join(" ");
+  return coin || "--";
+}
+
+function readableTradeSide(event) {
+  const metadata = eventMetadata(event);
+  const text = [
+    event.reason,
+    event.client_event_id,
+    metadata.side,
+    metadata.direction,
+    metadata.position_side,
+    metadata.positionSide,
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (/\blong\b/.test(text)) return "long";
+  if (/\bshort\b/.test(text)) return "short";
+  const side = String(metadata.side || event.side || "").toLowerCase();
+  const market = eventMarketType(event);
+  if (side === "buy" && market === "perp") return "long";
+  if (side === "sell" && market === "perp") return "short";
+  if (side === "buy" || side === "sell") return side;
+  const eventId = String(event.client_event_id || "").toLowerCase();
+  if (eventId.includes("-buy-")) return market === "perp" ? "long" : "buy";
+  if (eventId.includes("-sell-")) return market === "perp" ? "short" : "sell";
+  const assetIn = String(event.asset_in || "").toUpperCase();
+  const assetOut = String(event.asset_out || "").toUpperCase();
+  if (assetIn === "USD" && assetOut && assetOut !== "USD") return market === "perp" ? "long" : "buy";
+  if (assetOut === "USD" && assetIn && assetIn !== "USD") return market === "perp" ? "short" : "sell";
+  return "";
+}
+
+function eventCoin(event) {
+  const metadata = eventMetadata(event);
+  const direct = metadata.coin || event.coin;
+  if (direct) return String(direct).toUpperCase();
+  const assetOut = String(event.asset_out || "").toUpperCase();
+  const assetIn = String(event.asset_in || "").toUpperCase();
+  if (assetOut && assetOut !== "USD") return assetOut;
+  if (assetIn && assetIn !== "USD") return assetIn;
+  const match = String(event.reason || "").match(/\b(BTC|ETH|SOL|USDC|USDT|PURR)\b/i);
+  return match ? match[1].toUpperCase() : "";
+}
+
+function eventLeverage(event) {
+  const metadata = eventMetadata(event);
+  const value = asNumber(metadata.leverage ?? event.leverage);
+  if (value !== null) return `${Number.isInteger(value) ? value.toFixed(0) : String(value)}x`;
+  const match = String(event.reason || "").match(/\b(\d+(?:\.\d+)?)\s*x\b/i);
+  return match ? `${match[1]}x` : "";
+}
+
+function readableReasonTags(event, tradeType, direction, statusText) {
+  const reason = String(event.reason || "").toLowerCase();
+  const tags = [tradeType, direction, statusText];
+  const leverage = eventLeverage(event);
+  if (leverage) tags.push(leverage);
+  if (reason.includes("ioc")) tags.push("IOC");
+  if (reason.includes("slippage")) tags.push("Slippage capped");
+  if (reason.includes("rejected") || reason.includes("replacing")) tags.push("Replacement");
+  return [...new Set(tags.filter(Boolean))].slice(0, 6);
+}
+
+function readableEventPath(event, action, statusText, paper) {
+  const client = event.client_event_id ? `Client event ${shortHash(event.client_event_id)}` : "Agent created a backend event";
+  const order = event.intent_id
+    ? `${paper ? "Paper order" : "Intent"} ${shortHash(event.intent_id)}`
+    : event.tx_hash
+      ? `Tx ${shortHash(event.tx_hash)}`
+      : "Ledger row";
+
   return [
-    event.client_event_id ? `client ${shortHash(event.client_event_id)}` : "client event",
-    event.intent_id
-      ? `${isPaperTradeEvent(event) ? "paper order" : "intent"} ${shortHash(event.intent_id)}`
-      : titleCase(event.status_claim || "status"),
-    event.tx_hash ? `tx ${shortHash(event.tx_hash)}` : titleCase(event.event_type || "ledger row"),
+    {
+      label: "Signal",
+      detail: `${client}: ${action}.`,
+    },
+    {
+      label: "Checks",
+      detail: routeCheckDetail(event),
+    },
+    {
+      label: "Order",
+      detail: paper ? `${order} was sent to the paper venue.` : `${order} was observed by the backend.`,
+    },
+    {
+      label: "Result",
+      detail: `Backend recorded ${statusText.toLowerCase()}.`,
+    },
   ];
+}
+
+function routeCheckDetail(event) {
+  const reason = String(event.reason || "").toLowerCase();
+  if (reason.includes("replacing") || reason.includes("rejected")) {
+    return "Rejected route was replaced before execution.";
+  }
+  if (reason.includes("ioc") && reason.includes("slippage")) {
+    return "IOC order used a slippage cap.";
+  }
+  if (reason.includes("allowed")) {
+    return "Allowed market check passed.";
+  }
+  return "Agent reasoning was stored with the event.";
+}
+
+function failureStatus(status) {
+  return /fail|reject|cancel|error|liquidat/i.test(String(status || ""));
+}
+
+function renderModalPath(items) {
+  byId("modalPath").innerHTML = items.map((item, index) => `
+    <div>
+      <b>${String(index + 1).padStart(2, "0")}</b>
+      <strong>${escapeHtml(item.label)}</strong>
+      <span>${escapeHtml(item.detail)}</span>
+    </div>
+  `).join("");
+}
+
+function renderModalReasonTags(tags) {
+  const container = byId("modalReasonTags");
+  container.textContent = "";
+  tags.forEach((tag) => {
+    const item = document.createElement("span");
+    item.textContent = tag;
+    container.append(item);
+  });
 }
 
 function renderModalSources(event, agent) {
@@ -1461,21 +1649,52 @@ function renderModalSources(event, agent) {
   const container = byId("modalSources");
   container.textContent = "";
   event.sources.forEach((source) => {
-    const row = document.createElement("span");
-    row.textContent = source;
-    container.append(row);
+    const { label, value } = readableSource(source);
+    appendSourceRow(container, label, value);
   });
   if (txUrl) {
     const row = document.createElement("span");
-    row.textContent = "explorer: ";
+    const name = document.createElement("b");
+    name.textContent = "Explorer";
     const link = document.createElement("a");
     link.href = txUrl;
     link.target = "_blank";
     link.rel = "noreferrer";
     link.textContent = "NearBlocks";
-    row.append(link);
+    row.append(name, link);
     container.append(row);
   }
+}
+
+function readableSource(source) {
+  const [rawKey, ...rest] = String(source).split(":");
+  const value = rest.join(":").trim();
+  const key = rawKey.trim();
+  const labels = {
+    client_event_id: "Client event ID",
+    intent_id: "Intent ID",
+    network: "Network",
+    paper_order_id: "Paper order ID",
+    source: "Table",
+    status_claim: "Backend status",
+    tx_hash: "Tx hash",
+    venue: "Venue",
+    wallet: "Agent wallet",
+  };
+  return {
+    label: labels[key] || titleCase(key),
+    value: value || source,
+  };
+}
+
+function appendSourceRow(container, label, value) {
+  const row = document.createElement("span");
+  const name = document.createElement("b");
+  const code = document.createElement("code");
+  name.textContent = label;
+  code.textContent = value;
+  row.append(name, code);
+  container.append(row);
 }
 
 function closeModal() {

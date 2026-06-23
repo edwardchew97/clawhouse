@@ -199,7 +199,7 @@ export default function Page() {
 
       <div className="modal-backdrop" id="eventModal" hidden>
         <section className="event-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-          <button className="modal-close" id="modalClose" aria-label="Close event detail">Done</button>
+          <button className="modal-close" id="modalClose" aria-label="Close event detail">Close</button>
           <div className="receipt-hero">
             <div className="receipt-title">
               <span className="lock-kicker" id="modalKicker">Agent event</span>
@@ -213,7 +213,30 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="execution-rail">
+          <div className="trade-breakdown" aria-label="Trade breakdown">
+            <div>
+              <label>Trade type</label>
+              <strong id="modalTradeType">Paper trade</strong>
+              <span id="modalTradeMode">hyperliquid-paper</span>
+            </div>
+            <div>
+              <label>Spent</label>
+              <strong id="modalSpend">--</strong>
+              <span>Input asset</span>
+            </div>
+            <div>
+              <label>Received</label>
+              <strong id="modalReceive">--</strong>
+              <span>Output asset</span>
+            </div>
+            <div>
+              <label>Direction</label>
+              <strong id="modalDirection">--</strong>
+              <span>Agent exposure</span>
+            </div>
+          </div>
+
+          <div className="execution-rail" aria-label="Execution venue">
             <div>
               <label>Network</label>
               <strong id="modalNetwork">hyperliquid</strong>
@@ -228,22 +251,38 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="event-path" id="modalPath" aria-label="Event execution path">
-            <span><b>01</b>Signal</span>
-            <span><b>02</b>Route check</span>
-            <span><b>03</b>Paper trade</span>
-          </div>
+          <section className="behavior-panel" aria-labelledby="modalBehaviorTitle">
+            <div className="section-heading">
+              <h3 id="modalBehaviorTitle">What happened</h3>
+              <span>Readable execution path</span>
+            </div>
+            <div className="event-path" id="modalPath" aria-label="Event execution path">
+              <div><b>01</b><strong>Signal</strong><span>Agent created a trade event.</span></div>
+              <div><b>02</b><strong>Checks</strong><span>Backend checked route and limits.</span></div>
+              <div><b>03</b><strong>Order</strong><span>Paper order was recorded.</span></div>
+              <div><b>04</b><strong>Result</strong><span>Backend saved the status.</span></div>
+            </div>
+          </section>
 
           <div className="receipt-body">
             <div className="reason-panel">
-              <h3>Agent reasoning</h3>
+              <h3>Why the agent did it</h3>
               <p id="modalReason" />
+              <div className="reason-tags" id="modalReasonTags" />
             </div>
             <aside className="source-panel">
-              <h3>Data sources</h3>
+              <h3>Evidence</h3>
               <div className="source-list" id="modalSources" />
             </aside>
           </div>
+
+          <section className="comment-panel" aria-labelledby="modalCommentsTitle">
+            <div>
+              <h3 id="modalCommentsTitle">Comments</h3>
+              <p>Comments are not available yet. We will ship them with the shared comment system.</p>
+            </div>
+            <button type="button" disabled>Coming soon</button>
+          </section>
         </section>
       </div>
 
