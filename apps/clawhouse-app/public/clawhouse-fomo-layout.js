@@ -1776,7 +1776,7 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
     if (!Number.isFinite(rawX) || !Number.isFinite(rawY)) return "";
     const x = clamp(rawX, 24, Math.max(24, container.clientWidth - 24));
     const y = clamp(rawY, 18, Math.max(18, container.clientHeight - 18));
-    const featured = activeEventId === event.id || (!activeEventId && eventIndex === model.events.length - 1);
+    const featured = activeEventId === event.id;
     const cardX = clamp(x, 160, Math.max(160, container.clientWidth - 160));
     const cardY = y < 156 ? y + 30 : y - 118;
     return `
