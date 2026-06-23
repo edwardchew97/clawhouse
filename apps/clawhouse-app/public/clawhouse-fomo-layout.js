@@ -93,6 +93,12 @@ const isUnlocked = (agent) => {
   return Boolean(chainState.accountId && balance !== null && balance > 0 && readAccessApplies(agent));
 };
 
+function keyMarketUnavailable(agent) {
+  if (chainApplies(agent)) return false;
+  const message = String(chainState.error || "");
+  return /Agent key market does not exist|WasmTrap\(Unreachable\)/i.test(message);
+}
+
 function dispatchUiEvent(name) {
   window.dispatchEvent(new CustomEvent(name));
 }
@@ -1428,9 +1434,21 @@ function renderTicket(agent) {
   const balance = holderBalance(agent);
   const maxAmount = maxAmountForSide(agent);
   const busy = Boolean(chainState.pending);
+  const marketUnavailable = keyMarketUnavailable(agent);
   const quote = chainApplies(agent) && chainState.quoteSide === tradeSide ? chainState.quote : null;
   const chainTotal = tradeSide === "sell" ? quote?.payout_near : quote?.total_cost_near;
   renderTicketBalance(agent, balance);
+  const ticket = byId("keyMarketTicket");
+  const ticketControls = byId("keyMarketTicketControls");
+  const ticketEmpty = byId("keyMarketUnavailable");
+  if (ticket) {
+    ticket.classList.toggle("market-disabled", marketUnavailable);
+    ticket.setAttribute("aria-disabled", marketUnavailable ? "true" : "false");
+  }
+  if (ticketControls) {
+    ticketControls.setAttribute("aria-hidden", marketUnavailable ? "true" : "false");
+  }
+  if (ticketEmpty) ticketEmpty.hidden = !marketUnavailable;
   if (tradeSide === "sell") {
     byId("quotePay").textContent = keyAmountLabel(amount);
     byId("quoteReceive").textContent = chainTotal ? nearLabel(chainTotal) : "--";
@@ -1445,23 +1463,27 @@ function renderTicket(agent) {
   if (tradeButton) {
     tradeButton.textContent = busy
       ? statusButtonText()
+      : marketUnavailable
+        ? "Key trading unavailable"
       : chainState.accountId ? `${tradeSide === "buy" ? "Buy" : "Sell"} ${agentTitle(agent)} key` : "Connect Wallet";
     tradeButton.className = `${tradeSide === "buy" ? "primary" : "primary sell"}${busy ? " loading" : ""}`;
-    tradeButton.disabled = busy || amount <= 0 || (tradeSide === "sell" && (balance === null || balance <= 0));
+    tradeButton.disabled = marketUnavailable || busy || amount <= 0 || (tradeSide === "sell" && (balance === null || balance <= 0));
   }
   document.querySelectorAll(".ticket-tab, [data-unlock-agent]").forEach((button) => {
-    button.disabled = busy;
+    button.disabled = marketUnavailable || busy;
   });
   document.querySelectorAll("[data-amount]").forEach((button) => {
     const isMax = button.dataset.amount === "max";
-    button.disabled = busy || (isMax && maxAmount === null);
+    button.disabled = marketUnavailable || busy || (isMax && maxAmount === null);
     if (isMax) {
-      button.title = maxAmount === null
+      button.title = marketUnavailable
+        ? "Key trading is not enabled for this agent."
+        : maxAmount === null
         ? (tradeSide === "buy" ? "Connect Wallet to read max buy." : "No key balance to sell.")
         : `Use ${keyAmountLabel(maxAmount)}`;
     }
   });
-  if (keyAmount) keyAmount.disabled = busy;
+  if (keyAmount) keyAmount.disabled = marketUnavailable || busy;
   byId("gateButton").textContent = isUnlocked(agent)
     ? "Room open"
     : balance && balance > 0
