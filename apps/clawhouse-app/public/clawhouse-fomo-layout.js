@@ -1670,22 +1670,8 @@ function clearTradingViewChart() {
   lastPnlChartModel = null;
 }
 
-function tradingViewEventMarkers(model) {
-  const unlocked = isUnlocked(selectedAgent());
-  return model.events
-    .filter((event) => event.timeValue !== null && event.chartValue !== null)
-    .map((event, index) => {
-      const visible = unlocked || event.public === true;
-      const status = String(event.raw?.status_claim || event.label || "").toLowerCase();
-      const failed = status.includes("fail") || status.includes("reject") || status.includes("refund");
-      return {
-        time: event.timeValue,
-        position: event.chartValue >= 0 ? "aboveBar" : "belowBar",
-        color: visible ? (failed ? "#ff622e" : "#516af6") : "rgba(145, 151, 157, 0.78)",
-        shape: failed ? "arrowDown" : "circle",
-        text: "",
-      };
-    });
+function tradingViewEventMarkers() {
+  return [];
 }
 
 function drawChart(agent) {
