@@ -346,6 +346,9 @@
             "paperTrade.account.read": [
               "paperTradingAccountId"
             ],
+            "paperTrade.activity.read": [
+              "paperTradingAccountId"
+            ],
             "paperTrade.riskCheck": [
               "paperTradingAccountId"
             ],
@@ -1203,14 +1206,14 @@
         {
           "id": "clawhouseApp.backend.board",
           "name": "Read App Staging Backend Board",
-          "description": "Reads the selected Agent Board through the ClawHouse App server proxy, including events, portfolio, PnL, balance changes, price snapshots, and labeled Paper leaderboard data used by the app chart.",
+          "description": "Reads the selected Agent Board through the ClawHouse App server proxy, including events, portfolio, PnL, balance changes, price snapshots, labeled Paper leaderboard data, and public Paper activity used by the app chart.",
           "type": "http",
           "access": "public",
           "method": "GET",
           "url": "{{clawhouseAppBaseUrl}}/api/backend/board?boardId={{ledgerBoardId}}",
           "runningNotes": [
             "Calling the local ClawHouse App server proxy.",
-            "The proxy calls the staging Agent Board Ledger /boards/:id, /events, /portfolio, /pnl, /balance-changes, /prices, and /paper/leaderboard read paths.",
+            "The proxy calls the staging Agent Board Ledger /boards/:id, /events, /portfolio, /pnl, /balance-changes, /prices, /paper/leaderboard, and matching /paper/accounts/:id/activity read paths.",
             "If the Vercel staging project has no live deployment yet, the response should expose ok:false instead of hiding the backend state."
           ],
           "inputs": {
@@ -1225,7 +1228,10 @@
             "backendEventsError": "response.json.json.errors.events",
             "backendBalanceChangeError": "response.json.json.errors.balanceChanges",
             "backendPriceError": "response.json.json.errors.prices",
-            "backendPaperLeaderboardError": "response.json.json.errors.paperLeaderboard"
+            "backendPaperLeaderboardError": "response.json.json.errors.paperLeaderboard",
+            "backendPaperActivityError": "response.json.json.errors.paperActivity",
+            "backendPaperActivityFilledOrders": "response.json.json.paperActivity.summary.filled_orders",
+            "backendPaperActivityLatestRiskAt": "response.json.json.paperActivity.summary.latest_risk_at"
           },
           "clearInputs": {
             "userBrowsesAgent.ledger.getBoard": [
@@ -1962,6 +1968,9 @@
             "paperTrade.account.read": [
               "paperTradingAccountId"
             ],
+            "paperTrade.activity.read": [
+              "paperTradingAccountId"
+            ],
             "paperTrade.riskCheck": [
               "paperTradingAccountId"
             ],
@@ -2538,6 +2547,9 @@
             "paperTrade.account.read": [
               "paperTradingAccountId"
             ],
+            "paperTrade.activity.read": [
+              "paperTradingAccountId"
+            ],
             "paperTrade.riskCheck": [
               "paperTradingAccountId"
             ],
@@ -2565,6 +2577,28 @@
             "paperTradingAccountStatus": "response.json.json.account.status",
             "paperTradingPositionCoin": "response.json.json.positions.0.coin",
             "paperTradingRiskEquityUsd": "response.json.json.latest_risk.equity_usd"
+          }
+        },
+        {
+          "id": "paperTrade.activity.read",
+          "name": "Read Paper Activity Timeline",
+          "description": "Reads the public paper account activity endpoint used by the ClawHouse app chart: recent orders, fills, open positions, summary counts, and recent risk snapshots.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/paper/accounts/{{paperTradingAccountId}}/activity?limit=120",
+          "runningNotes": [
+            "Reading the real GET /paper/accounts/:id/activity endpoint.",
+            "The response includes order counts, recent filled/rejected orders, fills, open positions, and risk snapshots for the TradingView paper portfolio chart."
+          ],
+          "inputs": {
+            "paperTradingAccountId": ""
+          },
+          "setVars": {
+            "paperTradingTotalOrders": "response.json.json.summary.total_orders",
+            "paperTradingFilledOrders": "response.json.json.summary.filled_orders",
+            "paperTradingLatestRiskAt": "response.json.json.summary.latest_risk_at",
+            "paperTradingActivityLatestOrderId": "response.json.json.orders.0.id"
           }
         },
         {
@@ -3609,6 +3643,9 @@
             "paperTrade.account.read": [
               "paperTradingAccountId"
             ],
+            "paperTrade.activity.read": [
+              "paperTradingAccountId"
+            ],
             "paperTrade.riskCheck": [
               "paperTradingAccountId"
             ],
@@ -3783,6 +3820,9 @@
           },
           "clearInputs": {
             "paperTrade.account.read": [
+              "paperTradingAccountId"
+            ],
+            "paperTrade.activity.read": [
               "paperTradingAccountId"
             ],
             "paperTrade.riskCheck": [
