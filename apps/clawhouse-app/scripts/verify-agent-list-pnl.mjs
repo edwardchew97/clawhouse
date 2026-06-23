@@ -226,14 +226,28 @@ function noFillPaperActivityFixture() {
       { equity_usd: 999, created_at: "2026-06-23T11:01:00.000Z" },
       { equity_usd: 1001, created_at: "2026-06-23T11:02:00.000Z" },
     ],
-    orders: [],
+    orders: [
+      {
+        id: "paper_ord_no_fill_rejected",
+        client_order_id: "paper-client-no-fill-rejected",
+        market_type: "perp",
+        coin: "BTC",
+        side: "buy",
+        status: "rejected",
+        reject_reason: "stale_market_data",
+        size: 0.01,
+        margin_mode: "cross",
+        leverage: 2,
+        created_at: "2026-06-23T11:01:30.000Z",
+      },
+    ],
     fills: [],
     summary: {
-      total_orders: 0,
+      total_orders: 1,
       filled_orders: 0,
-      rejected_orders: 0,
+      rejected_orders: 1,
       total_fills: 0,
-      latest_order_at: null,
+      latest_order_at: "2026-06-23T11:01:30.000Z",
       latest_fill_at: null,
       latest_risk_at: "2026-06-23T11:02:00.000Z",
     },
@@ -401,6 +415,8 @@ assert(element("activityPanelTitle").textContent === "Paper Trading Activity", "
 assert(element("activityPanelSub").textContent.includes("1/16 filled orders"), "Paper activity header should expose filled/total order count.");
 assert(element("keyActivityList").innerHTML.includes("0.01 BTC"), "Paper activity list should render recent paper order size and coin.");
 assert(element("keyActivityList").innerHTML.includes("$100.00"), "Paper activity list should render filled paper order price.");
+assert(!element("keyActivityList").innerHTML.includes("REJ"), "Paper activity list should hide rejected paper orders.");
+assert(!element("keyActivityList").innerHTML.includes("stale_market_data"), "Paper activity list should hide rejected paper order reasons.");
 assert(element("positionTitle").textContent === "Paper Positions", "Paper agents should render paper positions instead of key balance position.");
 assert(element("positionSub").textContent.includes("2026-06-23T11:10:05Z"), "Paper position subtitle should render latest risk UTC time.");
 assert(element("chartSub").textContent.includes("paper net worth"), "Paper chart subtitle should identify the paper net worth source.");
@@ -412,6 +428,8 @@ assert(paperChart.values.at(-1) === 1002, "Paper chart should use post-fill equi
 assert(!paperChart.values.includes(999), "Paper chart should ignore risk snapshots before the first filled order.");
 assert(paperChart.points.every((point, index) => index === 0 || point.time > paperChart.points[index - 1].time), "Paper chart points should be strictly time-ordered.");
 assert(paperChart.events.some((event) => event.raw?.id === "paper_ord_first_fill" && event.raw?.status === "filled"), "Paper chart should keep the first filled order marker even after many later rejected orders.");
+assert(paperChart.events.length === 1, "Paper chart should hide rejected paper order markers.");
+assert(paperChart.events.every((event) => event.raw?.status !== "rejected"), "Paper chart events should not include rejected paper orders.");
 
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0, noFillPaperActivityFixture()) });
 const noFillPaperChart = context.window.ClawHouseDemo.getChartModel();
@@ -419,5 +437,7 @@ assert(noFillPaperChart.valueKind === "usd", "No-fill paper chart should still u
 assert(noFillPaperChart.values.length === 2, "No-fill paper chart should render a two-point flat line.");
 assert(noFillPaperChart.values.every((value) => value === 1000), "No-fill paper chart should stay at the starting balance instead of risk snapshot values.");
 assert(noFillPaperChart.events.length === 0, "No-fill paper chart should not render paper order markers.");
+assert(element("keyActivityList").innerHTML.includes("No filled paper orders yet"), "Rejected-only paper activity should render the no-filled-orders empty state.");
+assert(!element("keyActivityList").innerHTML.includes("stale_market_data"), "Rejected-only paper activity should hide rejected paper order reasons.");
 
 console.log("agent discovery row P&L harness passed");
