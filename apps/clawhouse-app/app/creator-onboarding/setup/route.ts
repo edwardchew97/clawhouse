@@ -47,6 +47,55 @@ const paperEnvironments = {
   production: "https://clawhouse-backend-prod.vercel.app",
 };
 
+const walletUnavailableMessage =
+  "Setup blocked: IronClaw secure local wallet setup is unavailable. Missing trusted local execution, lockfile control, or secure secret/key store. I cannot create the agent wallet safely in this environment.";
+
+const walletProvisioning = {
+  actor: "IronClaw",
+  creatorActionRequired: false,
+  userCreatesWallet: false,
+  requiredBeforeBackendRegistration: true,
+  requiredBeforeFundingInstructions: true,
+  mustAttemptPinnedHelperBeforeStop: true,
+  unavailableMeans: "ironclaw_platform_capability_blocker",
+  attemptOrder: [
+    "reuse_existing_ironclaw_managed_clawhouse_signer",
+    "create_or_bind_near_testnet_account_inside_ironclaw_secure_local_wallet_flow",
+    "generate_ed25519_keypair_with_pinned_near_js_crypto_when_no_signer_exists",
+    "store_private_key_material_only_in_ironclaw_secure_local_secret_key_store",
+    "return_only_public_wallet_metadata",
+  ],
+  pinnedHelper: {
+    package: "@near-js/crypto",
+    version: "2.5.1",
+    importNames: ["KeyPair", "keyToImplicitAddress"],
+    generate: 'KeyPair.fromRandom("ed25519")',
+    publicKey: "keyPair.getPublicKey().toString()",
+    creatorPublicAccount: "keyToImplicitAddress(keyPair.getPublicKey())",
+    keyId: "near-ed25519:<creator_public_account>",
+    secretValue: "keyPair.toString()",
+    secretStorage: "IronClaw secure local secret/key store only",
+  },
+  visibleReturnFields: [
+    "creator_public_account",
+    "public_key",
+    "key_id",
+    "network",
+    "private_key_backup_required",
+  ],
+  hiddenFields: ["private_key", "seed_phrase", "raw_signing_material"],
+  stopIfUnavailable: walletUnavailableMessage,
+  forbiddenCreatorSteps: [
+    "create_wallet_manually",
+    "install_wallet_app",
+    "paste_public_account_as_wallet_creation_fallback",
+    "paste_private_key",
+    "paste_seed_phrase",
+    "run_shell_command",
+    "complete_pending_wallet_steps",
+  ],
+};
+
 // Keep this text matched with skills/clawhouse-creator-onboarding/SKILL.md.
 function completionTemplate(creatorPublicAccount: string) {
   return [
@@ -186,7 +235,7 @@ function payloadFor(request: Request) {
       account,
       source,
       resolution:
-        "Resolve or create the IronClaw-managed NEAR testnet public account inside IronClaw. Never ask the creator for internal wallet setup details, private keys, seed phrases, or raw signing material.",
+        "Resolve or create the IronClaw-managed NEAR testnet public account inside IronClaw before backend registration. This is IronClaw agent work, not creator work.",
       walletSetup: {
         creatorIntakeAllowed: false,
         reuseExistingIronClawSigner: true,
@@ -195,19 +244,12 @@ function payloadFor(request: Request) {
         requiresTrustedLocalExecution: true,
         requiresLockfileControl: true,
         requiresSecureSecretStore: true,
-        stopIfUnavailable:
-          "IronClaw secure local wallet setup is unavailable. I cannot create the agent wallet safely in this environment.",
-        visibleReturnFields: [
-          "creator_public_account",
-          "public_key",
-          "key_id",
-          "network",
-          "private_key_backup_required",
-        ],
-        hiddenFields: ["private_key", "seed_phrase", "raw_signing_material"],
+        ...walletProvisioning,
       },
       fallbackPrompt:
-        "Ask for a public account id only when IronClaw already has an approved signer but needs an external public account binding. Do not use this as normal profile intake.",
+        "Do not ask the creator for a public account id as a wallet-creation fallback. A creator-provided public account is allowed only when IronClaw already has an approved signer and is binding that signer to an external public account.",
+      walletCreationFallbackAllowed: false,
+      platformBlockerWhenUnavailable: true,
       doNotResolveFrom: [
         "memory_search",
         "memory_tree",
@@ -222,6 +264,7 @@ function payloadFor(request: Request) {
       privateKeyHandling:
         "Never ask for, store, echo, or log the NEAR private key, seed phrase, or raw signing material.",
     },
+    walletProvisioning,
     manifest: {
       url: manifestUrl,
       requiredSkills,
@@ -258,6 +301,8 @@ function payloadFor(request: Request) {
         "dependency_list",
         "confirmation_question",
         "manual_bun_command",
+        "creator_wallet_creation_step",
+        "pending_wallet_steps",
       ],
     },
     forbidden: [
@@ -290,6 +335,9 @@ function payloadFor(request: Request) {
       "web_search_for_clawhouse_endpoints",
       "staging_api_clawhouse_com_for_paper_trade",
       "skill_install_with_fetched_skill_markdown_as_name",
+      "creator_wallet_creation_step",
+      "public_account_id_fallback_for_wallet_creation",
+      "pending_wallet_steps",
     ],
   };
 }
