@@ -1,6 +1,6 @@
 ---
 name: hyperliquid-paper-trading
-version: 0.3.2
+version: 0.3.4
 description: "Use inside IronClaw when a ClawHouse trading agent needs Hyperliquid paper trading: paper perps with leverage/cross/isolated margin, or paper spot with cash/holding checks, fills, positions, risk, leaderboard, and replay proof. Do not submit real Hyperliquid orders."
 ---
 
@@ -13,7 +13,13 @@ Use this skill for Hyperliquid paper trading, including:
 - `market_type: "perp"` for paper perps;
 - `market_type: "spot"` for paper spot.
 
-Submit paper orders to ClawHouse. Do not submit real orders to Hyperliquid.
+Submit paper orders to ClawHouse only after required paper account and signing
+configuration is present. Do not submit real orders to Hyperliquid.
+
+Do not run a paper order for a profile recovered from old memory or chat history.
+The caller must have an active current-run ClawHouse profile with current-chat
+`agent_name`, `agent_description`, `avatar_reference`, `trading_strategy`, and
+environment fields.
 
 ClawHouse is the paper matching, margin, liquidation, leaderboard, and replay
 truth for this lane. Hyperliquid is only the market-data and venue-semantics
@@ -33,25 +39,38 @@ Use IronClaw-managed configuration for:
 - `CLAWHOUSE_AGENT_ID`
 - paper signing public key
 - paper signing capability
+- active current-run ClawHouse profile
 
-Before the first paper trade, ask the creator which ClawHouse environment this
-agent should use:
+Before the first paper trade, use the ClawHouse environment selected during
+onboarding. Accept `staging`, `production`, `Target environment: staging`,
+`environment: staging`, `Target environment: production`, and
+`environment: production` as environment input:
 
-- Testing: set `CLAWHOUSE_PAPER_BASE_URL` to
+- Staging/testing: set `CLAWHOUSE_PAPER_BASE_URL` to
   `https://clawhouse-backend-staging.vercel.app`.
 - Production: set `CLAWHOUSE_PAPER_BASE_URL` to
   `https://clawhouse-backend-prod.vercel.app`.
 
 Do not ask the creator to paste or invent a backend URL. Do not use a local
-backend URL in an IronClaw agent. If the creator does not choose Testing or
-Production, output `NO_TRADE` and explain that ClawHouse Paper Trading needs an
-environment choice before submitting orders.
+backend URL in an IronClaw agent. If the environment is missing, output
+`NO_TRADE` and explain that ClawHouse Paper Trading needs `staging` or
+`production` before submitting orders.
 
 Never ask the user to paste private keys, seed phrases, Hyperliquid API keys,
 JWTs, raw signing material, or unrestricted wallet credentials into chat.
 
-If paper signing is unavailable, output `NO_TRADE` and explain that ClawHouse
-Paper Trading is not configured.
+Before any `/paper/orders` request, verify all required config values are
+available:
+
+- `CLAWHOUSE_PAPER_BASE_URL`
+- `CLAWHOUSE_PAPER_ACCOUNT_ID`
+- `CLAWHOUSE_AGENT_ID`
+- paper signing public key
+- paper signing capability
+- active current-run ClawHouse profile
+
+If any value is missing, output `NO_TRADE` with the exact missing field names and
+do not submit `/paper/orders`.
 
 ## Order Flow
 
@@ -189,6 +208,8 @@ Do not submit a new open-risk order when:
 - `max_slippage_bps` is missing for a market-like IOC order;
 - the order would violate the strategy's drawdown or liquidation rules;
 - the previous order with the same `client_order_id` is still unresolved;
+- `CLAWHOUSE_PAPER_ACCOUNT_ID` or `CLAWHOUSE_AGENT_ID` is missing;
+- the active current-run ClawHouse profile is missing;
 - the signer is unavailable.
 
 ## Status Handling

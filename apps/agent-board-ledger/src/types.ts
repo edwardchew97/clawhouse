@@ -3,6 +3,7 @@ export type JsonObject = Record<string, unknown>;
 export type Board = {
   id: string;
   agent_id: string;
+  agent_public_key: string | null;
   wallet_address: string;
   public_key: string;
   chain: string | null;
@@ -16,6 +17,15 @@ export type Board = {
   funding_tx_hash: string | null;
   metadata_json: string | null;
   created_at: string;
+};
+
+export type AgentRegistrationRow = {
+  agent_id: string;
+  agent_public_key: string;
+  status: string;
+  metadata_json: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type EventRow = {

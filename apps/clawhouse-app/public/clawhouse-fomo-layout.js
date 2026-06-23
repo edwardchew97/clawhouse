@@ -18,6 +18,7 @@ let selectedId = requestedAgentId || agentSelectionKey(agents[0]);
 if (!agents.some((agent) => agentMatchesSelection(agent, selectedId))) selectedId = agentSelectionKey(agents[0]);
 let tradeSide = "buy";
 let agentSort = "pnl";
+let activeChartRange = "24h";
 let activeEventId = null;
 let chainState = {
   accountId: null,
@@ -34,10 +35,19 @@ let chainState = {
   activity: null,
   activityError: null,
   backend: null,
+  readToken: null,
+  readAccess: null,
+  readAccessError: null,
   error: null
 };
 
 const TICKER_PX_PER_SECOND = 18;
+const CHART_RANGES = {
+  "1h": { label: "1H", hours: 1 },
+  "24h": { label: "24H", hours: 24 },
+  "7d": { label: "7D", hours: 24 * 7 },
+  all: { label: "ALL", hours: null },
+};
 
 const byId = (id) => document.getElementById(id);
 function agentSelectionKey(agent) {
@@ -62,7 +72,20 @@ const chainBalance = (agent) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 const holderBalance = (agent) => chainBalance(agent);
-const isUnlocked = () => true;
+const readAccessApplies = (agent) => {
+  const access = chainState.readAccess;
+  if (!access || !chainState.readToken) return false;
+  const boardId = agent.boardId || agent.id;
+  const expiresAt = Date.parse(access.expiresAt || "");
+  return access.boardId === boardId
+    && access.holderAccountId === chainState.accountId
+    && Number.isFinite(expiresAt)
+    && expiresAt > Date.now();
+};
+const isUnlocked = (agent) => {
+  const balance = holderBalance(agent);
+  return Boolean(chainState.accountId && balance !== null && balance > 0 && readAccessApplies(agent));
+};
 
 function dispatchUiEvent(name) {
   window.dispatchEvent(new CustomEvent(name));
@@ -308,15 +331,30 @@ function boardMetadata(agent) {
   return board?.metadata ?? parseJsonField(board?.metadata_json) ?? {};
 }
 
+function isPaperAgent(agent) {
+  if (paperLeaderboardRow(agent)) return true;
+  const text = [
+    agent?.id,
+    agent?.name,
+    agent?.displayName,
+    agent?.strategy,
+    agent?.desc,
+    agent?.description,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return text.includes("paper") || text.includes("hyperliquid");
+}
+
 function backendNetwork(agent) {
   const board = backendBoard(agent);
   const metadata = boardMetadata(agent);
+  if (isPaperAgent(agent)) return "hyperliquid";
   return metadata.network_id || metadata.networkId || board?.chain || "near";
 }
 
 function backendVenue(agent) {
   const board = backendBoard(agent);
   const metadata = boardMetadata(agent);
+  if (isPaperAgent(agent)) return "hyperliquid-paper";
   return metadata.venue || metadata.venue_namespace || board?.venue_namespace || "agent-board-ledger";
 }
 
@@ -421,21 +459,57 @@ function formatBackendAction(event) {
 function formatBackendSummary(event, agent) {
   const action = formatBackendAction(event);
   const status = event.status_claim ? `Status: ${event.status_claim}.` : "";
-  const network = `${backendNetwork(agent)} / ${backendVenue(agent)}`;
-  const tx = event.tx_hash ? `Tx ${shortHash(event.tx_hash)}.` : event.intent_id ? `Intent ${shortHash(event.intent_id)}.` : "";
-  return [action, status, network, tx].filter(Boolean).join(" ");
+  const venue = `${eventNetwork(event, agent)} / ${eventVenue(event, agent)}`;
+  const reference = eventReferenceLabel(event);
+  return [action, status, venue, reference].filter(Boolean).join(" ");
 }
 
 function backendTxUrl(event, agent) {
+  if (isPaperTradeEvent(event)) return null;
   if (!event.tx_hash) return null;
-  const network = String(event.metadata?.network_id || event.metadata?.networkId || backendNetwork(agent)).toLowerCase();
+  const network = String(eventNetwork(event, agent)).toLowerCase();
   const host = network.includes("testnet") ? "testnet.nearblocks.io" : "nearblocks.io";
   return `https://${host}/txns/${encodeURIComponent(event.tx_hash)}`;
 }
 
+function eventMetadata(event) {
+  return event?.metadata && typeof event.metadata === "object" ? event.metadata : {};
+}
+
+function isPaperTradeEvent(event) {
+  const metadata = eventMetadata(event);
+  const source = String(metadata.source || "").toLowerCase();
+  return event?.event_type === "paper_trade"
+    || String(event?.intent_id || "").startsWith("paper_")
+    || source.includes("paper")
+    || metadata.venue === "hyperliquid-paper"
+    || Boolean(metadata.market_type || metadata.marketType);
+}
+
+function eventNetwork(event, agent) {
+  const metadata = eventMetadata(event);
+  if (isPaperTradeEvent(event)) return "hyperliquid";
+  return metadata.network_id || metadata.networkId || backendNetwork(agent);
+}
+
+function eventVenue(event, agent) {
+  const metadata = eventMetadata(event);
+  if (isPaperTradeEvent(event)) return "hyperliquid-paper";
+  return metadata.venue || metadata.venue_namespace || backendVenue(agent);
+}
+
+function eventReferenceLabel(event) {
+  const paper = isPaperTradeEvent(event);
+  if (paper && event.intent_id) return `Paper order ${shortHash(event.intent_id)}.`;
+  if (paper && event.tx_hash) return `Paper receipt ${shortHash(event.tx_hash)}.`;
+  if (event.tx_hash) return `Tx ${shortHash(event.tx_hash)}.`;
+  if (!event.intent_id) return "";
+  return `Intent ${shortHash(event.intent_id)}.`;
+}
+
 function normalizeBackendEvent(event, index, agent, valueIndex) {
   const status = event.status_claim || event.event_type || "event";
-  const metadata = event.metadata && typeof event.metadata === "object" ? event.metadata : {};
+  const metadata = eventMetadata(event);
   return {
     id: event.id || event.client_event_id || event.tx_hash || `backend-event-${index}`,
     index: valueIndex,
@@ -454,12 +528,12 @@ function normalizeBackendEvent(event, index, agent, valueIndex) {
 
 function backendEventSources(event, agent) {
   const sources = [
-    `network: ${backendNetwork(agent)}`,
-    `venue: ${backendVenue(agent)}`,
+    `network: ${eventNetwork(event, agent)}`,
+    `venue: ${eventVenue(event, agent)}`,
   ];
   if (event.status_claim) sources.push(`status_claim: ${event.status_claim}`);
   if (event.tx_hash) sources.push(`tx_hash: ${event.tx_hash}`);
-  if (event.intent_id) sources.push(`intent_id: ${event.intent_id}`);
+  if (event.intent_id) sources.push(`${isPaperTradeEvent(event) ? "paper_order_id" : "intent_id"}: ${event.intent_id}`);
   if (event.client_event_id) sources.push(`client_event_id: ${event.client_event_id}`);
   if (event.wallet_address) sources.push(`wallet: ${event.wallet_address}`);
   if (event.metadata?.source) sources.push(`source: ${event.metadata.source}`);
@@ -480,9 +554,29 @@ function backendPrices(agent) {
 
 function sortedByObservedAt(rows) {
   return rows.slice().sort((a, b) => {
-    const left = Date.parse(a.observed_at || a.reported_at || a.created_at || "");
-    const right = Date.parse(b.observed_at || b.reported_at || b.created_at || "");
+    const left = rowTimestamp(a);
+    const right = rowTimestamp(b);
     return (Number.isFinite(left) ? left : 0) - (Number.isFinite(right) ? right : 0);
+  });
+}
+
+function rowTimestamp(row) {
+  return Date.parse(row?.observed_at || row?.reported_at || row?.created_at || "");
+}
+
+function chartRangeMeta(range = activeChartRange) {
+  return CHART_RANGES[range] || CHART_RANGES["24h"];
+}
+
+function filterRowsForChartRange(rows, range = activeChartRange) {
+  const meta = chartRangeMeta(range);
+  if (!meta.hours) return rows;
+  const timestamps = rows.map(rowTimestamp).filter(Number.isFinite);
+  if (!timestamps.length) return rows;
+  const cutoff = Math.max(...timestamps) - meta.hours * 60 * 60 * 1000;
+  return rows.filter((row) => {
+    const timestamp = rowTimestamp(row);
+    return Number.isFinite(timestamp) && timestamp >= cutoff;
   });
 }
 
@@ -495,16 +589,27 @@ function normalizeSeries(values) {
 }
 
 function chartModel(agent) {
+  const range = chartRangeMeta();
+  const rangePrefix = `${range.label} / `;
+  if (!chainState.accountId) {
+    return {
+      values: [],
+      events: [],
+      tone: "wallet",
+      title: "Connect Wallet",
+      message: `${rangePrefix}Connect Wallet to load holder-gated chart data.`,
+    };
+  }
   if (!chainState.backend || !backendApplies(agent)) {
-    return { values: [], events: [], tone: "idle", message: "Reading staging backend for this agent." };
+    return { values: [], events: [], tone: "idle", title: "Backend chart loading", message: `${rangePrefix}Reading backend for this agent.` };
   }
   if (!chainState.backend.ok) {
-    return { values: [], events: [], tone: "error", message: backendErrorMessage() };
+    return { values: [], events: [], tone: "error", title: "Backend chart unavailable", message: `${rangePrefix}${backendErrorMessage()}` };
   }
 
-  const events = sortedByObservedAt(backendEvents(agent));
-  const prices = sortedByObservedAt(backendPrices(agent)).filter((row) => asNumber(row.price_usd) !== null);
-  const balanceChanges = sortedByObservedAt(backendBalanceChanges(agent));
+  const events = filterRowsForChartRange(sortedByObservedAt(backendEvents(agent)));
+  const prices = filterRowsForChartRange(sortedByObservedAt(backendPrices(agent))).filter((row) => asNumber(row.price_usd) !== null);
+  const balanceChanges = filterRowsForChartRange(sortedByObservedAt(backendBalanceChanges(agent)));
   let values = [];
   let source = "backend events";
 
@@ -538,8 +643,9 @@ function chartModel(agent) {
     values: safeValues,
     events: normalizedEvents,
     tone: "success",
+    title: safeValues.length ? undefined : "No chart data yet",
     source,
-    message: safeValues.length ? source : "Backend is connected, but no chartable network series has been recorded yet.",
+    message: safeValues.length ? `${range.label} ${source}` : `No chartable backend series in ${range.label}.`,
   };
 }
 
@@ -822,7 +928,7 @@ function renderHero(agent) {
   const holders = holderCount(agent);
   byId("statHolders").textContent = holders === null ? "--" : holders.toLocaleString();
   byId("statUpdate").textContent = chainApplies(agent) ? "testnet live" : backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
-  byId("statGate").textContent = holderBalance(agent) > 0 ? "Unlocked" : "1 key";
+  byId("statGate").textContent = isUnlocked(agent) ? "Unlocked" : holderBalance(agent) > 0 ? "Sign proof" : "1 key";
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
   byId("miniTop").textContent = title;
@@ -892,9 +998,13 @@ function renderKeyActivity(agent) {
   }
 
   byId("keyActivityList").innerHTML = rows.slice(0, 7).map((row) => `
-    <div class="activity-row key-activity-row">
-      <span><b>${escapeHtml(row.title)}</b> ${escapeHtml(row.detail)}</span>
-      <span class="side">${row.linkUrl ? `<a href="${escapeHtml(row.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.side)}</a>` : escapeHtml(row.side)}</span>
+    <div class="activity-row key-activity-row ${escapeHtml(row.tone)}">
+      <span class="activity-action">${escapeHtml(row.title)}</span>
+      <span class="activity-main">
+        <b>${escapeHtml(row.amountLabel)}</b>
+        <span>by ${row.traderUrl ? `<a href="${escapeHtml(row.traderUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.traderLabel)}</a>` : escapeHtml(row.traderLabel)}</span>
+      </span>
+      <span class="activity-value">${row.linkUrl ? `<a href="${escapeHtml(row.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.side)}</a>` : escapeHtml(row.side)}</span>
     </div>
   `).join("");
 }
@@ -906,9 +1016,12 @@ function keyActivityRows(agent) {
   for (const trade of trades) {
     rows.push({
       title: titleCase(trade.side),
-      detail: `${trade.amount} key${trade.amount === "1" ? "" : "s"} by ${shortAccount(trade.trader_id)}`,
+      amountLabel: `${trade.amount} key${trade.amount === "1" ? "" : "s"}`,
+      traderLabel: shortAccount(trade.trader_id),
+      traderUrl: keyTradeAccountUrl(trade),
       side: keyTradeValueLabel(trade),
       linkUrl: keyTradeExplorerUrl(trade),
+      tone: trade.side === "sell" ? "sell" : "buy",
     });
   }
 
@@ -930,6 +1043,12 @@ function keyTradeExplorerUrl(trade) {
   if (!trade.tx_hash) return null;
   const host = trade.network_id === "mainnet" ? "nearblocks.io" : "testnet.nearblocks.io";
   return `https://${host}/txns/${encodeURIComponent(trade.tx_hash)}`;
+}
+
+function keyTradeAccountUrl(trade) {
+  if (!trade.trader_id) return null;
+  const host = trade.network_id === "mainnet" ? "nearblocks.io" : "testnet.nearblocks.io";
+  return `https://${host}/address/${encodeURIComponent(trade.trader_id)}`;
 }
 
 function yoctoNearLabel(value) {
@@ -971,7 +1090,11 @@ function renderTicket(agent) {
   byId("posEntry").textContent = "-";
   byId("posExit").textContent = "-";
   byId("posExit").className = "";
-  byId("gateButton").textContent = balance && balance > 0 ? "Room open" : "Gate: 1 key";
+  byId("gateButton").textContent = isUnlocked(agent)
+    ? "Room open"
+    : balance && balance > 0
+      ? "Sign proof"
+      : "Gate: 1 key";
   const walletButton = byId("walletButton");
   if (walletButton) {
     walletButton.textContent = chainState.accountId ? shortAccount(chainState.accountId) : "Connect Wallet";
@@ -985,6 +1108,7 @@ function statusButtonText() {
   if (chainState.phase === "connecting") return "Opening wallet...";
   if (chainState.phase === "quoting") return "Refreshing quote...";
   if (chainState.phase === "signing") return "Confirm in wallet...";
+  if (chainState.phase === "unlocking") return "Confirm access...";
   if (chainState.phase === "refreshing") return "Refreshing balance...";
   return "Working...";
 }
@@ -1054,7 +1178,7 @@ function drawChart(agent, progress = 1) {
   const values = model.values;
   if (values.length < 2) {
     drawEmptyChart(ctx, rect, model.message);
-    setChartEmptyState(true, model.message);
+    setChartEmptyState(true, model.message, model.title);
     byId("chartEvents").innerHTML = "";
     hidePriceMarker();
     return;
@@ -1149,14 +1273,14 @@ function drawEmptyChart(ctx, rect, message) {
   drawChartAxes(ctx, geo, [-10, 0, 10]);
 }
 
-function setChartEmptyState(isEmpty, message = "") {
+function setChartEmptyState(isEmpty, message = "", title = "Backend chart data unavailable") {
   const panel = byId("chartPanel");
   const overlay = byId("chartEmptyOverlay");
   if (!panel || !overlay) return;
   panel.classList.toggle("is-empty", isEmpty);
   overlay.hidden = !isEmpty;
   if (!isEmpty) return;
-  byId("chartEmptyTitle").textContent = "Backend chart data unavailable";
+  byId("chartEmptyTitle").textContent = title;
   byId("chartEmptyDetail").textContent = message || "No backend time series has been recorded for this agent.";
 }
 
@@ -1281,7 +1405,7 @@ function renderChartEvents(agent, rect, model = chartModel(agent)) {
   document.querySelectorAll("[data-chart-event]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!isUnlocked(selectedAgent())) {
-        showToast("Agent event details are open in this preview.");
+        showToast("Buy 1 key and sign wallet proof to unlock Agent reasoning.");
         return;
       }
       openEvent(button.dataset.chartEvent);
@@ -1292,7 +1416,7 @@ function renderChartEvents(agent, rect, model = chartModel(agent)) {
 function openEvent(eventId) {
   const agent = selectedAgent();
   if (!isUnlocked(agent)) {
-    showToast("Agent event details are open in this preview.");
+    showToast("Buy 1 key and sign wallet proof to unlock Agent reasoning.");
     return;
   }
   const event = chartModel(agent).events.find((item) => item.id === eventId);
@@ -1305,51 +1429,195 @@ function openEvent(eventId) {
 
 function renderBackendEventModal(agent, event) {
   const raw = event.raw || {};
-  byId("modalKicker").textContent = `${agent.name} / ${event.time}`;
-  byId("modalTitle").textContent = event.title;
-  byId("modalSummary").textContent = event.summary;
-  byId("modalMetricLabel").textContent = raw.status_claim ? "Backend status" : "Event type";
-  byId("modalMove").textContent = raw.status_claim || raw.event_type || "event";
-  byId("modalMove").className = String(raw.status_claim || "").toLowerCase().includes("fail") ? "red" : "green";
-  byId("modalMoveHint").textContent = raw.id || "Agent Board Ledger";
-  byId("modalNetwork").textContent = backendNetwork(agent);
-  byId("modalVenue").textContent = backendVenue(agent);
-  byId("modalAction").textContent = event.action;
+  const model = readableEventModel(raw, event, agent);
+  byId("modalKicker").textContent = `${agentTitle(agent)} / ${event.time}`;
+  byId("modalTitle").textContent = model.title;
+  byId("modalSummary").textContent = model.summary;
+  byId("modalMetricLabel").textContent = model.statusLabel;
+  byId("modalMove").textContent = model.status;
+  byId("modalMove").className = model.statusTone;
+  byId("modalMoveHint").textContent = model.receipt;
+  byId("modalDirection").textContent = model.direction;
+  byId("modalVenue").textContent = model.venue;
+  byId("modalAction").textContent = model.action;
   byId("modalReason").textContent = event.reason;
-  byId("modalPath").innerHTML = eventPathItems(raw).map((item, index) => `
-    <span><b>${String(index + 1).padStart(2, "0")}</b>${escapeHtml(item)}</span>
-  `).join("");
   renderModalSources(event, agent);
 }
 
-function eventPathItems(event) {
-  return [
-    event.client_event_id ? `client ${shortHash(event.client_event_id)}` : "client event",
-    event.intent_id ? `intent ${shortHash(event.intent_id)}` : titleCase(event.status_claim || "status"),
-    event.tx_hash ? `tx ${shortHash(event.tx_hash)}` : titleCase(event.event_type || "ledger row"),
-  ];
+function readableEventModel(raw, event, agent) {
+  const status = raw.status_claim || raw.event_type || "event";
+  const tradeType = readableTradeType(raw);
+  const venue = eventVenue(raw, agent);
+  const action = formatBackendAction(raw);
+  const direction = readableTradeDirection(raw);
+  const receipt = raw.id ? `Receipt ${shortHash(raw.id)}` : eventReferenceLabel(raw) || "Agent Board Ledger";
+  const statusText = titleCase(status);
+
+  return {
+    title: event.title || tradeType,
+    summary: readableTradeSummary(raw, action, tradeType, statusText, venue),
+    statusLabel: raw.status_claim ? "Backend status" : "Event type",
+    status,
+    statusTone: failureStatus(status) ? "red" : "green",
+    receipt,
+    direction,
+    venue,
+    action,
+  };
+}
+
+function readableTradeSummary(event, action, tradeType, statusText, venue) {
+  if (isPaperTradeEvent(event)) {
+    return `${tradeType} on ${venue}: ${action}. Backend recorded ${statusText.toLowerCase()}.`;
+  }
+  return `${tradeType}: ${action}. Backend recorded ${statusText.toLowerCase()}.`;
+}
+
+function readableTradeType(event) {
+  if (!isPaperTradeEvent(event)) return titleCase(event.event_type || "Backend event");
+  const market = eventMarketType(event);
+  if (market === "spot") return "Paper spot order";
+  if (market === "perp") return "Paper perp order";
+  return "Paper trade";
+}
+
+function eventMarketType(event) {
+  const metadata = eventMetadata(event);
+  const rawMarket = metadata.market_type || metadata.marketType || event.market_type || event.marketType;
+  if (rawMarket) return String(rawMarket).toLowerCase();
+  const reason = String(event.reason || "").toLowerCase();
+  if (reason.includes("perp")) return "perp";
+  if (reason.includes("spot")) return "spot";
+  return "";
+}
+
+function readableTradeDirection(event) {
+  const side = readableTradeSide(event);
+  const coin = eventCoin(event);
+  const leverage = eventLeverage(event);
+  if (side === "long" || side === "short") {
+    return [leverage, coin, side].filter(Boolean).join(" ") || titleCase(side);
+  }
+  if (side) return [titleCase(side), coin].filter(Boolean).join(" ");
+  return coin || "--";
+}
+
+function readableTradeSide(event) {
+  const metadata = eventMetadata(event);
+  const text = [
+    event.reason,
+    event.client_event_id,
+    metadata.side,
+    metadata.direction,
+    metadata.position_side,
+    metadata.positionSide,
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (/\blong\b/.test(text)) return "long";
+  if (/\bshort\b/.test(text)) return "short";
+  const side = String(metadata.side || event.side || "").toLowerCase();
+  const market = eventMarketType(event);
+  if (side === "buy" && market === "perp") return "long";
+  if (side === "sell" && market === "perp") return "short";
+  if (side === "buy" || side === "sell") return side;
+  const eventId = String(event.client_event_id || "").toLowerCase();
+  if (eventId.includes("-buy-")) return market === "perp" ? "long" : "buy";
+  if (eventId.includes("-sell-")) return market === "perp" ? "short" : "sell";
+  const assetIn = String(event.asset_in || "").toUpperCase();
+  const assetOut = String(event.asset_out || "").toUpperCase();
+  if (assetIn === "USD" && assetOut && assetOut !== "USD") return market === "perp" ? "long" : "buy";
+  if (assetOut === "USD" && assetIn && assetIn !== "USD") return market === "perp" ? "short" : "sell";
+  return "";
+}
+
+function eventCoin(event) {
+  const metadata = eventMetadata(event);
+  const direct = metadata.coin || event.coin;
+  if (direct) return String(direct).toUpperCase();
+  const assetOut = String(event.asset_out || "").toUpperCase();
+  const assetIn = String(event.asset_in || "").toUpperCase();
+  if (assetOut && assetOut !== "USD") return assetOut;
+  if (assetIn && assetIn !== "USD") return assetIn;
+  const match = String(event.reason || "").match(/\b(BTC|ETH|SOL|USDC|USDT|PURR)\b/i);
+  return match ? match[1].toUpperCase() : "";
+}
+
+function eventLeverage(event) {
+  const metadata = eventMetadata(event);
+  const value = asNumber(metadata.leverage ?? event.leverage);
+  if (value !== null) return `${Number.isInteger(value) ? value.toFixed(0) : String(value)}x`;
+  const match = String(event.reason || "").match(/\b(\d+(?:\.\d+)?)\s*x\b/i);
+  return match ? `${match[1]}x` : "";
+}
+
+function failureStatus(status) {
+  return /fail|reject|cancel|error|liquidat/i.test(String(status || ""));
 }
 
 function renderModalSources(event, agent) {
   const txUrl = backendTxUrl(event.raw || {}, agent);
   const container = byId("modalSources");
   container.textContent = "";
-  event.sources.forEach((source) => {
-    const row = document.createElement("span");
-    row.textContent = source;
-    container.append(row);
+  keyModalSources(event.sources).forEach((source) => {
+    const { label, value } = readableSource(source);
+    appendSourceRow(container, label, value);
   });
   if (txUrl) {
     const row = document.createElement("span");
-    row.textContent = "explorer: ";
+    const name = document.createElement("b");
+    name.textContent = "Explorer";
     const link = document.createElement("a");
     link.href = txUrl;
     link.target = "_blank";
     link.rel = "noreferrer";
     link.textContent = "NearBlocks";
-    row.append(link);
+    row.append(name, link);
     container.append(row);
   }
+}
+
+function keyModalSources(sources) {
+  const priority = ["paper_order_id", "intent_id", "client_event_id", "wallet", "source"];
+  return sources
+    .slice()
+    .sort((left, right) => sourcePriority(left, priority) - sourcePriority(right, priority))
+    .slice(0, 4);
+}
+
+function sourcePriority(source, priority) {
+  const key = String(source).split(":")[0]?.trim();
+  const index = priority.indexOf(key);
+  return index === -1 ? priority.length : index;
+}
+
+function readableSource(source) {
+  const [rawKey, ...rest] = String(source).split(":");
+  const value = rest.join(":").trim();
+  const key = rawKey.trim();
+  const labels = {
+    client_event_id: "Client event ID",
+    intent_id: "Intent ID",
+    network: "Network",
+    paper_order_id: "Paper order ID",
+    source: "Table",
+    status_claim: "Backend status",
+    tx_hash: "Tx hash",
+    venue: "Venue",
+    wallet: "Agent wallet",
+  };
+  return {
+    label: labels[key] || titleCase(key),
+    value: value || source,
+  };
+}
+
+function appendSourceRow(container, label, value) {
+  const row = document.createElement("span");
+  const name = document.createElement("b");
+  const code = document.createElement("code");
+  name.textContent = label;
+  code.textContent = value;
+  row.append(name, code);
+  container.append(row);
 }
 
 function closeModal() {
@@ -1363,8 +1631,9 @@ function bindUnlockButtons() {
 }
 
 function renderGateState(agent) {
-  byId("chartPanel").classList.add("unlocked");
-  document.body.classList.add("is-unlocked");
+  const unlocked = isUnlocked(agent);
+  byId("chartPanel").classList.toggle("unlocked", unlocked);
+  document.body.classList.toggle("is-unlocked", unlocked);
 }
 
 let columnSyncFrame = 0;
@@ -1436,6 +1705,29 @@ document.querySelectorAll(".ticket-tab").forEach((button) => {
     renderTicket(selectedAgent());
     scheduleKeyMarketRefresh("side-change");
     dispatchUiEvent("clawhouse:side-change");
+  });
+});
+
+function syncChartRangeButtons() {
+  document.querySelectorAll("[data-chart-range]").forEach((button) => {
+    const active = button.dataset.chartRange === activeChartRange;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+document.querySelectorAll("[data-chart-range]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const nextRange = CHART_RANGES[button.dataset.chartRange] ? button.dataset.chartRange : "24h";
+    if (nextRange === activeChartRange) return;
+    activeChartRange = nextRange;
+    activeEventId = null;
+    chartAnimationPending = true;
+    syncChartRangeButtons();
+    renderHero(selectedAgent());
+    renderRoom(selectedAgent());
+    syncContentColumns();
+    dispatchUiEvent("clawhouse:chart-range-change");
   });
 });
 
@@ -1538,10 +1830,12 @@ window.ClawHouseDemo = {
   getSelectedAgent: selectedAgent,
   getTradeSide: () => tradeSide,
   getKeyAmount: () => byId("keyAmount")?.value || "1",
+  getChartRange: () => activeChartRange,
   setChainState,
   showToast
 };
 
+syncChartRangeButtons();
 render();
 dispatchUiEvent("clawhouse:ready");
 scheduleKeyMarketRefresh("initial", 0);

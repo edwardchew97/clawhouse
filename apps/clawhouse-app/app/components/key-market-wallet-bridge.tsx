@@ -30,7 +30,7 @@ type DemoChainState = {
   contractId?: string;
   networkId?: string;
   pending?: boolean;
-  phase?: "idle" | "connecting" | "quoting" | "signing" | "refreshing";
+  phase?: "idle" | "connecting" | "quoting" | "signing" | "refreshing" | "unlocking";
   lastTxHash?: string | null;
   explorerUrl?: string | null;
   state?: Record<string, unknown> | null;
@@ -39,6 +39,14 @@ type DemoChainState = {
   protection?: Record<string, unknown> | null;
   activity?: Record<string, unknown> | null;
   activityError?: string | null;
+  backend?: Record<string, unknown> | null;
+  readToken?: string | null;
+  readAccess?: {
+    boardId: string;
+    holderAccountId: string;
+    expiresAt: string;
+  } | null;
+  readAccessError?: string | null;
   error?: string | null;
   statusTitle?: string;
   statusBody?: string;
@@ -62,6 +70,20 @@ type QuoteResponse = {
   };
 };
 
+type ReadTokenChallengeResponse = {
+  challenge: {
+    challenge: string;
+    message: string;
+    recipient: string;
+    nonce: string;
+  };
+};
+
+type ReadTokenResponse = {
+  readToken: string;
+  expiresAt: string;
+};
+
 declare global {
   interface Window {
     ClawHouseDemo?: DemoApi;
@@ -75,6 +97,12 @@ export function KeyMarketWalletBridge() {
   const configRef = useRef<KeyMarketConfig | null>(null);
   const initializeRef = useRef<Promise<void> | null>(null);
   const busyRef = useRef(false);
+  const readTokenRef = useRef<{
+    boardId: string;
+    holderAccountId: string;
+    readToken: string;
+    expiresAt: string;
+  } | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -92,6 +120,7 @@ export function KeyMarketWalletBridge() {
         const connector = new NearConnector({
           network: config.networkId,
           features: {
+            signMessage: true,
             signAndSendTransaction: true,
             signInWithoutAddKey: true,
             testnet: true,
@@ -115,10 +144,14 @@ export function KeyMarketWalletBridge() {
         connector.on("wallet:signOut", () => {
           walletRef.current = null;
           accountRef.current = null;
+          readTokenRef.current = null;
           renderChainState({
             accountId: null,
             contractId: config.contractId,
             networkId: config.networkId,
+            readToken: null,
+            readAccess: null,
+            backend: null,
           });
         });
 
@@ -170,6 +203,11 @@ export function KeyMarketWalletBridge() {
         } else {
           await connectWallet();
         }
+        return;
+      }
+
+      if (tradeButton && !accountRef.current) {
+        await connectWallet();
         return;
       }
 
@@ -251,6 +289,7 @@ export function KeyMarketWalletBridge() {
       } finally {
         walletRef.current = null;
         accountRef.current = null;
+        readTokenRef.current = null;
         renderChainState({
           accountId: null,
           pending: false,
@@ -260,6 +299,9 @@ export function KeyMarketWalletBridge() {
           statusTitle: "Wallet disconnected",
           statusBody: "Connect Wallet",
           statusTone: "idle",
+          readToken: null,
+          readAccess: null,
+          backend: null,
         });
         busyRef.current = false;
         showToast("NEAR wallet disconnected.");
@@ -472,19 +514,107 @@ export function KeyMarketWalletBridge() {
         fetchJson<QuoteResponse>(quotePath),
         fetchJson<Record<string, unknown>>(activityPath),
       ]);
+      const state = stateResult.status === "fulfilled" ? stateResult.value.state : null;
+      const activeTokenResult = await Promise.allSettled([ensureReadToken(agent, state)]).then((results) => results[0]);
+      const activeToken = activeTokenResult.status === "fulfilled" ? activeTokenResult.value : null;
+      const backendResult = await Promise.allSettled([
+        fetchBackendBoard(agent, activeToken?.readToken ?? null),
+      ]).then((results) => results[0]);
 
       renderChainState({
         accountId: account?.accountId ?? null,
         contractId: config.contractId,
         networkId: config.networkId,
-        state: stateResult.status === "fulfilled" ? stateResult.value.state : null,
+        pending: false,
+        phase: "idle",
+        state,
         quote: quoteResult.status === "fulfilled" ? quoteResult.value.quote : null,
         quoteSide: quoteResult.status === "fulfilled" ? side : null,
         protection: quoteResult.status === "fulfilled" ? quoteResult.value.protection : null,
         activity: activityResult.status === "fulfilled" ? activityResult.value : null,
         activityError: firstRejectedMessage([activityResult]),
+        backend: backendResult.status === "fulfilled" ? backendResult.value : { ok: false, error: firstRejectedMessage([backendResult]) },
+        readToken: activeToken?.readToken ?? null,
+        readAccess: activeToken ? {
+          boardId: activeToken.boardId,
+          holderAccountId: activeToken.holderAccountId,
+          expiresAt: activeToken.expiresAt,
+        } : null,
+        readAccessError: activeTokenResult.status === "rejected"
+          ? errorMessage(activeTokenResult.reason, "Room access signature failed.")
+          : null,
         error: firstRejectedMessage([stateResult, quoteResult]),
       });
+    }
+
+    async function ensureReadToken(agent: DemoAgent, state: Record<string, unknown> | null) {
+      const account = accountRef.current;
+      const wallet = walletRef.current;
+      if (!account || !wallet || !state) {
+        readTokenRef.current = null;
+        return null;
+      }
+
+      const balance = Number(state.holder_balance);
+      if (!Number.isFinite(balance) || balance <= 0) {
+        readTokenRef.current = null;
+        return null;
+      }
+
+      const boardId = agent.boardId ?? agent.id;
+      const config = configRef.current;
+      if (!config) throw new Error("Key-market config is unavailable.");
+      const cached = readTokenRef.current;
+      if (
+        cached
+        && cached.boardId === boardId
+        && cached.holderAccountId === account.accountId
+        && Date.parse(cached.expiresAt) > Date.now() + 30_000
+      ) {
+        return cached;
+      }
+
+      if (!wallet.manifest.features.signMessage) {
+        throw new Error("Selected wallet does not support signed room access.");
+      }
+
+      renderChainState({
+        accountId: account.accountId,
+        pending: true,
+        phase: "unlocking",
+        statusTitle: "Confirm room access",
+        statusBody: "Sign a wallet message to unlock Agent reasoning.",
+        statusTone: "pending",
+      });
+
+      const challengeResponse = await fetchJson<ReadTokenChallengeResponse>("/api/backend/read-token/nonce", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ boardId, holderAccountId: account.accountId }),
+      });
+      const signedMessage = await wallet.signMessage({
+        network: config.networkId,
+        signerId: account.accountId,
+        message: challengeResponse.challenge.message,
+        recipient: challengeResponse.challenge.recipient,
+        nonce: base64UrlToBytes(challengeResponse.challenge.nonce),
+      });
+      const readTokenResponse = await fetchJson<ReadTokenResponse>("/api/backend/read-token", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          challenge: challengeResponse.challenge.challenge,
+          signedMessage,
+        }),
+      });
+
+      readTokenRef.current = {
+        boardId,
+        holderAccountId: account.accountId,
+        readToken: readTokenResponse.readToken,
+        expiresAt: readTokenResponse.expiresAt,
+      };
+      return readTokenRef.current;
     }
 
     function renderChainState(state: DemoChainState) {
@@ -495,11 +625,17 @@ export function KeyMarketWalletBridge() {
       window.ClawHouseDemo?.showToast(message, options);
     }
 
+    const refreshFromUi = () => {
+      if (accountRef.current) void refreshWalletRead("ui-change");
+    };
+
     document.addEventListener("click", captureClick, true);
+    window.addEventListener("clawhouse:agent-change", refreshFromUi);
 
     return () => {
       disposed = true;
       document.removeEventListener("click", captureClick, true);
+      window.removeEventListener("clawhouse:agent-change", refreshFromUi);
     };
   }, []);
 
@@ -514,6 +650,12 @@ async function reportKeyMarketActivity(body: Record<string, string>) {
   });
 }
 
+async function fetchBackendBoard(agent: DemoAgent, readToken: string | null) {
+  const boardId = agent.boardId ?? agent.id;
+  const headers = readToken ? { "x-clawhouse-read-token": readToken } : undefined;
+  return fetchJson<Record<string, unknown>>(`/api/backend/board?boardId=${encodeURIComponent(boardId)}`, { headers });
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   const data = await response.json() as T & { ok?: boolean; error?: string };
@@ -526,6 +668,12 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 function normalizedAmount(value: string) {
   const trimmed = value.trim();
   return /^[1-9]\d{0,5}$/.test(trimmed) ? trimmed : "1";
+}
+
+function base64UrlToBytes(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
 }
 
 function requireString(value: unknown, message: string) {

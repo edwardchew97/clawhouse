@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import {
   generateNearWallet,
   inspectNearWallet,
+  signAgentBoardLedgerAgentRequest,
   signAgentBoardLedgerRequest,
   type NearWalletPublicInfo,
 } from "../../../tools/near-wallet/src/wallet";
@@ -11,7 +12,6 @@ import {
 type Options = {
   baseUrl: string;
   keyFile: string;
-  serviceToken?: string;
   boardId?: string;
   agentId: string;
   startingBalanceUsd: number;
@@ -27,25 +27,27 @@ async function main() {
     printJson({
       usage: "bun scripts/register-board.ts --base-url <url> --key-file <path> --agent-id <id>",
       options: ["--starting-balance-usd <number>"],
-      env: ["AGENT_BOARD_LEDGER_ADMIN_TOKEN", "ledgerAdminToken"],
+      endpoint: "POST /creator-onboarding/register",
     });
     return;
   }
   const options = parseArgs(process.argv.slice(2));
-  if (!options.serviceToken) {
-    throw new Error("Missing ledgerAdminToken input or AGENT_BOARD_LEDGER_ADMIN_TOKEN for service-authorized board registration");
-  }
 
   const wallet = await loadOrCreateWallet(options.keyFile);
   const boardId = options.boardId || `ledger-board-${crypto.randomUUID().slice(0, 8)}`;
+  const paperAccountId = `${boardId}-paper`;
   const body = {
     board_id: boardId,
+    paper_account_id: paperAccountId,
     agent_id: options.agentId,
+    agent_public_key: wallet.publicKey,
     wallet_address: wallet.walletAddress,
     public_key: wallet.publicKey,
     base_currency: "USD",
     public_status: "active",
     visibility_mode: options.visibilityMode,
+    starting_balance_usd: options.startingBalanceUsd,
+    allowed_markets: ["BTC", "ETH"],
     metadata: {
       source: "acceptance-workbench",
       strategy_summary: "Workbench-registered agent board metadata.",
@@ -55,38 +57,29 @@ async function main() {
   const signed = await signAgentBoardLedgerRequest({
     keyFile: options.keyFile,
     method: "POST",
-    path: "/boards",
+    path: "/creator-onboarding/register",
     body: rawBody,
     boardId,
     agentId: options.agentId,
   });
-  const response = await requestJson(options.baseUrl, "/boards", {
+  const signedAgent = await signAgentBoardLedgerAgentRequest({
+    keyFile: options.keyFile,
+    method: "POST",
+    path: "/creator-onboarding/register",
+    body: rawBody,
+    purpose: "creator_onboarding_registration",
+    boardId,
+    agentId: options.agentId,
+    agentPublicKey: wallet.publicKey,
+  });
+  const response = await requestJson(options.baseUrl, "/creator-onboarding/register", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${options.serviceToken}`,
       ...signed.headers,
+      ...signedAgent.headers,
     },
     body: rawBody,
-  });
-  const paperAccountId = `${boardId}-paper`;
-  const paperAccount = await requestJson(options.baseUrl, "/paper/accounts", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${options.serviceToken}`,
-    },
-    body: JSON.stringify({
-      paper_account_id: paperAccountId,
-      board_id: boardId,
-      agent_id: options.agentId,
-      agent_public_key: wallet.publicKey,
-      starting_balance_usd: options.startingBalanceUsd,
-      allowed_markets: ["BTC", "ETH"],
-      metadata: {
-        source: "acceptance-workbench",
-      },
-    }),
   });
 
   printJson({
@@ -95,9 +88,11 @@ async function main() {
     wallet,
     boardId,
     agentId: options.agentId,
+    agentRegistration: response.agent,
     paperAccountId,
     board: response.board,
-    paperAccount: paperAccount.account,
+    paperAccount: response.paperAccount,
+    backendRegistered: response.backend_registered,
   });
 }
 
@@ -132,9 +127,6 @@ function parseArgs(args: string[]): Options {
   return {
     baseUrl: values["base-url"] || "http://127.0.0.1:4321",
     keyFile: resolvePath(values["key-file"] || "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json"),
-    serviceToken: optionalString(values["admin-token"])
-      ?? optionalString(process.env.AGENT_BOARD_LEDGER_ADMIN_TOKEN)
-      ?? optionalString(process.env.ledgerAdminToken),
     boardId: optionalString(values["board-id"]),
     agentId: values["agent-id"] || "ironclaw-workbench",
     startingBalanceUsd: numberOption(values["starting-balance-usd"], 10000, "starting-balance-usd"),

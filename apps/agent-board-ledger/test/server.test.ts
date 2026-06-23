@@ -5,7 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrate, openMigratedRuntimeLedgerDb, openRuntimeLedgerDb, openSqliteLedgerDb, type LedgerDb, type SqliteLedgerDb } from "../src/db";
-import { ADMIN_TOKEN_ENV, canonicalAuthPayload, sha256Hex } from "../src/auth";
+import { ADMIN_TOKEN_ENV, canonicalAgentAuthPayload, canonicalAuthPayload, sha256Hex } from "../src/auth";
 import { canonicalPaperAuthPayload } from "../src/paper-trading";
 import { createApp } from "../src/server";
 import { CRON_SECRET_ENV, handleVercelLedgerRequest } from "../src/vercel";
@@ -15,6 +15,7 @@ const tempRoots: string[] = [];
 let app: ReturnType<typeof createApp>;
 let sqliteDb: SqliteLedgerDb;
 let wallet: ReturnType<typeof createWallet>;
+let agentWallet: ReturnType<typeof createWallet>;
 let currentNow: Date;
 let currentRpcFetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -32,6 +33,7 @@ beforeEach(async () => {
     env: {},
   });
   wallet = createWallet();
+  agentWallet = createWallet();
 });
 
 afterEach(async () => {
@@ -61,6 +63,32 @@ describe("Agent Board Ledger local backend", () => {
       boardId: "board-1",
       agentId: "ironclaw",
       walletAddress: wallet.walletAddress,
+    }));
+  });
+
+  test("uses the same fixed-order canonical agent auth payload as the wallet tool", () => {
+    expect(canonicalAgentAuthPayload({
+      purpose: "board_registration",
+      method: "post",
+      path: "/boards",
+      bodyHash: "0".repeat(64),
+      timestamp: "2026-06-19T00:00:00.000Z",
+      nonce: "agent-nonce-1",
+      agentId: "ironclaw",
+      agentPublicKey: agentWallet.publicKey,
+      boardId: "board-1",
+    })).toBe(JSON.stringify({
+      domain: "clawhouse.agent-board-ledger.v0",
+      version: 1,
+      purpose: "board_registration",
+      method: "POST",
+      path: "/boards",
+      bodyHash: "0".repeat(64),
+      timestamp: "2026-06-19T00:00:00.000Z",
+      nonce: "agent-nonce-1",
+      agentId: "ironclaw",
+      agentPublicKey: agentWallet.publicKey,
+      boardId: "board-1",
     }));
   });
 
@@ -380,6 +408,7 @@ describe("Agent Board Ledger local backend", () => {
     const response = await postJson("/boards", {
       board_id: "board-1",
       agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
     }, { admin: false, signed: true });
@@ -392,6 +421,7 @@ describe("Agent Board Ledger local backend", () => {
     const response = await postJson("/boards", {
       board_id: "board-1",
       agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
     });
@@ -405,12 +435,138 @@ describe("Agent Board Ledger local backend", () => {
     const response = await postJson("/boards", {
       board_id: "board-1",
       agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
     }, { signed: true, signer: otherWallet });
 
     expect(response.status).toBe(401);
     expect((await jsonOf<{ error: string }>(response)).error).toBe("Wallet does not match board registration");
+  });
+
+  test("requires board registration to be signed by a registered agent key", async () => {
+    await registerAgent("ironclaw", agentWallet.publicKey);
+    const body = {
+      board_id: "board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+    };
+
+    const missingAgentSignature = await postJson("/boards", body, { signed: true });
+    const unregisteredAgent = await postJson("/boards", {
+      ...body,
+      board_id: "board-rogue",
+      agent_id: "rogue-agent",
+    }, { signed: true, agentSigned: true });
+
+    expect(missingAgentSignature.status).toBe(401);
+    expect((await jsonOf<{ error: string }>(missingAgentSignature)).error).toBe("Missing x-clawhouse-agent-public-key");
+    expect(unregisteredAgent.status).toBe(403);
+    expect((await jsonOf<{ error: string }>(unregisteredAgent)).error).toBe("Agent registration not found");
+  });
+
+  test("rejects board registration when a different agent key signs the binding", async () => {
+    await registerAgent("ironclaw", agentWallet.publicKey);
+    const attackerAgent = createWallet();
+    const body = {
+      board_id: "board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+    };
+    const response = await postJson("/boards", body, {
+      signed: true,
+      agentSigned: true,
+      agentSigner: attackerAgent,
+    });
+
+    expect(response.status).toBe(401);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("Agent public key does not match signed agent");
+  });
+
+  test("creator onboarding registers agent board and paper account with one signed request", async () => {
+    const response = await postJson("/creator-onboarding/register", {
+      board_id: "board-1",
+      paper_account_id: "paper-board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      starting_balance_usd: 10000,
+      allowed_markets: ["BTC", "ETH"],
+      metadata: { source: "creator-onboarding-test" },
+    }, { admin: false, signed: true, agentSigned: true });
+    const body = await jsonOf<{
+      backend_registered: boolean;
+      agent_id: string;
+      board_id: string;
+      paper_account_id: string;
+    }>(response);
+    const discoverable = await jsonOf<{ count: number }>(await app.fetch(new Request("http://ledger.test/boards")));
+    const paper = await jsonOf<{ account: { id: string; starting_balance_usd: number } }>(
+      await app.fetch(new Request("http://ledger.test/paper/accounts/paper-board-1")),
+    );
+
+    expect(response.status).toBe(201);
+    expect(body.backend_registered).toBe(true);
+    expect(body.agent_id).toBe("ironclaw");
+    expect(body.board_id).toBe("board-1");
+    expect(body.paper_account_id).toBe("paper-board-1");
+    expect(discoverable.count).toBe(1);
+    expect(paper.account.id).toBe("paper-board-1");
+    expect(paper.account.starting_balance_usd).toBe(10000);
+  });
+
+  test("creator onboarding is idempotent for matching backend records", async () => {
+    const body = {
+      board_id: "board-1",
+      paper_account_id: "paper-board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      starting_balance_usd: 10000,
+      allowed_markets: ["BTC", "ETH"],
+    };
+    const first = await postJson("/creator-onboarding/register", body, { admin: false, signed: true, agentSigned: true });
+    const second = await postJson("/creator-onboarding/register", body, { admin: false, signed: true, agentSigned: true });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(countRows("agent_registrations")).toBe(1);
+    expect(countRows("boards")).toBe(1);
+    expect(countRows("paper_accounts")).toBe(1);
+  });
+
+  test("creator onboarding rejects an existing board that is not public active", async () => {
+    await registerAgent("ironclaw", agentWallet.publicKey);
+    const existingBoard = await postJson("/boards", {
+      board_id: "board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      public_status: "draft",
+      visibility_mode: "private",
+    }, { signed: true, agentSigned: true });
+    const response = await postJson("/creator-onboarding/register", {
+      board_id: "board-1",
+      paper_account_id: "paper-board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      starting_balance_usd: 10000,
+      allowed_markets: ["BTC", "ETH"],
+    }, { admin: false, signed: true, agentSigned: true });
+
+    expect(existingBoard.status).toBe(201);
+    expect(response.status).toBe(409);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("Existing board public_status does not match registration");
+    expect(countRows("paper_accounts")).toBe(0);
   });
 
   test("gates holder-only reads with a service-issued read token", async () => {
@@ -690,7 +846,7 @@ describe("Agent Board Ledger local backend", () => {
       reason: "The first explanation missed liquidity depth.",
       metadata: { confidence: "medium" },
     });
-    const eventsResponse = await app.fetch(new Request("http://ledger.test/boards/board-1/events"));
+    const eventsResponse = await serviceGet("/boards/board-1/events");
     const eventsBody = await jsonOf<{ events: Array<Record<string, any>> }>(eventsResponse);
 
     expect(attachmentResponse.status).toBe(201);
@@ -736,7 +892,7 @@ describe("Agent Board Ledger local backend", () => {
     });
     const secondBody = await jsonOf<{ merged: boolean }>(second);
     const eventsBody = await jsonOf<{ events: Array<Record<string, any>> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/events")),
+      await serviceGet("/boards/board-1/events"),
     );
 
     expect(first.status).toBe(201);
@@ -744,6 +900,26 @@ describe("Agent Board Ledger local backend", () => {
     expect(secondBody.merged).toBe(true);
     expect(eventsBody.events).toHaveLength(1);
     expect(eventsBody.events[0].reason).toBe("First report.");
+  });
+
+  test("database enforces one event per transaction identifier per board", async () => {
+    await registerBoard();
+    const insertRawEvent = (id: string, clientEventId: string | null, txHash: string | null, intentId: string | null) => {
+      sqliteDb.raw.query(
+        `INSERT INTO events
+          (id, board_id, agent_id, wallet_address, event_type, client_event_id, tx_hash, intent_id, created_at)
+          VALUES (?, 'board-1', 'ironclaw', ?, 'agent_reported', ?, ?, ?, ?)`,
+      ).run(id, wallet.walletAddress, clientEventId, txHash, intentId, currentNow.toISOString());
+    };
+
+    insertRawEvent("evt-db-client-source", "client-db", null, null);
+    expect(() => insertRawEvent("evt-db-client-duplicate", "client-db", null, null)).toThrow(/UNIQUE constraint failed/);
+
+    insertRawEvent("evt-db-tx-source", "client-db-tx-a", "tx-db", null);
+    expect(() => insertRawEvent("evt-db-tx-duplicate", "client-db-tx-b", "tx-db", null)).toThrow(/UNIQUE constraint failed/);
+
+    insertRawEvent("evt-db-intent-source", "client-db-intent-a", null, "intent-db");
+    expect(() => insertRawEvent("evt-db-intent-duplicate", "client-db-intent-b", null, "intent-db")).toThrow(/UNIQUE constraint failed/);
   });
 
   test("cron discovers unreported observations and creates a reasonless timeline event", async () => {
@@ -762,7 +938,7 @@ describe("Agent Board Ledger local backend", () => {
     const tickResponse = await postJson("/cron/tick", {});
     const tickBody = await jsonOf<{ discoveredEvents: number }>(tickResponse);
     const eventsBody = await jsonOf<{ events: Array<Record<string, any>> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/events")),
+      await serviceGet("/boards/board-1/events"),
     );
 
     expect(tickBody.discoveredEvents).toBe(1);
@@ -796,7 +972,7 @@ describe("Agent Board Ledger local backend", () => {
       await postJson("/cron/tick", {}),
     );
     const eventsBody = await jsonOf<{ events: Array<Record<string, any>> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/events")),
+      await serviceGet("/boards/board-1/events"),
     );
 
     expect(tickBody.discoveredEvents).toBe(0);
@@ -822,10 +998,10 @@ describe("Agent Board Ledger local backend", () => {
 
     await postJson("/cron/tick", {});
     const pnlBody = await jsonOf<{ latest: Record<string, number> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/pnl")),
+      await serviceGet("/boards/board-1/pnl"),
     );
     const portfolioBody = await jsonOf<{ latest: Record<string, number> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/portfolio")),
+      await serviceGet("/boards/board-1/portfolio"),
     );
 
     expect(pnlBody.latest.current_value_usd).toBe(130);
@@ -867,10 +1043,10 @@ describe("Agent Board Ledger local backend", () => {
 
     await postJson("/cron/tick", {});
     const pnlBody = await jsonOf<{ latest: Record<string, any> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/pnl")),
+      await serviceGet("/boards/board-1/pnl"),
     );
     const changesBody = await jsonOf<{ balance_changes: Array<Record<string, any>> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/balance-changes")),
+      await serviceGet("/boards/board-1/balance-changes"),
     );
 
     expect(pnlBody.latest.price_snapshot_id).toBe(priceBody.prices[0].id);
@@ -907,10 +1083,10 @@ describe("Agent Board Ledger local backend", () => {
 
     await postJson("/cron/tick", {});
     const pnlBody = await jsonOf<{ latest: Record<string, any> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/pnl")),
+      await serviceGet("/boards/board-1/pnl"),
     );
     const portfolioBody = await jsonOf<{ latest: Record<string, any> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/portfolio")),
+      await serviceGet("/boards/board-1/portfolio"),
     );
 
     expect(pnlBody.latest.current_value_usd).toBe(110);
@@ -947,7 +1123,7 @@ describe("Agent Board Ledger local backend", () => {
     );
     await postJson("/cron/tick", {});
     const pnlBody = await jsonOf<{ latest: Record<string, any> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/pnl")),
+      await serviceGet("/boards/board-1/pnl"),
     );
     const rpcBody = seenRpcBodies[0];
 
@@ -994,7 +1170,7 @@ describe("Agent Board Ledger local backend", () => {
       summary: Record<string, number | boolean | string>;
     }>(await postJson("/cron/tick", {}));
     const changesBody = await jsonOf<{ balance_changes: Array<Record<string, any>> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/balance-changes")),
+      await serviceGet("/boards/board-1/balance-changes"),
     );
 
     expect(tickBody.status).toBe("updated");
@@ -1047,7 +1223,7 @@ describe("Agent Board Ledger local backend", () => {
     );
     await postJson("/cron/tick", {});
     const pnlBody = await jsonOf<{ latest: Record<string, any> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/pnl")),
+      await serviceGet("/boards/board-1/pnl"),
     );
 
     expect(seenRpcBodies.map((body) => body.params.method_name)).toEqual(["ft_metadata", "ft_balance_of"]);
@@ -1101,6 +1277,22 @@ describe("Agent Board Ledger local backend", () => {
     expect(seenRpcBodies).toHaveLength(2);
     expect(allowed.status).toBe(200);
     expect(allowedBody.events[0].reason).toBe("Holder-gated reason.");
+  });
+
+  test("rejects NEAR key-market read access when body agent_id does not match the board", async () => {
+    currentRpcFetch = async () => nearViewResponse("2");
+    await registerBoard({ visibility_mode: "holder_gated" });
+
+    const response = await postJson("/boards/board-1/read-access/near-key-market", {
+      rpc_url: "https://rpc.testnet.near.org",
+      key_contract_id: "clawhouse-key.testnet",
+      holder_account_id: "holder.testnet",
+      agent_id: "different-agent",
+      read_token: "wrong-agent-token",
+    });
+
+    expect(response.status).toBe(400);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("agent_id must match board agent_id");
   });
 
   test("rechecks NEAR key-market holder balance before each holder-gated read", async () => {
@@ -1206,7 +1398,7 @@ describe("Agent Board Ledger local backend", () => {
 
     await postJson("/cron/tick", {});
     const pnlBody = await jsonOf<{ latest: Record<string, any> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/pnl")),
+      await serviceGet("/boards/board-1/pnl"),
     );
 
     expect(pnlBody.latest.price_snapshot_id).toBe(priceBody.prices[0].id);
@@ -1240,7 +1432,7 @@ describe("Agent Board Ledger local backend", () => {
 
     await postJson("/cron/tick", {});
     const eventsBody = await jsonOf<{ events: Array<Record<string, any>> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/events")),
+      await serviceGet("/boards/board-1/events"),
     );
 
     expect(eventsBody.events[0].reason).toBe("Agent claimed the swap filled.");
@@ -1277,7 +1469,7 @@ describe("Agent Board Ledger local backend", () => {
       await postJson("/cron/tick", {}),
     );
     const eventsBody = await jsonOf<{ events: Array<Record<string, any>> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/events")),
+      await serviceGet("/boards/board-1/events"),
     );
 
     expect(tickBody.summary.statusConflicts).toBe(1);
@@ -1306,7 +1498,7 @@ describe("Agent Board Ledger local backend", () => {
       summary: Record<string, number | boolean>;
     }>(await postJson("/cron/tick", {}));
     const pnlBody = await jsonOf<{ latest: Record<string, any> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/pnl")),
+      await serviceGet("/boards/board-1/pnl"),
     );
 
     expect(firstTick.status).toBe("updated");
@@ -1348,7 +1540,7 @@ describe("Agent Board Ledger local backend", () => {
       summary: Record<string, number | boolean>;
     }>(await postJson("/cron/tick", {}));
     const eventsBody = await jsonOf<{ events: Array<Record<string, any>> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/events")),
+      await serviceGet("/boards/board-1/events"),
     );
 
     expect(tickBody.discoveredEvents).toBe(1);
@@ -1383,7 +1575,7 @@ describe("Agent Board Ledger local backend", () => {
       await postJson("/cron/tick", {}),
     );
     const pnlBody = await jsonOf<{ latest: Record<string, any> }>(
-      await app.fetch(new Request("http://ledger.test/boards/board-1/pnl")),
+      await serviceGet("/boards/board-1/pnl"),
     );
 
     expect(tickBody.snapshots).toHaveLength(1);
@@ -1439,21 +1631,32 @@ describe("Agent Board Ledger local backend", () => {
   });
 
   test("normalizes Vercel wildcard rewrites without breaking board registration", async () => {
+    await registerAgent("ironclaw", agentWallet.publicKey);
     const body = {
       board_id: "board-1",
       agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
       base_currency: "USD",
       public_status: "active",
       visibility_mode: "public",
     };
-    const signed = signRequest("POST", "/boards", body, wallet, { timestamp: Date.now().toString() });
+    const timestamp = Date.now().toString();
+    const signed = signRequest("POST", "/boards", body, wallet, { timestamp });
+    const agentSigned = signAgentRequest("POST", "/boards", body, agentWallet, {
+      purpose: "board_registration",
+      boardId: "board-1",
+      agentId: "ironclaw",
+      agentPublicKey: agentWallet.publicKey,
+      timestamp,
+    });
     const response = await handleVercelLedgerRequest(
       new Request("http://ledger.test/api/ledger?ledgerPath=/boards/", {
         method: "POST",
         headers: {
           ...signed.headers,
+          ...agentSigned.headers,
           authorization: `Bearer ${adminToken}`,
         },
         body: signed.rawBody,
@@ -1465,19 +1668,29 @@ describe("Agent Board Ledger local backend", () => {
   });
 
   test("normalizes Vercel paper trading rewrites", async () => {
+    await registerAgent("ironclaw", agentWallet.publicKey);
+    const paperBody = {
+      paper_account_id: "paper-vercel",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      starting_balance_usd: 1000,
+    };
+    const signed = signAgentRequest("POST", "/paper/accounts", paperBody, agentWallet, {
+      purpose: "paper_account_registration",
+      boardId: null,
+      agentId: "ironclaw",
+      agentPublicKey: agentWallet.publicKey,
+      timestamp: Date.now().toString(),
+    });
     const response = await handleVercelLedgerRequest(
       new Request("http://ledger.test/api/ledger?ledgerPath=/paper/accounts/", {
         method: "POST",
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${adminToken}`,
+          ...signed.headers,
         },
-        body: JSON.stringify({
-          paper_account_id: "paper-vercel",
-          agent_id: "ironclaw",
-          agent_public_key: wallet.publicKey,
-          starting_balance_usd: 1000,
-        }),
+        body: signed.rawBody,
       }),
       { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
     );
@@ -1654,12 +1867,13 @@ describe("Agent Board Ledger local backend", () => {
   });
 
   test("rejects invalid production accounting numbers", async () => {
+    await registerAgent("ironclaw", agentWallet.publicKey);
     const zeroStart = await postJson("/paper/accounts", {
       paper_account_id: "paper-zero",
       agent_id: "ironclaw",
-      agent_public_key: wallet.publicKey,
+      agent_public_key: agentWallet.publicKey,
       starting_balance_usd: 0,
-    });
+    }, { agentSigned: true });
     expect(zeroStart.status).toBe(400);
     expect((await jsonOf<{ error: string }>(zeroStart)).error).toBe("starting_balance_usd must be greater than 0");
 
@@ -1685,6 +1899,37 @@ describe("Agent Board Ledger local backend", () => {
     expect((await jsonOf<{ error: string }>(negativeTopup)).error).toBe("topup_usd must be greater than or equal to 0");
     expect(negativeWithdrawal.status).toBe(400);
     expect((await jsonOf<{ error: string }>(negativeWithdrawal)).error).toBe("withdrawal_usd must be greater than or equal to 0");
+  });
+
+  test("requires paper account creation to be signed by the registered agent", async () => {
+    await registerAgent("ironclaw", agentWallet.publicKey);
+
+    const response = await postJson("/paper/accounts", {
+      paper_account_id: "paper-unsigned",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      starting_balance_usd: 1000,
+    });
+
+    expect(response.status).toBe(401);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("Missing x-clawhouse-agent-public-key");
+  });
+
+  test("rejects paper account creation when board_id and agent identity disagree", async () => {
+    await registerBoard();
+    const otherAgent = createWallet();
+    await registerAgent("other-agent", otherAgent.publicKey, otherAgent);
+
+    const response = await postJson("/paper/accounts", {
+      paper_account_id: "paper-wrong-agent",
+      board_id: "board-1",
+      agent_id: "other-agent",
+      agent_public_key: otherAgent.publicKey,
+      starting_balance_usd: 1000,
+    }, { agentSigned: true, agentSigner: otherAgent });
+
+    expect(response.status).toBe(400);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("paper account agent_id must match board agent_id");
   });
 
   test("fills a signed Hyperliquid-style IOC paper order and exposes leaderboard and replay proof", async () => {
@@ -2537,6 +2782,7 @@ async function registerBoard(overrides: Record<string, unknown> = {}) {
   const body = {
     board_id: "board-1",
     agent_id: "ironclaw",
+    agent_public_key: agentWallet.publicKey,
     wallet_address: wallet.walletAddress,
     public_key: wallet.publicKey,
     base_currency: "USD",
@@ -2544,7 +2790,8 @@ async function registerBoard(overrides: Record<string, unknown> = {}) {
     visibility_mode: "public",
     ...boardOverrides,
   };
-  const response = await postJson("/boards", body, { signed: true });
+  await registerAgent(cleanBodyString(body.agent_id, "agent_id"), cleanBodyString(body.agent_public_key, "agent_public_key"));
+  const response = await postJson("/boards", body, { signed: true, agentSigned: true });
 
   expect(response.status).toBe(201);
   const board = (await jsonOf<{ board: Record<string, any> }>(response)).board;
@@ -2552,25 +2799,36 @@ async function registerBoard(overrides: Record<string, unknown> = {}) {
     paper_account_id: `paper-${body.board_id}`,
     board_id: body.board_id,
     agent_id: body.agent_id,
-    agent_public_key: wallet.publicKey,
+    agent_public_key: body.agent_public_key,
     starting_balance_usd: paperStartingBalanceUsd,
     allowed_markets: ["BTC", "ETH"],
-  });
+  }, { agentSigned: true });
   expect(paperResponse.status).toBe(201);
   return board;
 }
 
 async function registerPaperAccount(overrides: Record<string, unknown> = {}) {
+  await registerAgent("ironclaw", agentWallet.publicKey);
   const response = await postJson("/paper/accounts", {
     paper_account_id: "paper-1",
     agent_id: "ironclaw",
-    agent_public_key: wallet.publicKey,
+    agent_public_key: agentWallet.publicKey,
     starting_balance_usd: 1000,
     allowed_markets: ["BTC", "ETH"],
     ...overrides,
-  });
+  }, { agentSigned: true });
   expect(response.status).toBe(201);
   return (await jsonOf<{ account: Record<string, any> }>(response)).account;
+}
+
+async function registerAgent(agentId = "ironclaw", agentPublicKey = agentWallet.publicKey, signer = agentWallet) {
+  const response = await postJson("/agents", {
+    agent_id: agentId,
+    agent_public_key: agentPublicKey,
+    metadata: { source: "test" },
+  }, { agentSigned: true, agentSigner: signer });
+  expect(response.status).toBe(201);
+  return (await jsonOf<{ agent: Record<string, any> }>(response)).agent;
 }
 
 async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
@@ -2587,7 +2845,7 @@ async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
 async function postJson(
   path: string,
   body: Record<string, unknown>,
-  options: { admin?: boolean; signed?: boolean; signer?: ReturnType<typeof createWallet> } = {},
+  options: { admin?: boolean; signed?: boolean; signer?: ReturnType<typeof createWallet>; agentSigned?: boolean; agentSigner?: ReturnType<typeof createWallet> } = {},
 ) {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (options.admin !== false) {
@@ -2597,6 +2855,26 @@ async function postJson(
     Object.assign(headers, signRequest("POST", path, body, options.signer ?? wallet, {
       boardId: cleanBodyString(body.board_id ?? body.boardId, "board_id"),
       agentId: cleanBodyString(body.agent_id ?? body.agentId, "agent_id"),
+    }).headers);
+  }
+  if (options.agentSigned) {
+    const purpose = path === "/agents"
+      ? "agent_registration"
+      : path === "/paper/accounts"
+        ? "paper_account_registration"
+        : path === "/creator-onboarding/register"
+          ? "creator_onboarding_registration"
+        : "board_registration";
+    const boardId = path === "/agents"
+      ? null
+      : path === "/paper/accounts"
+        ? cleanOptionalBodyString(body.board_id ?? body.boardId)
+        : cleanBodyString(body.board_id ?? body.boardId, "board_id");
+    Object.assign(headers, signAgentRequest("POST", path, body, options.agentSigner ?? agentWallet, {
+      purpose,
+      boardId,
+      agentId: cleanBodyString(body.agent_id ?? body.agentId, "agent_id"),
+      agentPublicKey: cleanBodyString(body.agent_public_key ?? body.agentPublicKey, "agent_public_key"),
     }).headers);
   }
 
@@ -2622,7 +2900,13 @@ async function signedFetch(
   }));
 }
 
-async function paperSignedPost(path: string, body: Record<string, unknown>, signer = wallet) {
+async function serviceGet(path: string) {
+  return await app.fetch(new Request(`http://ledger.test${path}`, {
+    headers: { authorization: `Bearer ${adminToken}` },
+  }));
+}
+
+async function paperSignedPost(path: string, body: Record<string, unknown>, signer = agentWallet) {
   const signedBody = paperOrderTestBody(body);
   const rawBody = JSON.stringify(signedBody);
   const timestamp = currentNow.getTime().toString();
@@ -2708,9 +2992,55 @@ function signRequest(
   };
 }
 
+function signAgentRequest(
+  method: string,
+  path: string,
+  body: Record<string, unknown>,
+  signer = agentWallet,
+  options: {
+    purpose: "agent_registration" | "board_registration" | "paper_account_registration" | "creator_onboarding_registration";
+    boardId: string | null;
+    agentId: string;
+    agentPublicKey: string;
+    timestamp?: string;
+  },
+) {
+  const rawBody = JSON.stringify(body);
+  const timestamp = options.timestamp ?? currentNow.getTime().toString();
+  const nonce = crypto.randomUUID();
+  const bodyHash = sha256Hex(rawBody);
+  const payload = canonicalAgentAuthPayload({
+    purpose: options.purpose,
+    method,
+    path,
+    bodyHash,
+    timestamp,
+    nonce,
+    boardId: options.boardId,
+    agentId: options.agentId,
+    agentPublicKey: options.agentPublicKey,
+  });
+  const signature = signer.keyPair.sign(new TextEncoder().encode(payload)).signature;
+
+  return {
+    rawBody,
+    headers: {
+      "x-clawhouse-agent-public-key": signer.publicKey,
+      "x-clawhouse-agent-timestamp": timestamp,
+      "x-clawhouse-agent-nonce": nonce,
+      "x-clawhouse-agent-body-sha256": bodyHash,
+      "x-clawhouse-agent-signature": Buffer.from(signature).toString("base64url"),
+    },
+  };
+}
+
 function cleanBodyString(value: unknown, name: string) {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`Missing ${name} in test body`);
   return value.trim();
+}
+
+function cleanOptionalBodyString(value: unknown) {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
 function createWallet() {
@@ -2806,7 +3136,17 @@ function columnNames(db: Database, table: string) {
   return db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().map((row) => row.name);
 }
 
-function countRows(table: "holding_snapshots" | "pnl_snapshots" | "events" | "observations" | "balance_changes") {
+function countRows(
+  table:
+    | "agent_registrations"
+    | "boards"
+    | "paper_accounts"
+    | "holding_snapshots"
+    | "pnl_snapshots"
+    | "events"
+    | "observations"
+    | "balance_changes",
+) {
   return sqliteDb.raw.query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM ${table}`).get()?.count ?? 0;
 }
 

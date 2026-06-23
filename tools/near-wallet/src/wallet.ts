@@ -64,6 +64,24 @@ type SignAgentBoardLedgerRequestOptions = Omit<
   cwd?: string;
 };
 
+type AgentBoardLedgerAgentRequestInput = {
+  method: string;
+  path: string;
+  body?: string;
+  bodyHash?: string;
+  timestamp?: string;
+  nonce?: string;
+  purpose: "agent_registration" | "board_registration" | "paper_account_registration" | "creator_onboarding_registration";
+  agentId: string;
+  agentPublicKey: string;
+  boardId: string | null;
+};
+
+type SignAgentBoardLedgerAgentRequestOptions = AgentBoardLedgerAgentRequestInput & {
+  keyFile: string;
+  cwd?: string;
+};
+
 export type AgentBoardLedgerCanonicalPayload = {
   domain: typeof AGENT_BOARD_LEDGER_SIGNATURE_DOMAIN;
   version: typeof AGENT_BOARD_LEDGER_SIGNATURE_VERSION;
@@ -77,8 +95,28 @@ export type AgentBoardLedgerCanonicalPayload = {
   walletAddress: string;
 };
 
+export type AgentBoardLedgerAgentCanonicalPayload = {
+  domain: typeof AGENT_BOARD_LEDGER_SIGNATURE_DOMAIN;
+  version: typeof AGENT_BOARD_LEDGER_SIGNATURE_VERSION;
+  purpose: "agent_registration" | "board_registration" | "paper_account_registration" | "creator_onboarding_registration";
+  method: string;
+  path: string;
+  bodyHash: string;
+  timestamp: string;
+  nonce: string;
+  agentId: string;
+  agentPublicKey: string;
+  boardId: string | null;
+};
+
 export type SignedAgentBoardLedgerRequest = NearWalletPublicInfo &
   AgentBoardLedgerCanonicalPayload & {
+    signature: string;
+    headers: Record<string, string>;
+  };
+
+export type SignedAgentBoardLedgerAgentRequest = NearWalletPublicInfo &
+  AgentBoardLedgerAgentCanonicalPayload & {
     signature: string;
     headers: Record<string, string>;
   };
@@ -201,6 +239,42 @@ export async function signAgentBoardLedgerRequest(
   };
 }
 
+export async function signAgentBoardLedgerAgentRequest(
+  options: SignAgentBoardLedgerAgentRequestOptions,
+): Promise<SignedAgentBoardLedgerAgentRequest> {
+  const keyFile = resolveLocalKeyFilePath(options.keyFile, options.cwd);
+  const raw = await readFile(keyFile, "utf8");
+  const keyStore = parseKeyStore(raw, keyFile);
+  const publicInfo = publicInfoFromPublicKey(keyStore.public_key, keyFile);
+
+  if (publicInfo.publicKey !== options.agentPublicKey) {
+    throw new Error("Agent public key does not match key file");
+  }
+  const keyPair = KeyPair.fromString(keyStore.private_key);
+  if (keyPair.getPublicKey().toString() !== publicInfo.publicKey) {
+    throw new Error("Key file private_key does not match public_key");
+  }
+
+  const payload = buildAgentBoardLedgerAgentPayload(options);
+  const message = new TextEncoder().encode(
+    serializeAgentBoardLedgerAgentPayload(payload),
+  );
+  const signature = encodeBase64Url(keyPair.sign(message).signature);
+
+  return {
+    ...publicInfo,
+    ...payload,
+    signature,
+    headers: {
+      "x-clawhouse-agent-public-key": publicInfo.publicKey,
+      "x-clawhouse-agent-timestamp": payload.timestamp,
+      "x-clawhouse-agent-nonce": payload.nonce,
+      "x-clawhouse-agent-body-sha256": payload.bodyHash,
+      "x-clawhouse-agent-signature": signature,
+    },
+  };
+}
+
 export function buildAgentBoardLedgerRequestPayload(
   input: AgentBoardLedgerRequestInput,
 ): AgentBoardLedgerCanonicalPayload {
@@ -238,6 +312,48 @@ export function serializeAgentBoardLedgerRequestPayload(
     boardId: payload.boardId,
     agentId: payload.agentId,
     walletAddress: payload.walletAddress,
+  });
+}
+
+export function buildAgentBoardLedgerAgentPayload(
+  input: AgentBoardLedgerAgentRequestInput,
+): AgentBoardLedgerAgentCanonicalPayload {
+  const bodyHash = input.bodyHash ?? hashRequestBody(input.body ?? "");
+
+  if (!/^[0-9a-f]{64}$/.test(bodyHash)) {
+    throw new Error("bodyHash must be a sha256 hex string");
+  }
+
+  return {
+    domain: AGENT_BOARD_LEDGER_SIGNATURE_DOMAIN,
+    version: AGENT_BOARD_LEDGER_SIGNATURE_VERSION,
+    purpose: input.purpose,
+    method: normalizeRequired(input.method, "method").toUpperCase(),
+    path: normalizeRequired(input.path, "path"),
+    bodyHash,
+    timestamp: input.timestamp ?? new Date().toISOString(),
+    nonce: input.nonce ?? randomUUID(),
+    agentId: normalizeRequired(input.agentId, "agentId"),
+    agentPublicKey: normalizeRequired(input.agentPublicKey, "agentPublicKey"),
+    boardId: input.boardId,
+  };
+}
+
+export function serializeAgentBoardLedgerAgentPayload(
+  payload: AgentBoardLedgerAgentCanonicalPayload,
+): string {
+  return JSON.stringify({
+    domain: payload.domain,
+    version: payload.version,
+    purpose: payload.purpose,
+    method: payload.method,
+    path: payload.path,
+    bodyHash: payload.bodyHash,
+    timestamp: payload.timestamp,
+    nonce: payload.nonce,
+    agentId: payload.agentId,
+    agentPublicKey: payload.agentPublicKey,
+    boardId: payload.boardId,
   });
 }
 

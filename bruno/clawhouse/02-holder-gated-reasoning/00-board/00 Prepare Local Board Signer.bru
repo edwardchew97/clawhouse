@@ -41,6 +41,7 @@ script:pre-request {
   bru.setVar("ledger_wallet_address", walletAddress);
   bru.setVar("ledger_wallet_secret_key", keyPair.toString());
   bru.setVar("ledger_wallet_public_key", publicKey.toString());
+  bru.setVar("ledger_agent_public_key", publicKey.toString());
 }
 
 tests {
@@ -52,5 +53,6 @@ tests {
     expect(bru.getVar("ledger_wallet_address")).to.match(/^[a-f0-9]{64}$/);
     expect(bru.getVar("ledger_wallet_secret_key")).to.match(/^ed25519:/);
     expect(bru.getVar("ledger_wallet_public_key")).to.match(/^ed25519:/);
+    expect(bru.getVar("ledger_agent_public_key")).to.match(/^ed25519:/);
   });
 }
