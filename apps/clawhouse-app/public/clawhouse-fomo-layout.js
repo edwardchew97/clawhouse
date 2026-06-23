@@ -1437,30 +1437,19 @@ function renderBackendEventModal(agent, event) {
   byId("modalMove").textContent = model.status;
   byId("modalMove").className = model.statusTone;
   byId("modalMoveHint").textContent = model.receipt;
-  byId("modalTradeType").textContent = model.tradeType;
-  byId("modalTradeMode").textContent = model.tradeMode;
-  byId("modalSpend").textContent = model.spend;
-  byId("modalReceive").textContent = model.receive;
   byId("modalDirection").textContent = model.direction;
-  byId("modalNetwork").textContent = model.network;
   byId("modalVenue").textContent = model.venue;
   byId("modalAction").textContent = model.action;
   byId("modalReason").textContent = event.reason;
-  renderModalReasonTags(model.tags);
-  renderModalPath(model.path);
   renderModalSources(event, agent);
 }
 
 function readableEventModel(raw, event, agent) {
   const status = raw.status_claim || raw.event_type || "event";
   const tradeType = readableTradeType(raw);
-  const network = eventNetwork(raw, agent);
   const venue = eventVenue(raw, agent);
   const action = formatBackendAction(raw);
-  const spend = formatBackendAmount(raw.amount_in, raw.asset_in) || "--";
-  const receive = formatBackendAmount(raw.amount_out, raw.asset_out) || "--";
   const direction = readableTradeDirection(raw);
-  const paper = isPaperTradeEvent(raw);
   const receipt = raw.id ? `Receipt ${shortHash(raw.id)}` : eventReferenceLabel(raw) || "Agent Board Ledger";
   const statusText = titleCase(status);
 
@@ -1471,16 +1460,9 @@ function readableEventModel(raw, event, agent) {
     status,
     statusTone: failureStatus(status) ? "red" : "green",
     receipt,
-    tradeType,
-    tradeMode: paper ? "Simulated venue; no live capital moved" : `${network} / ${venue}`,
-    spend,
-    receive,
     direction,
-    network,
     venue,
     action,
-    tags: readableReasonTags(raw, tradeType, direction, statusText),
-    path: readableEventPath(raw, action, statusText, paper),
   };
 }
 
@@ -1567,88 +1549,15 @@ function eventLeverage(event) {
   return match ? `${match[1]}x` : "";
 }
 
-function readableReasonTags(event, tradeType, direction, statusText) {
-  const reason = String(event.reason || "").toLowerCase();
-  const tags = [tradeType, direction, statusText];
-  const leverage = eventLeverage(event);
-  if (leverage) tags.push(leverage);
-  if (reason.includes("ioc")) tags.push("IOC");
-  if (reason.includes("slippage")) tags.push("Slippage capped");
-  if (reason.includes("rejected") || reason.includes("replacing")) tags.push("Replacement");
-  return [...new Set(tags.filter(Boolean))].slice(0, 6);
-}
-
-function readableEventPath(event, action, statusText, paper) {
-  const client = event.client_event_id ? `Client event ${shortHash(event.client_event_id)}` : "Agent created a backend event";
-  const order = event.intent_id
-    ? `${paper ? "Paper order" : "Intent"} ${shortHash(event.intent_id)}`
-    : event.tx_hash
-      ? `Tx ${shortHash(event.tx_hash)}`
-      : "Ledger row";
-
-  return [
-    {
-      label: "Signal",
-      detail: `${client}: ${action}.`,
-    },
-    {
-      label: "Checks",
-      detail: routeCheckDetail(event),
-    },
-    {
-      label: "Order",
-      detail: paper ? `${order} was sent to the paper venue.` : `${order} was observed by the backend.`,
-    },
-    {
-      label: "Result",
-      detail: `Backend recorded ${statusText.toLowerCase()}.`,
-    },
-  ];
-}
-
-function routeCheckDetail(event) {
-  const reason = String(event.reason || "").toLowerCase();
-  if (reason.includes("replacing") || reason.includes("rejected")) {
-    return "Rejected route was replaced before execution.";
-  }
-  if (reason.includes("ioc") && reason.includes("slippage")) {
-    return "IOC order used a slippage cap.";
-  }
-  if (reason.includes("allowed")) {
-    return "Allowed market check passed.";
-  }
-  return "Agent reasoning was stored with the event.";
-}
-
 function failureStatus(status) {
   return /fail|reject|cancel|error|liquidat/i.test(String(status || ""));
-}
-
-function renderModalPath(items) {
-  byId("modalPath").innerHTML = items.map((item, index) => `
-    <div>
-      <b>${String(index + 1).padStart(2, "0")}</b>
-      <strong>${escapeHtml(item.label)}</strong>
-      <span>${escapeHtml(item.detail)}</span>
-    </div>
-  `).join("");
-}
-
-function renderModalReasonTags(tags) {
-  const container = byId("modalReasonTags");
-  container.textContent = "";
-  tags.forEach((tag) => {
-    const item = document.createElement("span");
-    item.textContent = tag;
-    container.append(item);
-  });
 }
 
 function renderModalSources(event, agent) {
   const txUrl = backendTxUrl(event.raw || {}, agent);
   const container = byId("modalSources");
   container.textContent = "";
-  event.sources.forEach((source) => {
+  keyModalSources(event.sources).forEach((source) => {
     const { label, value } = readableSource(source);
     appendSourceRow(container, label, value);
   });
@@ -1664,6 +1573,20 @@ function renderModalSources(event, agent) {
     row.append(name, link);
     container.append(row);
   }
+}
+
+function keyModalSources(sources) {
+  const priority = ["paper_order_id", "intent_id", "client_event_id", "wallet", "source"];
+  return sources
+    .slice()
+    .sort((left, right) => sourcePriority(left, priority) - sourcePriority(right, priority))
+    .slice(0, 4);
+}
+
+function sourcePriority(source, priority) {
+  const key = String(source).split(":")[0]?.trim();
+  const index = priority.indexOf(key);
+  return index === -1 ? priority.length : index;
 }
 
 function readableSource(source) {
