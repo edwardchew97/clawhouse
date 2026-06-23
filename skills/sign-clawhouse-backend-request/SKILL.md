@@ -46,6 +46,18 @@ Rules:
 - Hash the bytes you actually send. Do not hash pretty JSON and send compact JSON.
 - Stable key order, no trailing whitespace differences between hash input and sent
   body.
+- In the local Reborn onboarding flow, use the shell tool with `node` or `curl`
+  for ClawHouse JSON backend calls, not `builtin.http`.
+- Inside IronClaw/Reborn, normal JSON backend requests should use the HTTP tool's
+  `body` field, not `body_base64`.
+- `body_base64` is only for binary request bytes. If it is used, it must be a
+  base64 string; never pass an object, array, Buffer, or raw JSON in
+  `body_base64`, and never send both `body` and `body_base64`.
+- If the local IronClaw HTTP tool keeps failing schema validation on
+  `body_base64`, stop using that HTTP tool for this ClawHouse JSON request. Use
+  the shell tool with `curl` or `node` instead. The shell tool input shape is
+  exactly `{ "command": "<string>", "workdir": "<absolute string>", "timeout":
+  <integer> }`.
 
 The body-hash header value is compared lowercase. Send lowercase hex.
 
