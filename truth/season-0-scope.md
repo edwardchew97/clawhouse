@@ -308,8 +308,6 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
 
 ## Original Vision 的地位
 
-`docs/references/original-vision.md` 是重要参考，但不是完整执行稿。
-
 我们采用它的核心消费传播逻辑：
 
 - Friend.tech-style agent keys。
