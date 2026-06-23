@@ -33,6 +33,18 @@
       box-sizing: border-box;
     }
 
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     html,
     body {
       width: 100%;
@@ -989,89 +1001,156 @@
 
     .event-marker {
       position: absolute;
-      min-width: 68px;
-      height: 26px;
-      display: inline-flex;
+      width: 34px;
+      height: 34px;
+      display: grid;
       align-items: center;
       justify-content: center;
-      gap: 5px;
       transform: translate(-50%, -50%);
       border-radius: 999px;
-      border: 1px solid rgba(203, 208, 235, 0.24);
-      background: rgba(18, 17, 26, 0.9);
-      color: var(--fomo-text);
-      font-family: var(--default-mono-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
-      font-size: 9px;
-      font-weight: 800;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      backdrop-filter: blur(12px);
-      box-shadow: 0 0 0 4px rgba(81, 106, 246, 0.08), 0 12px 24px rgba(0, 0, 0, 0.3);
+      border: 2px solid #05060a;
+      background: #ff7541;
+      color: transparent;
+      overflow: hidden;
+      box-shadow: 0 0 0 5px rgba(81, 106, 246, 0.18), 0 14px 28px rgba(0, 0, 0, 0.34);
       pointer-events: auto;
       touch-action: manipulation;
-      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+      z-index: 2;
+      transition: transform 160ms ease, box-shadow 160ms ease;
     }
 
-    .event-marker::before {
-      content: "";
-      width: 6px;
-      height: 6px;
-      flex: 0 0 auto;
+    .event-marker::after {
+      content: attr(data-initials);
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
       border-radius: 999px;
-      background: var(--fomo-accent);
-      box-shadow: 0 0 10px rgba(81, 106, 246, 0.9);
+      background: rgba(3, 4, 5, 0.72);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 900;
+      line-height: 1;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
     }
 
     .event-marker:hover,
     .event-marker.active {
-      transform: translate(-50%, -50%) scale(1.04);
-      border-color: rgba(203, 208, 235, 0.42);
-      background: rgba(34, 29, 75, 0.94);
-      box-shadow: 0 0 0 4px rgba(81, 106, 246, 0.14), 0 14px 30px rgba(0, 0, 0, 0.34);
+      transform: translate(-50%, -50%) scale(1.08);
+      box-shadow: 0 0 0 7px rgba(81, 106, 246, 0.24), 0 16px 34px rgba(0, 0, 0, 0.38);
     }
 
     .event-marker.locked {
-      color: transparent;
-      border-color: rgba(255, 255, 255, 0.12);
-      background: rgba(14, 15, 16, 0.72);
-      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.035);
+      filter: grayscale(1);
+      opacity: 0.68;
       cursor: pointer;
     }
 
-    .event-marker.locked::after {
-      content: "";
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: var(--locked);
-    }
-
-    .event-marker.locked::before {
-      display: none;
-    }
-
-    .event-label {
+    .chart-event-card {
       position: absolute;
-      min-width: 118px;
-      max-width: 154px;
-      transform: translate(-50%, 16px);
-      padding: 6px 7px;
-      border-radius: 4px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      background: rgba(9, 10, 11, 0.88);
-      color: #d7d7d7;
-      font-size: 10px;
-      line-height: 13px;
-      pointer-events: none;
-      text-align: center;
-      box-shadow: 0 14px 26px rgba(0, 0, 0, 0.24);
+      width: min(320px, calc(100% - 28px));
+      display: grid;
+      gap: 9px;
+      transform: translateX(-50%);
+      padding: 13px;
+      border-radius: 8px;
+      border: 1px solid rgba(119, 124, 255, 0.2);
+      background:
+        radial-gradient(circle at 22px 24px, rgba(82, 101, 255, 0.18), transparent 34px),
+        rgba(8, 9, 15, 0.94);
+      color: #fff;
+      text-align: left;
+      pointer-events: auto;
+      opacity: 0;
+      visibility: hidden;
+      z-index: 1;
+      box-shadow: 0 20px 52px rgba(0, 0, 0, 0.42);
+      transition: opacity 150ms ease, visibility 150ms ease, transform 150ms ease;
     }
 
-    .event-label.locked {
-      color: transparent;
-      text-shadow: 0 0 7px rgba(215, 215, 215, 0.62);
-      filter: blur(0.6px);
-      opacity: 0.8;
+    .event-marker:hover + .chart-event-card,
+    .chart-event-card:hover,
+    .chart-event-card.featured {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(-2px);
+      z-index: 3;
+    }
+
+    .chart-event-head {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chart-event-avatar {
+      width: 32px;
+      height: 32px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      border-radius: 999px;
+      border: 2px solid #05060a;
+      background: #ff7541;
+      box-shadow: 0 0 0 3px rgba(81, 106, 246, 0.2);
+    }
+
+    .chart-event-avatar .agent-icon,
+    .chart-event-avatar svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .chart-event-head strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 18px;
+    }
+
+    .chart-event-head time {
+      margin-left: auto;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .chart-event-reason {
+      color: #f4f5f8;
+      font-size: 15px;
+      font-weight: 850;
+      line-height: 21px;
+    }
+
+    .chart-event-action {
+      display: grid;
+      gap: 4px;
+      padding: 9px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.045);
+    }
+
+    .chart-event-action span {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .chart-event-action strong {
+      color: #fff;
+      font-size: 12px;
+      font-weight: 850;
+      line-height: 16px;
     }
 
     .lock-layer {

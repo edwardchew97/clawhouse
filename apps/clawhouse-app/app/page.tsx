@@ -93,7 +93,7 @@ export default function Page() {
             <section className="panel chart-panel" id="chartPanel">
               <div className="chart-top">
                 <div>
-                  <div className="panel-title">Agent Network Chart</div>
+                  <div className="panel-title">Paper Net Worth Chart</div>
                   <div className="panel-sub" id="chartSub">
                     Backend agent network series. Key market quotes use NEAR testnet.
                   </div>
@@ -105,7 +105,7 @@ export default function Page() {
                   <button data-chart-range="all" type="button" aria-pressed="false">ALL</button>
                 </div>
               </div>
-              <div id="pnlChart" aria-label="Agent P&L chart" />
+              <div id="pnlChart" aria-label="Paper net worth chart" />
               <div className="chart-events" id="chartEvents" />
               <div className="price-reference-line" id="priceReferenceLine" hidden />
               <div className="price-marker" id="priceMarker">backend</div>
