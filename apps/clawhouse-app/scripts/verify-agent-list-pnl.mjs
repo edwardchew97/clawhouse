@@ -381,6 +381,9 @@ assert(element("keyActivityList").innerHTML.includes("0.01 BTC"), "Paper activit
 assert(element("keyActivityList").innerHTML.includes("$100.00"), "Paper activity list should render filled paper order price.");
 assert(element("positionTitle").textContent === "Paper Positions", "Paper agents should render paper positions instead of key balance position.");
 assert(element("positionSub").textContent.includes("2026-06-23T11:10:05Z"), "Paper position subtitle should render latest risk UTC time.");
-assert(element("chartSub").textContent.includes("paper risk timeline"), "Paper chart subtitle should identify the paper risk timeline source.");
+assert(element("chartSub").textContent.includes("paper net worth"), "Paper chart subtitle should identify the paper net worth source.");
+const paperChart = context.window.ClawHouseDemo.getChartModel();
+assert(paperChart.valueKind === "usd", "Paper chart should use USD net worth values instead of percent values.");
+assert(paperChart.values[0] === 1000 && paperChart.values[1] === 1002, "Paper chart values should be raw equity_usd net worth values.");
 
 console.log("agent discovery row P&L harness passed");
