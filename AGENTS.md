@@ -65,9 +65,10 @@ When reporting a product or onboarding flow, write the exact action chain first.
 
 ## Final Replies
 
-- Keep final replies as short as possible: what changed and current state.
-- Do not include a tests/proof section or command list unless verification
-  failed, was skipped, or JY explicitly asks for it.
+- Use plain-language style: short, concrete, and focused on what changed.
+- Default final reply: what changed + current state.
+- Do not include tests/proof or command lists unless verification failed, was
+  skipped, or JY asks.
 
 ## Public Onboarding Kit Sync
 
