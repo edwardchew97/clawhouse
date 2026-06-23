@@ -261,6 +261,9 @@ export type PaperOrderRow = {
   margin_mode: string;
   leverage: number;
   max_slippage_bps: number;
+  reference_px: number | null;
+  max_reference_deviation_bps: number | null;
+  reference_deviation_bps: number | null;
   status: string;
   reject_reason: string | null;
   reason: string | null;

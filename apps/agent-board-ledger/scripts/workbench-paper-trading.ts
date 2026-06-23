@@ -87,7 +87,7 @@ async function runPaperTradingFlow(
     coin: "BTC",
     side: "buy",
     tif: "Ioc",
-    size: 1.2,
+    size: 0.01,
     margin_mode: "cross",
     leverage: 10,
     max_slippage_bps: 200,
@@ -115,7 +115,7 @@ async function runPaperTradingFlow(
     coin: "BTC",
     side: "sell",
     tif: "Ioc",
-    size: 0.2,
+    size: 0.002,
     margin_mode: "cross",
     leverage: 10,
     max_slippage_bps: 200,
@@ -169,7 +169,7 @@ async function runPaperTradingFlow(
     coin: "BTC",
     side: "buy",
     tif: "Ioc",
-    size: 0.1,
+    size: 0.001,
     reduce_only: true,
     margin_mode: "cross",
     leverage: 10,
@@ -209,7 +209,7 @@ async function runPaperTradingFlow(
     coin: "ETH",
     side: "buy",
     tif: "Ioc",
-    size: 5,
+    size: 50,
     margin_mode: "isolated",
     leverage: 1,
     max_slippage_bps: 200,
@@ -224,7 +224,7 @@ async function runPaperTradingFlow(
     side: "buy",
     tif: "Gtc",
     limit_px: 1900,
-    size: 0.1,
+    size: 0.01,
     margin_mode: "cross",
     leverage: 5,
     reason: "Workbench rests a non-crossing GTC bid.",
@@ -238,7 +238,7 @@ async function runPaperTradingFlow(
     side: "buy",
     tif: "Alo",
     limit_px: 2005,
-    size: 0.1,
+    size: 0.01,
     margin_mode: "cross",
     leverage: 5,
     reason: "Workbench verifies post-only crossing rejection.",
@@ -251,7 +251,7 @@ async function runPaperTradingFlow(
     coin: "BTC",
     side: "buy",
     tif: "Ioc",
-    size: 1,
+    size: 0.01,
     margin_mode: "isolated",
     leverage: 10,
     max_slippage_bps: 200,
@@ -461,7 +461,8 @@ async function paperPostJson(
   agentId: string,
   body: JsonRecord,
 ) {
-  const rawBody = JSON.stringify(body);
+  const signedBody = await withReferencePrice(options, body);
+  const rawBody = JSON.stringify(signedBody);
   const timestamp = Date.now().toString();
   const nonce = randomUUID();
   const bodyHash = sha256Hex(rawBody);
@@ -488,6 +489,30 @@ async function paperPostJson(
     },
     body: rawBody,
   });
+}
+
+async function withReferencePrice(options: Options, body: JsonRecord) {
+  if (body.reference_px !== undefined || body.referencePx !== undefined) {
+    return body;
+  }
+  const marketType = jsonString(body.market_type) ?? jsonString(body.marketType) ?? "perp";
+  const coin = requiredJsonString(body.coin, "coin");
+  const snapshot = await servicePostJson(options, "/paper/market-snapshots/hyperliquid", {
+    market_type: marketType,
+    coin,
+  });
+  if (!snapshot.responseOk) {
+    throw new Error(`Unable to fetch live Hyperliquid reference price for ${marketType}:${coin}: ${snapshot.text}`);
+  }
+  const markPx = numberAt(snapshot.json, ["snapshots", "0", "mark_px"]);
+  if (markPx === undefined || markPx <= 0) {
+    throw new Error(`Live Hyperliquid snapshot for ${marketType}:${coin} did not include mark_px`);
+  }
+  return {
+    ...body,
+    reference_px: markPx,
+    max_reference_deviation_bps: body.max_reference_deviation_bps ?? body.maxReferenceDeviationBps ?? 100,
+  };
 }
 
 async function getJson(baseUrl: string, path: string) {
@@ -654,6 +679,11 @@ function stringAt(value: unknown, path: string[]) {
 function arrayAt(value: unknown, path: string[]) {
   const result = valueAt(value, path);
   return Array.isArray(result) ? result : [];
+}
+
+function numberAt(value: unknown, path: string[]) {
+  const result = valueAt(value, path);
+  return typeof result === "number" ? result : undefined;
 }
 
 function valueAt(value: unknown, path: string[]): unknown {

@@ -60,8 +60,14 @@ type OrderInput = {
   leverage: number;
   maxSlippageBps: number;
   maxSlippageBpsProvided: boolean;
+  referencePx: number;
+  maxReferenceDeviationBps: number;
   reason: string | null;
   strategyHash: string | null;
+};
+
+type SubmitPaperOrderOptions = {
+  refreshMarketData?: (db: LedgerDb, marketType: MarketType, coin: string, createdAt: string) => Promise<void>;
 };
 
 export function canonicalPaperAuthPayload(input: {
@@ -236,6 +242,7 @@ export async function submitPaperOrder(
   body: BodyInput,
   path: string,
   createdAt: string,
+  options: SubmitPaperOrderOptions = {},
 ) {
   const input = parseOrderInput(body.json);
   const account = await requirePaperAccount(db, input.paperAccountId);
@@ -272,24 +279,38 @@ export async function submitPaperOrder(
       return await insertRejectedOrder(tx, lockedAccount, input, "reason_required", body.raw, createdAt);
     }
 
+    if (input.tif === "Ioc" && input.limitPx === null && !input.maxSlippageBpsProvided) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "max_slippage_bps_required", body.raw, createdAt);
+    }
+
+    if (options.refreshMarketData) {
+      try {
+        await options.refreshMarketData(tx, input.marketType, input.coin, createdAt);
+      } catch (error) {
+        if (!(error instanceof RequestError)) throw error;
+        return await insertRejectedOrder(tx, lockedAccount, input, "market_data_unavailable", body.raw, createdAt);
+      }
+    }
+
     const snapshot = await latestMarketSnapshot(tx, input.marketType, input.coin);
     if (!snapshot || marketIsStale(snapshot, Date.parse(createdAt))) {
       return await insertRejectedOrder(tx, lockedAccount, input, "stale_market_data", body.raw, createdAt, snapshot?.id ?? null);
     }
+    const referenceDeviationBps = referenceDeviation(input.referencePx, snapshot.mark_px);
+    if (referenceDeviationBps - input.maxReferenceDeviationBps > EPSILON) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "reference_price_deviation", body.raw, createdAt, snapshot.id, referenceDeviationBps);
+    }
     if (input.marketType === "perp" && snapshot.max_leverage !== null && input.leverage - snapshot.max_leverage > EPSILON) {
-      return await insertRejectedOrder(tx, lockedAccount, input, "leverage_exceeds_hyperliquid_max", body.raw, createdAt, snapshot.id);
+      return await insertRejectedOrder(tx, lockedAccount, input, "leverage_exceeds_hyperliquid_max", body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
 
     const book = parseBook(snapshot.book_json);
-    if (input.tif === "Ioc" && input.limitPx === null && !input.maxSlippageBpsProvided) {
-      return await insertRejectedOrder(tx, lockedAccount, input, "max_slippage_bps_required", body.raw, createdAt, snapshot.id);
-    }
     const effectiveLimit = effectiveLimitPx(input, book);
     if (input.tif !== "Ioc" && input.limitPx === null) {
-      return await insertRejectedOrder(tx, lockedAccount, input, "limit_px_required_for_resting_order", body.raw, createdAt, snapshot.id);
+      return await insertRejectedOrder(tx, lockedAccount, input, "limit_px_required_for_resting_order", body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
     if (input.tif === "Alo" && wouldCross(input.side, effectiveLimit, book)) {
-      return await insertRejectedOrder(tx, lockedAccount, input, "post_only_would_cross", body.raw, createdAt, snapshot.id);
+      return await insertRejectedOrder(tx, lockedAccount, input, "post_only_would_cross", body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
 
     const fillPlan = input.tif === "Alo" ? [] : planTakerFills(input.side, input.size, effectiveLimit, book);
@@ -301,7 +322,7 @@ export async function submitPaperOrder(
       ? await validateReduceOnlyOrder(tx, lockedAccount.id, input, input.tif === "Ioc" ? totalFillSize : input.size)
       : null;
     if (reduceOnlyRejectReason) {
-      return await insertRejectedOrder(tx, lockedAccount, input, reduceOnlyRejectReason, body.raw, createdAt, snapshot.id);
+      return await insertRejectedOrder(tx, lockedAccount, input, reduceOnlyRejectReason, body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
     if (input.marketType === "spot") {
       const spotBalanceRejectReason = await validateSpotOrderBalances(
@@ -312,20 +333,20 @@ export async function submitPaperOrder(
         fee,
       );
       if (spotBalanceRejectReason) {
-        return await insertRejectedOrder(tx, lockedAccount, input, spotBalanceRejectReason, body.raw, createdAt, snapshot.id);
+        return await insertRejectedOrder(tx, lockedAccount, input, spotBalanceRejectReason, body.raw, createdAt, snapshot.id, referenceDeviationBps);
       }
     }
 
     if (input.tif === "Ioc" && totalFillSize <= 0) {
-      return await insertRejectedOrder(tx, lockedAccount, input, "insufficient_depth", body.raw, createdAt, snapshot.id);
+      return await insertRejectedOrder(tx, lockedAccount, input, "insufficient_depth", body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
     if (totalFillSize > 0) {
       const marginRejectReason = await validateMarginAvailable(tx, lockedAccount, input, notional, fee, snapshot, createdAt);
       if (marginRejectReason) {
-        return await insertRejectedOrder(tx, lockedAccount, input, marginRejectReason, body.raw, createdAt, snapshot.id);
+        return await insertRejectedOrder(tx, lockedAccount, input, marginRejectReason, body.raw, createdAt, snapshot.id, referenceDeviationBps);
       }
     } else if (input.tif !== "Alo" && input.tif !== "Gtc") {
-      return await insertRejectedOrder(tx, lockedAccount, input, "insufficient_depth", body.raw, createdAt, snapshot.id);
+      return await insertRejectedOrder(tx, lockedAccount, input, "insufficient_depth", body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
 
     const order: PaperOrderRow = {
@@ -344,6 +365,9 @@ export async function submitPaperOrder(
       margin_mode: input.marginMode,
       leverage: input.leverage,
       max_slippage_bps: input.maxSlippageBps,
+      reference_px: input.referencePx,
+      max_reference_deviation_bps: input.maxReferenceDeviationBps,
+      reference_deviation_bps: referenceDeviationBps,
       status: orderStatus(input.tif, totalFillSize, remainingSize),
       reject_reason: null,
       reason: input.reason,
@@ -480,6 +504,7 @@ async function insertRejectedOrder(
   rawBody: string,
   createdAt: string,
   marketSnapshotId: string | null = null,
+  referenceDeviationBps: number | null = null,
 ) {
   const order: PaperOrderRow = {
     id: newId("paper_ord"),
@@ -497,6 +522,9 @@ async function insertRejectedOrder(
     margin_mode: input.marginMode,
     leverage: input.leverage,
     max_slippage_bps: input.maxSlippageBps,
+    reference_px: input.referencePx,
+    max_reference_deviation_bps: input.maxReferenceDeviationBps,
+    reference_deviation_bps: referenceDeviationBps,
     status: "rejected",
     reject_reason: rejectReason,
     reason: input.reason,
@@ -577,6 +605,8 @@ function parseOrderInput(value: unknown): OrderInput {
   const tif = cleanString(data.tif ?? data.timeInForce ?? data.time_in_force ?? data.orderType ?? data.order_type) ?? "Ioc";
   const normalizedTif = normalizeTif(tif);
   const maxSlippageInput = data.maxSlippageBps ?? data.max_slippage_bps;
+  const referencePx = data.referencePx ?? data.reference_px;
+  const maxReferenceDeviationBps = data.maxReferenceDeviationBps ?? data.max_reference_deviation_bps;
   return {
     paperAccountId: requiredString(data.paperAccountId ?? data.paper_account_id, "paper_account_id"),
     clientOrderId: requiredString(data.clientOrderId ?? data.client_order_id, "client_order_id"),
@@ -593,6 +623,8 @@ function parseOrderInput(value: unknown): OrderInput {
       : requiredPositiveNumber(data.leverage, "leverage"),
     maxSlippageBps: optionalNonNegativeNumber(maxSlippageInput, "max_slippage_bps") ?? DEFAULT_MAX_SLIPPAGE_BPS,
     maxSlippageBpsProvided: maxSlippageInput !== undefined && maxSlippageInput !== null && maxSlippageInput !== "",
+    referencePx: requiredPositiveNumber(referencePx, "reference_px"),
+    maxReferenceDeviationBps: requiredPositiveNumber(maxReferenceDeviationBps, "max_reference_deviation_bps"),
     reason: cleanString(data.reason),
     strategyHash: cleanString(data.strategyHash ?? data.strategy_hash),
   };
@@ -1158,13 +1190,15 @@ async function insertOrder(db: LedgerDb, order: PaperOrderRow) {
     `INSERT INTO paper_orders
       (id, paper_account_id, agent_id, client_order_id, market_type, coin, side, tif, limit_px,
        size, remaining_size, reduce_only, margin_mode, leverage, max_slippage_bps,
+       reference_px, max_reference_deviation_bps, reference_deviation_bps,
        status, reject_reason, reason, strategy_hash, market_snapshot_id, avg_fill_px,
        notional_usd, fee_usd, body_hash, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       order.id, order.paper_account_id, order.agent_id, order.client_order_id,
       order.market_type, order.coin, order.side, order.tif, order.limit_px, order.size, order.remaining_size,
       order.reduce_only, order.margin_mode, order.leverage, order.max_slippage_bps,
+      order.reference_px, order.max_reference_deviation_bps, order.reference_deviation_bps,
       order.status, order.reject_reason, order.reason, order.strategy_hash,
       order.market_snapshot_id, order.avg_fill_px, order.notional_usd, order.fee_usd,
       order.body_hash, order.created_at, order.updated_at,
@@ -1345,6 +1379,10 @@ function presentAudit(event: PaperAuditEventRow) {
 
 function sumNotional(fills: FillCandidate[]) {
   return fills.reduce((sum, fill) => sum + fill.notional, 0);
+}
+
+function referenceDeviation(referencePx: number, markPx: number) {
+  return Math.abs(referencePx - markPx) / markPx * 10_000;
 }
 
 function roundQty(value: number) {

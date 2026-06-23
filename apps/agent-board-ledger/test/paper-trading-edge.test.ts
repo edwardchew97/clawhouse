@@ -14,17 +14,33 @@ let app: ReturnType<typeof createApp>;
 let sqliteDb: SqliteLedgerDb;
 let wallet: ReturnType<typeof createWallet>;
 let currentNow: Date;
+let currentRpcFetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+let currentHyperliquidMarkets: Record<string, HyperliquidFixtureMarket>;
+
+type HyperliquidFixtureMarket = {
+  marketType: string;
+  coin: string;
+  markPx: number;
+  oraclePx: number | null;
+  funding: number | null;
+  maxLeverage: number | null;
+  observedAtMs: number;
+  bids: Array<{ px: number; sz: number; n: number }>;
+  asks: Array<{ px: number; sz: number; n: number }>;
+};
 
 beforeEach(async () => {
   const root = await mkdtemp(join(tmpdir(), "clawhouse-paper-edge-"));
   tempRoots.push(root);
   currentNow = new Date("2026-06-19T00:00:00.000Z");
+  currentHyperliquidMarkets = {};
+  currentRpcFetch = fetch;
   sqliteDb = openSqliteLedgerDb(join(root, "ledger.sqlite"));
   app = createApp({
     db: sqliteDb,
     now: () => currentNow,
     adminToken,
-    rpcFetch: fetch,
+    rpcFetch: (...args) => currentRpcFetch(...args),
     env: {},
   });
   wallet = createWallet();
@@ -103,6 +119,26 @@ describe("paper-trading input validation", () => {
     expect((await json<{ error: string }>(res)).error).toBe("tif must be Ioc, Gtc, or Alo");
   });
 
+  test("requires a reference price on paper orders", async () => {
+    await registerPaperAccount();
+    const rawBody = JSON.stringify({
+      paper_account_id: "paper-1",
+      client_order_id: "missing-reference",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 1,
+      margin_mode: "cross",
+      leverage: 5,
+      max_slippage_bps: 50,
+      max_reference_deviation_bps: 50,
+      reason: "Missing reference price should be rejected before market fetch.",
+    });
+    const res = await rawPaperPost("/paper/orders", rawBody);
+    expect(res.status).toBe(400);
+    expect((await json<{ error: string }>(res)).error).toBe("Missing reference_px");
+  });
+
   test("rejects invalid market_type", async () => {
     await registerPaperAccount();
     const res = await paperSignedPost("/paper/orders", {
@@ -173,6 +209,7 @@ describe("paper-trading auth", () => {
       body: JSON.stringify({
         paper_account_id: "paper-1", client_order_id: "unsigned", coin: "BTC",
         side: "buy", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 5,
+        reference_px: 100, max_reference_deviation_bps: 50,
       }),
     }));
     expect(res.status).toBe(401);
@@ -188,7 +225,7 @@ describe("paper-trading auth", () => {
     const signed = signPaper("/paper/orders", body);
     const res = await app.fetch(new Request("http://ledger.test/paper/orders", {
       method: "POST", headers: signed.headers,
-      body: JSON.stringify({ ...body, size: 100 }),
+      body: JSON.stringify({ ...paperOrderTestBody(body), size: 100 }),
     }));
     expect(res.status).toBe(401);
     expect((await json<{ error: string }>(res)).error).toBe("Body hash mismatch");
@@ -266,14 +303,18 @@ describe("paper-trading auth", () => {
 // GROUP C: Market data / staleness
 // ============================================================================
 describe("paper-trading market data", () => {
-  test("rejects order with no market snapshot", async () => {
+  test("rejects order when backend cannot refresh Hyperliquid market data", async () => {
     await registerPaperAccount();
+    currentRpcFetch = async () => new Response(JSON.stringify({ error: "upstream unavailable" }), {
+      status: 502,
+      headers: { "content-type": "application/json" },
+    });
     const res = await paperSignedPost("/paper/orders", {
       paper_account_id: "paper-1", client_order_id: "no-mkt", coin: "BTC",
       side: "buy", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 5,
     });
     expect(res.status).toBe(201);
-    expect((await json<{ order: { reject_reason: string } }>(res)).order.reject_reason).toBe("stale_market_data");
+    expect((await json<{ order: { reject_reason: string } }>(res)).order.reject_reason).toBe("market_data_unavailable");
   });
 
   test("rejects order against stale snapshot (older than 10s)", async () => {
@@ -289,7 +330,7 @@ describe("paper-trading market data", () => {
     expect((await json<{ order: { reject_reason: string } }>(res)).order.reject_reason).toBe("stale_market_data");
   });
 
-  test("rejects order when snapshot staleness_status != fresh", async () => {
+  test("ignores degraded cached snapshot when backend order-path refresh succeeds", async () => {
     await registerPaperAccount();
     await createPaperMarketSnapshot({
       coin: "BTC", mark_px: 100, bids: [{ px: 99, sz: 5 }], asks: [{ px: 100, sz: 5 }],
@@ -299,7 +340,9 @@ describe("paper-trading market data", () => {
       paper_account_id: "paper-1", client_order_id: "degraded", coin: "BTC",
       side: "buy", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 5,
     });
-    expect((await json<{ order: { reject_reason: string } }>(res)).order.reject_reason).toBe("stale_market_data");
+    const body = await json<{ order: { status: string; reject_reason: string | null } }>(res);
+    expect(body.order.status).toBe("filled");
+    expect(body.order.reject_reason).toBeNull();
   });
 
   test("market_not_allowed when coin not in allowlist", async () => {
@@ -312,7 +355,21 @@ describe("paper-trading market data", () => {
     expect((await json<{ order: { reject_reason: string } }>(res)).order.reject_reason).toBe("market_not_allowed");
   });
 
-  test("latest market snapshot uses ingestion order when observed_at ties", async () => {
+  test("rejects when reference price deviates too far from backend Hyperliquid mark", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({ coin: "BTC", mark_px: 100, bids: [{ px: 99, sz: 5 }], asks: [{ px: 100, sz: 5 }] });
+    const res = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "bad-reference", coin: "BTC",
+      side: "buy", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 5,
+      reference_px: 90, max_reference_deviation_bps: 10,
+    });
+    const body = await json<{ order: { reject_reason: string; reference_deviation_bps: number; market_snapshot_id: string } }>(res);
+    expect(body.order.reject_reason).toBe("reference_price_deviation");
+    expect(body.order.reference_deviation_bps).toBe(1000);
+    expect(body.order.market_snapshot_id).toBeTruthy();
+  });
+
+  test("paper orders write and use a fresh order-path snapshot instead of cached snapshots", async () => {
     await registerPaperAccount();
     await createPaperMarketSnapshot({ coin: "BTC", mark_px: 100, bids: [{ px: 99, sz: 5 }], asks: [{ px: 100, sz: 5 }] });
     const latest = await createPaperMarketSnapshot({ coin: "BTC", mark_px: 200, bids: [{ px: 199, sz: 5 }], asks: [{ px: 200, sz: 5 }] });
@@ -321,7 +378,7 @@ describe("paper-trading market data", () => {
       side: "buy", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 10,
     });
     const body = await json<{ order: { avg_fill_px: number; market_snapshot_id: string } }>(res);
-    expect(body.order.market_snapshot_id).toBe(latest.id);
+    expect(body.order.market_snapshot_id).not.toBe(latest.id);
     expect(body.order.avg_fill_px).toBe(200);
   });
 });
@@ -870,11 +927,93 @@ async function registerAgent() {
 }
 
 async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
+  rememberHyperliquidFixture(overrides);
   const res = await postJson("/paper/market-snapshots", {
     source: "test-fixture", maintenance_margin_rate: 0.005, observed_at: currentNow.toISOString(), ...overrides,
   });
   expect(res.status).toBe(201);
   return (await json<{ snapshot: Record<string, any> }>(res)).snapshot;
+}
+
+function rememberHyperliquidFixture(overrides: Record<string, unknown>) {
+  const marketType = String(overrides.market_type ?? overrides.marketType ?? "perp");
+  const coin = requiredBodyString(overrides.coin, "coin").toUpperCase();
+  currentHyperliquidMarkets[coin] = {
+    marketType,
+    coin,
+    markPx: Number(overrides.mark_px ?? overrides.markPx),
+    oraclePx: optionalFixtureNumber(overrides.oracle_px ?? overrides.oraclePx),
+    funding: optionalFixtureNumber(overrides.funding_rate ?? overrides.fundingRate),
+    maxLeverage: optionalFixtureNumber(overrides.max_leverage ?? overrides.maxLeverage),
+    observedAtMs: Date.parse(String(overrides.observed_at ?? overrides.observedAt ?? currentNow.toISOString())),
+    bids: fixtureLevels(overrides.bids),
+    asks: fixtureLevels(overrides.asks),
+  };
+  currentRpcFetch = mockHyperliquidFetchFromFixtures;
+}
+
+function fixtureLevels(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const level = item as Record<string, unknown>;
+    return {
+      px: Number(level.px),
+      sz: Number(level.sz),
+      n: typeof level.n === "number" ? level.n : 1,
+    };
+  });
+}
+
+function optionalFixtureNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  return Number(value);
+}
+
+async function mockHyperliquidFetchFromFixtures(_request: string | URL | Request, init?: RequestInit) {
+  const body = JSON.parse(String(init?.body ?? "{}")) as { type?: string; coin?: string };
+  if (body.type === "metaAndAssetCtxs") {
+    const perps = Object.values(currentHyperliquidMarkets).filter((market) => market.marketType !== "spot");
+    return new Response(JSON.stringify([
+      { universe: perps.map((market) => ({ name: market.coin, maxLeverage: market.maxLeverage ?? 40 })) },
+      perps.map((market) => ({
+        markPx: String(market.markPx),
+        oraclePx: String(market.oraclePx ?? market.markPx),
+        funding: String(market.funding ?? 0),
+      })),
+    ]), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  if (body.type === "spotMetaAndAssetCtxs") {
+    const spots = Object.values(currentHyperliquidMarkets).filter((market) => market.marketType === "spot");
+    return new Response(JSON.stringify([
+      { universe: spots.map((market, index) => ({ name: market.coin, index })) },
+      spots.map((market) => ({
+        markPx: String(market.markPx),
+        midPx: String(market.markPx),
+        oraclePx: String(market.oraclePx ?? market.markPx),
+      })),
+    ]), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  if (body.type === "l2Book" && body.coin) {
+    const market = currentHyperliquidMarkets[body.coin.toUpperCase()];
+    if (!market) {
+      return new Response(JSON.stringify({ error: `missing book for ${body.coin}` }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({
+      coin: body.coin.toUpperCase(),
+      time: market.observedAtMs,
+      levels: [
+        market.bids.map((level) => ({ px: String(level.px), sz: String(level.sz), n: level.n })),
+        market.asks.map((level) => ({ px: String(level.px), sz: String(level.sz), n: level.n })),
+      ],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  return new Response(JSON.stringify({ error: "unsupported hyperliquid fixture request" }), {
+    status: 400,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 async function postJson(path: string, body: Record<string, unknown>) {
@@ -974,16 +1113,31 @@ function signPaper(
 
 function paperOrderTestBody(body: Record<string, unknown>) {
   const next = { ...body };
+  const coin = String(next.coin ?? "BTC").toUpperCase();
   const tif = String(next.tif ?? next.timeInForce ?? next.time_in_force ?? next.orderType ?? next.order_type ?? "Ioc").toLowerCase();
   const hasLimitPx = next.limitPx !== undefined || next.limit_px !== undefined;
   const hasMaxSlippage = next.maxSlippageBps !== undefined || next.max_slippage_bps !== undefined;
   if (!hasLimitPx && !hasMaxSlippage && (tif === "ioc" || tif === "market")) {
     next.max_slippage_bps = 50;
   }
+  if (next.reference_px === undefined && next.referencePx === undefined) {
+    next.reference_px = defaultReferencePx(coin);
+  }
+  if (next.max_reference_deviation_bps === undefined && next.maxReferenceDeviationBps === undefined) {
+    next.max_reference_deviation_bps = 100;
+  }
   if (next.reason === undefined) {
     next.reason = "Paper trading edge test order.";
   }
   return next;
+}
+
+function defaultReferencePx(coin: string) {
+  const market = currentHyperliquidMarkets[coin];
+  if (market) return market.markPx;
+  if (coin === "ETH") return 2000;
+  if (coin === "PURR/USDC") return 0.2;
+  return 100;
 }
 
 async function paperSignedPost(

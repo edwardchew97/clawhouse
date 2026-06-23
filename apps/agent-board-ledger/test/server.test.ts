@@ -18,11 +18,25 @@ let wallet: ReturnType<typeof createWallet>;
 let agentWallet: ReturnType<typeof createWallet>;
 let currentNow: Date;
 let currentRpcFetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+let currentHyperliquidMarkets: Record<string, HyperliquidFixtureMarket>;
+
+type HyperliquidFixtureMarket = {
+  marketType: string;
+  coin: string;
+  markPx: number;
+  oraclePx: number | null;
+  funding: number | null;
+  maxLeverage: number | null;
+  observedAtMs: number;
+  bids: Array<{ px: number; sz: number; n: number }>;
+  asks: Array<{ px: number; sz: number; n: number }>;
+};
 
 beforeEach(async () => {
   const root = await mkdtemp(join(tmpdir(), "clawhouse-ledger-"));
   tempRoots.push(root);
   currentNow = new Date("2026-06-19T00:00:00.000Z");
+  currentHyperliquidMarkets = {};
   currentRpcFetch = fetch;
   sqliteDb = openSqliteLedgerDb(join(root, "ledger.sqlite"));
   app = createApp({
@@ -2112,6 +2126,44 @@ describe("Agent Board Ledger local backend", () => {
     expect(body.snapshots[0]?.book.asks).toHaveLength(1);
   });
 
+  test("fills a first paper order by refreshing Hyperliquid market data on the order path", async () => {
+    await registerPaperAccount({ allowed_markets: ["BTC", "ETH"] });
+    currentRpcFetch = mockHyperliquidFetch({
+      meta: [{ name: "BTC", maxLeverage: 40 }],
+      contexts: [{ markPx: "100", oraclePx: "101", funding: "0.00001" }],
+      books: {
+        BTC: {
+          bids: [{ px: "99", sz: "5", n: 2 }],
+          asks: [{ px: "100", sz: "5", n: 4 }],
+        },
+      },
+    });
+
+    const order = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "first-order-refreshes-market",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 0.5,
+      margin_mode: "cross",
+      leverage: 10,
+      max_slippage_bps: 200,
+      reference_px: 100,
+      max_reference_deviation_bps: 10,
+      reason: "Open first BTC paper position after backend order-path refresh.",
+    });
+    const body = await jsonOf<{ order: { id: string; status: string; reject_reason: string | null; market_snapshot_id: string | null; reference_deviation_bps: number } }>(order);
+
+    expect(order.status).toBe(201);
+    expect(body.order.status).toBe("filled");
+    expect(body.order.reject_reason).toBeNull();
+    expect(body.order.market_snapshot_id).toBeTruthy();
+    expect(body.order.reference_deviation_bps).toBe(0);
+    expect(sqliteDb.raw.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM paper_market_snapshots").get()?.count).toBe(1);
+    expect(sqliteDb.raw.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM paper_positions").get()?.count).toBe(1);
+  });
+
   test("fills a signed Hyperliquid spot paper order and rejects selling more than held", async () => {
     await registerPaperAccount({ allowed_markets: ["spot:PURR/USDC"] });
     await createPaperMarketSnapshot({
@@ -2832,6 +2884,7 @@ async function registerAgent(agentId = "ironclaw", agentPublicKey = agentWallet.
 }
 
 async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
+  rememberHyperliquidFixture(overrides);
   const response = await postJson("/paper/market-snapshots", {
     source: "hyperliquid-test-fixture",
     maintenance_margin_rate: 0.005,
@@ -2840,6 +2893,87 @@ async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
   });
   expect(response.status).toBe(201);
   return (await jsonOf<{ snapshot: Record<string, any> }>(response)).snapshot;
+}
+
+function rememberHyperliquidFixture(overrides: Record<string, unknown>) {
+  const marketType = String(overrides.market_type ?? overrides.marketType ?? "perp");
+  const coin = cleanBodyString(overrides.coin, "coin").toUpperCase();
+  currentHyperliquidMarkets[coin] = {
+    marketType,
+    coin,
+    markPx: Number(overrides.mark_px ?? overrides.markPx),
+    oraclePx: optionalFixtureNumber(overrides.oracle_px ?? overrides.oraclePx),
+    funding: optionalFixtureNumber(overrides.funding_rate ?? overrides.fundingRate),
+    maxLeverage: optionalFixtureNumber(overrides.max_leverage ?? overrides.maxLeverage),
+    observedAtMs: Date.parse(String(overrides.observed_at ?? overrides.observedAt ?? currentNow.toISOString())),
+    bids: fixtureLevels(overrides.bids),
+    asks: fixtureLevels(overrides.asks),
+  };
+  currentRpcFetch = mockHyperliquidFetchFromFixtures;
+}
+
+function fixtureLevels(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const level = item as Record<string, unknown>;
+    return {
+      px: Number(level.px),
+      sz: Number(level.sz),
+      n: typeof level.n === "number" ? level.n : 1,
+    };
+  });
+}
+
+function optionalFixtureNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  return Number(value);
+}
+
+async function mockHyperliquidFetchFromFixtures(_request: string | URL | Request, init?: RequestInit) {
+  const body = JSON.parse(String(init?.body ?? "{}")) as { type?: string; coin?: string };
+  if (body.type === "metaAndAssetCtxs") {
+    const perps = Object.values(currentHyperliquidMarkets).filter((market) => market.marketType !== "spot");
+    return new Response(JSON.stringify([
+      { universe: perps.map((market) => ({ name: market.coin, maxLeverage: market.maxLeverage ?? 40 })) },
+      perps.map((market) => ({
+        markPx: String(market.markPx),
+        oraclePx: String(market.oraclePx ?? market.markPx),
+        funding: String(market.funding ?? 0),
+      })),
+    ]), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  if (body.type === "spotMetaAndAssetCtxs") {
+    const spots = Object.values(currentHyperliquidMarkets).filter((market) => market.marketType === "spot");
+    return new Response(JSON.stringify([
+      { universe: spots.map((market, index) => ({ name: market.coin, index })) },
+      spots.map((market) => ({
+        markPx: String(market.markPx),
+        midPx: String(market.markPx),
+        oraclePx: String(market.oraclePx ?? market.markPx),
+      })),
+    ]), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  if (body.type === "l2Book" && body.coin) {
+    const market = currentHyperliquidMarkets[body.coin.toUpperCase()];
+    if (!market) {
+      return new Response(JSON.stringify({ error: `missing book for ${body.coin}` }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({
+      coin: body.coin.toUpperCase(),
+      time: market.observedAtMs,
+      levels: [
+        market.bids.map((level) => ({ px: String(level.px), sz: String(level.sz), n: level.n })),
+        market.asks.map((level) => ({ px: String(level.px), sz: String(level.sz), n: level.n })),
+      ],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  return new Response(JSON.stringify({ error: "unsupported hyperliquid fixture request" }), {
+    status: 400,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 async function postJson(
@@ -2941,6 +3075,7 @@ async function paperSignedPost(path: string, body: Record<string, unknown>, sign
 
 function paperOrderTestBody(body: Record<string, unknown>) {
   const next = { ...body };
+  const coin = String(next.coin ?? "BTC").toUpperCase();
   const omitMaxSlippage = next.__omitMaxSlippageBps === true;
   delete next.__omitMaxSlippageBps;
 
@@ -2951,8 +3086,22 @@ function paperOrderTestBody(body: Record<string, unknown>) {
   if (!omitMaxSlippage && !hasLimitPx && !hasMaxSlippage && (tif === "ioc" || tif === "market")) {
     next.max_slippage_bps = 50;
   }
+  if (next.reference_px === undefined && next.referencePx === undefined) {
+    next.reference_px = defaultReferencePx(coin);
+  }
+  if (next.max_reference_deviation_bps === undefined && next.maxReferenceDeviationBps === undefined) {
+    next.max_reference_deviation_bps = 100;
+  }
 
   return next;
+}
+
+function defaultReferencePx(coin: string) {
+  const market = currentHyperliquidMarkets[coin];
+  if (market) return market.markPx;
+  if (coin === "ETH") return 2000;
+  if (coin === "PURR/USDC") return 0.2;
+  return 100;
 }
 
 function signRequest(

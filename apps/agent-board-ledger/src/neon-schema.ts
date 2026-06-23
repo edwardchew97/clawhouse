@@ -305,6 +305,9 @@ export const neonSchemaStatements = [
       margin_mode TEXT NOT NULL,
       leverage DOUBLE PRECISION NOT NULL,
       max_slippage_bps DOUBLE PRECISION NOT NULL,
+      reference_px DOUBLE PRECISION,
+      max_reference_deviation_bps DOUBLE PRECISION,
+      reference_deviation_bps DOUBLE PRECISION,
       status TEXT NOT NULL,
       reject_reason TEXT,
       reason TEXT,
@@ -320,6 +323,9 @@ export const neonSchemaStatements = [
     )
   `,
   "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS reference_px DOUBLE PRECISION",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS max_reference_deviation_bps DOUBLE PRECISION",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS reference_deviation_bps DOUBLE PRECISION",
   "CREATE INDEX IF NOT EXISTS paper_orders_account_created_idx ON paper_orders(paper_account_id, created_at)",
   "CREATE INDEX IF NOT EXISTS paper_orders_status_idx ON paper_orders(status, market_type, coin)",
   `
