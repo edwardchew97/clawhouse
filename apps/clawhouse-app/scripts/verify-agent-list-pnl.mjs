@@ -618,5 +618,6 @@ context.window.ClawHouseDemo.setChartRange("24h");
 rangeChart = context.window.ClawHouseDemo.getChartModel();
 assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_old_fill"), "24H paper chart may include old order markers after recalculating the range.");
 assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_recent_fill"), "24H paper chart should include recent order markers after recalculating the range.");
+assert(rangeChart.events.find((event) => event.raw?.id === "paper_ord_recent_fill")?.chartValue === 10000, "Paper order markers should use the net worth at or before the order time instead of snapping to a later high-water point.");
 
 console.log("agent discovery row P&L harness passed");

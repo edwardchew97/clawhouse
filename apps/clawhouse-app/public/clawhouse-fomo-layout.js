@@ -818,6 +818,18 @@ function nearestChartPointIndex(points, row, fallbackIndex, totalRows) {
   ), 0);
 }
 
+function chartPointIndexAtOrBefore(points, row, fallbackIndex, totalRows) {
+  if (!points.length) return 0;
+  const parsed = rowTimestamp(row);
+  if (!Number.isFinite(parsed)) return nearestChartPointIndex(points, row, fallbackIndex, totalRows);
+  const target = Math.floor(parsed / 1000);
+  let bestIndex = 0;
+  points.forEach((point, index) => {
+    if (point.time <= target && point.time >= points[bestIndex].time) bestIndex = index;
+  });
+  return bestIndex;
+}
+
 function chartModel(agent) {
   const range = chartRangeMeta();
   const rangePrefix = `${range.label} / `;
@@ -884,7 +896,9 @@ function chartModel(agent) {
   const points = safeValues.length >= 2 ? chartPointsForValues(safeValues, pointRows) : [];
   const chartEvents = activity ? paperChartEvents(events) : events.slice(-40);
   const normalizedEvents = chartEvents.map((event, index) => {
-    const valueIndex = nearestChartPointIndex(points, event, index, chartEvents.length);
+    const valueIndex = activity
+      ? chartPointIndexAtOrBefore(points, event, index, chartEvents.length)
+      : nearestChartPointIndex(points, event, index, chartEvents.length);
     return activity
       ? normalizePaperOrderEvent(event, index, agent, valueIndex, points[valueIndex])
       : normalizeBackendEvent(event, index, agent, valueIndex, points[valueIndex]);
