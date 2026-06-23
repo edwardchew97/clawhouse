@@ -588,6 +588,7 @@ function normalizePaperOrderEvent(order, index, agent, valueIndex, point) {
   const status = order.status || "paper_order";
   const coin = String(order.coin || "").toUpperCase();
   const side = String(order.side || "order").toLowerCase();
+  const orderTime = rowTimestamp(order);
   const raw = {
     ...order,
     event_type: "paper_trade",
@@ -607,7 +608,7 @@ function normalizePaperOrderEvent(order, index, agent, valueIndex, point) {
   return {
     id: order.id || `paper-order-${index}`,
     index: valueIndex,
-    timeValue: point?.time ?? null,
+    timeValue: Number.isFinite(orderTime) ? Math.floor(orderTime / 1000) : point?.time ?? null,
     chartValue: point?.value ?? null,
     title,
     label: status,
