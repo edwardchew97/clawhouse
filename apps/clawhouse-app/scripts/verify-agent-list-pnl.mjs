@@ -388,6 +388,11 @@ function rows() {
     .map((match) => ({ key: match[1], id: match[2], selected: match[3], title: match[4], pnl: match[5] }));
 }
 
+function chartEventPosition(eventId) {
+  const match = element("chartEvents").innerHTML.match(new RegExp(`data-chart-event="${eventId}"[\\s\\S]*?style="left:([\\d.]+)px; top:([\\d.]+)px"`));
+  return match ? { left: Number(match[1]), top: Number(match[2]) } : null;
+}
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -449,8 +454,13 @@ context.window = {
         },
         update() {},
         applyOptions() {},
-        priceToCoordinate() {
-          return 148;
+        priceToCoordinate(value) {
+          const values = this.data.map((point) => point.value).filter(Number.isFinite);
+          if (values.length < 2) return 148;
+          const min = Math.min(...values);
+          const max = Math.max(...values);
+          if (max === min) return 148;
+          return 280 - ((value - min) / (max - min)) * 220;
         },
       };
       return {
@@ -626,5 +636,7 @@ assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_old_fill")
 assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_recent_fill"), "24H paper chart should include recent order markers after recalculating the range.");
 assert(rangeChart.events.find((event) => event.raw?.id === "paper_ord_recent_fill")?.chartValue === 10000, "Paper order markers should use the net worth at or before the order time instead of snapping to a later high-water point.");
 assert(rangeChart.events.find((event) => event.raw?.id === "paper_ord_recent_fill")?.timeValue === Date.parse("2026-06-23T12:45:00.000Z") / 1000, "Paper order markers should render at the order time instead of the matched net worth point time.");
+assert(chartEventPosition("paper_ord_old_fill")?.top > 240, "Old 24H paper order marker should render on the lower $10k net worth line instead of floating near the current net worth line.");
+assert(chartEventPosition("paper_ord_recent_fill")?.top > 240, "Recent 24H paper order marker should render on the lower $10k net worth line instead of floating near the current net worth line.");
 
 console.log("agent discovery row P&L harness passed");
