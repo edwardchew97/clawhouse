@@ -37,9 +37,6 @@ Scope notes:
 - `truth/` is the accepted product boundary. Agent Board Ledger is the board
   history/read surface. Hyperliquid-style paper trading owns paper order
   intake, matching, margin, liquidation, leaderboard, and replay proof.
-- `docs/references/` is historical context only. Do not create tests for old
-  unimplemented arena, copy-trading, `/api/rooms/*`, `/api/agents/*`, or
-  `/api/intents/*` routes unless source code later implements them.
 - Smart-contract methods under `agent-key-market/` are not HTTP backend
   endpoints. They are only represented here through the ClawHouse app
   key-market read APIs.
