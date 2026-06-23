@@ -528,14 +528,6 @@ function formatBackendSummary(event, agent) {
   return [action, status, venue, reference].filter(Boolean).join(" ");
 }
 
-function backendTxUrl(event, agent) {
-  if (isPaperTradeEvent(event)) return null;
-  if (!event.tx_hash) return null;
-  const network = String(eventNetwork(event, agent)).toLowerCase();
-  const host = network.includes("testnet") ? "testnet.nearblocks.io" : "nearblocks.io";
-  return `https://${host}/txns/${encodeURIComponent(event.tx_hash)}`;
-}
-
 function eventMetadata(event) {
   return event?.metadata && typeof event.metadata === "object" ? event.metadata : {};
 }
@@ -1864,32 +1856,25 @@ function renderBackendEventModal(agent, event) {
   byId("modalKicker").textContent = `${agentTitle(agent)} / ${event.time}`;
   byId("modalTitle").textContent = model.title;
   byId("modalSummary").textContent = model.summary;
-  byId("modalMetricLabel").textContent = model.statusLabel;
-  byId("modalMove").textContent = model.status;
-  byId("modalMove").className = model.statusTone;
   byId("modalMoveHint").textContent = model.receipt;
   byId("modalDirection").textContent = model.direction;
   byId("modalVenue").textContent = model.venue;
   byId("modalAction").textContent = model.action;
   byId("modalReason").textContent = event.reason;
-  renderModalSources(event, agent);
 }
 
 function readableEventModel(raw, event, agent) {
-  const status = raw.status_claim || raw.event_type || "event";
   const tradeType = readableTradeType(raw);
   const venue = eventVenue(raw, agent);
   const action = formatBackendAction(raw);
   const direction = readableTradeDirection(raw);
   const receipt = raw.id ? `Receipt ${shortHash(raw.id)}` : eventReferenceLabel(raw) || "Agent Board Ledger";
+  const status = raw.status_claim || raw.event_type || "event";
   const statusText = titleCase(status);
 
   return {
     title: event.title || tradeType,
     summary: readableTradeSummary(raw, action, tradeType, statusText, venue),
-    statusLabel: raw.status_claim ? "Backend status" : "Event type",
-    status,
-    statusTone: failureStatus(status) ? "red" : "green",
     receipt,
     direction,
     venue,
@@ -1978,77 +1963,6 @@ function eventLeverage(event) {
   if (value !== null) return `${Number.isInteger(value) ? value.toFixed(0) : String(value)}x`;
   const match = String(event.reason || "").match(/\b(\d+(?:\.\d+)?)\s*x\b/i);
   return match ? `${match[1]}x` : "";
-}
-
-function failureStatus(status) {
-  return /fail|reject|cancel|error|liquidat/i.test(String(status || ""));
-}
-
-function renderModalSources(event, agent) {
-  const txUrl = backendTxUrl(event.raw || {}, agent);
-  const container = byId("modalSources");
-  container.textContent = "";
-  keyModalSources(event.sources).forEach((source) => {
-    const { label, value } = readableSource(source);
-    appendSourceRow(container, label, value);
-  });
-  if (txUrl) {
-    const row = document.createElement("span");
-    const name = document.createElement("b");
-    name.textContent = "Explorer";
-    const link = document.createElement("a");
-    link.href = txUrl;
-    link.target = "_blank";
-    link.rel = "noreferrer";
-    link.textContent = "NearBlocks";
-    row.append(name, link);
-    container.append(row);
-  }
-}
-
-function keyModalSources(sources) {
-  const priority = ["paper_order_id", "intent_id", "client_event_id", "wallet", "source"];
-  return sources
-    .slice()
-    .sort((left, right) => sourcePriority(left, priority) - sourcePriority(right, priority))
-    .slice(0, 4);
-}
-
-function sourcePriority(source, priority) {
-  const key = String(source).split(":")[0]?.trim();
-  const index = priority.indexOf(key);
-  return index === -1 ? priority.length : index;
-}
-
-function readableSource(source) {
-  const [rawKey, ...rest] = String(source).split(":");
-  const value = rest.join(":").trim();
-  const key = rawKey.trim();
-  const labels = {
-    client_event_id: "Client event ID",
-    intent_id: "Intent ID",
-    network: "Network",
-    paper_order_id: "Paper order ID",
-    source: "Table",
-    status_claim: "Backend status",
-    tx_hash: "Tx hash",
-    venue: "Venue",
-    wallet: "Agent wallet",
-  };
-  return {
-    label: labels[key] || titleCase(key),
-    value: value || source,
-  };
-}
-
-function appendSourceRow(container, label, value) {
-  const row = document.createElement("span");
-  const name = document.createElement("b");
-  const code = document.createElement("code");
-  name.textContent = label;
-  code.textContent = value;
-  row.append(name, code);
-  container.append(row);
 }
 
 function closeModal() {
