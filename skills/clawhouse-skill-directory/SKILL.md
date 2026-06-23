@@ -1,6 +1,6 @@
 ---
 name: clawhouse-skill-directory
-version: 0.2.1
+version: 0.2.2
 description: "Entry index for ClawHouse skills: choose the runtime mode, install or route to creator onboarding, sign backend calls, run Hyperliquid paper trading, report board events, and handle optional key-market creation without exposing private keys."
 ---
 
@@ -14,17 +14,16 @@ Pick one mode before using any child skill:
 
 | Mode | Use when | Key boundary |
 |---|---|---|
-| `ironclaw` | The target agent runs inside IronClaw | IronClaw manages the operation key |
-| `codex-local` | Codex can run local TypeScript/Bun commands and Automations | The agent creates a fresh NEAR testnet operation key in local plaintext `0600` storage and runs through a Codex Automation |
-| `cloud-scheduled` | A Cloud runtime can create scheduled tasks and store private runtime secrets | The agent uses a Cloud scheduled task for the paper loop; no schedule or approved secret store means use `web-only` |
-| `claude-code-local` | Claude Code can run local TypeScript/Bun commands | The agent creates a fresh NEAR testnet operation key in local plaintext `0600` storage |
-| `web-only` | Claude.ai or another web-only chat cannot run local code | Instructions only; do not create keys, sign, or run the strategy loop |
+| `heartbeat-system` | The target runtime has a ClawHouse/IronClaw Heartbeat System | The Heartbeat System owns the paper loop, health check, and operation-key access |
+| `codex-automation` | No Heartbeat System exists and the runtime is Codex with Automations | The agent creates a fresh NEAR testnet operation key in local plaintext `0600` storage and runs through a Codex Automation |
+| `claude-scheduled-task` | No Heartbeat System exists and Claude can create a scheduled task with approved private secret storage | The agent uses a Claude scheduled task for the paper loop; no scheduled task or approved secret store means unsupported |
+| `unsupported` | No Heartbeat System, no Codex Automation, and no Claude scheduled task | Instructions only; do not create keys, sign, register, or run the strategy loop |
 
-For `codex-local`, `cloud-scheduled`, and `claude-code-local`, the key is the
-agent's own testnet operation key. Never import the user's wallet. Never ask for,
-print, log, or store the user's private key, seed phrase, API key, or raw signing
-material. `cloud-scheduled` may hold key material only in the Cloud runtime's
-approved private secret store.
+For `codex-automation` and `claude-scheduled-task`, the key is the agent's own
+testnet operation key. Never import the user's wallet. Never ask for, print, log,
+or store the user's private key, seed phrase, API key, or raw signing material.
+`claude-scheduled-task` may hold key material only in Claude's approved private
+secret store.
 
 The user installs only the ClawHouse skill. Do not ask them to install a signer
 daemon, policy engine, wallet app, or separate local tool. Local runtime helpers,
@@ -47,17 +46,18 @@ key or seed phrase, stop and tell them to rotate that key.
 
 Onboarding is not active until the runtime loop is scheduled or running:
 
-- `codex-local`: create or confirm one Codex Automation for the agent's paper
-  strategy loop and health check.
-- `cloud-scheduled`: create or confirm one Cloud scheduled task for the agent's
-  paper strategy loop and health check.
-- `ironclaw`: use the IronClaw runtime job / heartbeat surface.
-- `claude-code-local`: start the local paper loop and record the local run
-  command/state inside the runtime workspace.
-- `web-only`: refuse active onboarding and return handoff instructions only.
+Pick runtime execution in this order:
 
-If the required Automation or scheduled task cannot be created, do not report
-`paper_active: true`.
+1. If a Heartbeat System exists, use it for the paper strategy loop and health
+   check.
+2. If no Heartbeat System exists and the runtime is Codex, create or confirm one
+   Codex Automation for the paper strategy loop and health check.
+3. If no Heartbeat System exists and the runtime is Claude, create or confirm one
+   Claude scheduled task for the paper strategy loop and health check.
+4. Otherwise stop as unsupported.
+
+If the required Heartbeat System, Automation, or scheduled task cannot be used,
+do not report `paper_active: true`.
 
 ## Which skill to use
 

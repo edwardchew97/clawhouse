@@ -101,36 +101,36 @@ const walletProvisioning = {
 
 const runtimeExecution = {
   requiredBeforePaperActive: true,
-  codexLocal: {
+  priority: [
+    "heartbeat_system",
+    "codex_automation",
+    "claude_scheduled_task",
+    "unsupported",
+  ],
+  heartbeatSystem: {
+    driver: "heartbeat_system",
+    requiredWhenAvailable: true,
+    owns: ["paper_strategy_loop", "health_check"],
+  },
+  codexAutomation: {
     driver: "codex_automation",
-    required: true,
+    requiredWhenNoHeartbeatSystem: true,
     nameTemplate: "clawhouse-<agent_id>-paper-loop",
     owns: ["paper_strategy_loop", "health_check"],
   },
-  cloudScheduled: {
-    driver: "cloud_scheduled_task",
-    required: true,
+  claudeScheduledTask: {
+    driver: "claude_scheduled_task",
+    requiredWhenNoHeartbeatSystem: true,
     nameTemplate: "clawhouse-<agent_id>-paper-loop",
     owns: ["paper_strategy_loop", "health_check"],
     requiresApprovedPrivateSecretStore: true,
   },
-  ironclaw: {
-    driver: "ironclaw_job",
-    required: true,
-    owns: ["paper_strategy_loop", "heartbeat"],
-  },
-  claudeCodeLocal: {
-    driver: "local_loop",
-    required: true,
-    useScheduledTaskWhenAvailable: true,
-    owns: ["paper_strategy_loop", "health_check"],
-  },
-  webOnly: {
+  unsupported: {
     driver: "none",
     activeOnboardingAllowed: false,
   },
   safety:
-    "Automation and scheduled tasks may read the runtime-managed operation key only through the approved local or Cloud secret store. They must never print, echo, upload, or log private key material.",
+    "Automation and scheduled tasks may read the runtime-managed operation key only through the approved local or Claude private secret store. They must never print, echo, upload, or log private key material.",
   stopIfUnavailable:
     "Setup blocked: ClawHouse runtime execution schedule is unavailable.",
 };
@@ -230,17 +230,16 @@ function payloadFor(request: Request) {
     route: "/creator-onboarding/setup",
     mode: "supported-runtime-onboarding",
     runtimeModes: [
-      "ironclaw",
-      "codex-local",
-      "cloud-scheduled",
-      "claude-code-local",
-      "web-only",
+      "heartbeat-system",
+      "codex-automation",
+      "claude-scheduled-task",
+      "unsupported",
     ],
     userInstallsOnlySkill: true,
     noSignerDaemon: true,
     noPolicyEngine: true,
-    webOnlyMode:
-      "Claude.ai and other web-only environments are instructions-only and cannot generate, store, or use key material.",
+    unsupportedMode:
+      "Unsupported environments are instructions-only and cannot generate keys, sign, register, or run the strategy loop.",
     runtimeExecution,
     status: "active",
     message:
@@ -346,10 +345,9 @@ function payloadFor(request: Request) {
       scheduleRequired: true,
       scheduleActive: true,
       executionDrivers: [
+        "heartbeat_system",
         "codex_automation",
-        "cloud_scheduled_task",
-        "ironclaw_job",
-        "local_loop",
+        "claude_scheduled_task",
       ],
       canSubmitPaperOrders: true,
       canSubmitReasoning: true,
