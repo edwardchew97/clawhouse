@@ -533,6 +533,8 @@ assert(paperChart.events.length === 1, "Paper chart should hide rejected paper o
 assert(paperChart.events.every((event) => event.raw?.status !== "rejected"), "Paper chart events should not include rejected paper orders.");
 const paperOrderButton = element("chartEvents").querySelectorAll("[data-chart-event]")[0];
 assert(paperOrderButton?.textContent === "Order 1", "Paper chart should render a visible clickable order marker.");
+assert(element("priceReferenceLine").hidden === false, "Paper chart should render the current net worth reference line.");
+assert(element("priceReferenceLine").style.top === element("priceMarker").style.top, "Current net worth line should align with the price marker.");
 element("eventModal").hidden = true;
 paperOrderButton.click();
 assert(element("eventModal").hidden === false, "Clicking a paper order marker should open the order detail modal.");
