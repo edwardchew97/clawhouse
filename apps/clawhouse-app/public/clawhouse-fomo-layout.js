@@ -32,6 +32,8 @@ let chainState = {
   quote: null,
   quoteSide: null,
   protection: null,
+  maxBuy: null,
+  maxBuyError: null,
   activity: null,
   activityError: null,
   backend: null,
@@ -72,6 +74,10 @@ const chainBalance = (agent) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 const holderBalance = (agent) => chainBalance(agent);
+const maxBuyApplies = (agent) => {
+  const maxBuy = chainState.maxBuy;
+  return Boolean(maxBuy && maxBuy.agent_id === agent.id && maxBuy.account_id === chainState.accountId);
+};
 const readAccessApplies = (agent) => {
   const access = chainState.readAccess;
   if (!access) return false;
@@ -258,6 +264,21 @@ function keyAmountLabel(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return "--";
   return `${numeric} Key`;
+}
+
+function wholeKeyAmount(value) {
+  const numeric = Math.floor(Number(value));
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function buyMaxAmount(agent) {
+  if (!maxBuyApplies(agent)) return null;
+  return wholeKeyAmount(chainState.maxBuy?.maxBuy?.amount);
+}
+
+function maxAmountForSide(agent) {
+  if (tradeSide === "sell") return wholeKeyAmount(holderBalance(agent));
+  return buyMaxAmount(agent);
 }
 
 function averageKeyPriceLabel(totalNear, amount) {
@@ -1033,10 +1054,15 @@ async function refreshKeyMarketRead(_reason) {
   const statePath = `/api/key-market/state?agentId=${encodeURIComponent(agent.id)}${holderParam}`;
   const quotePath = `/api/key-market/quote?side=${side}&agentId=${encodeURIComponent(agent.id)}&amount=${encodeURIComponent(amount)}`;
   const activityPath = `/api/key-market/activity?agentId=${encodeURIComponent(agent.id)}&limit=7`;
-  const [stateResult, quoteResult, activityResult] = await Promise.allSettled([
+  const shouldRefreshMaxBuy = chainState.accountId
+    && _reason !== "amount-change"
+    && _reason !== "side-change";
+  const maxBuyPath = `/api/key-market/max-buy?agentId=${encodeURIComponent(agent.id)}&accountId=${encodeURIComponent(chainState.accountId || "")}`;
+  const [stateResult, quoteResult, activityResult, maxBuyResult] = await Promise.allSettled([
     fetchJson(statePath),
     fetchJson(quotePath),
     fetchJson(activityPath),
+    shouldRefreshMaxBuy ? fetchJson(maxBuyPath) : Promise.resolve(chainState.maxBuy),
   ]);
   if (refreshId !== keyMarketRefreshId) return;
 
@@ -1046,6 +1072,8 @@ async function refreshKeyMarketRead(_reason) {
     quote: quoteResult.status === "fulfilled" ? quoteResult.value.quote : null,
     quoteSide: quoteResult.status === "fulfilled" ? side : null,
     protection: quoteResult.status === "fulfilled" ? quoteResult.value.protection : null,
+    maxBuy: maxBuyResult.status === "fulfilled" ? maxBuyResult.value : chainState.maxBuy,
+    maxBuyError: maxBuyResult.status === "rejected" ? errorMessage(maxBuyResult.reason, "Max buy read failed.") : null,
     activity: activityResult.status === "fulfilled" ? activityResult.value : null,
     activityError: firstRejectedMessage([activityResult]),
     error: firstRejectedMessage([stateResult, quoteResult]),
@@ -1403,9 +1431,11 @@ function renderTicket(agent) {
   const keyAmount = byId("keyAmount");
   const amount = Math.max(Number(keyAmount?.value || 1), 0);
   const balance = holderBalance(agent);
+  const maxAmount = maxAmountForSide(agent);
   const busy = Boolean(chainState.pending);
   const quote = chainApplies(agent) && chainState.quoteSide === tradeSide ? chainState.quote : null;
   const chainTotal = tradeSide === "sell" ? quote?.payout_near : quote?.total_cost_near;
+  renderTicketBalance(agent, balance);
   if (tradeSide === "sell") {
     byId("quotePay").textContent = keyAmountLabel(amount);
     byId("quoteReceive").textContent = chainTotal ? nearLabel(chainTotal) : "--";
@@ -1424,8 +1454,17 @@ function renderTicket(agent) {
     tradeButton.className = `${tradeSide === "buy" ? "primary" : "primary sell"}${busy ? " loading" : ""}`;
     tradeButton.disabled = busy || amount <= 0 || (tradeSide === "sell" && (balance === null || balance <= 0));
   }
-  document.querySelectorAll(".ticket-tab, [data-amount], [data-unlock-agent]").forEach((button) => {
+  document.querySelectorAll(".ticket-tab, [data-unlock-agent]").forEach((button) => {
     button.disabled = busy;
+  });
+  document.querySelectorAll("[data-amount]").forEach((button) => {
+    const isMax = button.dataset.amount === "max";
+    button.disabled = busy || (isMax && maxAmount === null);
+    if (isMax) {
+      button.title = maxAmount === null
+        ? (tradeSide === "buy" ? "Connect Wallet to read max buy." : "No key balance to sell.")
+        : `Use ${keyAmountLabel(maxAmount)}`;
+    }
   });
   if (keyAmount) keyAmount.disabled = busy;
   if (paperActivity(agent)) {
@@ -1445,6 +1484,15 @@ function renderTicket(agent) {
     walletButton.disabled = busy;
   }
   renderBackendStatus();
+}
+
+function renderTicketBalance(agent, balance) {
+  const owned = balance === null ? "--" : keyAmountLabel(balance);
+  const maxBuy = buyMaxAmount(agent);
+  byId("ticketOwnedKeys").textContent = owned;
+  byId("ticketMaxBuy").textContent = tradeSide === "sell"
+    ? `Sellable ${owned}`
+    : `Max buy ${maxBuy === null ? "--" : keyAmountLabel(maxBuy)}`;
 }
 
 function renderKeyPosition(balance) {
@@ -2096,7 +2144,14 @@ if (agentSortControl) {
 
 document.querySelectorAll("[data-amount]").forEach((button) => {
   button.addEventListener("click", () => {
-    byId("keyAmount").value = button.dataset.amount;
+    const amount = button.dataset.amount === "max"
+      ? maxAmountForSide(selectedAgent())
+      : wholeKeyAmount(button.dataset.amount);
+    if (amount === null) {
+      showToast(tradeSide === "buy" ? "Connect Wallet to read max buy." : "No key balance to sell.");
+      return;
+    }
+    byId("keyAmount").value = amount.toString();
     clearQuote();
     renderTicket(selectedAgent());
     scheduleKeyMarketRefresh("amount-change");

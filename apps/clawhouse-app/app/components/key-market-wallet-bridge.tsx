@@ -43,6 +43,8 @@ type DemoChainState = {
   quote?: Record<string, unknown> | null;
   quoteSide?: TradeSide | null;
   protection?: Record<string, unknown> | null;
+  maxBuy?: Record<string, unknown> | null;
+  maxBuyError?: string | null;
   activity?: Record<string, unknown> | null;
   activityError?: string | null;
   backend?: Record<string, unknown> | null;
@@ -517,10 +519,14 @@ export function KeyMarketWalletBridge() {
       const statePath = `/api/key-market/state?agentId=${encodeURIComponent(agent.id)}${holderParam}`;
       const quotePath = `/api/key-market/quote?side=${side}&agentId=${encodeURIComponent(agent.id)}&amount=${encodeURIComponent(amount)}`;
       const activityPath = `/api/key-market/activity?agentId=${encodeURIComponent(agent.id)}&limit=7`;
-      const [stateResult, quoteResult, activityResult] = await Promise.allSettled([
+      const maxBuyPath = account?.accountId
+        ? `/api/key-market/max-buy?agentId=${encodeURIComponent(agent.id)}&accountId=${encodeURIComponent(account.accountId)}`
+        : "";
+      const [stateResult, quoteResult, activityResult, maxBuyResult] = await Promise.allSettled([
         fetchJson<{ state: Record<string, unknown> }>(statePath),
         fetchJson<QuoteResponse>(quotePath),
         fetchJson<Record<string, unknown>>(activityPath),
+        maxBuyPath ? fetchJson<Record<string, unknown>>(maxBuyPath) : Promise.resolve(null),
       ]);
       const state = stateResult.status === "fulfilled" ? stateResult.value.state : null;
       const activeAccessResult = await Promise.allSettled([ensureReadAccess(agent, state)]).then((results) => results[0]);
@@ -539,6 +545,8 @@ export function KeyMarketWalletBridge() {
         quote: quoteResult.status === "fulfilled" ? quoteResult.value.quote : null,
         quoteSide: quoteResult.status === "fulfilled" ? side : null,
         protection: quoteResult.status === "fulfilled" ? quoteResult.value.protection : null,
+        maxBuy: maxBuyResult.status === "fulfilled" ? maxBuyResult.value : null,
+        maxBuyError: maxBuyResult.status === "rejected" ? errorMessage(maxBuyResult.reason, "Max buy read failed.") : null,
         activity: activityResult.status === "fulfilled" ? activityResult.value : null,
         activityError: firstRejectedMessage([activityResult]),
         backend: backendResult.status === "fulfilled" ? backendResult.value : { ok: false, error: firstRejectedMessage([backendResult]) },

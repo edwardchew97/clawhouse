@@ -155,11 +155,17 @@ export default function Page() {
                 <input id="keyAmount" defaultValue="1" inputMode="decimal" aria-label="Key amount" />
                 <span>KEY</span>
               </div>
+              <div className="ticket-balance">
+                <span>You own</span>
+                <b id="ticketOwnedKeys">--</b>
+                <span id="ticketMaxBuy">Max buy --</span>
+              </div>
               <div className="quick">
                 <button data-amount="1" type="button">1</button>
                 <button data-amount="2" type="button">2</button>
                 <button data-amount="5" type="button">5</button>
                 <button data-amount="10" type="button">10</button>
+                <button data-amount="max" id="maxAmountButton" type="button">Max</button>
               </div>
               <div className="quote">
                 <div className="quote-line"><span>You pay</span><b id="quotePay">--</b></div>

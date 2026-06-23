@@ -2007,9 +2007,37 @@
       white-space: nowrap;
     }
 
+    .ticket-balance {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 14px;
+    }
+
+    .ticket-balance b {
+      min-width: 0;
+      color: #fff;
+      font-weight: 650;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ticket-balance span:last-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: right;
+      white-space: nowrap;
+    }
+
     .quick {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 6px;
       margin: 8px 0 10px;
     }
