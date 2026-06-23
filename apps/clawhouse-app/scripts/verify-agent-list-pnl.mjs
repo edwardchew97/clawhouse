@@ -142,7 +142,83 @@ function element(id) {
   return elements.get(id);
 }
 
-function selectedBackend(boardId, totalPnlPct) {
+function paperActivityFixture() {
+  return {
+    ok: true,
+    account: {
+      id: "codex_board",
+      agent_id: "codex_main_20260620",
+      starting_balance_usd: 1000,
+      created_at: "2026-06-23T11:08:05.000Z",
+    },
+    positions: [
+      { coin: "BTC", signed_size: 0.01 },
+      { coin: "ETH", signed_size: -0.02 },
+    ],
+    latest_risk: {
+      equity_usd: 1002,
+      total_notional_usd: 150,
+      created_at: "2026-06-23T11:10:05.000Z",
+    },
+    risk_snapshots: [
+      { equity_usd: 1000, created_at: "2026-06-23T11:08:05.000Z" },
+      { equity_usd: 1002, created_at: "2026-06-23T11:10:05.000Z" },
+    ],
+    orders: [
+      {
+        id: "paper_ord_3",
+        client_order_id: "paper-client-3",
+        market_type: "perp",
+        coin: "BTC",
+        side: "buy",
+        status: "filled",
+        size: 0.01,
+        avg_fill_px: 100,
+        margin_mode: "cross",
+        leverage: 2,
+        created_at: "2026-06-23T11:10:15.000Z",
+      },
+      {
+        id: "paper_ord_2",
+        client_order_id: "paper-client-2",
+        market_type: "perp",
+        coin: "ETH",
+        side: "sell",
+        status: "filled",
+        size: 0.02,
+        avg_fill_px: 200,
+        margin_mode: "cross",
+        leverage: 2,
+        created_at: "2026-06-23T11:09:15.000Z",
+      },
+      {
+        id: "paper_ord_1",
+        client_order_id: "paper-client-1",
+        market_type: "perp",
+        coin: "BTC",
+        side: "buy",
+        status: "rejected",
+        reject_reason: "stale_market_data",
+        size: 0.01,
+        margin_mode: "cross",
+        leverage: 2,
+        created_at: "2026-06-23T11:08:15.000Z",
+      },
+    ],
+    fills: [{ id: "fill-1" }, { id: "fill-2" }],
+    summary: {
+      total_orders: 3,
+      filled_orders: 2,
+      rejected_orders: 1,
+      total_fills: 2,
+      latest_order_at: "2026-06-23T11:10:15.000Z",
+      latest_fill_at: "2026-06-23T11:10:15.000Z",
+      latest_risk_at: "2026-06-23T11:10:05.000Z",
+    },
+  };
+}
+
+function selectedBackend(boardId, totalPnlPct, paperActivity = null) {
   return {
     ok: true,
     boardId,
@@ -161,6 +237,7 @@ function selectedBackend(boardId, totalPnlPct) {
         },
       ],
     },
+    paperActivity,
   };
 }
 
@@ -180,7 +257,8 @@ const context = {
   Math,
   Number,
   Date,
-  setTimeout: (callback) => {
+  setTimeout: (callback, delayMs = 0) => {
+    if (delayMs >= 1000) return 1;
     callback();
     return 1;
   },
@@ -293,5 +371,16 @@ ledgerFlowRow.click();
 rendered = rows();
 const selectedRows = rendered.filter((row) => row.selected === "true");
 assert(selectedRows.length === 1 && selectedRows[0]?.key === "ledger-lane-flow", "Rows with the same agent id should not all become selected.");
+
+const codexRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "codex_main_20260620");
+codexRow.click();
+context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0.25, paperActivityFixture()) });
+assert(element("activityPanelTitle").textContent === "Paper Trading Activity", "Paper agents should render paper trading activity instead of key-market empty state.");
+assert(element("activityPanelSub").textContent.includes("2/3 filled orders"), "Paper activity header should expose filled/total order count.");
+assert(element("keyActivityList").innerHTML.includes("0.01 BTC"), "Paper activity list should render recent paper order size and coin.");
+assert(element("keyActivityList").innerHTML.includes("$100.00"), "Paper activity list should render filled paper order price.");
+assert(element("positionTitle").textContent === "Paper Positions", "Paper agents should render paper positions instead of key balance position.");
+assert(element("positionSub").textContent.includes("2026-06-23T11:10:05Z"), "Paper position subtitle should render latest risk UTC time.");
+assert(element("chartSub").textContent.includes("paper risk timeline"), "Paper chart subtitle should identify the paper risk timeline source.");
 
 console.log("agent discovery row P&L harness passed");

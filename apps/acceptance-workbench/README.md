@@ -82,7 +82,8 @@ service.
 
 The flow checks the local `hyperliquid-paper-trading` runtime skill, refreshes a
 Hyperliquid public market-data snapshot, runs the signed paper-order script, and
-then reads account state, risk, the public paper leaderboard, and replay proof.
+then reads account state, public paper activity timeline, risk, the public paper
+leaderboard, and replay proof.
 The signed script covers both Hyperliquid-style paper perps and paper spot:
 perps exercise IOC/GTC/ALO orders, margin, risk, liquidation, and replay proof;
 spot exercises IOC fills, paper cash checks, holding checks, and replay proof.

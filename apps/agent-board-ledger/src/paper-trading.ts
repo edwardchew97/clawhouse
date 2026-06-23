@@ -458,6 +458,37 @@ export async function readPaperAccount(db: LedgerDb, paperAccountId: string) {
   };
 }
 
+export async function readPaperAccountActivity(
+  db: LedgerDb,
+  paperAccountId: string,
+  options: { limit?: number } = {},
+) {
+  const account = await requirePaperAccount(db, paperAccountId);
+  const limit = boundedActivityLimit(options.limit);
+  const orders = await listRecentOrders(db, account.id, limit);
+  const fills = await listRecentAccountFills(db, account.id, limit);
+  const riskSnapshots = await listRecentRiskSnapshots(db, account.id, limit);
+  const counts = await paperOrderCounts(db, account.id);
+
+  return {
+    ok: true,
+    account: presentPaperAccount(account),
+    positions: (await listOpenPositions(db, account.id)).map(presentPosition),
+    latest_risk: riskSnapshots[riskSnapshots.length - 1]
+      ? presentRisk(riskSnapshots[riskSnapshots.length - 1])
+      : await latestRiskSnapshot(db, account.id),
+    risk_snapshots: riskSnapshots.map(presentRisk),
+    orders: orders.map(presentActivityOrder),
+    fills: fills.map(presentFill),
+    summary: {
+      ...counts,
+      latest_order_at: orders[0]?.created_at ?? null,
+      latest_fill_at: fills[0]?.created_at ?? null,
+      latest_risk_at: riskSnapshots[riskSnapshots.length - 1]?.created_at ?? null,
+    },
+  };
+}
+
 export async function readPaperLeaderboard(db: LedgerDb) {
   const rows = await db.all<PaperLeaderboardSnapshotRow>(
     `SELECT latest.*
@@ -1177,12 +1208,72 @@ async function listFills(db: LedgerDb, orderId: string) {
   return await db.all<PaperFillRow>("SELECT * FROM paper_fills WHERE order_id = ? ORDER BY created_at ASC, id ASC", [orderId]);
 }
 
+async function listRecentOrders(db: LedgerDb, paperAccountId: string, limit: number) {
+  return await db.all<PaperOrderRow>(
+    `SELECT * FROM paper_orders
+      WHERE paper_account_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT ?`,
+    [paperAccountId, limit],
+  );
+}
+
+async function listRecentAccountFills(db: LedgerDb, paperAccountId: string, limit: number) {
+  return await db.all<PaperFillRow>(
+    `SELECT * FROM paper_fills
+      WHERE paper_account_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT ?`,
+    [paperAccountId, limit],
+  );
+}
+
+async function listRecentRiskSnapshots(db: LedgerDb, paperAccountId: string, limit: number) {
+  return await db.all<PaperRiskSnapshotRow>(
+    `SELECT * FROM (
+        SELECT * FROM paper_risk_snapshots
+          WHERE paper_account_id = ?
+          ORDER BY created_at DESC, COALESCE(ingest_sequence, 0) DESC, id DESC
+          LIMIT ?
+      ) AS recent
+      ORDER BY created_at ASC, COALESCE(ingest_sequence, 0) ASC, id ASC`,
+    [paperAccountId, limit],
+  );
+}
+
 async function latestRiskSnapshot(db: LedgerDb, paperAccountId: string) {
   const row = await db.get<PaperRiskSnapshotRow>(
     "SELECT * FROM paper_risk_snapshots WHERE paper_account_id = ? ORDER BY created_at DESC, COALESCE(ingest_sequence, 0) DESC, id DESC LIMIT 1",
     [paperAccountId],
   );
   return row ? presentRisk(row) : null;
+}
+
+async function paperOrderCounts(db: LedgerDb, paperAccountId: string) {
+  const row = await db.get<{
+    total_orders: number;
+    filled_orders: number;
+    rejected_orders: number;
+    open_orders: number;
+    total_fills: number;
+  }>(
+    `SELECT
+        COUNT(o.id) AS total_orders,
+        SUM(CASE WHEN status = 'filled' THEN 1 ELSE 0 END) AS filled_orders,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected_orders,
+        SUM(CASE WHEN status NOT IN ('filled', 'rejected') THEN 1 ELSE 0 END) AS open_orders,
+        (SELECT COUNT(*) FROM paper_fills WHERE paper_account_id = ?) AS total_fills
+       FROM paper_orders AS o
+       WHERE o.paper_account_id = ?`,
+    [paperAccountId, paperAccountId],
+  );
+  return {
+    total_orders: Number(row?.total_orders ?? 0),
+    filled_orders: Number(row?.filled_orders ?? 0),
+    rejected_orders: Number(row?.rejected_orders ?? 0),
+    open_orders: Number(row?.open_orders ?? 0),
+    total_fills: Number(row?.total_fills ?? 0),
+  };
 }
 
 async function insertOrder(db: LedgerDb, order: PaperOrderRow) {
@@ -1353,6 +1444,11 @@ function presentOrder(order: PaperOrderRow) {
   return { ...order, reduce_only: Boolean(order.reduce_only) };
 }
 
+function presentActivityOrder(order: PaperOrderRow) {
+  const { body_hash: _bodyHash, ...presented } = presentOrder(order);
+  return presented;
+}
+
 function presentFill(fill: PaperFillRow) {
   return fill;
 }
@@ -1448,6 +1544,14 @@ function normalizedTimestamp(value: unknown, fallback: string, name: string) {
   const parsed = Date.parse(timestamp);
   if (!Number.isFinite(parsed)) throw new RequestError(`Invalid ${name}`, 400);
   return new Date(parsed).toISOString();
+}
+
+function boundedActivityLimit(value: number | undefined) {
+  const limit = value ?? 120;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 240) {
+    throw new RequestError("Invalid limit", 400);
+  }
+  return limit;
 }
 
 function asObject(value: unknown): JsonObject {

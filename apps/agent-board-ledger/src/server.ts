@@ -2,7 +2,7 @@ import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, 
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAgentAuthPayload, canonicalAuthPayload, readAgentSignedHeaders, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
 import { refreshHyperliquidPaperMarketSnapshot, refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
 import { listKeyMarketTrades, reportKeyMarketTrade } from "./key-market.js";
-import { PaperAuthError, createPaperAccount, createPaperMarketSnapshot, readPaperAccount, readPaperLeaderboard, replayPaperOrder, runPaperRiskCheck, submitPaperOrder } from "./paper-trading.js";
+import { PaperAuthError, createPaperAccount, createPaperMarketSnapshot, readPaperAccount, readPaperAccountActivity, readPaperLeaderboard, replayPaperOrder, runPaperRiskCheck, submitPaperOrder } from "./paper-trading.js";
 import type { AgentRegistrationRow, AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PaperAccountRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
 
 type AppOptions = {
@@ -85,6 +85,7 @@ export function createApp(options: AppOptions) {
         const pnlMatch = path.match(/^\/boards\/([^/]+)\/pnl$/);
         const keyMarketTradesMatch = path.match(/^\/key-market\/trades$/);
         const paperAccountMatch = path.match(/^\/paper\/accounts\/([^/]+)$/);
+        const paperAccountActivityMatch = path.match(/^\/paper\/accounts\/([^/]+)\/activity$/);
         const paperRiskCheckMatch = path.match(/^\/paper\/accounts\/([^/]+)\/risk-check$/);
         const paperOrderReplayMatch = path.match(/^\/paper\/orders\/([^/]+)\/replay$/);
 
@@ -188,6 +189,11 @@ export function createApp(options: AppOptions) {
         if (method === "GET" && paperAccountMatch) {
           return json(await readPaperAccount(db, paperAccountMatch[1]));
         }
+        if (method === "GET" && paperAccountActivityMatch) {
+          return json(await readPaperAccountActivity(db, paperAccountActivityMatch[1], {
+            limit: boundedPaperActivityLimit(url.searchParams.get("limit")),
+          }));
+        }
         if (method === "POST" && path === "/paper/market-snapshots") {
           assertServiceBearer(request.headers, adminToken);
           return json(await createPaperMarketSnapshot(db, await readBody(request), now()), 201);
@@ -230,6 +236,15 @@ async function readHealth(db: LedgerDb) {
   const ready = await db.get<{ ready: number }>("SELECT 1 AS ready");
   if (!ready) throw new RequestError("Database readiness check failed", 503);
   return { ok: true, service: "agent-board-ledger", db: "ready" };
+}
+
+function boundedPaperActivityLimit(value: string | null) {
+  if (!value) return 120;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 240) {
+    throw new RequestError("Invalid limit", 400);
+  }
+  return parsed;
 }
 
 async function listDiscoverableBoards(db: LedgerDb) {
