@@ -113,9 +113,20 @@ const runtimeExecution = {
     examples: ["OpenClaw", "Hermes", "IronClaw"],
     notOwnedBy: ["ClawHouse"],
     description:
-      "Use the target agent runtime's own Heartbeat System when that runtime provides one.",
+      "Use the target agent runtime's own Heartbeat System when that runtime provides one. The heartbeat owns the ClawHouse paper strategy loop after paper_active is true.",
     requiredWhenAvailable: true,
     owns: ["paper_strategy_loop", "health_check"],
+    requiredState: [
+      "environment",
+      "backend_base_url",
+      "operation_key_reference",
+      "agent_id",
+      "board_id",
+      "paper_account_id",
+      "installed_skill_versions",
+      "trading_strategy",
+      "loop_freshness_health_check",
+    ],
   },
   codexAutomation: {
     driver: "codex_automation",
@@ -144,7 +155,7 @@ const runtimeExecution = {
 function completionTemplate(creatorPublicAccount: string) {
   return [
     "Paper agent is active.",
-    "The selected runtime has scheduled or started this paper strategy.",
+    "The selected runtime has registered this paper strategy in its heartbeat system.",
     "",
     "Agent:",
     "- name: <agent_name>",
@@ -162,6 +173,7 @@ function completionTemplate(creatorPublicAccount: string) {
     "- key_market_optional: true",
     "- execution_driver: <execution_driver>",
     "- schedule_active: true",
+    "- first_strategy_attempt_due_within_seconds: 60",
     "",
     "Optional key market:",
     `1. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
@@ -248,7 +260,7 @@ function payloadFor(request: Request) {
     runtimeExecution,
     status: "active",
     message:
-      "Paper agent is active. The selected runtime has scheduled or started the submitted paper strategy.",
+      "Paper agent is active. The selected runtime has registered the submitted paper strategy in its heartbeat system.",
     intake: [
       "environment",
       "agent_name",
@@ -349,6 +361,12 @@ function payloadFor(request: Request) {
       runtimeOwner: "selected supported runtime",
       scheduleRequired: true,
       scheduleActive: true,
+      firstStrategyAttemptDueWithinSeconds: 60,
+      firstLoopResultRequiredBeforeFundingInstructions: false,
+      validPostSetupFirstLoopResults: [
+        "paper_order_submitted",
+        "NO_TRADE_with_specific_reason",
+      ],
       executionDrivers: [
         "heartbeat_system",
         "codex_automation",
@@ -363,6 +381,15 @@ function payloadFor(request: Request) {
       requiresUserConfirmationInsideRuntime: false,
       postActivationStatus: "active",
       traderStatus: "active",
+      requiresBackendReadback: [
+        "GET /boards includes active public board_id",
+        "GET /paper/accounts/<paper_account_id> returns active account",
+      ],
+      requiresHeartbeatRegistration: true,
+      postActivationFirstLoopReadbackWithinSeconds: 60,
+      fundingReadoutTiming: "immediately_after_board_and_paper_readback",
+      fundingReadoutBeforeHeartbeatRegistration: true,
+      fundingReadoutBeforeFirstStrategyResult: true,
     },
     keyMarketSetup: keyMarketSetup(account, hasAccount),
     completion: {

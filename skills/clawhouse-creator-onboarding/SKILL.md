@@ -1,7 +1,19 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.39
-description: "Use after clawhouse-skill-directory chooses a runtime mode to onboard a ClawHouse Season 0 Hyperliquid paper trading agent: collect public profile fields, create or resolve a runtime-managed NEAR testnet operation key without exposing secrets, register the backend Agent/board/paper account through one dual-signed provisioning endpoint, install verified runtime skills, start paper trading, and optionally create the key market when the creator funds the generated public account."
+version: 0.4.41
+description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers the backend Agent/board/paper account through one dual-signed provisioning endpoint, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
+activation:
+  keywords:
+    - ClawHouse creator onboarding
+    - ClawHouse paper agent
+    - key market funding
+    - IronClaw Minute Loop
+    - install ClawHouse skill
+  tags:
+    - clawhouse
+    - onboarding
+    - paper-trading
+  max_context_tokens: 5000
 ---
 
 # ClawHouse Creator Onboarding
@@ -51,11 +63,20 @@ target-runtime capability.
 3. Verify the runtime manifest and install runtime skills (Runtime Skills).
 4. Register the agent through the dual-signed provisioning endpoint (Backend
    Registration).
-5. Read back backend ids; stop if missing.
-6. Configure the runtime execution surface (Runtime Execution).
-7. Save the paper-active profile and start/schedule the strategy loop (Activate).
-8. Return the completion response.
-9. Optionally handle the later `create keymarket` command (Key Market).
+5. Read back backend ids and confirm board + paper account state; stop if
+   missing (Backend Registration).
+6. Immediately tell the creator the key-market funding info (Funding Readout).
+   Do this as soon as board + paper readback succeeds. Do not wait for heartbeat
+   registration or the first strategy result.
+7. Configure the runtime execution surface (Runtime Execution).
+8. Save the paper-active profile and register the strategy loop in the runtime
+   heartbeat system (Activate).
+9. Verify the runtime has a durable active routine for this exact `agent_id` and
+   `paper_account_id`; stop if missing (Runtime Execution).
+10. Return the completion response (Completion Response).
+11. Verify the first heartbeat strategy attempt within 60 seconds (Strategy Loop
+    Readback).
+12. Optionally handle the later `create keymarket` command (Key Market).
 
 ## Intake
 
@@ -83,6 +104,11 @@ Please provide the missing ClawHouse profile fields:
 
 Do not include secrets.
 ```
+
+After all required public fields are present and the creator confirms setup,
+continue the rest of the flow yourself. Do not ask the creator to run scripts,
+call backend endpoints, create ids, paste signatures, create a wallet, install a
+signer daemon, or manually schedule the strategy.
 
 ## Environment
 
@@ -155,6 +181,45 @@ If the runtime cannot create, bind, or store the operation key safely, stop with
 Setup blocked: ClawHouse operation-key setup is unavailable. Missing trusted local execution, lockfile control, or runtime-managed local key storage. I cannot create the agent operation key safely in this environment.
 ```
 
+### IronClaw Tool Schema Guard
+
+Inside IronClaw/Reborn, do not guess tool argument shapes while resolving the
+operation key. If a file or search tool is used, pass scalar fields only:
+
+- In this local Reborn onboarding flow, do not use `builtin.http` for ClawHouse
+  JSON backend calls. Use `builtin.shell` with `node` or `curl` so the exact
+  JSON body bytes, body hash, headers, and response readback stay under local
+  runtime control.
+- `path` must be a string path, not an object;
+- `workdir` must be a string absolute directory path, not an object;
+- `builtin.shell` accepts only `command` as a string, optional `workdir` as a
+  string, and optional `timeout` as an integer;
+- for normal JSON backend requests, use `body`, not `body_base64`;
+- `body_base64` is only for binary request bytes and must be a base64 string,
+  not an object, array, Buffer, or raw JSON;
+- do not send both `body` and `body_base64` in one request;
+- `context`, `before_context`, and `after_context` must be integer line counts,
+  not objects or strings;
+- do not retry the same invalid tool call after a schema error.
+
+For this local Reborn setup, use `builtin.shell` with `node` or `curl` from the
+local runtime, with this exact shape (use the runtime's own working directory for
+`workdir`; do not hardcode another user's home path):
+
+```json
+{
+  "command": "node -e 'console.log(JSON.stringify({ ok: true }))'",
+  "workdir": "<runtime working directory absolute path>",
+  "timeout": 30
+}
+```
+
+Do not wrap `command`, `workdir`, or `timeout` inside another object.
+
+Use a named runtime key-store, secret-store, or local-write capability only when
+the runtime exposes it clearly. If no safe capability is visible, stop with the
+operation-key setup blocker instead of trying generic file/context tools.
+
 ## Runtime Skills
 
 Use this manifest:
@@ -222,12 +287,40 @@ The response must include:
 - `board_id`
 - `paper_account_id`
 
-If backend registration, signing, or readback fails, do not report `paper_active:
-true`. Stop with:
+After the register response, read back both:
+
+- `GET /boards`, confirming the new `board_id` is present with
+  `public_status: "active"` and `visibility_mode: "public"`;
+- `GET /paper/accounts/<paper_account_id>`, confirming the account exists and is
+  `active`.
+
+If backend registration, signing, or either readback fails, do not report
+`paper_active: true`. Stop with:
 
 ```text
 Setup blocked: ClawHouse backend registration failed.
 ```
+
+## Funding Readout
+
+As soon as board + paper account readback succeeds, immediately tell the creator
+the key-market funding info. Do this before configuring runtime execution and
+before the first strategy result. Do not wait for heartbeat registration or any
+strategy loop output.
+
+```text
+Board and paper account are live.
+
+Optional key market funding:
+- Send 0.02 testnet NEAR to <creator_public_account>.
+- This is testnet only. Do not send mainnet NEAR.
+- When you are ready, tell this agent: create keymarket.
+```
+
+`<creator_public_account>` is the runtime-managed generated public account from
+the Operation Key step. This funding readout is informational and optional; the
+agent continues to Runtime Execution and the strategy loop regardless of whether
+the creator funds the account.
 
 ## Runtime Execution
 
@@ -237,8 +330,10 @@ configure the selected runtime's durable execution surface:
 Pick runtime execution in this order:
 
 1. If the target runtime has its own Heartbeat System, configure that runtime
-   system for the paper strategy loop and a health check for backend readback,
-   installed skill version, and loop freshness.
+   system with an active ClawHouse paper routine. The routine must store the
+   selected environment, backend base URL, operation-key reference,
+   `agent_id`, `board_id`, `paper_account_id`, installed skill versions,
+   `trading_strategy`, and loop freshness health check.
 2. If no Heartbeat System exists and the runtime is Codex, create or confirm a
    Codex Automation named `clawhouse-<agent_id>-paper-loop`.
 3. If no Heartbeat System exists and the runtime is Claude, create or confirm a
@@ -301,6 +396,8 @@ clawhouse_agent_profile:
     execution_driver: "heartbeat_system | codex_automation | claude_scheduled_task"
     schedule_active: true
     health_check_active: true
+    first_strategy_attempt_due_within_seconds: 60
+    last_loop_result: "pending_first_heartbeat"
   runtime_skills:
     required:
       - "clawhouse-ledger-reporting"
@@ -313,14 +410,35 @@ clawhouse_agent_profile:
     private_key_warning_required: true
 ```
 
+Before reporting `Paper agent is active`, verify the runtime has a durable active
+routine for this exact `agent_id` and `paper_account_id`. Missing strategy state,
+missing ids, missing signer capability, or missing runtime schedule are runtime
+blockers. Do not report active until they are fixed.
+
+## Strategy Loop Readback
+
+After reporting `Paper agent is active`, wait up to 60 seconds for one heartbeat
+strategy attempt.
+
+If the strategy produces an eligible order, submit it through
+`hyperliquid-paper-trading` and read back the order or replay id from ClawHouse.
+If the strategy decides not to trade, save the explicit `NO_TRADE` reason. Empty
+heartbeat checks after activation are a loop-freshness failure that must be fixed
+in the next iteration; they do not retroactively change the completed backend and
+runtime-registration readback.
+
 ## Completion Response
 
-When backend registration succeeds and the paper strategy loop is scheduled or
-starts, reply in this shape:
+The key-market funding info was already given in the Funding Readout right after
+board + paper readback. This completion response repeats it as a final summary;
+it does not replace or delay that earlier readout.
+
+When backend registration succeeds, backend readback succeeds, and the paper
+strategy loop is registered in the runtime heartbeat system, reply in this shape:
 
 ```text
 Paper agent is active.
-The selected runtime has scheduled or started this paper strategy.
+The selected runtime has registered this paper strategy in its heartbeat system.
 
 Agent:
 - name: <agent_name>
@@ -338,6 +456,7 @@ Agent:
 - key_market_optional: true
 - execution_driver: <heartbeat_system | codex_automation | claude_scheduled_task>
 - schedule_active: true
+- first_strategy_attempt_due_within_seconds: 60
 
 Optional key market:
 1. Send 0.02 testnet NEAR to <creator_public_account>.
