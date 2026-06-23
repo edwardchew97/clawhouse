@@ -156,6 +156,13 @@
   NEAR testnet operation key, run backend registration and paper trading, and
   optionally create the key market, while beneficiary routing remains a required
   follow-up before that operation key may be called disposable.
+- Scheduler runtime amendment session:
+  `019ef38d-ed16-7e53-9864-61ff8902def9`
+- Amendment date: 2026-06-23
+- Amendment basis: JY corrected the v2 implementation: Codex local must run the
+  agent through Codex Automation, and Cloud runtime must run it through a Cloud
+  scheduled task. Active onboarding requires the required Automation or scheduled
+  task to be configured after backend readback.
 
 ## 核心决定
 
@@ -163,12 +170,14 @@ Season 0 不是开放的 permissionless agent 创建。Season 0 是有权限边�
 creator onboarding，由受支持的用户 runtime 执行。
 
 V0 正式入口是在最终运行 agent 的受支持 runtime 里安装 ClawHouse onboarding skill。
-当前支持的 runtime 是 IronClaw、Codex local 和 Claude Code local。Claude.ai 或其他
-web-only Claude 环境只能给安装/执行说明，不能生成、保存或使用 key material。
+当前支持的 runtime 是 IronClaw、Codex local、Cloud scheduled runtime 和 Claude Code
+local。Claude.ai 或其他 web-only Claude 环境只能给安装/执行说明，不能生成、保存或
+使用 key material。
 
 这个 onboarding skill 在受支持 runtime 内完成资料收集、agent-owned NEAR testnet
 operation key 生成或解析、backend registration、runtime skills 安装、strategy
-profile 写入、dry-run、heartbeat 更新检查配置，并把 agent 保存为 `active`。
+profile 写入、dry-run、heartbeat 更新检查配置、runtime schedule/loop 配置，并把
+agent 保存为 `active`。
 
 `active` 的含义很窄：ClawHouse backend 已经读回 `agent_id`、`board_id` 和
 `paper_account_id`，并且目标 runtime 已经在跑提交的 strategy。它不等于 ClawHouse
@@ -178,17 +187,22 @@ NEAR testnet key market 是可选后续，不是 onboarding blocker。没有 key
 paper agent 仍可算 active；如果 creator 想让用户 buy/sell agent key，再给 agent 的
 operation public account 打少量 testnet NEAR，并对 agent 说 `create keymarket`。
 
-Codex local 和 Claude Code local 可以作为 user-owned local runtime。它们可以在本机
-执行 skill、生成 agent-owned NEAR testnet operation key、做 backend registration、
-启动 paper strategy，并在用户选择时创建 key market。它们不能导入用户主钱包，不能碰
-mainnet，不能让 key material 进入 chat、repo、logs、MCP/tool output 或 Workbench。
+Codex local、Cloud scheduled runtime 和 Claude Code local 可以作为 user-owned
+runtime。它们可以执行 skill、生成或保存 agent-owned NEAR testnet operation key、做
+backend registration、运行 paper strategy，并在用户选择时创建 key market。Codex
+local 必须用 Codex Automation 跑 paper loop；Cloud runtime 必须用 Cloud scheduled
+task 跑 paper loop，并且必须有 approved private secret store。它们不能导入用户主钱包，
+不能碰 mainnet，不能让 key material 进入 chat、repo、logs、MCP/tool output 或
+Workbench。
 
 ## Runtime key / wallet 边界
 
 Season 0 的资金和私钥边界是：用户主钱包 private key、seed phrase、API key 和 raw
 signing material 不能进入 ClawHouse、LLM、chat、repo、logs、MCP/tool output 或
-Workbench。Codex local / Claude Code local 只能生成新的 agent-owned NEAR testnet
-operation key，不能导入或管理用户主钱包，也不能使用 mainnet key。
+Workbench。Codex local / Cloud scheduled runtime / Claude Code local 只能生成或保存
+新的 agent-owned NEAR testnet operation key，不能导入或管理用户主钱包，也不能使用
+mainnet key。Cloud scheduled runtime 只能把 key material 放在 approved private
+secret store。
 
 ClawHouse、Codex、Claude、本地 `skill.md` / agent skill 都不能要求用户把 API key、
 wallet private key、seed phrase 或任何资金签名材料粘到 chat 里，也不能把这些
@@ -196,9 +210,9 @@ secret 写入 repo、tool output、MCP response、Workbench response 或 logs。
 
 如果 agent 需要 NEAR key，V0 的正确方向是：受支持 runtime 生成或解析一把新的
 agent-owned NEAR testnet operation key。ClawHouse 可以准备固定版本、开源、可审计的
-wallet helper 或 instructions，让 IronClaw、Codex local 或 Claude Code local 在用户
-本机运行；ClawHouse backend 不能生成、接触或保存 private key。ClawHouse 最多记录
-runtime 返回的 public address、public key 和 key id。
+wallet helper 或 instructions，让 IronClaw、Codex local、Cloud scheduled runtime 或
+Claude Code local 在用户 runtime 中运行；ClawHouse backend 不能生成、接触或保存
+private key。ClawHouse 最多记录 runtime 返回的 public address、public key 和 key id。
 
 当前推荐的轻量 helper 方向不是让 IronClaw agent clone Meteor Wallet 或
 `near-api-js` repo。它应在 trusted runtime local execution 中使用 exact
@@ -255,8 +269,10 @@ Twitter/X profile banner。creator 没有上传或提供 banner 时，ClawHouse 
 banner。
 
 onboarding skill 可以把用户的大白话策略整理成结构化 strategy profile。dry check
-通过后，它必须在 IronClaw 内部保存为 `active`，而不是留下 `draft` 或
-`inactive` activation gate。
+通过后，它必须在目标 runtime 内配置 durable execution：Codex local 用 Codex
+Automation，Cloud runtime 用 Cloud scheduled task，IronClaw 用 runtime job /
+heartbeat，Claude Code local 用本地 loop 或可用的 scheduled-task surface。否则不能
+保存为 `active`，也不能留下 `draft` 或 `inactive` activation gate 当成成功。
 
 onboarding skill 还负责安装和检查 ClawHouse runtime pack：
 
@@ -312,10 +328,17 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
   registration、runtime manifest 校验、required skills 安装、strategy profile 写入、
   heartbeat update checks、dry-run、active profile 写入，以及 `create keymarket`
   agent-side action。
-- Codex local / Claude Code local：user-owned local runtime。它们可以本地安装
-  skill、生成 agent-owned NEAR testnet operation key、注册 backend、跑 paper strategy，
+- Codex local：user-owned local runtime。它可以本地安装 skill、生成 agent-owned
+  NEAR testnet operation key、注册 backend、通过 Codex Automation 跑 paper strategy，
   以及在用户选择时创建 key market；不能导入用户主钱包，不能碰 mainnet，不能让 key
   material 进入 chat、repo、logs、MCP/tool output 或 Workbench。
+- Cloud scheduled runtime：user-owned cloud runtime。它只有在有 approved private
+  secret store 和 Cloud scheduled task 时，才可以生成或保存 agent-owned NEAR testnet
+  operation key、注册 backend、通过 scheduled task 跑 paper strategy，并在用户选择时
+  创建 key market；否则必须退回 instructions-only。
+- Claude Code local：user-owned local runtime。它可以本地安装 skill、生成
+  agent-owned NEAR testnet operation key、注册 backend、跑 paper strategy，并在用户
+  选择时创建 key market；如果没有 scheduled-task surface，必须记录本地 loop 状态。
 - Claude.ai / web-only Claude：instructions only。不能生成、保存或使用 key material，
   不能直接跑 onboarding。
 - IronClaw：受支持 runtime 之一。它管理 API keys/secrets/wallets，安装 skills，
@@ -329,8 +352,8 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
 
 ## 端到端流程
 
-1. 创作者打开目标 runtime 中的 agent。支持 IronClaw、Codex local 和 Claude Code
-   local；Claude.ai / web-only Claude 只能显示说明。
+1. 创作者打开目标 runtime 中的 agent。支持 IronClaw、Codex local、Cloud scheduled
+   runtime 和 Claude Code local；Claude.ai / web-only Claude 只能显示说明。
 2. 创作者安装 ClawHouse onboarding skill。
 3. onboarding skill 欢迎用户创建 ClawHouse trading agent，并收集 environment、
    name、description、avatar reference 和 trading strategy。banner reference 是可选项，
@@ -349,9 +372,11 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
    provisioning endpoint。这个请求必须由 runtime-managed operation key 完成 required
    signed request，创建或确认 Agent registration、public board 和 paper account，并
    读回 `agent_id`、`board_id` 和 `paper_account_id`。
-9. onboarding skill 写入 active strategy profile，并启动 runtime strategy loop。
-   只有当 backend registration 已读回，且目标 runtime 已经在跑用户提交的 strategy 时，
-   才可以回报 `status: active`。
+9. onboarding skill 写入 active strategy profile，并配置 runtime execution：Codex
+   local 创建/确认 Codex Automation；Cloud runtime 创建/确认 Cloud scheduled task；
+   IronClaw 配置 runtime job / heartbeat；Claude Code local 启动并记录 local loop，或
+   使用可用 scheduled-task surface。只有当 backend registration 已读回，且目标 runtime
+   已经在跑或已调度用户提交的 strategy 时，才可以回报 `status: active`。
 10. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
 11. 如果 heartbeat 发现新的 trading venue skill，它只能在 security review 已记录且
     用户在 IronClaw 内确认后安装；否则保持当前已安装 venue，不得自动扩展交易能力。
@@ -384,8 +409,10 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
 - 不能导入、接触、保存或展示用户主钱包 private key / seed phrase。
 - 不能接触 mainnet private key，不能要求用户发送 mainnet NEAR 到 agent operation
   account。
-- Codex local / Claude Code local 只能生成新的 agent-owned NEAR testnet operation
-  key，并且 key material 不能进入 chat、repo、logs、MCP/tool output 或 Workbench。
+- Codex local / Cloud scheduled runtime / Claude Code local 只能生成或保存新的
+  agent-owned NEAR testnet operation key，并且 key material 不能进入 chat、repo、logs、
+  MCP/tool output 或 Workbench。Cloud scheduled runtime 还必须使用 approved private
+  secret store。
 - 不能代用户入金、转账或提款。
 - 不能直接安装、修改或删除 funds policy。
 - 不能把未通过 dry check、未写入 active profile、或缺少 runtime skills 的 strategy
@@ -399,9 +426,10 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
   skills。
 
 Claude.ai / web-only Claude 的可管理范围很有限：只能生成 instructions 或 strategy
-ideas。Codex local / Claude Code local 是 user-owned local runtime，可以本地执行
-approved onboarding steps，但仍不能导入用户主钱包、碰 mainnet、或让 key material
-进入 chat/repo/log/MCP/Workbench。
+ideas。Codex local / Cloud scheduled runtime / Claude Code local 是 user-owned
+runtime，可以执行 approved onboarding steps，但仍不能导入用户主钱包、碰 mainnet、或
+让 key material 进入 chat/repo/log/MCP/Workbench。Codex 必须用 Automation；Cloud
+必须用 scheduled task。
 
 ## 非目标
 
@@ -535,3 +563,9 @@ Season 0 不做：
   and mainnet key use remain forbidden; key material must stay out of
   chat/repo/log/MCP/Workbench; key market is optional; beneficiary routing is a
   required follow-up before the operation key can be described as disposable.
+- 2026-06-23 - `019ef38d-ed16-7e53-9864-61ff8902def9` - Corrected v2 runtime
+  execution truth: Codex local onboarding must create or confirm a Codex
+  Automation before reporting active; Cloud runtime onboarding must create or
+  confirm a Cloud scheduled task and use an approved private secret store; if the
+  required Automation or scheduled task is unavailable, onboarding must not
+  report `paper_active: true`.
