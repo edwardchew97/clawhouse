@@ -820,6 +820,26 @@ describe("Agent Board Ledger local backend", () => {
     expect(eventsBody.events[0].reason).toBe("First report.");
   });
 
+  test("database enforces one event per transaction identifier per board", async () => {
+    await registerBoard();
+    const insertRawEvent = (id: string, clientEventId: string | null, txHash: string | null, intentId: string | null) => {
+      sqliteDb.raw.query(
+        `INSERT INTO events
+          (id, board_id, agent_id, wallet_address, event_type, client_event_id, tx_hash, intent_id, created_at)
+          VALUES (?, 'board-1', 'ironclaw', ?, 'agent_reported', ?, ?, ?, ?)`,
+      ).run(id, wallet.walletAddress, clientEventId, txHash, intentId, currentNow.toISOString());
+    };
+
+    insertRawEvent("evt-db-client-source", "client-db", null, null);
+    expect(() => insertRawEvent("evt-db-client-duplicate", "client-db", null, null)).toThrow(/UNIQUE constraint failed/);
+
+    insertRawEvent("evt-db-tx-source", "client-db-tx-a", "tx-db", null);
+    expect(() => insertRawEvent("evt-db-tx-duplicate", "client-db-tx-b", "tx-db", null)).toThrow(/UNIQUE constraint failed/);
+
+    insertRawEvent("evt-db-intent-source", "client-db-intent-a", null, "intent-db");
+    expect(() => insertRawEvent("evt-db-intent-duplicate", "client-db-intent-b", null, "intent-db")).toThrow(/UNIQUE constraint failed/);
+  });
+
   test("cron discovers unreported observations and creates a reasonless timeline event", async () => {
     await registerBoard();
     await postJson("/boards/board-1/observations", {

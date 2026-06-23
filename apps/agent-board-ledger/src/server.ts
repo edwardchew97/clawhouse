@@ -548,8 +548,8 @@ async function createEvent(
     created_at: createdAt,
   };
 
-  await insertEvent(db, event);
-  return { ok: true, merged: false, event: await presentEvent(db, event) };
+  const inserted = await insertEventOrFindMerge(db, event);
+  return { ok: true, merged: !inserted.created, event: await presentEvent(db, inserted.event) };
 }
 
 async function createAttachment(
@@ -1382,8 +1382,9 @@ async function discoverEventForObservation(db: LedgerDb, observation: Observatio
       reported_at: null,
       created_at: createdAt,
     };
-    await insertEvent(db, event);
-    created = true;
+    const inserted = await insertEventOrFindMerge(db, event);
+    event = inserted.event;
+    created = inserted.created;
   }
 
   const result = await db.run("UPDATE observations SET event_id = ? WHERE id = ? AND event_id IS NULL", [
@@ -2034,6 +2035,18 @@ async function insertEvent(db: LedgerDb, event: EventRow) {
     event.created_at,
     ],
   );
+}
+
+async function insertEventOrFindMerge(db: LedgerDb, event: EventRow) {
+  try {
+    await insertEvent(db, event);
+    return { created: true, event };
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    const existing = await findEventByAssociations(db, event.board_id, event);
+    if (!existing) throw error;
+    return { created: false, event: existing };
+  }
 }
 
 async function insertAttachment(db: LedgerDb, attachment: AttachmentRow) {
