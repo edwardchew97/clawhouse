@@ -1,6 +1,6 @@
 ---
 name: hyperliquid-paper-trading
-version: 0.3.4
+version: 0.3.5
 description: "Use inside IronClaw when a ClawHouse trading agent needs Hyperliquid paper trading: paper perps with leverage/cross/isolated margin, or paper spot with cash/holding checks, fills, positions, risk, leaderboard, and replay proof. Do not submit real Hyperliquid orders."
 ---
 
@@ -79,7 +79,7 @@ Default to a risk check before opening or increasing exposure.
 1. Read current position and risk from:
    `/paper/accounts/{paperAccountId}`
 2. Build a paper order with a fresh `client_order_id`.
-3. Include `reason` and `strategy_hash` when available.
+3. Include an order-specific `reason` and `strategy_hash` when available.
 4. Sign the exact JSON body using the ClawHouse paper signing payload.
 5. Submit to:
    `/paper/orders`
@@ -126,6 +126,14 @@ will fetch Hyperliquid again on the backend before accepting or filling.
 
 Do not include deposit, recipient, refund, swap quote, or real transfer fields in
 any ClawHouse paper order.
+
+The `reason` field must be the current strategy's trade rationale for this exact
+paper order: market signal, risk check result, entry/exit intent, and why this
+size/direction is acceptable now. Do not use heartbeat names, test descriptions,
+loop status, safety disclaimers, or generic text such as "paper-only", "if
+rejected", or "never place real orders" as `reason`. If the strategy does not
+have a real trade rationale, do not submit `/paper/orders`; record a specific
+`NO_TRADE` reason instead.
 
 ## Paper Order Body
 
