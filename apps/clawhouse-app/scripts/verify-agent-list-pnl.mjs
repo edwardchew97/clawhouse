@@ -299,6 +299,66 @@ function noFillPaperActivityFixture() {
   };
 }
 
+function rangeFilteredPaperActivityFixture() {
+  return {
+    ok: true,
+    account: {
+      id: "codex_board",
+      agent_id: "codex_main_20260620",
+      starting_balance_usd: 10000,
+      created_at: "2026-06-23T10:00:00.000Z",
+    },
+    positions: [{ coin: "BTC", signed_size: 0.02 }],
+    latest_risk: {
+      equity_usd: 20966.5,
+      total_notional_usd: 400,
+      created_at: "2026-06-23T13:03:00.000Z",
+    },
+    risk_snapshots: [
+      { equity_usd: 10000, created_at: "2026-06-23T12:45:00.000Z" },
+      { equity_usd: 20966.5, created_at: "2026-06-23T13:03:00.000Z" },
+    ],
+    orders: [
+      {
+        id: "paper_ord_old_fill",
+        client_order_id: "paper-client-old-fill",
+        market_type: "perp",
+        coin: "BTC",
+        side: "buy",
+        status: "filled",
+        size: 0.01,
+        avg_fill_px: 100,
+        margin_mode: "cross",
+        leverage: 2,
+        created_at: "2026-06-23T11:10:00.000Z",
+      },
+      {
+        id: "paper_ord_recent_fill",
+        client_order_id: "paper-client-recent-fill",
+        market_type: "perp",
+        coin: "BTC",
+        side: "buy",
+        status: "filled",
+        size: 0.01,
+        avg_fill_px: 110,
+        margin_mode: "cross",
+        leverage: 2,
+        created_at: "2026-06-23T12:45:00.000Z",
+      },
+    ],
+    fills: [{ id: "fill-old" }, { id: "fill-recent" }],
+    summary: {
+      total_orders: 2,
+      filled_orders: 2,
+      rejected_orders: 0,
+      total_fills: 2,
+      latest_order_at: "2026-06-23T12:45:00.000Z",
+      latest_fill_at: "2026-06-23T12:45:00.000Z",
+      latest_risk_at: "2026-06-23T13:03:00.000Z",
+    },
+  };
+}
+
 function selectedBackend(boardId, totalPnlPct, paperActivity = null) {
   return {
     ok: true,
@@ -547,5 +607,16 @@ assert(noFillPaperChart.values.every((value) => value === 1000), "No-fill paper 
 assert(noFillPaperChart.events.length === 0, "No-fill paper chart should not render paper order markers.");
 assert(element("keyActivityList").innerHTML.includes("No filled paper orders yet"), "Rejected-only paper activity should render the no-filled-orders empty state.");
 assert(!element("keyActivityList").innerHTML.includes("stale_market_data"), "Rejected-only paper activity should hide rejected paper order reasons.");
+
+context.window.ClawHouseDemo.setChartRange("1h");
+context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0.25, rangeFilteredPaperActivityFixture()) });
+let rangeChart = context.window.ClawHouseDemo.getChartModel();
+assert(rangeChart.events.length === 1, "1H paper chart should only include order markers inside the active range.");
+assert(rangeChart.events[0]?.raw?.id === "paper_ord_recent_fill", "1H paper chart should not carry old filled orders into marker rendering.");
+assert(!element("chartEvents").innerHTML.includes("paper_ord_old_fill"), "Rendered 1H chart markers should not include old order ids.");
+context.window.ClawHouseDemo.setChartRange("24h");
+rangeChart = context.window.ClawHouseDemo.getChartModel();
+assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_old_fill"), "24H paper chart may include old order markers after recalculating the range.");
+assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_recent_fill"), "24H paper chart should include recent order markers after recalculating the range.");
 
 console.log("agent discovery row P&L harness passed");
