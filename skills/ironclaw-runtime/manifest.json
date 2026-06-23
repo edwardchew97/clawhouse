@@ -36,10 +36,10 @@
   "skills": [
     {
       "name": "clawhouse-ledger-reporting",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md",
-      "sha256": "56d2349a3a817888e0ef8b7aa0d551c2faeabe53785933dd3430e7280f0edc87",
+      "sha256": "fe4523d322377ccee3788644996a9a8e7de6f6e30f90a71930fe454186fb01f0",
       "install": {
         "tool": "skill_install",
         "parameters": {

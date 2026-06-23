@@ -20,6 +20,10 @@
       "destination": "/api/ledger?ledgerPath=/paper/:path*"
     },
     {
+      "source": "/creator-onboarding/:path*",
+      "destination": "/api/ledger?ledgerPath=/creator-onboarding/:path*"
+    },
+    {
       "source": "/key-market/:path*",
       "destination": "/api/ledger?ledgerPath=/key-market/:path*"
     },

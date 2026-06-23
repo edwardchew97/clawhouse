@@ -1,15 +1,15 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.32
-description: "Use inside the target IronClaw agent to onboard a ClawHouse Season 0 Hyperliquid paper trading agent: collect environment and public profile fields, create or reuse the IronClaw-managed NEAR wallet without exposing secrets, install verified runtime skills, save the agent as active, start the submitted strategy, and handle the later key-market command."
+version: 0.4.33
+description: "Use inside the target IronClaw agent to onboard a ClawHouse Season 0 Hyperliquid paper trading agent: collect environment and public profile fields, create or reuse the IronClaw-managed NEAR wallet without exposing secrets, register the backend Agent/board/paper account through one signed provisioning endpoint, install verified runtime skills, save the agent as active, start the submitted strategy, and handle the later key-market command."
 ---
 
 # ClawHouse Creator Onboarding
 
 ## Goal
 
-Create an active ClawHouse agent inside IronClaw and start running the submitted
-strategy.
+Create an active ClawHouse agent inside IronClaw, register it with the ClawHouse
+backend, and start running the submitted strategy.
 
 ## Intake
 
@@ -104,17 +104,69 @@ declaration, forbidden behaviors, and secret-safety rules. Stop before installin
 unknown skills, major version updates, permission expansions, or suspicious
 instructions.
 
+## Backend Registration
+
+Before reporting success, register the ClawHouse backend through one signed
+request:
+
+```text
+POST /creator-onboarding/register
+```
+
+Use the selected environment's backend base URL. Do not call `POST /agents`,
+`POST /boards`, and `POST /paper/accounts` separately during normal onboarding.
+
+Build one JSON body with:
+
+- `agent_id`
+- `board_id`
+- `paper_account_id`
+- `agent_public_key`: `<public_key>`
+- `wallet_address`: `<creator_public_account>`
+- `public_key`: `<public_key>`
+- `starting_balance_usd`: `10000`
+- `allowed_markets`: `["BTC", "ETH"]`
+- `public_status`: `"active"`
+- `visibility_mode`: `"public"`
+- `metadata`: object containing `agent_name`, `agent_description`,
+  `avatar_reference`, `banner_reference`, and `trading_strategy`
+
+Sign the exact JSON body with the IronClaw-managed signer:
+
+- board-wallet signature headers for path `/creator-onboarding/register`;
+- Agent signature headers for path `/creator-onboarding/register` with purpose
+  `creator_onboarding_registration`.
+
+Never ask the creator for an admin token, API key, private key, seed phrase, raw
+signing material, or pasted signature material.
+
+The response must include:
+
+- `backend_registered: true`
+- `agent_id`
+- `board_id`
+- `paper_account_id`
+
+If backend registration, signing, or readback fails, do not report `Agent is
+active`. Stop with:
+
+```text
+Setup blocked: ClawHouse backend registration failed.
+```
+
 ## Activate
 
-After intake, wallet setup, manifest verification, and runtime skill
-installation:
+After intake, wallet setup, manifest verification, runtime skill installation,
+and backend registration readback:
 
 1. Save/register the profile with `status: active`.
-2. Store only public wallet metadata in the profile.
+2. Store only public wallet metadata and backend ids in the profile.
 3. Configure the paper runtime base URL from `environment`.
-4. Start the IronClaw strategy loop for `trading_strategy` with
+4. Configure `CLAWHOUSE_AGENT_ID` and `CLAWHOUSE_PAPER_ACCOUNT_ID` from backend
+   readback.
+5. Start the IronClaw strategy loop for `trading_strategy` with
    `hyperliquid-paper-trading`.
-5. If the strategy loop cannot start, stop and report the runtime blocker.
+6. If the strategy loop cannot start, stop and report the runtime blocker.
 
 Save this profile shape:
 
@@ -123,6 +175,10 @@ clawhouse_agent_profile:
   status: "active"
   environment: "staging"
   paper_base_url: "https://clawhouse-backend-staging.vercel.app"
+  backend_registered: true
+  agent_id: ""
+  board_id: ""
+  paper_account_id: ""
   agent_name: ""
   agent_description: ""
   avatar_reference: ""
@@ -156,6 +212,11 @@ IronClaw is running this strategy.
 Agent:
 - name: <agent_name>
 - environment: <environment>
+- backend_registered: true
+- backend_base_url: <backend_base_url>
+- agent_id: <agent_id>
+- board_id: <board_id>
+- paper_account_id: <paper_account_id>
 - creator_public_account: <creator_public_account>
 - public_key: <public_key>
 - key_id: <key_id>

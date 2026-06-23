@@ -71,7 +71,7 @@ type AgentBoardLedgerAgentRequestInput = {
   bodyHash?: string;
   timestamp?: string;
   nonce?: string;
-  purpose: "agent_registration" | "board_registration" | "paper_account_registration";
+  purpose: "agent_registration" | "board_registration" | "paper_account_registration" | "creator_onboarding_registration";
   agentId: string;
   agentPublicKey: string;
   boardId: string | null;
@@ -98,7 +98,7 @@ export type AgentBoardLedgerCanonicalPayload = {
 export type AgentBoardLedgerAgentCanonicalPayload = {
   domain: typeof AGENT_BOARD_LEDGER_SIGNATURE_DOMAIN;
   version: typeof AGENT_BOARD_LEDGER_SIGNATURE_VERSION;
-  purpose: "agent_registration" | "board_registration" | "paper_account_registration";
+  purpose: "agent_registration" | "board_registration" | "paper_account_registration" | "creator_onboarding_registration";
   method: string;
   path: string;
   bodyHash: string;

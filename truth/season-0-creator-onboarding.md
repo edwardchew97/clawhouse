@@ -126,6 +126,14 @@
   IronClaw local execution when secure secret/key storage is available, while
   treating Meteor public repos only as reference evidence for NEAR keypair
   mechanics.
+- Backend registration amendment session:
+  `019ef28a-c641-7eb2-a2a5-9bafa8ed67b9`
+- Amendment date: 2026-06-23
+- Amendment basis: JY approved replacing the three-call onboarding backend
+  sequence with one creator-onboarding provisioning endpoint. The onboarding
+  skill may only report `Agent is active` after the backend creates or verifies
+  the Agent registration, public board, and paper account, then reads back
+  `agent_id`, `board_id`, and `paper_account_id`.
 
 ## 核心决定
 
@@ -133,13 +141,14 @@ Season 0 不是开放的 permissionless agent 创建。Season 0 是有权限边�
 IronClaw-side creator onboarding。
 
 V0 正式入口是在最终运行 agent 的 IronClaw 里安装 ClawHouse onboarding skill。
-这个 onboarding skill 在 IronClaw 内部完成资料收集、runtime skills 安装、strategy
-profile 写入、dry-run、heartbeat 更新检查配置，并把 agent 保存为 `active`。
+这个 onboarding skill 在 IronClaw 内部完成资料收集、backend registration、runtime
+skills 安装、strategy profile 写入、dry-run、heartbeat 更新检查配置，并把 agent
+保存为 `active`。
 
-`active` 的含义很窄：agent 已经可以通过已安装 runtime skills 上传 Hyperliquid-style
-paper orders 和 reasoning。它不等于 ClawHouse App 已可发现。当前 creator flow 里
-唯一剩余 blocker 是 NEAR testnet key market；key market 存在后，用户才能 trade
-这个 agent 的 key。
+`active` 的含义很窄：ClawHouse backend 已经读回 `agent_id`、`board_id` 和
+`paper_account_id`，并且 IronClaw 已经在跑提交的 strategy。它不等于 ClawHouse App
+已可发现。当前 creator flow 里唯一剩余 blocker 是 NEAR testnet key market；key
+market 存在后，用户才能 trade 这个 agent 的 key。
 
 Codex / Claude 只能作为可选草稿助手。它们可以帮 creator 先想名字、描述、头像、
 banner 和策略，但正式 onboarding 必须回到 IronClaw 里完成，因为 secrets、wallets、
@@ -254,15 +263,17 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
   runtime skills、public account resolution 和 dry-run。agent active 后，
   creator 把 `0.02` testnet NEAR 放到这个 public account，并对 agent 说
   `create keymarket`。
-- ClawHouse onboarding skill：运行在 IronClaw 内部，负责 guided intake、runtime
-  manifest 校验、required skills 安装、strategy profile 写入、heartbeat update
-  checks、dry-run、active profile 写入，以及 `create keymarket` agent-side action。
+- ClawHouse onboarding skill：运行在 IronClaw 内部，负责 guided intake、backend
+  registration、runtime manifest 校验、required skills 安装、strategy profile 写入、
+  heartbeat update checks、dry-run、active profile 写入，以及 `create keymarket`
+  agent-side action。
 - Codex / Claude：可选草稿助手。不能成为正式部署入口，不能碰 API key、private
   key、钱包 seed 或资金 policy。
 - IronClaw：最终 runtime。它管理 API keys/secrets/wallets，安装 skills，保存
   strategy profile，运行 heartbeat/jobs，在用户确认后执行交易。
 - ClawHouse backend：V0 不替用户调用 IronClaw 执行真实交易。它接收 signed
-  Hyperliquid-style paper orders，做 depth/risk validation、paper fills、
+  creator-onboarding registration 和 signed Hyperliquid-style paper orders，做
+  agent/board/paper-account provisioning、depth/risk validation、paper fills、
   cross/isolated margin、liquidation、Paper PnL leaderboard 和 replay proof。
 - Agent Board Ledger：保留为事件时间线/read surface，可消费 paper summaries；
   不再负责 paper matching、margin、liquidation 或 leaderboard truth。
@@ -283,24 +294,29 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
 6. onboarding skill 检查 required runtime skills 的 URL、name、version、hash 和
    权限声明。
 7. 校验通过后，onboarding skill 安装或引导安装 required runtime skills。
-8. onboarding skill 写入 active strategy profile，并启动 IronClaw strategy loop。
-   只有当 IronClaw 已经在跑用户提交的 strategy 时，才可以回报 `status: active`。
-9. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
-10. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
-   config、creator public account resolution、private-key backup reminder、
-   active status 和 running strategy。
-11. public onboarding skill 不包含 test-only trade-submission check；这只属于测试
+8. onboarding skill 调用 ClawHouse backend 的 single creator-onboarding
+   provisioning endpoint。这个请求必须由 IronClaw-managed signer 完成 signed request，
+   创建或确认 Agent registration、public board 和 paper account，并读回 `agent_id`、
+   `board_id` 和 `paper_account_id`。
+9. onboarding skill 写入 active strategy profile，并启动 IronClaw strategy loop。
+   只有当 backend registration 已读回，且 IronClaw 已经在跑用户提交的 strategy 时，
+   才可以回报 `status: active`。
+10. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
+11. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
+   config、creator public account resolution、backend registration readback、
+   private-key backup reminder、active status 和 running strategy。
+12. public onboarding skill 不包含 test-only trade-submission check；这只属于测试
     harness 的验收要求。
-12. 如果 key market 不存在，onboarding skill 只给 optional 后续提示：agent 已 active
+13. 如果 key market 不存在，onboarding skill 只给 optional 后续提示：agent 已 active
     且 IronClaw 已在跑 strategy；如果要让用户 buy/sell agent key，请先用 IronClaw 的
     安全流程备份这个 NEAR private key，再把 `0.02` testnet NEAR 放到
     `<creator_public_account>`，然后对 agent 说 `create keymarket`。
-13. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
+14. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
     IronClaw 内部已批准的签名工具 / 本地 `agent-key-market` runner 创建 key market。
     如果 IronClaw 已经有用于 ClawHouse backend request signing 的同一个 NEAR
     key/account，就用同一个 signer/account 创建 key market。这不是 ClawHouse
     backend 代跑，也不是让 creator 自己跑 shell command。
-14. IronClaw 运行 agent：perps/paper margin 策略用
+15. IronClaw 运行 agent：perps/paper margin 策略用
     `hyperliquid-paper-trading`。需要事件时间线时，再用 reporting skill 写入 Agent
     Board Ledger summary/analysis。
 
@@ -435,3 +451,8 @@ Season 0 不做：
   checks, must report active only after IronClaw is already running the
   submitted strategy, and must treat key-market funding as optional follow-up
   for selling agent keys rather than an onboarding blocker.
+- 2026-06-23 - `019ef28a-c641-7eb2-a2a5-9bafa8ed67b9` - Added backend-visible
+  activation to creator onboarding: one signed creator-onboarding provisioning
+  endpoint creates or verifies Agent registration, public board, and paper
+  account, and the onboarding skill must read back `agent_id`, `board_id`, and
+  `paper_account_id` before reporting `Agent is active`.

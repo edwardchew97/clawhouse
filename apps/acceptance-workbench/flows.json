@@ -153,7 +153,7 @@
         {
           "id": "agentRegistration.ledger.createBoard",
           "name": "Register Agent Board",
-          "description": "Registers the approved Agent public key, then registers the Agent Board with both wallet and Agent-signed proofs.",
+          "description": "Registers the approved Agent, public board, and paper account through one creator-onboarding backend request with both wallet and Agent-signed proofs.",
           "type": "script",
           "access": "protected",
           "command": "bun",
@@ -182,9 +182,8 @@
             "mnemonic"
           ],
           "runningNotes": [
-            "Calling the real POST /agents backend API with service authorization and Agent signature headers.",
-            "Calling the real POST /boards backend API with service authorization, wallet signature headers, and Agent signature headers.",
-            "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN configured in the local runtime environment.",
+            "Calling the real POST /creator-onboarding/register backend API with wallet signature headers and Agent signature headers.",
+            "The backend creates or verifies the Agent registration, public board, and paper account in one provisioning request.",
             "Reusing the local Workbench wallet artifact from Generate Agent Ledger Key Pair; if that step was skipped, this script creates one locally.",
             "Leave ledgerBoardId empty if you want the registration script to generate a local board id before signing.",
             "Run Generate Agent Ledger Key Pair first to auto-fill a fresh test ledgerAgentId, or edit ledgerAgentId to intentionally reuse an agent id.",
