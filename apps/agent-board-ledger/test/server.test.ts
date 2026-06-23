@@ -1995,6 +1995,28 @@ describe("Agent Board Ledger local backend", () => {
     expect(replay.replay.market_snapshot.coin).toBe("BTC");
     expect(replay.replay.fills).toHaveLength(2);
     expect(replay.replay.audit.length).toBeGreaterThan(0);
+
+    const activity = await jsonOf<{
+      summary: { total_orders: number; filled_orders: number; rejected_orders: number; total_fills: number; latest_risk_at: string | null };
+      orders: Array<{ id: string; status: string; body_hash?: string }>;
+      fills: unknown[];
+      risk_snapshots: Array<{ equity_usd: number; staleness_status: string }>;
+      positions: unknown[];
+    }>(
+      await app.fetch(new Request("http://ledger.test/paper/accounts/paper-1/activity?limit=10")),
+    );
+    expect(activity.summary.total_orders).toBe(1);
+    expect(activity.summary.filled_orders).toBe(1);
+    expect(activity.summary.rejected_orders).toBe(0);
+    expect(activity.summary.total_fills).toBe(2);
+    expect(activity.summary.latest_risk_at).toBeTruthy();
+    expect(activity.orders[0]?.id).toBe(body.order.id);
+    expect(activity.orders[0]?.status).toBe("filled");
+    expect(activity.orders[0]).not.toHaveProperty("body_hash");
+    expect(activity.fills).toHaveLength(2);
+    expect(activity.risk_snapshots).toHaveLength(1);
+    expect(activity.risk_snapshots[0]?.staleness_status).toBe("fresh");
+    expect(activity.positions).toHaveLength(1);
   });
 
   test("supports GTC resting paper orders and rejects crossing ALO post-only orders", async () => {
