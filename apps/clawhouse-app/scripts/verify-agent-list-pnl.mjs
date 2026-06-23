@@ -13,6 +13,7 @@ const agents = [
 
 const elements = new Map();
 const events = new Map();
+let clearCrosshairCalls = 0;
 
 class FakeClassList {
   constructor() {
@@ -466,6 +467,9 @@ context.window = {
             },
           };
         },
+        clearCrosshairPosition() {
+          clearCrosshairCalls += 1;
+        },
       };
     },
     createSeriesMarkers() {
@@ -614,7 +618,9 @@ let rangeChart = context.window.ClawHouseDemo.getChartModel();
 assert(rangeChart.events.length === 1, "1H paper chart should only include order markers inside the active range.");
 assert(rangeChart.events[0]?.raw?.id === "paper_ord_recent_fill", "1H paper chart should not carry old filled orders into marker rendering.");
 assert(!element("chartEvents").innerHTML.includes("paper_ord_old_fill"), "Rendered 1H chart markers should not include old order ids.");
+const clearCrosshairBeforeRangeSwitch = clearCrosshairCalls;
 context.window.ClawHouseDemo.setChartRange("24h");
+assert(clearCrosshairCalls > clearCrosshairBeforeRangeSwitch, "Switching chart ranges should clear the stale crosshair marker.");
 rangeChart = context.window.ClawHouseDemo.getChartModel();
 assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_old_fill"), "24H paper chart may include old order markers after recalculating the range.");
 assert(rangeChart.events.some((event) => event.raw?.id === "paper_ord_recent_fill"), "24H paper chart should include recent order markers after recalculating the range.");
