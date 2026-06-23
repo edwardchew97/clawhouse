@@ -22,7 +22,7 @@ export type CanonicalAuthPayload = {
 export type CanonicalAgentAuthPayload = {
   domain: typeof AUTH_DOMAIN;
   version: typeof AUTH_VERSION;
-  purpose: "agent_registration" | "board_registration" | "paper_account_registration";
+  purpose: "agent_registration" | "board_registration" | "paper_account_registration" | "creator_onboarding_registration";
   method: string;
   path: string;
   bodyHash: string;

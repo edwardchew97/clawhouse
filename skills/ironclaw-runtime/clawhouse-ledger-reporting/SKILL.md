@@ -1,6 +1,6 @@
 ---
 name: clawhouse-ledger-reporting
-version: 0.1.0
+version: 0.1.1
 description: Use inside IronClaw when a ClawHouse trading agent needs to report a filled, failed, refunded, skipped, pending, or corrected trading event to Agent Board Ledger after the run, with registered-Agent board setup, board-wallet signed event requests, and no trade execution by ClawHouse.
 ---
 
@@ -29,9 +29,10 @@ Use IronClaw-managed configuration for:
 Never ask the user to paste private keys, seed phrases, API keys, JWTs, raw
 signing material, or unrestricted wallet credentials into chat.
 
-The board must already be registered through the Agent Board Ledger registration
-flow: `POST /agents` proves the Agent public key, and `POST /boards` proves both
-the registered Agent public key and the board wallet. Do not create or reuse a
+The board must already have signed Agent Board Ledger registration proof. Normal
+creator onboarding uses `POST /creator-onboarding/register` to create or verify
+the Agent, public board, and paper account in one request. Lower-level admin
+setup may still use `POST /agents` and `POST /boards`. Do not create or reuse a
 board whose `agent_id` was only supplied as request body text without Agent
 signature proof.
 

@@ -487,6 +487,88 @@ describe("Agent Board Ledger local backend", () => {
     expect((await jsonOf<{ error: string }>(response)).error).toBe("Agent public key does not match signed agent");
   });
 
+  test("creator onboarding registers agent board and paper account with one signed request", async () => {
+    const response = await postJson("/creator-onboarding/register", {
+      board_id: "board-1",
+      paper_account_id: "paper-board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      starting_balance_usd: 10000,
+      allowed_markets: ["BTC", "ETH"],
+      metadata: { source: "creator-onboarding-test" },
+    }, { admin: false, signed: true, agentSigned: true });
+    const body = await jsonOf<{
+      backend_registered: boolean;
+      agent_id: string;
+      board_id: string;
+      paper_account_id: string;
+    }>(response);
+    const discoverable = await jsonOf<{ count: number }>(await app.fetch(new Request("http://ledger.test/boards")));
+    const paper = await jsonOf<{ account: { id: string; starting_balance_usd: number } }>(
+      await app.fetch(new Request("http://ledger.test/paper/accounts/paper-board-1")),
+    );
+
+    expect(response.status).toBe(201);
+    expect(body.backend_registered).toBe(true);
+    expect(body.agent_id).toBe("ironclaw");
+    expect(body.board_id).toBe("board-1");
+    expect(body.paper_account_id).toBe("paper-board-1");
+    expect(discoverable.count).toBe(1);
+    expect(paper.account.id).toBe("paper-board-1");
+    expect(paper.account.starting_balance_usd).toBe(10000);
+  });
+
+  test("creator onboarding is idempotent for matching backend records", async () => {
+    const body = {
+      board_id: "board-1",
+      paper_account_id: "paper-board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      starting_balance_usd: 10000,
+      allowed_markets: ["BTC", "ETH"],
+    };
+    const first = await postJson("/creator-onboarding/register", body, { admin: false, signed: true, agentSigned: true });
+    const second = await postJson("/creator-onboarding/register", body, { admin: false, signed: true, agentSigned: true });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(countRows("agent_registrations")).toBe(1);
+    expect(countRows("boards")).toBe(1);
+    expect(countRows("paper_accounts")).toBe(1);
+  });
+
+  test("creator onboarding rejects an existing board that is not public active", async () => {
+    await registerAgent("ironclaw", agentWallet.publicKey);
+    const existingBoard = await postJson("/boards", {
+      board_id: "board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      public_status: "draft",
+      visibility_mode: "private",
+    }, { signed: true, agentSigned: true });
+    const response = await postJson("/creator-onboarding/register", {
+      board_id: "board-1",
+      paper_account_id: "paper-board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      starting_balance_usd: 10000,
+      allowed_markets: ["BTC", "ETH"],
+    }, { admin: false, signed: true, agentSigned: true });
+
+    expect(existingBoard.status).toBe(201);
+    expect(response.status).toBe(409);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("Existing board public_status does not match registration");
+    expect(countRows("paper_accounts")).toBe(0);
+  });
+
   test("gates holder-only reads with a service-issued read token", async () => {
     await registerBoard({ visibility_mode: "holder_gated" });
     await signedFetch("POST", "/boards/board-1/events", {
@@ -2780,6 +2862,8 @@ async function postJson(
       ? "agent_registration"
       : path === "/paper/accounts"
         ? "paper_account_registration"
+        : path === "/creator-onboarding/register"
+          ? "creator_onboarding_registration"
         : "board_registration";
     const boardId = path === "/agents"
       ? null
@@ -2914,7 +2998,7 @@ function signAgentRequest(
   body: Record<string, unknown>,
   signer = agentWallet,
   options: {
-    purpose: "agent_registration" | "board_registration" | "paper_account_registration";
+    purpose: "agent_registration" | "board_registration" | "paper_account_registration" | "creator_onboarding_registration";
     boardId: string | null;
     agentId: string;
     agentPublicKey: string;
@@ -3052,7 +3136,17 @@ function columnNames(db: Database, table: string) {
   return db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().map((row) => row.name);
 }
 
-function countRows(table: "holding_snapshots" | "pnl_snapshots" | "events" | "observations" | "balance_changes") {
+function countRows(
+  table:
+    | "agent_registrations"
+    | "boards"
+    | "paper_accounts"
+    | "holding_snapshots"
+    | "pnl_snapshots"
+    | "events"
+    | "observations"
+    | "balance_changes",
+) {
   return sqliteDb.raw.query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM ${table}`).get()?.count ?? 0;
 }
 

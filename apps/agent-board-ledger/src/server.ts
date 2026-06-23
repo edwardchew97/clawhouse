@@ -3,7 +3,7 @@ import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, cano
 import { refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
 import { listKeyMarketTrades, reportKeyMarketTrade } from "./key-market.js";
 import { PaperAuthError, createPaperAccount, createPaperMarketSnapshot, readPaperAccount, readPaperLeaderboard, replayPaperOrder, runPaperRiskCheck, submitPaperOrder } from "./paper-trading.js";
-import type { AgentRegistrationRow, AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
+import type { AgentRegistrationRow, AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PaperAccountRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
 
 type AppOptions = {
   db: LedgerDb;
@@ -20,6 +20,8 @@ type RouteContext = {
   params: Record<string, string>;
   path: string;
 };
+
+type AgentAuthPurpose = "agent_registration" | "board_registration" | "paper_account_registration" | "creator_onboarding_registration";
 
 const attachmentTypes = new Set([
   "reason",
@@ -64,6 +66,9 @@ export function createApp(options: AppOptions) {
         if (method === "POST" && path === "/agents") {
           assertServiceBearer(request.headers, adminToken);
           return json(await registerAgent(db, request, await readBody(request), now()), 201);
+        }
+        if (method === "POST" && path === "/creator-onboarding/register") {
+          return json(await registerCreatorOnboarding(db, request, await readBody(request), now()), 201);
         }
 
         const boardMatch = path.match(/^\/boards\/([^/]+)$/);
@@ -255,30 +260,109 @@ async function registerAgent(db: LedgerDb, request: Request, body: BodyResult, c
     createdAt,
   });
 
+  return { ok: true, agent: await upsertAgentRegistration(db, { agentId, agentPublicKey, status, metadataJson }, createdAt) };
+}
+
+async function upsertAgentRegistration(
+  db: LedgerDb,
+  input: {
+    agentId: string;
+    agentPublicKey: string;
+    status: string;
+    metadataJson: string | null;
+  },
+  createdAt: string,
+) {
   const existing = await db.get<AgentRegistrationRow>(
     "SELECT * FROM agent_registrations WHERE agent_id = ?",
-    [agentId],
+    [input.agentId],
   );
-  if (existing && existing.agent_public_key !== agentPublicKey) {
+  if (existing && existing.agent_public_key !== input.agentPublicKey) {
     throw new RequestError("Agent ID is already registered to a different public key", 409);
   }
-
   if (existing) {
     await db.run(
       "UPDATE agent_registrations SET status = ?, metadata_json = ?, updated_at = ? WHERE agent_id = ?",
-      [status, metadataJson, createdAt, agentId],
+      [input.status, input.metadataJson, createdAt, input.agentId],
     );
   } else {
     await db.run(
       `INSERT INTO agent_registrations
         (agent_id, agent_public_key, status, metadata_json, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)`,
-      [agentId, agentPublicKey, status, metadataJson, createdAt, createdAt],
+      [input.agentId, input.agentPublicKey, input.status, input.metadataJson, createdAt, createdAt],
     );
   }
 
-  const agent = await requireActiveAgentRegistration(db, agentId, agentPublicKey);
-  return { ok: true, agent: presentAgentRegistration(agent) };
+  return presentAgentRegistration(await requireActiveAgentRegistration(db, input.agentId, input.agentPublicKey));
+}
+
+async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
+  const data = asObject(body.json);
+  const agentId = requiredString(data.agentId ?? data.agent_id, "agent_id");
+  const agentPublicKey = requiredString(data.agentPublicKey ?? data.agent_public_key, "agent_public_key");
+  const boardId = requiredString(data.boardId ?? data.board_id, "board_id");
+  const paperAccountId = requiredString(data.paperAccountId ?? data.paper_account_id, "paper_account_id");
+  const board: Board = {
+    id: boardId,
+    agent_id: agentId,
+    agent_public_key: agentPublicKey,
+    wallet_address: requiredString(data.walletAddress ?? data.wallet_address, "wallet_address"),
+    public_key: requiredString(data.publicKey ?? data.public_key, "public_key"),
+    chain: cleanString(data.chain) ?? "near",
+    venue_namespace: cleanString(data.venueNamespace ?? data.venue_namespace) ?? "hyperliquid-paper",
+    tracking_started_at: normalizedTimestampField(data.trackingStartedAt ?? data.tracking_started_at, createdAt, "tracking_started_at"),
+    base_currency: cleanString(data.baseCurrency ?? data.base_currency) ?? "USD",
+    public_status: cleanString(data.publicStatus ?? data.public_status) ?? "active",
+    visibility_mode: cleanString(data.visibilityMode ?? data.visibility_mode) ?? "public",
+    owner_wallet_address: cleanString(data.ownerWalletAddress ?? data.owner_wallet_address),
+    funding_source: cleanString(data.fundingSource ?? data.funding_source),
+    funding_tx_hash: cleanString(data.fundingTxHash ?? data.funding_tx_hash),
+    metadata_json: stringifyOptional(data.boardMetadata ?? data.board_metadata ?? data.metadata),
+    created_at: createdAt,
+  };
+  const paperBody = {
+    paper_account_id: paperAccountId,
+    board_id: boardId,
+    agent_id: agentId,
+    agent_public_key: agentPublicKey,
+    starting_balance_usd: requiredPositiveNumberField(data.startingBalanceUsd ?? data.starting_balance_usd, "starting_balance_usd"),
+    allowed_markets: data.allowedMarkets ?? data.allowed_markets ?? ["BTC", "ETH"],
+    metadata: data.paperMetadata ?? data.paper_metadata ?? data.metadata,
+  };
+  let registeredAgent: ReturnType<typeof presentAgentRegistration> | null = null;
+  let registeredBoard: Board | null = null;
+
+  await db.transaction(async (tx) => {
+    await assertBoardRegistrationSignature(tx, request, body.raw, board, Date.parse(createdAt), createdAt);
+    await assertAgentSignature(tx, request, body.raw, {
+      purpose: "creator_onboarding_registration",
+      agentId,
+      agentPublicKey,
+      boardId,
+      createdAt,
+    });
+    registeredAgent = await upsertAgentRegistration(tx, {
+      agentId,
+      agentPublicKey,
+      status: cleanString(data.status) ?? "active",
+      metadataJson: stringifyOptional(data.agentMetadata ?? data.agent_metadata ?? data.metadata),
+    }, createdAt);
+    registeredBoard = await ensureBoardRegistration(tx, board);
+    await ensurePaperAccountRegistration(tx, paperAccountId, paperBody, createdAt);
+  });
+
+  const paperAccount = (await readPaperAccount(db, paperAccountId)).account;
+  return {
+    ok: true,
+    backend_registered: true,
+    agent_id: agentId,
+    board_id: boardId,
+    paper_account_id: paperAccountId,
+    agent: registeredAgent,
+    board: registeredBoard,
+    paperAccount,
+  };
 }
 
 async function createBoard(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
@@ -313,54 +397,99 @@ async function createBoard(db: LedgerDb, request: Request, body: BodyResult, cre
       createdAt,
     });
     await requireActiveAgentRegistration(tx, board.agent_id, requiredBoardAgentPublicKey(board));
-    await tx.run(
-      `INSERT INTO boards
-        (id, agent_id, agent_public_key, wallet_address, public_key, chain, venue_namespace, tracking_started_at,
-         base_currency, public_status, visibility_mode, owner_wallet_address,
-         funding_source, funding_tx_hash, metadata_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        board.id,
-        board.agent_id,
-        board.agent_public_key,
-        board.wallet_address,
-        board.public_key,
-        board.chain,
-        board.venue_namespace,
-        board.tracking_started_at,
-        board.base_currency,
-        board.public_status,
-        board.visibility_mode,
-        board.owner_wallet_address,
-        board.funding_source,
-        board.funding_tx_hash,
-        board.metadata_json,
-        board.created_at,
-      ],
-    );
-    await tx.run(
-      `INSERT INTO tracked_wallets
-        (id, board_id, agent_id, wallet_address, public_key, chain, venue_namespace,
-         tracking_started_at, tracking_status, source, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT (board_id, wallet_address) DO NOTHING`,
-      [
-        `tw_${board.id}`,
-        board.id,
-        board.agent_id,
-        board.wallet_address,
-        board.public_key,
-        board.chain,
-        board.venue_namespace,
-        board.tracking_started_at,
-        "active",
-        "board_registration",
-        board.created_at,
-      ],
-    );
+    await insertBoardRegistration(tx, board);
   });
 
   return { ok: true, board };
+}
+
+async function ensureBoardRegistration(db: LedgerDb, board: Board) {
+  const existing = await db.get<Board>("SELECT * FROM boards WHERE id = ?", [board.id]);
+  if (existing) {
+    assertSameRegisteredField(existing.agent_id, board.agent_id, "board agent_id");
+    assertSameRegisteredField(requiredBoardAgentPublicKey(existing), requiredBoardAgentPublicKey(board), "board agent_public_key");
+    assertSameRegisteredField(existing.wallet_address, board.wallet_address, "board wallet_address");
+    assertSameRegisteredField(existing.public_key, board.public_key, "board public_key");
+    assertSameRegisteredField(existing.public_status, board.public_status, "board public_status");
+    assertSameRegisteredField(existing.visibility_mode, board.visibility_mode, "board visibility_mode");
+    return existing;
+  }
+  await insertBoardRegistration(db, board);
+  return board;
+}
+
+async function insertBoardRegistration(db: LedgerDb, board: Board) {
+  await db.run(
+    `INSERT INTO boards
+      (id, agent_id, agent_public_key, wallet_address, public_key, chain, venue_namespace, tracking_started_at,
+       base_currency, public_status, visibility_mode, owner_wallet_address,
+       funding_source, funding_tx_hash, metadata_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      board.id,
+      board.agent_id,
+      board.agent_public_key,
+      board.wallet_address,
+      board.public_key,
+      board.chain,
+      board.venue_namespace,
+      board.tracking_started_at,
+      board.base_currency,
+      board.public_status,
+      board.visibility_mode,
+      board.owner_wallet_address,
+      board.funding_source,
+      board.funding_tx_hash,
+      board.metadata_json,
+      board.created_at,
+    ],
+  );
+  await db.run(
+    `INSERT INTO tracked_wallets
+      (id, board_id, agent_id, wallet_address, public_key, chain, venue_namespace,
+       tracking_started_at, tracking_status, source, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (board_id, wallet_address) DO NOTHING`,
+    [
+      `tw_${board.id}`,
+      board.id,
+      board.agent_id,
+      board.wallet_address,
+      board.public_key,
+      board.chain,
+      board.venue_namespace,
+      board.tracking_started_at,
+      "active",
+      "board_registration",
+      board.created_at,
+    ],
+  );
+}
+
+async function ensurePaperAccountRegistration(
+  db: LedgerDb,
+  paperAccountId: string,
+  paperBody: JsonObject,
+  createdAt: string,
+) {
+  const existing = await db.get<PaperAccountRow>("SELECT * FROM paper_accounts WHERE id = ?", [paperAccountId]);
+  if (existing) {
+    assertSameRegisteredField(existing.board_id, cleanString(paperBody.board_id), "paper account board_id");
+    assertSameRegisteredField(existing.agent_id, cleanString(paperBody.agent_id), "paper account agent_id");
+    assertSameRegisteredField(existing.agent_public_key, cleanString(paperBody.agent_public_key), "paper account agent_public_key");
+    const startingBalance = requiredPositiveNumberField(paperBody.starting_balance_usd, "starting_balance_usd");
+    if (Number(existing.starting_balance_usd) !== startingBalance) {
+      throw new RequestError("Existing paper account starting_balance_usd does not match registration", 409);
+    }
+    assertSameRegisteredField(existing.status, "active", "paper account status");
+    return existing;
+  }
+  await createPaperAccount(db, { raw: JSON.stringify(paperBody), json: paperBody }, createdAt);
+  return await db.get<PaperAccountRow>("SELECT * FROM paper_accounts WHERE id = ?", [paperAccountId]);
+}
+
+function assertSameRegisteredField(actual: string | null, expected: string | null, name: string) {
+  if (actual !== expected) throw new RequestError(`Existing ${name} does not match registration`, 409);
 }
 
 async function assertBoardRegistrationSignature(
@@ -421,7 +550,7 @@ async function assertAgentSignature(
   request: Request,
   rawBody: string,
   input: {
-    purpose: "agent_registration" | "board_registration" | "paper_account_registration";
+    purpose: AgentAuthPurpose;
     agentId: string;
     agentPublicKey: string;
     boardId: string | null;

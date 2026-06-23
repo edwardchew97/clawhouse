@@ -27,7 +27,7 @@ type ParsedOptions = {
   boardId?: string;
   agentId?: string;
   agentPublicKey?: string;
-  purpose?: "agent_registration" | "board_registration" | "paper_account_registration";
+  purpose?: "agent_registration" | "board_registration" | "paper_account_registration" | "creator_onboarding_registration";
   publicKey?: string;
   walletAddress?: string;
   signature?: string;
@@ -42,7 +42,7 @@ Usage:
   bun run inspect -- --key-file <local-key-file>
   bun run read-public -- --key-file <local-key-file>
   bun run sign-request -- --key-file <local-key-file> --method POST --path <path> --body <json> --board-id <id> --agent-id <id> [--timestamp <value>] [--nonce <value>]
-  bun run sign-agent-request -- --key-file <local-key-file> --method POST --path <path> --body <json> --agent-id <id> --agent-public-key <key> --purpose <agent_registration|board_registration|paper_account_registration> [--board-id <id>] [--timestamp <value>] [--nonce <value>]
+  bun run sign-agent-request -- --key-file <local-key-file> --method POST --path <path> --body <json> --agent-id <id> --agent-public-key <key> --purpose <agent_registration|board_registration|paper_account_registration|creator_onboarding_registration> [--board-id <id>] [--timestamp <value>] [--nonce <value>]
   bun run verify-request -- --public-key <key> --wallet-address <address> --signature <signature> --method POST --path <path> --body <json> --board-id <id> --agent-id <id> --timestamp <value> --nonce <value>
 
 This tool stores a plaintext local dev NEAR private key in the exact file path
@@ -125,7 +125,7 @@ export async function runCli(
       requireOption(options.path, "--path <path>");
       requireOption(options.agentId, "--agent-id <id>");
       requireOption(options.agentPublicKey, "--agent-public-key <key>");
-      requireOption(options.purpose, "--purpose <agent_registration|board_registration|paper_account_registration>");
+      requireOption(options.purpose, "--purpose <agent_registration|board_registration|paper_account_registration|creator_onboarding_registration>");
       const body = await readBodyOption(options);
       const bodyHash = resolveBodyHashOption(options, body);
 
@@ -271,8 +271,13 @@ function parseOptions(args: string[]): ParsedOptions {
     }
     if (arg === "--purpose") {
       const value = readOptionValue(args, index, "--purpose");
-      if (value !== "agent_registration" && value !== "board_registration" && value !== "paper_account_registration") {
-        throw new Error("--purpose must be agent_registration, board_registration, or paper_account_registration");
+      if (
+        value !== "agent_registration"
+        && value !== "board_registration"
+        && value !== "paper_account_registration"
+        && value !== "creator_onboarding_registration"
+      ) {
+        throw new Error("--purpose must be agent_registration, board_registration, paper_account_registration, or creator_onboarding_registration");
       }
       options.purpose = value;
       index += 1;

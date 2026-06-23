@@ -535,6 +535,52 @@ describe("Agent Board Ledger request signatures", () => {
     );
   });
 
+  test("sign-agent-request accepts creator onboarding purpose", async () => {
+    const root = await tempRoot();
+    const keyFile = join(root, "wallet.json");
+    const wallet = await generateNearWallet({ keyFile });
+    const body = JSON.stringify({
+      board_id: "board-1",
+      paper_account_id: "paper-board-1",
+      agent_id: "agent-1",
+      agent_public_key: wallet.publicKey,
+    });
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const exitCode = await runCli(
+      [
+        "sign-agent-request",
+        "--key-file",
+        keyFile,
+        "--method",
+        "POST",
+        "--path",
+        "/creator-onboarding/register",
+        "--body",
+        body,
+        "--agent-id",
+        "agent-1",
+        "--agent-public-key",
+        wallet.publicKey,
+        "--purpose",
+        "creator_onboarding_registration",
+        "--board-id",
+        "board-1",
+      ],
+      {
+        stdout: (message) => stdout.push(message),
+        stderr: (message) => stderr.push(message),
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr.join("")).toBe("");
+    const signed = JSON.parse(stdout.join(""));
+    expect(signed.purpose).toBe("creator_onboarding_registration");
+    expect(signed.path).toBe("/creator-onboarding/register");
+    expect(signed.headers["x-clawhouse-agent-signature"]).toBe(signed.signature);
+  });
+
   test("verify-request reports ok false for a tampered body", async () => {
     const root = await tempRoot();
     const keyFile = join(root, "wallet.json");
