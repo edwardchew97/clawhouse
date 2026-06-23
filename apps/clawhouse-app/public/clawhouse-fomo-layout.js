@@ -1804,6 +1804,21 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function spacedChartEventItems(items) {
+  const minGap = 46;
+  const kept = [];
+  items.slice().reverse().forEach((item) => {
+    const active = activeEventId === item.event.id;
+    const crowded = kept.some((keptItem) => {
+      const dx = keptItem.x - item.x;
+      const dy = keptItem.y - item.y;
+      return Math.sqrt(dx * dx + dy * dy) < minGap;
+    });
+    if (active || !crowded) kept.push(item);
+  });
+  return kept.sort((left, right) => left.eventIndex - right.eventIndex);
+}
+
 function renderChartEvents(agent, _rect, model = chartModel(agent)) {
   const unlocked = isUnlocked(agent);
   const container = byId("pnlChart");
@@ -1812,7 +1827,7 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
     return;
   }
   const timeBounds = chartPointTimeBounds(model.points);
-  const eventHtml = model.events.map((event, eventIndex) => {
+  const positionedEvents = model.events.map((event, eventIndex) => {
     if (event.timeValue === null || event.chartValue === null) return "";
     if (timeBounds && (event.timeValue < timeBounds.min || event.timeValue > timeBounds.max)) return "";
     const visible = unlocked || event.public === true;
@@ -1822,6 +1837,9 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
     if (rawX < 0 || rawX > container.clientWidth || rawY < 0 || rawY > container.clientHeight) return "";
     const x = clamp(rawX, 24, Math.max(24, container.clientWidth - 24));
     const y = clamp(rawY, 18, Math.max(18, container.clientHeight - 18));
+    return { event, eventIndex, visible, x, y };
+  }).filter(Boolean);
+  const eventHtml = spacedChartEventItems(positionedEvents).map(({ event, eventIndex, visible, x, y }) => {
     const featured = activeEventId === event.id;
     const cardX = clamp(x, 160, Math.max(160, container.clientWidth - 160));
     const cardY = y < 156 ? y + 30 : y - 118;
@@ -1832,7 +1850,10 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
         data-initials="${escapeHtml(agent.initials || initialsFor(agentTitle(agent)))}"
         style="left:${x}px; top:${y}px"
         aria-label="${escapeHtml(visible ? event.title : "Locked backend event")}"
-      >Order ${eventIndex + 1}</button>
+      >
+        <span class="event-marker-avatar" aria-hidden="true">${agentIcon(agent)}</span>
+        Order ${eventIndex + 1}
+      </button>
       <button
         class="chart-event-card ${visible ? "" : "locked"} ${featured ? "featured" : ""}"
         data-chart-card-event="${event.id}"
