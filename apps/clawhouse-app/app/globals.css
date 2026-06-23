@@ -2184,21 +2184,6 @@
           inset 0 1px 0 rgba(255,255,255,0.15);
   }
 }
-    .position {
-      padding: 10px;
-    }
-
-    .position-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 9px;
-      margin-top: 9px;
-    }
-
-    .position .stat {
-      padding: 8px 7px;
-    }
-
     .blur-status {
       position: relative;
       min-height: 220px;
@@ -2673,14 +2658,12 @@
     .main.agent-changing .room-feed,
     .main.agent-changing .activity-list,
     .main.agent-changing .ticket,
-    .main.agent-changing .position,
     .main.agent-changing .share {
       animation: agent-content-in 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
     }
 
     .main.agent-changing .hero-stats,
-    .main.agent-changing .activity-list,
-    .main.agent-changing .position {
+    .main.agent-changing .activity-list {
       animation-delay: 35ms;
     }
 

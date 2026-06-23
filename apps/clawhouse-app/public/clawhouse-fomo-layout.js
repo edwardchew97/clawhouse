@@ -421,11 +421,6 @@ function paperFills(agent) {
   return Array.isArray(fills) ? fills : [];
 }
 
-function paperPositions(agent) {
-  const positions = paperActivity(agent)?.positions;
-  return Array.isArray(positions) ? positions : [];
-}
-
 function paperRiskSnapshots(agent) {
   const snapshots = paperActivity(agent)?.risk_snapshots;
   return Array.isArray(snapshots) ? snapshots : [];
@@ -1467,11 +1462,6 @@ function renderTicket(agent) {
     }
   });
   if (keyAmount) keyAmount.disabled = busy;
-  if (paperActivity(agent)) {
-    renderPaperPosition(agent);
-  } else {
-    renderKeyPosition(balance);
-  }
   byId("gateButton").textContent = isUnlocked(agent)
     ? "Room open"
     : balance && balance > 0
@@ -1493,43 +1483,6 @@ function renderTicketBalance(agent, balance) {
   byId("ticketMaxBuy").textContent = tradeSide === "sell"
     ? `Sellable ${owned}`
     : `Max buy ${maxBuy === null ? "--" : keyAmountLabel(maxBuy)}`;
-}
-
-function renderKeyPosition(balance) {
-  byId("positionTitle").textContent = "Your Key Position";
-  byId("positionSub").textContent = "Key balance only, not copy-trade portfolio";
-  byId("posKeysLabel").textContent = "Keys";
-  byId("posEntryLabel").textContent = "Entry";
-  byId("posExitLabel").textContent = "Exit";
-  byId("posKeys").textContent = balance === null ? "--" : balance.toString();
-  byId("posEntry").textContent = "-";
-  byId("posExit").textContent = "-";
-  byId("posExit").className = "";
-}
-
-function renderPaperPosition(agent) {
-  const activity = paperActivity(agent);
-  const summary = paperSummary(agent);
-  const risk = activity?.latest_risk;
-  const positions = paperPositions(agent);
-  byId("positionTitle").textContent = "Paper Positions";
-  byId("positionSub").textContent = `${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled orders / ${formatUtcTime(summary.latest_risk_at || risk?.created_at)}`;
-  byId("posKeysLabel").textContent = "Equity";
-  byId("posKeys").textContent = formatUsd(risk?.equity_usd);
-
-  const first = positions[0];
-  const second = positions[1];
-  byId("posEntryLabel").textContent = first?.coin || "Position";
-  byId("posEntry").textContent = first ? paperPositionLabel(first) : "--";
-  byId("posExitLabel").textContent = second?.coin || "Notional";
-  byId("posExit").textContent = second ? paperPositionLabel(second) : formatUsd(risk?.total_notional_usd);
-  byId("posExit").className = "";
-}
-
-function paperPositionLabel(position) {
-  const size = asNumber(position.signed_size);
-  if (size === null) return "--";
-  return `${size > 0 ? "+" : ""}${compactNumber(size)} ${position.coin || ""}`.trim();
 }
 
 function statusButtonText() {
