@@ -1689,6 +1689,7 @@ function clearTradingViewChart() {
   clearChartCrosshair();
   if (pnlTradingViewSeries) pnlTradingViewSeries.setData([]);
   if (pnlTradingViewMarkers) pnlTradingViewMarkers.setMarkers([]);
+  byId("chartEvents").innerHTML = "";
   lastPnlChartModel = null;
 }
 
@@ -1743,6 +1744,11 @@ function drawChart(agent) {
   pnlTradingViewChart.timeScale().fitContent();
   updatePriceMarker(model);
   renderChartEvents(agent, null, model);
+  window.requestAnimationFrame(() => {
+    if (lastPnlChartModel !== model) return;
+    updatePriceMarker(model);
+    renderChartEvents(agent, null, model);
+  });
 }
 
 function hidePriceMarker() {
@@ -2091,6 +2097,7 @@ function setChartRange(range) {
   activeEventId = null;
   chartAnimationPending = true;
   clearChartCrosshair();
+  byId("chartEvents").innerHTML = "";
   syncChartRangeButtons();
   renderHero(selectedAgent());
   renderRoom(selectedAgent());
