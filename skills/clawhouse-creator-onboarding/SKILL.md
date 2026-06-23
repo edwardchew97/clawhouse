@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.36
+version: 0.4.37
 description: "Use after clawhouse-skill-directory chooses a runtime mode to onboard a ClawHouse Season 0 Hyperliquid paper trading agent: collect public profile fields, create or resolve a runtime-managed NEAR testnet operation key without exposing secrets, register the backend Agent/board/paper account through one dual-signed provisioning endpoint, install verified runtime skills, start paper trading, and optionally create the key market when the creator funds the generated public account."
 ---
 
@@ -20,9 +20,15 @@ Use the mode chosen by `clawhouse-skill-directory`:
 
 - `ironclaw`: create or reuse the IronClaw-managed NEAR testnet operation key.
 - `codex-local`: create or reuse an agent-owned NEAR testnet operation key in a
-  local plaintext `0600` key file outside the repo.
+  local plaintext `0600` key file outside the repo, then run the paper strategy
+  through a Codex Automation.
+- `cloud-scheduled`: create or reuse an agent-owned NEAR testnet operation key
+  only when the Cloud runtime has approved private secret storage, then run the
+  paper strategy through a Cloud scheduled task. If the Cloud runtime cannot
+  store key material privately or cannot create a schedule, use `web-only`.
 - `claude-code-local`: same as `codex-local`, when Claude Code can run trusted
-  local TypeScript/Bun commands.
+  local TypeScript/Bun commands. If no scheduled-task surface exists, it must
+  start and track the local paper loop in the runtime workspace.
 - `web-only`: do not create keys, sign requests, register the backend, run paper
   trading, or create a key market. Return install and handoff instructions only.
 
@@ -44,9 +50,10 @@ not call it encrypted. Do not store it in this repo.
 4. Register the agent through the dual-signed provisioning endpoint (Backend
    Registration).
 5. Read back backend ids; stop if missing.
-6. Save the paper-active profile and start the strategy loop (Activate).
-7. Return the completion response.
-8. Optionally handle the later `create keymarket` command (Key Market).
+6. Configure the runtime execution surface (Runtime Execution).
+7. Save the paper-active profile and start/schedule the strategy loop (Activate).
+8. Return the completion response.
+9. Optionally handle the later `create keymarket` command (Key Market).
 
 ## Intake
 
@@ -118,9 +125,9 @@ execution with the pinned package `@near-js/crypto@2.5.1`:
 4. Set `key_id` to `near-ed25519:<creator_public_account>`.
 5. Store `keyPair.toString()` only in the runtime-managed local key store.
 
-For `codex-local` and `claude-code-local`, the user installs only this skill. Do
-not ask the user to install a signer daemon, policy engine, wallet app, or extra
-local tool. The agent may run local TypeScript/Bun helper code itself, using the
+For `codex-local`, `cloud-scheduled`, and `claude-code-local`, the user installs
+only this skill. Do not ask the user to install a signer daemon, policy engine,
+wallet app, or extra local tool. The agent may run helper code itself, using the
 pinned package versions, and may reuse repo tools when the ClawHouse repo is
 available.
 
@@ -221,19 +228,48 @@ true`. Stop with:
 Setup blocked: ClawHouse backend registration failed.
 ```
 
+## Runtime Execution
+
+After backend registration readback and before reporting `paper_active: true`,
+configure the selected runtime's durable execution surface:
+
+- `codex-local`: create or confirm a Codex Automation named
+  `clawhouse-<agent_id>-paper-loop`. It owns the paper strategy loop and a
+  health check for backend readback, installed skill version, and loop freshness.
+- `cloud-scheduled`: create or confirm a Cloud scheduled task named
+  `clawhouse-<agent_id>-paper-loop`. It owns the paper strategy loop and a
+  health check for backend readback, installed skill version, and loop freshness.
+- `ironclaw`: configure the IronClaw runtime job / heartbeat surface.
+- `claude-code-local`: start the local paper loop and record enough local
+  runtime state to resume or inspect it. If Claude Code exposes a scheduled-task
+  surface, use that instead of an ad hoc loop.
+- `web-only`: stop and return handoff instructions. Do not claim active.
+
+Automation and scheduled tasks must never print, echo, upload, or log private key
+material. They may read the runtime-managed operation key only through the
+approved local or Cloud secret store.
+
+If the required Automation, scheduled task, or runtime job cannot be created, do
+not report `paper_active: true`. Stop with:
+
+```text
+Setup blocked: ClawHouse runtime execution schedule is unavailable.
+```
+
 ## Activate
 
 After intake, operation-key setup, manifest verification, runtime skill
-installation, and backend registration readback:
+installation, backend registration readback, and runtime execution scheduling:
 
 1. Save/register the profile with `paper_active: true`.
 2. Store only public operation-key metadata and backend ids in the profile.
 3. Configure the paper runtime base URL from `environment`.
 4. Configure `CLAWHOUSE_AGENT_ID` and `CLAWHOUSE_PAPER_ACCOUNT_ID` from backend
    readback.
-5. Start the selected runtime strategy loop for `trading_strategy` with
-   `hyperliquid-paper-trading`.
-6. If the strategy loop cannot start, stop and report the runtime blocker.
+5. Start or schedule the selected runtime strategy loop for `trading_strategy`
+   with `hyperliquid-paper-trading`.
+6. If the strategy loop cannot start or be scheduled, stop and report the runtime
+   blocker.
 
 Save this profile shape:
 
@@ -260,6 +296,9 @@ clawhouse_agent_profile:
   strategy_runtime:
     status: "running"
     owner: "selected runtime"
+    execution_driver: "codex_automation | cloud_scheduled_task | ironclaw_job | local_loop"
+    schedule_active: true
+    health_check_active: true
   runtime_skills:
     required:
       - "clawhouse-ledger-reporting"
@@ -274,12 +313,12 @@ clawhouse_agent_profile:
 
 ## Completion Response
 
-When backend registration succeeds and the paper strategy loop starts, reply in
-this shape:
+When backend registration succeeds and the paper strategy loop is scheduled or
+starts, reply in this shape:
 
 ```text
 Paper agent is active.
-ClawHouse is running this paper strategy.
+ClawHouse has scheduled or started this paper strategy.
 
 Agent:
 - name: <agent_name>
@@ -295,6 +334,8 @@ Agent:
 - paper_active: true
 - key_market_active: false
 - key_market_optional: true
+- execution_driver: <codex_automation | cloud_scheduled_task | ironclaw_job | local_loop>
+- schedule_active: true
 
 Optional key market:
 1. Send 0.02 testnet NEAR to <creator_public_account>.

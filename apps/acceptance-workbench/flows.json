@@ -580,20 +580,20 @@
           "optional": true,
           "id": "agentRegistration.pending.skillDirectoryOnboarding",
           "name": "Skill Directory Creator Onboarding",
-          "description": "The creator should start from the official Skill Directory, choose a supported runtime, create or reuse the agent-owned NEAR testnet operation key, register backend paper state, and optionally create a key market. 未完成: Workbench records the public install/readback path; the runtime itself performs key generation and strategy execution.",
+          "description": "The creator should start from the official Skill Directory, choose a supported runtime, create or reuse the agent-owned NEAR testnet operation key, register backend paper state, schedule the paper loop, and optionally create a key market. 未完成: Workbench records the public install/readback path; the runtime itself performs key generation, scheduling, and strategy execution.",
           "type": "pending",
           "status": "未完成",
           "access": "protected",
           "publicFacingMessage": "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-skill-directory/SKILL.md and follow it to create and run my ClawHouse paper-trading agent.",
-          "pendingReason": "The selected supported runtime performs local key generation, backend registration signing, and strategy execution. Workbench must not custody funds or expose key material.",
+          "pendingReason": "The selected supported runtime performs key generation, backend registration signing, runtime scheduling, and strategy execution. Codex-local must use Codex Automation; Cloud must use a scheduled task. Workbench must not custody funds or expose key material.",
           "inputs": {},
           "setVars": {},
           "responseLines": [
             "Read https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-skill-directory/SKILL.md and follow it to create and run my ClawHouse paper-trading agent.",
-            "Key-market creation is optional. Onboarding succeeds when paper_active is true."
+            "Key-market creation is optional. Onboarding succeeds when paper_active is true and the required Automation or scheduled task is active."
           ],
           "runningNotes": [
-            "未完成: Workbench records the public install/readback path. The selected supported runtime performs key generation, signing, and paper strategy execution.",
+            "未完成: Workbench records the public install/readback path. The selected supported runtime performs key generation, signing, runtime scheduling, and paper strategy execution.",
             "Never paste private keys, seed phrases, API keys, or raw signing material into Workbench."
           ]
         },
@@ -601,7 +601,7 @@
           "optional": true,
           "id": "agentRegistration.creatorOnboarding.setupReadback",
           "name": "GET /creator-onboarding/setup",
-          "description": "Calls the ClawHouse App compatibility readback for supported-runtime onboarding. It returns active paper-agent status, runtime modes, manifest, required skill_install parameters, operation-key warning, the resolved public funding account, and the optional agent-side key-market action; it does not store secrets or create wallets.",
+          "description": "Calls the ClawHouse App compatibility readback for supported-runtime onboarding. It returns active paper-agent status, runtime modes, manifest, required skill_install parameters, operation-key warning, runtime execution schedule requirements, the resolved public funding account, and the optional agent-side key-market action; it does not store secrets or create wallets.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -609,12 +609,16 @@
           "runningNotes": [
             "Calling the real ClawHouse App /creator-onboarding/setup route.",
             "The query parameter simulates a runtime-resolved operation public account for readback; creator_public_account should not appear in normal user intake.",
-            "This step should return active paper status plus manifest, skill_install parameters, the operation-key warning, the funding address field, and the optional create keymarket action."
+            "This step should return active paper status plus manifest, skill_install parameters, the operation-key warning, Codex Automation / Cloud scheduled task requirements, the funding address field, and the optional create keymarket action."
           ],
           "setVars": {
             "creatorOnboardingMode": "response.json.mode",
             "creatorOnboardingStatus": "response.json.status",
             "creatorOnboardingUserInstallsOnlySkill": "response.json.userInstallsOnlySkill",
+            "runtimeExecutionRequiredBeforePaperActive": "response.json.runtimeExecution.requiredBeforePaperActive",
+            "runtimeExecutionCodexDriver": "response.json.runtimeExecution.codexLocal.driver",
+            "runtimeExecutionCloudDriver": "response.json.runtimeExecution.cloudScheduled.driver",
+            "runtimeExecutionStopIfUnavailable": "response.json.runtimeExecution.stopIfUnavailable",
             "creatorOnboardingManifestUrl": "response.json.manifest.url",
             "creatorOnboardingCompletionTemplate": "response.json.completion.template",
             "creatorPublicAccountUserIntake": "response.json.creatorPublicAccount.userIntake",
