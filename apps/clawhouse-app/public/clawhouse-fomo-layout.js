@@ -506,6 +506,9 @@ function formatBackendAction(event) {
   if (isPaperTradeEvent(event) && event.coin && event.size) {
     const action = titleCase(event.side || "order");
     const amount = formatBackendAmount(event.size, event.coin);
+    if (event.status === "rejected" || event.reject_reason) {
+      return `Rejected ${action.toLowerCase()} ${amount}: ${event.reject_reason || "order rejected"}`;
+    }
     const px = asNumber(event.avg_fill_px);
     return px === null ? `${action} ${amount}` : `${action} ${amount} @ ${formatUsd(px)}`;
   }
@@ -1239,6 +1242,20 @@ function publicEventText(event) {
   return `${event.title} / ${formatBackendAction(event.raw || event)}`;
 }
 
+function compactReason(reason) {
+  const text = String(reason || "").trim().replace(/\s+/g, " ");
+  if (!text) return "No reason supplied.";
+  return text.length > 86 ? `${text.slice(0, 83).trim()}...` : text;
+}
+
+function eventTag(event) {
+  const raw = event.raw || {};
+  const coin = String(raw.coin || raw.metadata?.coin || "").toUpperCase();
+  const side = String(raw.side || raw.metadata?.side || event.label || "event").toLowerCase();
+  if (coin) return `${coin} ${titleCase(side)}`;
+  return event.title || titleCase(side);
+}
+
 function renderBackendEmpty(targetId, title, detail) {
   byId(targetId).innerHTML = `
     <div class="backend-empty">
@@ -1249,7 +1266,10 @@ function renderBackendEmpty(targetId, title, detail) {
 }
 
 function renderRoom(agent) {
-  const events = chartModel(agent).events;
+  const activity = paperActivity(agent);
+  const events = activity
+    ? sortedByObservedAt(paperOrders(agent)).slice(-12).reverse().map((order, index) => normalizePaperOrderEvent(order, index, agent, 0, null))
+    : chartModel(agent).events;
   if (!events.length) {
     byId("roomFeed").innerHTML = `
       <div class="blur-status feed-unavailable" aria-label="Agent chat room unavailable">
@@ -1268,14 +1288,19 @@ function renderRoom(agent) {
 
   byId("roomFeed").innerHTML = events.map((event) => `
     <article class="update" data-event="${event.id}">
-          <div class="update-copy">
+      <div class="update-avatar" aria-hidden="true">${agentIcon(agent)}</div>
+      <div class="update-copy">
         <div class="update-title">
-          <span>${escapeHtml(event.title)}</span>
-          <span class="tag">agent event</span>
+          <strong>${escapeHtml(agentTitle(agent))}</strong>
+          <span class="tag">${escapeHtml(eventTag(event))}</span>
+          <time>${escapeHtml(event.time)}</time>
         </div>
-        <div class="update-text">${escapeHtml(event.summary)}</div>
+        <div class="update-text">${escapeHtml(compactReason(event.reason))}</div>
+        <div class="update-action">
+          <span>Action</span>
+          <strong>${escapeHtml(event.action)}</strong>
+        </div>
       </div>
-      <div class="update-time">${escapeHtml(event.time)}</div>
     </article>
   `).join("");
 
