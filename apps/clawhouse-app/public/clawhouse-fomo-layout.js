@@ -1953,6 +1953,8 @@ function eventLeverage(event) {
 
 function closeModal() {
   byId("eventModal").hidden = true;
+  activeEventId = null;
+  if (lastPnlChartModel) renderChartEvents(selectedAgent(), null, lastPnlChartModel);
 }
 
 function bindUnlockButtons() {
