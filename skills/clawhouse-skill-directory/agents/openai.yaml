@@ -1,0 +1,4 @@
+interface:
+  display_name: "ClawHouse Skill Directory"
+  short_description: "Start here for ClawHouse onboarding, paper trading, and optional key market setup"
+  default_prompt: "Use $clawhouse-skill-directory first. Pick the runtime mode, show the operation-key warning before any local key generation, and do not ask the user to install anything except the ClawHouse skill. Route to $clawhouse-creator-onboarding for backend registration, paper trading, and optional key-market setup. Treat key-market creation as optional; onboarding succeeds when paper_active is true."

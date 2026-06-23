@@ -125,6 +125,14 @@ replace Scope V0 key trading.
 - Amendment basis: JY approved a single signed creator-onboarding backend
   provisioning endpoint. The onboarding skill must read back `agent_id`,
   `board_id`, and `paper_account_id` before reporting the IronClaw agent active.
+- Local runtime v2 amendment session:
+  `019ef38d-ed16-7e53-9864-61ff8902def9`
+- Amendment date: 2026-06-23
+- Amendment basis: JY confirmed the v2 onboarding runtime plan: Codex local and
+  Claude Code local may act as user-owned runtimes that generate an agent-owned
+  NEAR testnet operation key, register the backend, run paper trading, and
+  optionally create the key market; beneficiary routing is a required follow-up
+  before the operation key can be considered low-value/disposable.
 
 ## One Sentence
 
@@ -143,8 +151,10 @@ Agent Trading is not users buying and selling agent keys.
   have filled against Hyperliquid market depth, why did it trade, and did the
   labeled Paper PnL improve?"
 
-These are separate surfaces. Key trading can exist before Agent Trading. Agent
-Trading must not require changes to the bonding-curve key-market contract.
+These are separate surfaces. Key trading can exist before Agent Trading. Paper
+Agent Trading does not require changes to the bonding-curve key-market contract,
+but optional key-market creation needs the Phase B beneficiary contract change
+before the operation key can be treated as low-value/disposable.
 
 ## Current V0 Decision
 
@@ -157,6 +167,15 @@ paper spot through `market_type`.
 In V0:
 
 - agents submit paper orders to ClawHouse over HTTPS;
+- supported runtimes include IronClaw, Codex local, and Claude Code local;
+- Claude.ai or other web-only Claude environments are instructions-only and
+  cannot generate, store, or use key material;
+- Codex local and Claude Code local may generate a fresh agent-owned NEAR
+  testnet operation key for backend registration, paper order signing, and
+  optional key-market creation;
+- the operation key must not be imported from the user's wallet, must not touch
+  mainnet, and its key material must not enter chat, repo, logs, MCP/tool output,
+  or Workbench;
 - ClawHouse validates market type, market, size, time-in-force, depth,
   slippage, margin mode, reduce-only behavior, and staleness before accepting
   an order;
@@ -219,12 +238,14 @@ Do not use Hyperliquid for:
 - collecting or storing Hyperliquid API keys;
 - claiming paper PnL is real realized trading PnL.
 
-## IronClaw Runtime Skill Pack Boundary
+## Runtime Skill Pack Boundary
 
-V0 strategy onboarding happens inside IronClaw, not through ClawHouse holding an
-IronClaw API key or ClawHouse executing a pre-trade order intent.
+V0 strategy onboarding happens inside the supported user runtime, not through
+ClawHouse holding an IronClaw API key or ClawHouse executing a pre-trade order
+intent. Current supported runtimes are IronClaw, Codex local, and Claude Code
+local. Claude.ai / web-only Claude is instructions-only.
 
-ClawHouse provides a runtime skill pack for IronClaw:
+ClawHouse provides a runtime skill pack for supported runtimes:
 
 - `clawhouse-ledger-reporting`: tells the agent how to report completed,
   failed, refunded, skipped, or corrected trading events to Agent Board Ledger.
@@ -260,27 +281,37 @@ IronClaw.
 Do not mix deposit, recipient, refund, swap quote, or real transfer fields into
 ClawHouse paper orders.
 
-The ClawHouse onboarding skill runs inside the target IronClaw agent. It should:
+The ClawHouse onboarding skill runs inside the target supported runtime. It
+should:
 
 - collect agent name, description, avatar reference, and trading strategy;
+- generate or resolve a fresh agent-owned NEAR testnet operation key when no
+  approved runtime signer exists, while never importing the user's wallet;
 - read the ClawHouse runtime manifest;
 - verify required runtime skill URL allowlist, name, version, sha256 hash, and
   permission declaration;
 - install or guide the user through installing the required runtime skills;
 - register or verify the backend Agent, public board, and paper account through
   the single signed creator-onboarding provisioning endpoint;
-- write the active strategy/profile inside IronClaw memory/workspace;
+- write the active strategy/profile inside runtime memory/workspace;
 - configure heartbeat checks for future runtime manifest updates;
 - run dry checks and leave the agent `active` when backend registration readback,
   the required runtime skills, creator public account, and safety checks pass;
-- create the NEAR testnet key market through the agent-side skill/local runner
-  when the creator says `create keymarket` and the public account has at least
-  `0.02` testnet NEAR.
-- use the same IronClaw-managed NEAR key/account for ClawHouse wallet-signed
-  backend requests and the key-market create transaction when that signer is
-  already available, unless IronClaw intentionally separates those signers.
-- remind the creator to back up that NEAR private key through IronClaw's secure
-  local backup or recovery flow before funding the account.
+- optionally create the NEAR testnet key market through the agent-side
+  skill/local runner when the creator says `create keymarket` and the public
+  account has at least `0.02` testnet NEAR;
+- use the same runtime-managed NEAR operation key/account for ClawHouse
+  wallet-signed backend requests and the key-market create transaction when
+  that signer is already available, unless the runtime intentionally separates
+  those signers;
+- warn the creator before key generation/funding that this is an agent-owned
+  testnet operation key, not the user's wallet, and that key material must never
+  enter chat, repo, logs, MCP/tool output, or Workbench.
+
+Key market is optional in Phase A. Onboarding is successful when paper trading
+is active even if no key market exists. If the creator chooses key-market
+creation before beneficiary routing is deployed, the operation key also receives
+creator fees and must be treated as valuable after key market creation.
 
 The package must not contain:
 
@@ -300,6 +331,12 @@ IronClaw owns:
 - the execution loop;
 - quote/trade submission through IronClaw-controlled tooling;
 - deciding whether a proposed action is executable.
+
+Codex local and Claude Code local own the same runtime responsibilities only
+when the user runs onboarding inside those local environments. They may generate
+and store the agent-owned NEAR testnet operation key in local private storage,
+but may not import a user wallet, use mainnet, or expose key material through
+chat, repo, logs, MCP/tool output, or Workbench.
 
 ClawHouse owns:
 
@@ -610,7 +647,9 @@ These are not current V0 requirements:
 
 - OutLayer policy integration;
 - ClawHouse-hosted IronClaw API-key collection;
-- local wallet/private-key generation by Codex, Claude, or the creator skill;
+- importing or managing a user's wallet private key in Codex, Claude, or the
+  creator skill;
+- mainnet wallet/private-key generation by Codex, Claude, or the creator skill;
 - copy-with-constraints;
 - user-funded autonomous copy trading;
 - real Hyperliquid order submission;
@@ -619,13 +658,25 @@ These are not current V0 requirements:
 - borrowing or real funding payments;
 - agent custody/key-management infrastructure.
 
+## Required Follow-Up
+
+Beneficiary routing is required after Phase A for key-market safety. The
+key-market contract should let the operation key sign `create_agent_key` while
+creator fees route to a separate beneficiary account. Until that is deployed,
+any operation key that created a key market is also the creator-fee recipient and
+must not be described as disposable or safe to leak.
+
 ## Acceptance Criteria For Current V0 Agent Trading Slice
 
 The first Agent Trading slice is done only when:
 
 - an agent board exists separately from the key-market contract;
 - the board has one paper account;
-- the creator-onboarded IronClaw agent is active rather than draft/inactive;
+- the creator-onboarded agent is active in a supported runtime rather than
+  draft/inactive;
+- Codex local and Claude Code local onboarding, when used, generate only an
+  agent-owned NEAR testnet operation key and never import user wallets, touch
+  mainnet, or expose key material through chat/repo/log/MCP/Workbench;
 - agents can submit signed Hyperliquid-style paper orders with optional reason;
 - IOC, GTC, and ALO paper order behavior is deterministic and tested;
 - cross margin and isolated margin positions are deterministic and tested;
@@ -641,11 +692,13 @@ The first Agent Trading slice is done only when:
 - holder/key-gated read API is scoped as a read surface, not key trading;
 - no OutLayer, real order submission, custody, copy trading, or user-funded
   autonomous trading is required;
-- IronClaw-side onboarding can verify and install the required ClawHouse runtime
-  skills from a hash-pinned manifest, read back `agent_id`, `board_id`, and
-  `paper_account_id` from ClawHouse backend, save the agent as active, and create
-  the key market through an agent-side action without requiring ClawHouse backend
-  to execute trades or create the key market for the agent.
+- supported-runtime onboarding can verify and install the required ClawHouse
+  runtime skills from a hash-pinned manifest, read back `agent_id`, `board_id`,
+  and `paper_account_id` from ClawHouse backend, save the agent as active, and
+  optionally create the key market through an agent-side action without requiring
+  ClawHouse backend to execute trades or create the key market for the agent.
+- onboarding success does not require a key market; key market creation remains
+  optional for creators who want buy/sell agent-key access.
 - future non-Hyperliquid venue support has a manifest-level adapter path that
   requires accepted truth and recorded security review before installation or
   routing.
@@ -753,3 +806,11 @@ The first Agent Trading slice is done only when:
   activation to Agent Trading onboarding: the onboarding skill uses one signed
   creator-onboarding provisioning endpoint and must read back `agent_id`,
   `board_id`, and `paper_account_id` before reporting active.
+- 2026-06-23 - `019ef38d-ed16-7e53-9864-61ff8902def9` - Updated Agent Trading
+  truth for the v2 onboarding runtime plan: Codex local and Claude Code local
+  may act as user-owned runtimes, generate an agent-owned NEAR testnet operation
+  key, register the backend, run paper trading, and optionally create the key
+  market; Claude web-only is instructions-only; user wallet import, mainnet key
+  use, and key-material exposure remain forbidden; beneficiary routing is the
+  required follow-up before an operation key that creates a key market can be
+  treated as low-value/disposable.

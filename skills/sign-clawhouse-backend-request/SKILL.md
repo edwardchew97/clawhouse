@@ -1,7 +1,7 @@
 ---
 name: sign-clawhouse-backend-request
 version: 0.1.0
-description: "Use inside IronClaw to sign ClawHouse backend requests: build the canonical JSON body, the body sha256, and the wallet, agent, or paper signature headers the ClawHouse backend verifies with NEAR ed25519 over a domain-bound payload."
+description: "Use inside an approved ClawHouse runtime to sign backend requests: build the canonical JSON body, the body sha256, and the wallet, agent, or paper signature headers the ClawHouse backend verifies with NEAR ed25519 over a domain-bound payload."
 ---
 
 # Sign ClawHouse Backend Request
@@ -117,8 +117,8 @@ The paper family is only for `POST /paper/orders`. Creating a paper account
 
 ## Step 3: sign
 
-Sign the UTF-8 bytes of the canonical payload string with the IronClaw-managed NEAR
-key, base64url-encode the signature.
+Sign the UTF-8 bytes of the canonical payload string with the runtime-managed NEAR
+operation key, base64url-encode the signature.
 
 ## Step 4: send headers
 
@@ -207,5 +207,5 @@ headers_present: true
 ## Safety
 
 Never ask the user to paste a private key, seed phrase, raw signing material, or
-exchange API key. Sign only with the IronClaw-managed signer. Never echo or log the
-private key.
+exchange API key. Sign only with the approved runtime-managed operation key. Never
+echo or log the private key.

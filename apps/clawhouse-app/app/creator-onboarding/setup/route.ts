@@ -47,15 +47,68 @@ const paperEnvironments = {
   production: "https://clawhouse-backend-prod.vercel.app",
 };
 
+const walletUnavailableMessage =
+  "Setup blocked: ClawHouse operation-key setup is unavailable. Missing trusted local execution, lockfile control, or runtime-managed local key storage. I cannot create the agent operation key safely in this environment.";
+
+const walletProvisioning = {
+  actor: "selected supported runtime",
+  creatorActionRequired: false,
+  userCreatesWallet: false,
+  requiredBeforeBackendRegistration: true,
+  requiredBeforeFundingInstructions: true,
+  mustAttemptPinnedHelperBeforeStop: true,
+  unavailableMeans: "runtime_platform_capability_blocker",
+  attemptOrder: [
+    "reuse_existing_runtime_managed_clawhouse_operation_key",
+    "create_or_bind_near_testnet_operation_account_inside_runtime_local_flow",
+    "generate_ed25519_keypair_with_pinned_near_js_crypto_when_no_signer_exists",
+    "store_private_key_material_only_in_runtime_managed_local_key_store",
+    "return_only_public_operation_key_metadata",
+  ],
+  pinnedHelper: {
+    package: "@near-js/crypto",
+    version: "2.5.1",
+    importNames: ["KeyPair", "keyToImplicitAddress"],
+    generate: 'KeyPair.fromRandom("ed25519")',
+    publicKey: "keyPair.getPublicKey().toString()",
+    creatorPublicAccount: "keyToImplicitAddress(keyPair.getPublicKey())",
+    keyId: "near-ed25519:<creator_public_account>",
+    secretValue: "keyPair.toString()",
+    secretStorage:
+      "Runtime-managed local key store only. Phase A local-dev storage is plaintext 0600, not encrypted.",
+  },
+  visibleReturnFields: [
+    "creator_public_account",
+    "public_key",
+    "key_id",
+    "network",
+    "private_key_warning_required",
+  ],
+  hiddenFields: ["private_key", "seed_phrase", "raw_signing_material"],
+  stopIfUnavailable: walletUnavailableMessage,
+  forbiddenCreatorSteps: [
+    "create_wallet_manually",
+    "install_wallet_app",
+    "paste_public_account_as_wallet_creation_fallback",
+    "paste_private_key",
+    "paste_seed_phrase",
+    "run_shell_command",
+    "complete_pending_wallet_steps",
+  ],
+  warning:
+    "This agent will create and store its own NEAR testnet private key. Do not paste your wallet private key. Do not send mainnet NEAR. Only send small testnet NEAR to the generated public account. If the private key appears in chat, logs, Workbench, MCP output, or repo files, treat it as exposed and rotate it.",
+};
+
 // Keep this text matched with skills/clawhouse-creator-onboarding/SKILL.md.
 function completionTemplate(creatorPublicAccount: string) {
   return [
-    "Agent is active.",
-    "IronClaw is running this strategy.",
+    "Paper agent is active.",
+    "ClawHouse is running this paper strategy.",
     "",
     "Agent:",
     "- name: <agent_name>",
     "- environment: <environment>",
+    "- paper_active: true",
     "- backend_registered: true",
     "- backend_base_url: <backend_base_url>",
     "- agent_id: <agent_id>",
@@ -64,11 +117,14 @@ function completionTemplate(creatorPublicAccount: string) {
     `- creator_public_account: ${creatorPublicAccount}`,
     "- public_key: <public_key>",
     "- key_id: <key_id>",
+    "- key_market_active: false",
+    "- key_market_optional: true",
     "",
     "Optional key market:",
-    "1. Back up the NEAR private key using IronClaw's secure backup or recovery flow.",
-    `2. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
-    "3. Tell this agent: create keymarket.",
+    `1. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
+    "2. Tell this agent: create keymarket.",
+    "",
+    "Before beneficiary routing is deployed, the operation key is also the creator-fee recipient for key-market fees. Treat it as valuable after key-market creation. Do not call it disposable yet.",
     "",
   ].join("\n");
 }
@@ -87,16 +143,18 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
     fundingAddressProvided: hasCreatorPublicAccount,
     fundingAddressSource: hasCreatorPublicAccount
       ? "resolved_public_account"
-      : "ironclaw_account_resolution_required",
+      : "runtime_operation_account_resolution_required",
     creatorPublicAccountIsUserIntake: false,
     createTrigger: "create keymarket",
     userRunsCommand: false,
     backendRunsCommand: false,
-    executor: "clawhouse-creator-onboarding skill inside the target IronClaw agent",
+    executor: "clawhouse-creator-onboarding skill inside the selected supported runtime",
     signerReuse:
-      "Use the same IronClaw-managed NEAR key/account for ClawHouse wallet-signed backend requests and key-market creation when that signer already exists.",
+      "Use the same runtime-managed NEAR operation key/account for ClawHouse wallet-signed backend requests and key-market creation when that signer already exists.",
     backupReminder:
-      "Back up the NEAR private key using IronClaw's secure backup or recovery flow before funding. Do not paste it into chat, Workbench, tool output, or logs.",
+      "Do not paste the operation private key into chat, Workbench, tool output, MCP output, logs, or repo files. If it appears there, rotate it.",
+    beneficiaryWarning:
+      "Before beneficiary routing is deployed, the operation key is also the creator-fee recipient for key-market fees and must be treated as valuable after key-market creation.",
     localAction: {
       runner: "agent-key-market create",
       cwd: "agent-key-market",
@@ -107,12 +165,13 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
         ACCOUNT_ID: creatorPublicAccount,
         CONTRACT_ID: contractId,
         NEAR_NETWORK_ID: "testnet",
+        CLAWHOUSE_OPERATION_KEY_FILE:
+          "~/.clawhouse/agents/<agent_id>/operation-key.json",
       },
       signerAccount: creatorPublicAccount,
       args: ["<agent_id>", "<agent_name>", "<metadata_uri>"],
     },
     userFacingSteps: [
-      "Back up the NEAR private key using IronClaw's secure backup or recovery flow.",
       `Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
       "Tell this agent: create keymarket.",
     ],
@@ -131,9 +190,15 @@ function payloadFor(request: Request) {
   return {
     ok: true,
     route: "/creator-onboarding/setup",
-    mode: "ironclaw-side-onboarding",
+    mode: "supported-runtime-onboarding",
+    runtimeModes: ["ironclaw", "codex-local", "claude-code-local", "web-only"],
+    userInstallsOnlySkill: true,
+    noSignerDaemon: true,
+    noPolicyEngine: true,
+    webOnlyMode:
+      "Claude.ai and other web-only environments are instructions-only and cannot generate, store, or use key material.",
     status: "active",
-    message: "Agent is active. IronClaw is running the submitted strategy.",
+    message: "Paper agent is active. ClawHouse is running the submitted paper strategy.",
     intake: [
       "environment",
       "agent_name",
@@ -186,28 +251,21 @@ function payloadFor(request: Request) {
       account,
       source,
       resolution:
-        "Resolve or create the IronClaw-managed NEAR testnet public account inside IronClaw. Never ask the creator for internal wallet setup details, private keys, seed phrases, or raw signing material.",
+        "Resolve or create the runtime-managed NEAR testnet operation account inside the selected supported runtime before backend registration. This is agent runtime work, not creator wallet work.",
       walletSetup: {
         creatorIntakeAllowed: false,
-        reuseExistingIronClawSigner: true,
-        createInsideIronClawWhenSafe: true,
+        reuseExistingRuntimeSigner: true,
+        createInsideRuntimeWhenSafe: true,
         pinnedPackage: "@near-js/crypto@2.5.1",
         requiresTrustedLocalExecution: true,
         requiresLockfileControl: true,
-        requiresSecureSecretStore: true,
-        stopIfUnavailable:
-          "IronClaw secure local wallet setup is unavailable. I cannot create the agent wallet safely in this environment.",
-        visibleReturnFields: [
-          "creator_public_account",
-          "public_key",
-          "key_id",
-          "network",
-          "private_key_backup_required",
-        ],
-        hiddenFields: ["private_key", "seed_phrase", "raw_signing_material"],
+        requiresRuntimeManagedLocalKeyStore: true,
+        ...walletProvisioning,
       },
       fallbackPrompt:
-        "Ask for a public account id only when IronClaw already has an approved signer but needs an external public account binding. Do not use this as normal profile intake.",
+        "Do not ask the creator for a public account id as a wallet-creation fallback. A creator-provided public account is allowed only when the runtime already has an approved signer and is binding that signer to an external public account.",
+      walletCreationFallbackAllowed: false,
+      platformBlockerWhenUnavailable: true,
       doNotResolveFrom: [
         "memory_search",
         "memory_tree",
@@ -222,13 +280,15 @@ function payloadFor(request: Request) {
       privateKeyHandling:
         "Never ask for, store, echo, or log the NEAR private key, seed phrase, or raw signing material.",
     },
+    walletProvisioning,
+    operationKeyProvisioning: walletProvisioning,
     manifest: {
       url: manifestUrl,
       requiredSkills,
       tradingSkills,
       futureTradingSkills: "Add one verified manifest entry per venue or trading pattern.",
       hashVerification:
-        "Require manifest sha256 metadata. Do not use __codeact__, Python, shell, package imports, or hashlib only to compute hashes inside IronClaw. If no built-in hash utility exists, continue after URL/name/version/permission/forbidden-behavior/secret-safety checks and report hash_not_recomputed_no_builtin_hasher.",
+        "Require manifest sha256 metadata. If the runtime has no built-in hash utility, continue after URL/name/version/permission/forbidden-behavior/secret-safety checks and report hash_not_recomputed_no_builtin_hasher.",
     },
     install: [...requiredInstall, ...tradingInstall],
     installRequired: requiredInstall,
@@ -236,14 +296,14 @@ function payloadFor(request: Request) {
     agentState: {
       status: "active",
       strategyRuntime: "running",
-      runtimeOwner: "IronClaw",
+      runtimeOwner: "selected supported runtime",
       canSubmitPaperOrders: true,
       canSubmitReasoning: true,
       keyMarketStatus: "optional_not_created",
     },
     activation: {
       defaultStatus: "active",
-      requiresUserConfirmationInsideIronClaw: false,
+      requiresUserConfirmationInsideRuntime: false,
       postActivationStatus: "active",
       traderStatus: "active",
     },
@@ -258,6 +318,8 @@ function payloadFor(request: Request) {
         "dependency_list",
         "confirmation_question",
         "manual_bun_command",
+        "creator_wallet_creation_step",
+        "pending_wallet_steps",
       ],
     },
     forbidden: [
@@ -290,6 +352,9 @@ function payloadFor(request: Request) {
       "web_search_for_clawhouse_endpoints",
       "staging_api_clawhouse_com_for_paper_trade",
       "skill_install_with_fetched_skill_markdown_as_name",
+      "creator_wallet_creation_step",
+      "public_account_id_fallback_for_wallet_creation",
+      "pending_wallet_steps",
     ],
   };
 }
@@ -319,7 +384,7 @@ function creatorPublicAccount(request: Request) {
       ? "request_query"
       : envAccount
         ? "environment"
-        : "ironclaw_managed_wallet_required",
+        : "runtime_managed_operation_key_required",
   };
 }
 
