@@ -133,6 +133,13 @@ replace Scope V0 key trading.
   NEAR testnet operation key, register the backend, run paper trading, and
   optionally create the key market; beneficiary routing is a required follow-up
   before the operation key can be considered low-value/disposable.
+- Scheduler runtime amendment session:
+  `019ef38d-ed16-7e53-9864-61ff8902def9`
+- Amendment date: 2026-06-23
+- Amendment basis: JY corrected the v2 runtime execution requirement: Codex
+  local must use Codex Automation for the paper loop, Cloud runtime must use a
+  Cloud scheduled task, and onboarding must not report paper active unless the
+  required schedule exists.
 
 ## One Sentence
 
@@ -167,12 +174,16 @@ paper spot through `market_type`.
 In V0:
 
 - agents submit paper orders to ClawHouse over HTTPS;
-- supported runtimes include IronClaw, Codex local, and Claude Code local;
+- supported runtimes include IronClaw, Codex local, Cloud scheduled runtime, and
+  Claude Code local;
 - Claude.ai or other web-only Claude environments are instructions-only and
   cannot generate, store, or use key material;
-- Codex local and Claude Code local may generate a fresh agent-owned NEAR
-  testnet operation key for backend registration, paper order signing, and
-  optional key-market creation;
+- Codex local, Cloud scheduled runtime, and Claude Code local may generate or
+  store a fresh agent-owned NEAR testnet operation key for backend registration,
+  paper order signing, and optional key-market creation;
+- Codex local must use Codex Automation for the paper strategy loop and health
+  check; Cloud scheduled runtime must use a Cloud scheduled task and an approved
+  private secret store;
 - the operation key must not be imported from the user's wallet, must not touch
   mainnet, and its key material must not enter chat, repo, logs, MCP/tool output,
   or Workbench;
@@ -242,8 +253,8 @@ Do not use Hyperliquid for:
 
 V0 strategy onboarding happens inside the supported user runtime, not through
 ClawHouse holding an IronClaw API key or ClawHouse executing a pre-trade order
-intent. Current supported runtimes are IronClaw, Codex local, and Claude Code
-local. Claude.ai / web-only Claude is instructions-only.
+intent. Current supported runtimes are IronClaw, Codex local, Cloud scheduled
+runtime, and Claude Code local. Claude.ai / web-only Claude is instructions-only.
 
 ClawHouse provides a runtime skill pack for supported runtimes:
 
@@ -295,8 +306,13 @@ should:
   the single signed creator-onboarding provisioning endpoint;
 - write the active strategy/profile inside runtime memory/workspace;
 - configure heartbeat checks for future runtime manifest updates;
+- configure the runtime execution surface before reporting active: Codex local
+  uses Codex Automation, Cloud scheduled runtime uses a Cloud scheduled task,
+  IronClaw uses its runtime job/heartbeat surface, and Claude Code local uses a
+  local loop or available scheduled-task surface;
 - run dry checks and leave the agent `active` when backend registration readback,
-  the required runtime skills, creator public account, and safety checks pass;
+  the required runtime skills, creator public account, runtime schedule, and
+  safety checks pass;
 - optionally create the NEAR testnet key market through the agent-side
   skill/local runner when the creator says `create keymarket` and the public
   account has at least `0.02` testnet NEAR;
@@ -332,9 +348,12 @@ IronClaw owns:
 - quote/trade submission through IronClaw-controlled tooling;
 - deciding whether a proposed action is executable.
 
-Codex local and Claude Code local own the same runtime responsibilities only
-when the user runs onboarding inside those local environments. They may generate
-and store the agent-owned NEAR testnet operation key in local private storage,
+Codex local, Cloud scheduled runtime, and Claude Code local own the same runtime
+responsibilities only when the user runs onboarding inside those environments.
+Codex local must create or confirm a Codex Automation for the paper strategy
+loop and health check. Cloud scheduled runtime must create or confirm a Cloud
+scheduled task and use an approved private secret store. They may generate and
+store the agent-owned NEAR testnet operation key in approved runtime storage,
 but may not import a user wallet, use mainnet, or expose key material through
 chat, repo, logs, MCP/tool output, or Workbench.
 
@@ -814,3 +833,8 @@ The first Agent Trading slice is done only when:
   use, and key-material exposure remain forbidden; beneficiary routing is the
   required follow-up before an operation key that creates a key market can be
   treated as low-value/disposable.
+- 2026-06-23 - `019ef38d-ed16-7e53-9864-61ff8902def9` - Corrected v2 Agent
+  Trading runtime execution: Codex local must use Codex Automation for the paper
+  loop and health check; Cloud scheduled runtime must use a Cloud scheduled task
+  and approved private secret store; onboarding must not report paper active
+  unless the required schedule exists.
