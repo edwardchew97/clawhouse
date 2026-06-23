@@ -1,31 +1,52 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.35
-description: "Use inside the target IronClaw agent to onboard a ClawHouse Season 0 Hyperliquid paper trading agent: collect environment and public profile fields, create or reuse the IronClaw-managed NEAR wallet without exposing secrets, register the backend Agent/board/paper account through one signed provisioning endpoint, install verified runtime skills, save the agent as active, start the submitted strategy, and handle the later key-market command."
+version: 0.4.36
+description: "Use after clawhouse-skill-directory chooses a runtime mode to onboard a ClawHouse Season 0 Hyperliquid paper trading agent: collect public profile fields, create or resolve a runtime-managed NEAR testnet operation key without exposing secrets, register the backend Agent/board/paper account through one dual-signed provisioning endpoint, install verified runtime skills, start paper trading, and optionally create the key market when the creator funds the generated public account."
 ---
 
 # ClawHouse Creator Onboarding
 
 ## Goal
 
-Create an active ClawHouse agent inside IronClaw, register it with the ClawHouse
-backend, and start running the submitted strategy.
+Create a ClawHouse paper-trading agent in the selected runtime, register it with
+the ClawHouse backend, and start running the submitted strategy.
 
 For request signing, use the `sign-clawhouse-backend-request` skill. For picking
 between ClawHouse skills, see `clawhouse-skill-directory`.
 
+## Runtime Modes
+
+Use the mode chosen by `clawhouse-skill-directory`:
+
+- `ironclaw`: create or reuse the IronClaw-managed NEAR testnet operation key.
+- `codex-local`: create or reuse an agent-owned NEAR testnet operation key in a
+  local plaintext `0600` key file outside the repo.
+- `claude-code-local`: same as `codex-local`, when Claude Code can run trusted
+  local TypeScript/Bun commands.
+- `web-only`: do not create keys, sign requests, register the backend, run paper
+  trading, or create a key market. Return install and handoff instructions only.
+
+For local modes, use a path like:
+
+```text
+~/.clawhouse/agents/<agent_id>/operation-key.json
+```
+
+This Phase A key file is plaintext local-dev storage with `0600` permissions. Do
+not call it encrypted. Do not store it in this repo.
+
 ## Flow
 
 1. Collect creator profile fields (Intake).
-2. Resolve or create the IronClaw-managed NEAR public account inside IronClaw
-   (Wallet).
+2. Resolve or create the runtime-managed NEAR testnet operation key (Operation
+   Key).
 3. Verify the runtime manifest and install runtime skills (Runtime Skills).
-4. Register the agent through the signed provisioning endpoint (Backend
+4. Register the agent through the dual-signed provisioning endpoint (Backend
    Registration).
 5. Read back backend ids; stop if missing.
-6. Save the active profile and start the strategy loop (Activate).
+6. Save the paper-active profile and start the strategy loop (Activate).
 7. Return the completion response.
-8. Handle the later `create keymarket` command (Key Market).
+8. Optionally handle the later `create keymarket` command (Key Market).
 
 ## Intake
 
@@ -61,39 +82,69 @@ Use this backend map:
 - `staging`: `https://clawhouse-backend-staging.vercel.app`
 - `production`: `https://clawhouse-backend-prod.vercel.app`
 
-## Wallet
+## Operation Key
 
-Resolve `creator_public_account` inside IronClaw. This is IronClaw agent work,
-not creator work:
+Resolve `creator_public_account` inside the selected runtime. This is agent
+runtime work, not creator wallet work:
 
-1. Reuse an existing IronClaw-managed ClawHouse signer when available.
+1. Reuse an existing runtime-managed ClawHouse operation key when available.
 2. If no signer exists, create or bind a NEAR testnet account through
-   IronClaw's secure local wallet flow.
+   the runtime's trusted local operation-key flow.
 3. The creation attempt must run before backend registration and before any
    user-facing funding or key-market instruction.
-4. Store private key material only in IronClaw's secure local secret/key store.
+4. Store private key material only in the runtime-managed local key store.
 5. Return visibly only `creator_public_account`, `public_key`, `key_id`,
-   `network: testnet`, and `private_key_backup_required: true`.
+   `network: testnet`, and `private_key_warning_required: true`.
 
-When IronClaw needs to generate a keypair locally, it must use trusted local
+Before generating or using a local operation key, show:
+
+```text
+This agent will create and store its own NEAR testnet private key.
+Do not paste your wallet private key.
+Do not send mainnet NEAR.
+Only send small testnet NEAR to the generated public account.
+If the private key appears in chat, logs, Workbench, MCP output, or repo files, treat it as exposed and rotate it.
+```
+
+If the creator does not confirm the warning, stop before key generation. If the
+creator pastes a private key or seed phrase, stop and tell them to rotate it.
+
+When the runtime needs to generate a keypair locally, it must use trusted local
 execution with the pinned package `@near-js/crypto@2.5.1`:
 
 1. Generate `KeyPair.fromRandom("ed25519")`.
 2. Derive `public_key` from `keyPair.getPublicKey().toString()`.
 3. Derive `creator_public_account` from `keyToImplicitAddress(public_key)`.
 4. Set `key_id` to `near-ed25519:<creator_public_account>`.
-5. Store `keyPair.toString()` only in IronClaw's secure local secret/key store.
+5. Store `keyPair.toString()` only in the runtime-managed local key store.
+
+For `codex-local` and `claude-code-local`, the user installs only this skill. Do
+not ask the user to install a signer daemon, policy engine, wallet app, or extra
+local tool. The agent may run local TypeScript/Bun helper code itself, using the
+pinned package versions, and may reuse repo tools when the ClawHouse repo is
+available.
+
+Use this local key-file shape for Phase A:
+
+```json
+{
+  "schema": "clawhouse.near.local-dev-keystore.v1",
+  "account_id": "<creator_public_account>",
+  "public_key": "<public_key>",
+  "private_key": "<store only in the local 0600 file; never print>",
+  "key_id": "near-ed25519:<creator_public_account>"
+}
+```
 
 Do not ask the creator to create a wallet, install a wallet app, paste a public
-account as a wallet-creation fallback, run shell commands, or complete "pending
-wallet steps". The creator only backs up the IronClaw-managed private key through
-IronClaw's secure backup or recovery flow and funds the resolved public account
-after onboarding has created or reused it.
+account as a wallet-creation fallback, paste a private key, or complete "pending
+wallet steps". The creator only funds the generated public account with small
+testnet NEAR if they choose the optional key-market step.
 
-If IronClaw cannot create, bind, or store the wallet safely, stop with:
+If the runtime cannot create, bind, or store the operation key safely, stop with:
 
 ```text
-Setup blocked: IronClaw secure local wallet setup is unavailable. Missing trusted local execution, lockfile control, or secure secret/key store. I cannot create the agent wallet safely in this environment.
+Setup blocked: ClawHouse operation-key setup is unavailable. Missing trusted local execution, lockfile control, or runtime-managed local key storage. I cannot create the agent operation key safely in this environment.
 ```
 
 ## Runtime Skills
@@ -142,12 +193,19 @@ Build one JSON body with:
 - `metadata`: object containing `agent_name`, `agent_description`,
   `avatar_reference`, `banner_reference`, and `trading_strategy`
 
-Sign the exact JSON body with the IronClaw-managed signer using the
+Sign the exact JSON body with the runtime-managed operation key using the
 `sign-clawhouse-backend-request` skill:
 
 - wallet signature headers for path `/creator-onboarding/register`;
 - Agent signature headers for path `/creator-onboarding/register` with purpose
   `creator_onboarding_registration`.
+
+Both signature families are required on the same request. The operation key may
+produce both signatures in Phase A. If the ClawHouse repo is available, the agent
+may use `tools/near-wallet` `sign-request` and `sign-agent-request`; otherwise it
+must implement the exact canonical payload rules from `sign-clawhouse-backend-request`
+inside its local runtime. Do not ask the user to sign or paste raw signing
+material.
 
 The response must include:
 
@@ -156,8 +214,8 @@ The response must include:
 - `board_id`
 - `paper_account_id`
 
-If backend registration, signing, or readback fails, do not report `Agent is
-active`. Stop with:
+If backend registration, signing, or readback fails, do not report `paper_active:
+true`. Stop with:
 
 ```text
 Setup blocked: ClawHouse backend registration failed.
@@ -165,15 +223,15 @@ Setup blocked: ClawHouse backend registration failed.
 
 ## Activate
 
-After intake, wallet setup, manifest verification, runtime skill installation,
-and backend registration readback:
+After intake, operation-key setup, manifest verification, runtime skill
+installation, and backend registration readback:
 
-1. Save/register the profile with `status: active`.
-2. Store only public wallet metadata and backend ids in the profile.
+1. Save/register the profile with `paper_active: true`.
+2. Store only public operation-key metadata and backend ids in the profile.
 3. Configure the paper runtime base URL from `environment`.
 4. Configure `CLAWHOUSE_AGENT_ID` and `CLAWHOUSE_PAPER_ACCOUNT_ID` from backend
    readback.
-5. Start the IronClaw strategy loop for `trading_strategy` with
+5. Start the selected runtime strategy loop for `trading_strategy` with
    `hyperliquid-paper-trading`.
 6. If the strategy loop cannot start, stop and report the runtime blocker.
 
@@ -181,7 +239,9 @@ Save this profile shape:
 
 ```yaml
 clawhouse_agent_profile:
-  status: "active"
+  paper_active: true
+  key_market_active: false
+  key_market_optional: true
   environment: "staging"
   paper_base_url: "https://clawhouse-backend-staging.vercel.app"
   backend_registered: true
@@ -195,10 +255,11 @@ clawhouse_agent_profile:
   creator_public_account: ""
   public_key: ""
   key_id: ""
+  operation_key_storage: "runtime-managed local key store"
   trading_strategy: ""
   strategy_runtime:
     status: "running"
-    owner: "IronClaw"
+    owner: "selected runtime"
   runtime_skills:
     required:
       - "clawhouse-ledger-reporting"
@@ -206,17 +267,19 @@ clawhouse_agent_profile:
   safety:
     paper_only: true
     no_real_hyperliquid_orders: true
-    secrets_stay_in_ironclaw: true
-    private_key_backup_required: true
+    no_user_wallet_import: true
+    no_mainnet_near: true
+    private_key_warning_required: true
 ```
 
 ## Completion Response
 
-When onboarding succeeds, reply exactly in this shape:
+When backend registration succeeds and the paper strategy loop starts, reply in
+this shape:
 
 ```text
-Agent is active.
-IronClaw is running this strategy.
+Paper agent is active.
+ClawHouse is running this paper strategy.
 
 Agent:
 - name: <agent_name>
@@ -229,22 +292,36 @@ Agent:
 - creator_public_account: <creator_public_account>
 - public_key: <public_key>
 - key_id: <key_id>
+- paper_active: true
+- key_market_active: false
+- key_market_optional: true
 
 Optional key market:
-1. Back up the NEAR private key using IronClaw's secure backup or recovery flow.
-2. Send 0.02 testnet NEAR to <creator_public_account>.
-3. Tell this agent: create keymarket.
+1. Send 0.02 testnet NEAR to <creator_public_account>.
+2. Tell this agent: create keymarket.
+
+Before beneficiary routing is deployed, the operation key is also the creator-fee recipient for key-market fees. Treat it as valuable after key-market creation. Do not call it disposable yet.
 ```
 
 ## Key Market Command
 
 When the creator later says `create keymarket`:
 
-1. Confirm the IronClaw-managed private key has been backed up through IronClaw's
-   secure backup or recovery flow.
-2. Check that `<creator_public_account>` has at least `0.02` testnet NEAR.
+1. Check that `<creator_public_account>` has at least `0.02` testnet NEAR.
+2. If the balance is short, stop with the exact missing funding item.
 3. Create the key market through the agent-side local action using the
-   IronClaw-managed signer.
+   runtime-managed operation key.
+4. Return `key_market_active: true`, `contract_id`, `tx_hash`,
+   `creator_public_account`, and `agent_id`.
+
+If the ClawHouse repo is available, use the `agent-key-market` runner with
+`CLAWHOUSE_OPERATION_KEY_FILE=~/.clawhouse/agents/<agent_id>/operation-key.json`.
+If the repo is not available, call the NEAR testnet contract from local
+TypeScript/Bun with `near-api-js`, signed by the same operation key. This is
+agent-side execution; do not present `bun run` commands as user work.
+
+Do not treat key-market creation as an onboarding blocker. Onboarding already
+succeeds when `paper_active: true`.
 
 ## Safety
 
@@ -263,14 +340,14 @@ or API-key requests.
 Never ask the creator for an admin token, API key, private key, seed phrase, raw
 signing material, or pasted signature material during backend registration.
 
-Never turn wallet generation into creator pending steps. If the IronClaw runtime
-cannot run the pinned wallet helper and store the key securely, report the exact
-IronClaw capability blocker instead of asking the creator to create a wallet.
+Never turn operation-key generation into creator pending steps. If the runtime
+cannot run the pinned wallet helper and store the key locally, report the exact
+runtime capability blocker instead of asking the creator to create a wallet.
 
 Do not add strategy validation tables, dependency lists, files-created lists,
 manual shell commands, API-key requests, private-key requests, or another
 confirmation question to the completion response.
 
 For the key market: do not show a `bun run` command as the normal path. Do not ask
-the creator to paste private key material. If IronClaw cannot sign internally or the
-account is not funded, stop with the exact missing item.
+the creator to paste private key material. If the runtime cannot sign internally or
+the account is not funded, stop with the exact missing item.

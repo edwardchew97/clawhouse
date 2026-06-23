@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { extractTransactionHash, formatTransactionResult } from "./near";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { extractTransactionHash, formatTransactionResult, readPrivateKey } from "./near";
 
 describe("transaction hash formatting", () => {
   test("reads the hash from the signed transaction view", () => {
@@ -29,5 +32,75 @@ describe("transaction hash formatting", () => {
     expect(() => formatTransactionResult("buy_key", { status: {} })).toThrow(
       "Transaction completed, but NEAR did not return a transaction hash",
     );
+  });
+});
+
+describe("operation key file loading", () => {
+  test("reads a ClawHouse operation key file", async () => {
+    const previousKeyFile = process.env.CLAWHOUSE_OPERATION_KEY_FILE;
+    const dir = await mkdtemp(join(tmpdir(), "clawhouse-operation-key-"));
+    const keyFile = join(dir, "operation-key.json");
+
+    try {
+      await writeFile(
+        keyFile,
+        JSON.stringify({
+          account_id: "agent.testnet",
+          private_key: "ed25519:operation-key",
+        }),
+      );
+      process.env.CLAWHOUSE_OPERATION_KEY_FILE = keyFile;
+
+      await expect(
+        readPrivateKey({
+          networkId: "testnet",
+          nodeUrl: "https://rpc.testnet.near.org",
+          contractId: "contract.testnet",
+          accountId: "agent.testnet",
+        }),
+      ).resolves.toBe("ed25519:operation-key");
+    } finally {
+      if (previousKeyFile === undefined) {
+        delete process.env.CLAWHOUSE_OPERATION_KEY_FILE;
+      } else {
+        process.env.CLAWHOUSE_OPERATION_KEY_FILE = previousKeyFile;
+      }
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects an operation key file for a different account", async () => {
+    const previousKeyFile = process.env.CLAWHOUSE_OPERATION_KEY_FILE;
+    const dir = await mkdtemp(join(tmpdir(), "clawhouse-operation-key-"));
+    const keyFile = join(dir, "operation-key.json");
+
+    try {
+      await writeFile(
+        keyFile,
+        JSON.stringify({
+          account_id: "agent.testnet",
+          private_key: "ed25519:operation-key",
+        }),
+      );
+      process.env.CLAWHOUSE_OPERATION_KEY_FILE = keyFile;
+
+      await expect(
+        readPrivateKey({
+          networkId: "testnet",
+          nodeUrl: "https://rpc.testnet.near.org",
+          contractId: "contract.testnet",
+          accountId: "other.testnet",
+        }),
+      ).rejects.toThrow(
+        "Operation key file account_id agent.testnet does not match ACCOUNT_ID other.testnet",
+      );
+    } finally {
+      if (previousKeyFile === undefined) {
+        delete process.env.CLAWHOUSE_OPERATION_KEY_FILE;
+      } else {
+        process.env.CLAWHOUSE_OPERATION_KEY_FILE = previousKeyFile;
+      }
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
