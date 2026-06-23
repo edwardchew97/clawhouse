@@ -71,6 +71,13 @@
 - Migration basis: JY requested moving the historical root-level reference
   directory under `docs/` and updating path references without changing product
   scope.
+- Venue adapter security amendment session:
+  `019ef2b1-0083-78e2-96d5-c484a2725d0b`
+- Amendment date: 2026-06-23
+- Amendment basis: JY accepted splitting future paper-trading runtime support
+  into a router/core/venue-adapter model and clarified that any newly installable
+  trading venue skill must pass a sufficient security review before installation
+  or routing.
 
 ## 一句话
 
@@ -232,8 +239,8 @@ NEAR Intents 也不负责当前 Hyperliquid paper trading 的：
 Current onboarding/runtime surfaces must not expose a legacy spot runtime
 skill. Current Hyperliquid paper trading uses `hyperliquid-paper-trading` for
 both `market_type: "perp"` and `market_type: "spot"`. Non-Hyperliquid venues
-require a new verified manifest skill and a new accepted truth update before
-onboarding can route agents to them.
+require a new verified manifest skill, a recorded security review, and a new
+accepted truth update before onboarding can route agents to them.
 
 ## Hyperliquid Paper Trading Boundary
 
@@ -360,3 +367,7 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
 - 2026-06-22 - `019eedca-8639-73f3-b78e-1da192821360` - Moved historical
   reference files into `docs/references/` and updated the Original Vision path
   reference without changing accepted product scope.
+- 2026-06-23 - `019ef2b1-0083-78e2-96d5-c484a2725d0b` - Added the accepted
+  future venue-adapter security gate: non-Hyperliquid trading venues require a
+  verified manifest skill, accepted truth update, and recorded security review
+  before onboarding or heartbeat can install or route agents to them.

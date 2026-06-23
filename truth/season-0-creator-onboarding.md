@@ -126,6 +126,12 @@
   IronClaw local execution when secure secret/key storage is available, while
   treating Meteor public repos only as reference evidence for NEAR keypair
   mechanics.
+- Venue adapter security amendment session:
+  `019ef2b1-0083-78e2-96d5-c484a2725d0b`
+- Amendment date: 2026-06-23
+- Amendment basis: JY accepted the future router/core/venue-adapter runtime
+  shape and required sufficient security review before any newly installable
+  trading venue skill may be installed or used by existing agents.
 - Backend registration amendment session:
   `019ef28a-c641-7eb2-a2a5-9bafa8ed67b9`
 - Amendment date: 2026-06-23
@@ -224,7 +230,7 @@ onboarding skill 还负责安装和检查 ClawHouse runtime pack：
 - `clawhouse-ledger-reporting`;
 - `hyperliquid-paper-trading`;
 - future non-Hyperliquid trading skills only when a later manifest safely adds
-  them.
+  them after accepted truth and recorded security review.
 
 The current onboarding skill supports Hyperliquid-style paper perps and
 Hyperliquid-style paper spot through `hyperliquid-paper-trading`. Agents choose
@@ -243,6 +249,12 @@ onboarding skill 还应配置 heartbeat，让 IronClaw 定期读取 ClawHouse ru
 manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/signature 校验通过的
 低风险更新；新增 skill、major version、权限扩大、未知 tool/MCP、或可疑内容必须停下
 来让用户确认。
+
+新增 trading venue skill / venue adapter 不是低风险更新。它必须先有 ClawHouse
+记录的 security review，至少覆盖 source URL、hash/signature、权限/tool、network
+endpoint、signing scope、secret handling、forbidden behaviors，以及 dry-run 或
+sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue，不得安装，
+不得让现有 agent 把策略路由过去。
 
 当前 repo artifact 是开发版 runtime pack，位于 `skills/ironclaw-runtime/`：
 
@@ -302,21 +314,23 @@ manifest，检查是否有可安装更新。heartbeat 只能自动安装 hash/si
    只有当 backend registration 已读回，且 IronClaw 已经在跑用户提交的 strategy 时，
    才可以回报 `status: active`。
 10. onboarding skill 配置 heartbeat update check，定期检查 runtime manifest。
-11. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
+11. 如果 heartbeat 发现新的 trading venue skill，它只能在 security review 已记录且
+    用户在 IronClaw 内确认后安装；否则保持当前已安装 venue，不得自动扩展交易能力。
+12. onboarding skill 做 dry-run：确认 strategy、skills、wallet/secrets/reporting
    config、creator public account resolution、backend registration readback、
    private-key backup reminder、active status 和 running strategy。
-12. public onboarding skill 不包含 test-only trade-submission check；这只属于测试
+13. public onboarding skill 不包含 test-only trade-submission check；这只属于测试
     harness 的验收要求。
-13. 如果 key market 不存在，onboarding skill 只给 optional 后续提示：agent 已 active
+14. 如果 key market 不存在，onboarding skill 只给 optional 后续提示：agent 已 active
     且 IronClaw 已在跑 strategy；如果要让用户 buy/sell agent key，请先用 IronClaw 的
     安全流程备份这个 NEAR private key，再把 `0.02` testnet NEAR 放到
     `<creator_public_account>`，然后对 agent 说 `create keymarket`。
-14. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
+15. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
     IronClaw 内部已批准的签名工具 / 本地 `agent-key-market` runner 创建 key market。
     如果 IronClaw 已经有用于 ClawHouse backend request signing 的同一个 NEAR
     key/account，就用同一个 signer/account 创建 key market。这不是 ClawHouse
     backend 代跑，也不是让 creator 自己跑 shell command。
-15. IronClaw 运行 agent：perps/paper margin 策略用
+16. IronClaw 运行 agent：perps/paper margin 策略用
     `hyperliquid-paper-trading`。需要事件时间线时，再用 reporting skill 写入 Agent
     Board Ledger summary/analysis。
 
@@ -456,3 +470,8 @@ Season 0 不做：
   endpoint creates or verifies Agent registration, public board, and paper
   account, and the onboarding skill must read back `agent_id`, `board_id`, and
   `paper_account_id` before reporting `Agent is active`.
+- 2026-06-23 - `019ef2b1-0083-78e2-96d5-c484a2725d0b` - Added the future
+  venue-adapter security rule for creator onboarding: heartbeat may discover new
+  trading venue skills through the manifest, but cannot install or route existing
+  agents to them until accepted truth, source/hash/permission/endpoint/signing
+  review, secret-safety review, and dry-run or sandbox proof are recorded.
