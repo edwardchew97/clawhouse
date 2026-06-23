@@ -696,6 +696,78 @@ function paperNetWorthValues(rows) {
   return equities;
 }
 
+function firstFilledPaperOrder(orderRows) {
+  return orderRows
+    .filter((order) => String(order?.status || "").toLowerCase() === "filled")
+    .sort((left, right) => {
+      const leftTime = rowTimestamp(left);
+      const rightTime = rowTimestamp(right);
+      return (Number.isFinite(leftTime) ? leftTime : Number.MAX_SAFE_INTEGER) -
+        (Number.isFinite(rightTime) ? rightTime : Number.MAX_SAFE_INTEGER);
+    })[0] ?? null;
+}
+
+function paperChartPointRows(activity, riskRows, orderRows) {
+  const startingBalance = asNumber(activity?.account?.starting_balance_usd);
+  const accountCreatedAt = activity?.account?.created_at;
+  const accountTime = rowTimestamp(activity?.account);
+  if (startingBalance === null || !Number.isFinite(accountTime)) return riskRows;
+
+  const firstFilledOrder = firstFilledPaperOrder(orderRows);
+  const firstFilledTime = rowTimestamp(firstFilledOrder);
+  const totalFilledOrders = asNumber(activity?.summary?.filled_orders) ?? 0;
+  const baselineRows = [{ created_at: accountCreatedAt, equity_usd: startingBalance }];
+  let chartRiskRows = riskRows;
+
+  if (Number.isFinite(firstFilledTime)) {
+    if (firstFilledTime > accountTime + 1000) {
+      baselineRows.push({
+        created_at: new Date(firstFilledTime - 1000).toISOString(),
+        equity_usd: startingBalance,
+      });
+    }
+    chartRiskRows = riskRows.filter((row) => {
+      const timestamp = rowTimestamp(row);
+      return Number.isFinite(timestamp) && timestamp >= firstFilledTime;
+    });
+  } else if (totalFilledOrders === 0) {
+    const latestRiskTime = rowTimestamp(riskRows[riskRows.length - 1]);
+    const endTime = Number.isFinite(latestRiskTime) && latestRiskTime > accountTime
+      ? latestRiskTime
+      : Date.now();
+    baselineRows.push({
+      created_at: new Date(Math.max(accountTime + 1000, endTime)).toISOString(),
+      equity_usd: startingBalance,
+    });
+    chartRiskRows = [];
+  }
+
+  return uniquePaperChartRows([...baselineRows, ...chartRiskRows]);
+}
+
+function uniquePaperChartRows(rows) {
+  const seenTimes = new Set();
+  return rows
+    .filter((row) => asNumber(row?.equity_usd) !== null && Number.isFinite(rowTimestamp(row)))
+    .sort((left, right) => rowTimestamp(left) - rowTimestamp(right))
+    .filter((row) => {
+      const time = rowTimestamp(row);
+      if (seenTimes.has(time)) return false;
+      seenTimes.add(time);
+      return true;
+    });
+}
+
+function paperChartEvents(orderRows) {
+  const firstFilledOrder = firstFilledPaperOrder(orderRows);
+  const recentOrders = orderRows.slice(-12);
+  const byId = new Map();
+  [firstFilledOrder, ...recentOrders].filter(Boolean).forEach((order) => {
+    byId.set(order.id || `${order.created_at}-${order.client_order_id || order.side || "paper"}`, order);
+  });
+  return [...byId.values()].sort((left, right) => rowTimestamp(left) - rowTimestamp(right));
+}
+
 function chartPointTime(row, index, total, startTime, endTime) {
   const parsed = rowTimestamp(row);
   if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
@@ -760,11 +832,12 @@ function chartModel(agent) {
     };
   }
 
+  const allPaperOrders = activity ? sortedByObservedAt(paperOrders(agent)) : [];
   const paperRiskRows = activity
     ? filterRowsForChartRange(sortedByObservedAt(paperRiskSnapshots(agent))).filter((row) => asNumber(row.equity_usd) !== null)
     : [];
   const events = activity
-    ? filterRowsForChartRange(sortedByObservedAt(paperOrders(agent)))
+    ? filterRowsForChartRange(allPaperOrders)
     : filterRowsForChartRange(sortedByObservedAt(backendEvents(agent)));
   const prices = filterRowsForChartRange(sortedByObservedAt(backendPrices(agent))).filter((row) => asNumber(row.price_usd) !== null);
   const balanceChanges = filterRowsForChartRange(sortedByObservedAt(backendBalanceChanges(agent)));
@@ -773,14 +846,8 @@ function chartModel(agent) {
   let source = activity ? "paper risk timeline" : "backend events";
   let valueKind = "pct";
 
-  if (paperRiskRows.length > 0) {
-    const startingBalance = asNumber(activity.account?.starting_balance_usd);
-    const firstRiskTime = rowTimestamp(paperRiskRows[0]);
-    const accountTime = rowTimestamp(activity.account);
-    const baseline = startingBalance !== null && Number.isFinite(accountTime) && (!Number.isFinite(firstRiskTime) || accountTime < firstRiskTime)
-      ? { created_at: activity.account.created_at, equity_usd: startingBalance }
-      : null;
-    pointRows = baseline ? [baseline, ...paperRiskRows] : paperRiskRows;
+  if (activity) {
+    pointRows = paperChartPointRows(activity, paperRiskRows, allPaperOrders);
     values = paperNetWorthValues(pointRows);
     source = "paper net worth";
     valueKind = "usd";
@@ -807,7 +874,7 @@ function chartModel(agent) {
 
   const safeValues = values.length >= 2 ? values : [];
   const points = safeValues.length >= 2 ? chartPointsForValues(safeValues, pointRows) : [];
-  const chartEvents = events.slice(activity ? -12 : -40);
+  const chartEvents = activity ? paperChartEvents(allPaperOrders) : events.slice(-40);
   const normalizedEvents = chartEvents.map((event, index) => {
     const valueIndex = nearestChartPointIndex(points, event, index, chartEvents.length);
     return activity
