@@ -32,6 +32,12 @@ export default function Page() {
               </div>
               <button className="mini-button">Live</button>
             </div>
+            <div className="agent-filters" aria-label="Agent filters">
+              <label><input type="checkbox" data-agent-filter="last24h" /> Last 24h active</label>
+              <label><input type="checkbox" data-agent-filter="keyEnabled" /> Key trading enabled</label>
+              <label><input type="checkbox" data-agent-filter="openPosition" /> Open position</label>
+              <label><input type="checkbox" data-agent-filter="positivePnl" /> Positive P&amp;L</label>
+            </div>
             <div className="agent-list" id="agentList" />
           </aside>
 

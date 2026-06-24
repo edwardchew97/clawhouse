@@ -19,6 +19,7 @@ if (!agents.some((agent) => agentMatchesSelection(agent, selectedId))) selectedI
 let tradeSide = "buy";
 let activeChartRange = "24h";
 let activeEventId = null;
+const activeDiscoveryFilters = new Set();
 let chainState = {
   accountId: null,
   contractId: null,
@@ -121,6 +122,8 @@ function normalizeDiscoveryAgent(agent = {}, index = 0) {
     gate: agent.gate || "open",
     last: agent.status === "available" ? "live read" : "checking",
     boardId: agent.boardId || agent.board_id || id,
+    keyMarketStatus: agent.keyMarket?.status || "unknown",
+    keyMarketAgentId: keyStateAgent.agent_id || null,
     pnl: normalizePct(pnlLatest.total_pnl_pct),
     discoveryIndex: index,
   };
@@ -299,6 +302,11 @@ function holderCount(agent) {
   return asNumber(agent.holders);
 }
 
+function keyTradingEnabled(agent) {
+  if (chainApplies(agent)) return !keyMarketUnavailable(agent) && Boolean(chainState.state?.agent?.agent_id);
+  return agent.keyMarketStatus === "available" || Boolean(agent.keyMarketAgentId) || holderCount(agent) !== null;
+}
+
 function shortAccount(accountId) {
   return accountId.length > 18 ? `${accountId.slice(0, 9)}...${accountId.slice(-6)}` : accountId;
 }
@@ -442,6 +450,36 @@ function paperOpenPositions(agent) {
     : [];
 }
 
+function latestPaperActivityTimestamp(agent) {
+  const times = [];
+  const row = paperLeaderboardRow(agent);
+  [
+    row?.created_at,
+    paperSummary(agent).latest_fill_at,
+    paperSummary(agent).latest_order_at,
+    paperSummary(agent).latest_risk_at,
+    paperActivity(agent)?.latest_risk?.created_at,
+  ].forEach((value) => {
+    const parsed = Date.parse(value || "");
+    if (Number.isFinite(parsed)) times.push(parsed);
+  });
+  return times.length ? Math.max(...times) : null;
+}
+
+function hasRecentPaperActivity(agent, hours = 24) {
+  const timestamp = latestPaperActivityTimestamp(agent);
+  if (!Number.isFinite(timestamp)) return false;
+  return timestamp >= Date.now() - hours * 60 * 60 * 1000;
+}
+
+function agentMatchesDiscoveryFilters(agent) {
+  if (activeDiscoveryFilters.has("last24h") && !hasRecentPaperActivity(agent)) return false;
+  if (activeDiscoveryFilters.has("keyEnabled") && !keyTradingEnabled(agent)) return false;
+  if (activeDiscoveryFilters.has("openPosition") && paperOpenPositions(agent).length === 0) return false;
+  if (activeDiscoveryFilters.has("positivePnl") && !(backendPnl(agent) > 0)) return false;
+  return true;
+}
+
 function discoveryPnl(agent) {
   if (agent.pnl === null || agent.pnl === undefined || agent.pnl === "") return null;
   return asNumber(agent.pnl);
@@ -492,14 +530,16 @@ function hasPaperActivity(agent) {
 
 function visibleDiscoveryAgents() {
   const rows = paperLeaderboardRows();
-  if (!rows) return [...agents];
-  const active = agents.filter(hasPaperActivity);
-  return active.length ? active : [...agents];
+  const base = !rows ? [...agents] : agents.filter(hasPaperActivity);
+  const visible = base.length ? base : [...agents];
+  if (!activeDiscoveryFilters.size) return visible;
+  return visible.filter(agentMatchesDiscoveryFilters);
 }
 
 function ensureVisibleSelectedAgent() {
   if (requestedAgentId) return;
   const visible = visibleDiscoveryAgents();
+  if (!visible.length) return;
   if (visible.some((agent) => agentMatchesSelection(agent, selectedId))) return;
   selectedId = agentSelectionKey(visible[0] ?? agents[0]);
 }
@@ -1321,7 +1361,18 @@ function renderAgentList() {
 
   list.removeAttribute("aria-busy");
   ensureVisibleSelectedAgent();
-  list.innerHTML = sortedAgents().map((agent) => {
+  const sorted = sortedAgents();
+  if (!sorted.length) {
+    list.innerHTML = `
+      <div class="agent-list-empty">
+        <span>No agents match these filters</span>
+        <strong>Try fewer filters.</strong>
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = sorted.map((agent) => {
     const pnl = agentRowPnl(agent);
     const selectionKey = agentSelectionKey(agent);
     const selected = selectionKey === selectedId;
@@ -1362,6 +1413,24 @@ function renderAgentList() {
     });
   });
 }
+
+function syncDiscoveryFilters() {
+  document.querySelectorAll("[data-agent-filter]").forEach((input) => {
+    input.checked = activeDiscoveryFilters.has(input.dataset.agentFilter);
+  });
+}
+
+document.querySelectorAll("[data-agent-filter]").forEach((input) => {
+  input.addEventListener("change", () => {
+    if (input.checked) {
+      activeDiscoveryFilters.add(input.dataset.agentFilter);
+    } else {
+      activeDiscoveryFilters.delete(input.dataset.agentFilter);
+    }
+    activeEventId = null;
+    render();
+  });
+});
 
 function renderHero(agent) {
   const pnl = backendPnl(agent);
@@ -2170,6 +2239,7 @@ function render() {
   const agent = selectedAgent();
   renderGateState(agent);
   renderTicker();
+  syncDiscoveryFilters();
   renderAgentList();
   renderHero(agent);
   renderRoom(agent);
