@@ -17,9 +17,9 @@ document.body.classList.add("motion-prep");
 let selectedId = requestedAgentId || agentSelectionKey(agents[0]);
 if (!agents.some((agent) => agentMatchesSelection(agent, selectedId))) selectedId = agentSelectionKey(agents[0]);
 let tradeSide = "buy";
-let agentSort = "pnl";
 let activeChartRange = "24h";
 let activeEventId = null;
+const activeDiscoveryFilters = new Set();
 let chainState = {
   accountId: null,
   contractId: null,
@@ -122,6 +122,8 @@ function normalizeDiscoveryAgent(agent = {}, index = 0) {
     gate: agent.gate || "open",
     last: agent.status === "available" ? "live read" : "checking",
     boardId: agent.boardId || agent.board_id || id,
+    keyMarketStatus: agent.keyMarket?.status || "unknown",
+    keyMarketAgentId: keyStateAgent.agent_id || null,
     pnl: normalizePct(pnlLatest.total_pnl_pct),
     discoveryIndex: index,
   };
@@ -300,6 +302,13 @@ function holderCount(agent) {
   return asNumber(agent.holders);
 }
 
+function keyTradingEnabled(agent) {
+  if (chainApplies(agent)) {
+    return !keyMarketUnavailable(agent) && chainState.state?.agent?.agent_id === agent.id;
+  }
+  return agent.keyMarketStatus === "available" && agent.keyMarketAgentId === agent.id;
+}
+
 function shortAccount(accountId) {
   return accountId.length > 18 ? `${accountId.slice(0, 9)}...${accountId.slice(-6)}` : accountId;
 }
@@ -443,6 +452,46 @@ function paperOpenPositions(agent) {
     : [];
 }
 
+function latestPaperActivityTimestamp(agent) {
+  const times = [];
+  const row = paperLeaderboardRow(agent);
+  [
+    row?.created_at,
+    paperSummary(agent).latest_fill_at,
+    paperSummary(agent).latest_order_at,
+    paperSummary(agent).latest_risk_at,
+    paperActivity(agent)?.latest_risk?.created_at,
+  ].forEach((value) => {
+    const parsed = Date.parse(value || "");
+    if (Number.isFinite(parsed)) times.push(parsed);
+  });
+  return times.length ? Math.max(...times) : null;
+}
+
+function hasRecentPaperActivity(agent, hours = 24) {
+  const timestamp = latestPaperActivityTimestamp(agent);
+  if (!Number.isFinite(timestamp)) return false;
+  return timestamp >= Date.now() - hours * 60 * 60 * 1000;
+}
+
+function agentMatchesDiscoveryFilters(agent) {
+  if (activeDiscoveryFilters.has("last24h") && !hasRecentPaperActivity(agent)) return false;
+  if (activeDiscoveryFilters.has("keyEnabled") && !keyTradingEnabled(agent)) return false;
+  if (activeDiscoveryFilters.has("openPosition") && paperOpenPositions(agent).length === 0) return false;
+  if (activeDiscoveryFilters.has("positivePnl") && !(backendPnl(agent) > 0)) return false;
+  return true;
+}
+
+function activeDiscoveryFilterLabels() {
+  const labels = {
+    last24h: "Last 24h active",
+    keyEnabled: "Key trading enabled",
+    openPosition: "Open position",
+    positivePnl: "Positive P&L",
+  };
+  return [...activeDiscoveryFilters].map((filter) => labels[filter]).filter(Boolean);
+}
+
 function discoveryPnl(agent) {
   if (agent.pnl === null || agent.pnl === undefined || agent.pnl === "") return null;
   return asNumber(agent.pnl);
@@ -472,8 +521,8 @@ function backendPnlSource(agent) {
 function sortedAgents() {
   const sorted = visibleDiscoveryAgents();
   sorted.sort((a, b) => {
-    const aValue = agentSort === "events" ? agentEventCount(a) : agentRowPnl(a);
-    const bValue = agentSort === "events" ? agentEventCount(b) : agentRowPnl(b);
+    const aValue = agentRowPnl(a);
+    const bValue = agentRowPnl(b);
     if (aValue === null && bValue !== null) return 1;
     if (aValue !== null && bValue === null) return -1;
     if (aValue !== null && bValue !== null && aValue !== bValue) return bValue - aValue;
@@ -493,20 +542,43 @@ function hasPaperActivity(agent) {
 
 function visibleDiscoveryAgents() {
   const rows = paperLeaderboardRows();
-  if (!rows) return [...agents];
-  const active = agents.filter(hasPaperActivity);
-  return active.length ? active : [...agents];
+  const base = !rows ? [...agents] : agents.filter(hasPaperActivity);
+  const visible = base.length ? base : [...agents];
+  if (!activeDiscoveryFilters.size) return visible;
+  return visible.filter(agentMatchesDiscoveryFilters);
 }
 
 function ensureVisibleSelectedAgent() {
   if (requestedAgentId) return;
   const visible = visibleDiscoveryAgents();
+  if (!visible.length) return;
   if (visible.some((agent) => agentMatchesSelection(agent, selectedId))) return;
   selectedId = agentSelectionKey(visible[0] ?? agents[0]);
 }
 
 function agentEventCount(agent) {
   return chartModel(agent).events.length;
+}
+
+function agentRowReadout(agent) {
+  const paper = paperLeaderboardRow(agent);
+  if (paper) {
+    const freshness = String(paper.stale_data_status || "").replace(/_/g, " ");
+    const updated = formatBackendTime(paper.created_at);
+    const liquidations = asNumber(paper.liquidation_count) ?? 0;
+    return {
+      primary: `Equity ${formatUsd(paper.equity_usd)}`,
+      secondary: `${freshness || "paper"} · ${updated}${liquidations > 0 ? ` · ${liquidations} liq` : ""}`,
+      tone: freshness.includes("stale") ? "warn" : "fresh",
+    };
+  }
+
+  const holders = holderCount(agent);
+  return {
+    primary: keyPriceLabel(agent),
+    secondary: holders === null ? "key market checking" : `${holders} key holders`,
+    tone: "idle",
+  };
 }
 
 function formatBackendTime(value) {
@@ -1301,13 +1373,31 @@ function renderAgentList() {
 
   list.removeAttribute("aria-busy");
   ensureVisibleSelectedAgent();
-  list.innerHTML = sortedAgents().map((agent) => {
+  const sorted = sortedAgents();
+  if (!sorted.length) {
+    const filters = activeDiscoveryFilterLabels();
+    list.innerHTML = `
+      <div class="agent-list-empty">
+        <span class="agent-list-empty-kicker">${filters.length ? `${filters.length} filters active` : "No matches"}</span>
+        <strong>No agents found</strong>
+        <p>${filters.length ? `No public agent matches ${escapeHtml(filters.join(" + "))}.` : "No public agents are available right now."}</p>
+        <button class="agent-clear-filters" type="button">Clear filters</button>
+      </div>
+    `;
+    list.querySelector(".agent-clear-filters")?.addEventListener("click", () => {
+      activeDiscoveryFilters.clear();
+      render();
+    });
+    return;
+  }
+
+  list.innerHTML = sorted.map((agent) => {
     const pnl = agentRowPnl(agent);
     const selectionKey = agentSelectionKey(agent);
     const selected = selectionKey === selectedId;
     const title = agentTitle(agent);
     const pnlTone = pnl === null ? "empty" : pnl < 0 ? "down" : "up";
-    const holders = holderCount(agent);
+    const readout = agentRowReadout(agent);
     const rowTag = isPaperAgent(agent) ? "paper" : "key market";
     return `
     <button class="agent-row" data-agent="${escapeHtml(selectionKey)}" data-agent-id="${escapeHtml(agent.id)}" data-selected="${selected ? "true" : "false"}" aria-label="Open ${escapeHtml(title)}">
@@ -1319,8 +1409,8 @@ function renderAgentList() {
         </div>
         <div class="agent-meta">${escapeHtml(agent.strategy)}</div>
         <div class="agent-stats">
-          <span>${keyPriceLabel(agent)}</span>
-          <span>${holders === null ? "--" : holders} keys</span>
+          <span class="agent-row-metric">${escapeHtml(readout.primary)}</span>
+          <span class="agent-row-status ${escapeHtml(readout.tone)}">${escapeHtml(readout.secondary)}</span>
           <b class="agent-change ${pnlTone}">${pnlLabel(pnl)}</b>
         </div>
       </div>
@@ -1342,6 +1432,24 @@ function renderAgentList() {
     });
   });
 }
+
+function syncDiscoveryFilters() {
+  document.querySelectorAll("[data-agent-filter]").forEach((input) => {
+    input.checked = activeDiscoveryFilters.has(input.dataset.agentFilter);
+  });
+}
+
+document.querySelectorAll("[data-agent-filter]").forEach((input) => {
+  input.addEventListener("change", () => {
+    if (input.checked) {
+      activeDiscoveryFilters.add(input.dataset.agentFilter);
+    } else {
+      activeDiscoveryFilters.delete(input.dataset.agentFilter);
+    }
+    activeEventId = null;
+    render();
+  });
+});
 
 function renderHero(agent) {
   const pnl = backendPnl(agent);
@@ -1366,9 +1474,6 @@ function renderHero(agent) {
   byId("statGate").textContent = isUnlocked(agent) ? "Unlocked" : holderBalance(agent) > 0 ? "Sign proof" : "1 key";
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
-  byId("miniTop").textContent = title;
-  byId("miniMove").textContent = pnl === null ? "--" : signedPct(pnl);
-  byId("leaderDataSource").textContent = pnlSource;
   byId("chartSub").textContent = activity
     ? `${chart.message} / ${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled orders / ${backendNetwork(agent)}`
     : `${chart.message} / ${backendNetwork(agent)} / ${pnlSource} / key market ${chainApplies(agent) ? "live" : "checking"}`;
@@ -2153,6 +2258,7 @@ function render() {
   const agent = selectedAgent();
   renderGateState(agent);
   renderTicker();
+  syncDiscoveryFilters();
   renderAgentList();
   renderHero(agent);
   renderRoom(agent);
@@ -2201,16 +2307,6 @@ function setChartRange(range) {
   renderRoom(selectedAgent());
   syncContentColumns();
   dispatchUiEvent("clawhouse:chart-range-change");
-}
-
-const agentSortControl = byId("agentSort");
-if (agentSortControl) {
-  agentSortControl.value = agentSort;
-  agentSortControl.addEventListener("change", () => {
-    agentSort = agentSortControl.value === "events" ? "events" : "pnl";
-    renderAgentList();
-    dispatchUiEvent("clawhouse:agent-sort-change");
-  });
 }
 
 document.querySelectorAll("[data-amount]").forEach((button) => {
