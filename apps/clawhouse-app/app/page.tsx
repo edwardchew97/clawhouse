@@ -126,6 +126,7 @@ export default function Page() {
                   <span className="chart-skeleton-tick tick-b" />
                   <span className="chart-skeleton-tick tick-c" />
                 </div>
+                <div className="chart-empty-kicker" id="chartEmptyKicker">Paper trading inactive</div>
                 <strong id="chartEmptyTitle">Connect Wallet</strong>
                 <span id="chartEmptyDetail">Connect Wallet to load holder-gated chart data.</span>
               </div>

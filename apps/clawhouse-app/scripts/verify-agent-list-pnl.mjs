@@ -429,14 +429,14 @@ function maxBuyFixture(agentId, accountId, amount) {
   };
 }
 
-function selectedBackend(boardId, totalPnlPct, paperActivity = null) {
+function selectedBackend(boardId, totalPnlPct, paperActivity = null, leaderboard = null) {
   return {
     ok: true,
     boardId,
     board: { id: boardId },
     pnl: { latest: { total_pnl_pct: totalPnlPct } },
     paperLeaderboard: {
-      leaderboard: [
+      leaderboard: leaderboard ?? [
         {
           paper_account_id: "codex_board",
           agent_id: "codex_main_20260620",
@@ -648,40 +648,30 @@ context.window.ClawHouseDemo.setChainState({ backend: null });
 assert(element("chartEmptyOverlay").classList.contains("is-loading"), "Chart backend loading state should render the skeleton overlay.");
 assert(element("chartPanel").classList.contains("is-loading"), "Chart panel should expose a loading class for skeleton styling.");
 
-context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("terminal_chad6", 0.99) });
+const emptyRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "empty_agent");
+emptyRow.click();
+context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("empty_board", 0.56, null, []) });
+const emptyPaperChart = context.window.ClawHouseDemo.getChartModel();
+assert(emptyPaperChart.title === "Agent has not started trading yet", "Paper agents without public paper activity should say the agent has not started trading.");
+assert(emptyPaperChart.message.includes("No paper trades"), "Missing paper activity should explain that no paper trades have been recorded.");
+assert(element("chartEmptyKicker").textContent === "Paper trading inactive", "Missing paper activity should use the inactive chart kicker.");
 let rendered = rows();
+assert(rendered.length === 5, "Agent Discovery should fall back to all rows when no paper leaderboard is available.");
+
+context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("terminal_chad6", 0.99) });
+rendered = rows();
 assert(rendered[0]?.id === "codex_main_20260620", "P&L sort should rank the highest row-owned P&L first.");
 assert(rendered[0]?.title === "Codex Main", "Codex row should render a readable title instead of the raw id.");
 assert(rendered[0]?.pnl === "+25.00%", "Codex row should render its matching Paper leaderboard P&L.");
-assert(rendered[1]?.id === "terminal_chad6", "Terminal row should remain second after the Paper P&L row.");
-assert(rendered[1]?.title === "Terminal Chad6", "Terminal row should render a readable title instead of the raw id.");
-assert(rendered[1]?.pnl === "--", "Backend detail P&L must not be shown as list-row P&L.");
-assert(rendered[2]?.id === "empty_agent" && rendered[2]?.pnl === "--", "Rows without actual P&L should render --.");
+assert(rendered.length === 1, "Agent discovery should hide rows without public paper activity.");
 assert(
   element("heroBannerImage").src === "/agent-banners/default-agent-banner.png",
   "Agents without an uploaded banner should render the default banner.",
 );
-assert(rendered.filter((row) => row.id === "ledger-lane-agent-edge-20260620-0936-a13c").every((row) => row.pnl === "--"), "Ambiguous Paper P&L must not be copied across duplicate agent ids.");
-assert(rendered[1]?.selected === "true", "The selected row should use the data-selected marker.");
+assert(!element("agentList").innerHTML.includes("empty_agent"), "Inactive paper agents should be hidden from Agent Discovery.");
+assert(!element("agentList").innerHTML.includes("terminal_chad6"), "Rows without public paper activity should not remain visible after backend readback.");
+assert(rendered[0]?.selected === "true", "The selected row should move to the first visible active paper agent.");
 assert(!element("agentList").innerHTML.includes("agent-row active"), "Agent rows should not use the old active class.");
-
-const emptyRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "empty_agent");
-emptyRow.click();
-context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("empty_board", 0.56) });
-const emptyPaperChart = context.window.ClawHouseDemo.getChartModel();
-assert(emptyPaperChart.title === "No public paper activity", "Paper agents without public paper activity should not ask the user to connect a wallet.");
-assert(emptyPaperChart.message.includes("No public paper account"), "Missing paper activity should explain the missing public paper account.");
-rendered = rows();
-assert(rendered[0]?.id === "codex_main_20260620" && rendered[0]?.pnl === "+25.00%", "Selecting another row must not change P&L sorting.");
-assert(rendered[1]?.id === "terminal_chad6" && rendered[1]?.pnl === "--", "Unselected backend detail P&L should stay out of list rows.");
-assert(rendered[2]?.id === "empty_agent" && rendered[2]?.pnl === "--", "Selected detail P&L must not be borrowed by an empty list row.");
-assert(rendered[2]?.selected === "true", "Clicking a row should move the data-selected marker.");
-
-const ledgerFlowRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agent === "ledger-lane-flow");
-ledgerFlowRow.click();
-rendered = rows();
-const selectedRows = rendered.filter((row) => row.selected === "true");
-assert(selectedRows.length === 1 && selectedRows[0]?.key === "ledger-lane-flow", "Rows with the same agent id should not all become selected.");
 
 const codexRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "codex_main_20260620");
 codexRow.click();

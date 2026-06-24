@@ -971,10 +971,13 @@
       bottom: 8px;
       z-index: 14;
       display: grid;
-      place-items: center;
+      align-content: center;
+      justify-items: center;
+      gap: 8px;
       pointer-events: none;
       overflow: hidden;
       border-radius: 8px;
+      padding: 18px 16px;
     }
 
     .chart-empty-overlay[hidden] {
@@ -986,7 +989,14 @@
       position: absolute;
       inset: 0;
       border-radius: inherit;
-      background: rgba(2, 3, 4, 0.28);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255, 107, 71, 0.16), rgba(255, 107, 71, 0) 44%),
+        rgba(7, 8, 9, 0.58);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 18px 46px rgba(0, 0, 0, 0.38);
+      backdrop-filter: blur(16px);
     }
 
     .chart-empty-overlay.is-loading {
@@ -996,15 +1006,19 @@
     }
 
     .chart-empty-overlay.is-loading::before {
+      border: 0;
       background:
         linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255, 255, 255, 0.032) 1px, transparent 1px),
         rgba(3, 4, 5, 0.64);
       background-size: 100% 22%, 8.33% 100%, auto;
+      box-shadow: none;
+      backdrop-filter: none;
     }
 
     .chart-empty-overlay.is-loading > strong,
-    .chart-empty-overlay.is-loading > span {
+    .chart-empty-overlay.is-loading > span,
+    .chart-empty-overlay.is-loading .chart-empty-kicker {
       display: none;
     }
 
@@ -1141,29 +1155,46 @@
       }
     }
 
+    .chart-empty-kicker,
     .chart-empty-overlay > strong,
     .chart-empty-overlay > span {
       position: relative;
       z-index: 1;
-      max-width: min(360px, 82%);
       text-align: center;
+    }
+
+    .chart-empty-kicker {
+      width: max-content;
+      max-width: 100%;
+      padding: 5px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 107, 71, 0.22);
+      background: rgba(255, 107, 71, 0.09);
+      color: #ffc5b8;
+      font-size: 10px;
+      font-weight: 760;
+      line-height: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
     }
 
     .chart-empty-overlay > strong {
       display: block;
+      max-width: 260px;
       color: #fff;
-      font-size: 13px;
-      font-weight: 800;
+      font-size: 15px;
+      font-weight: 780;
       line-height: 18px;
+      text-wrap: pretty;
     }
 
     .chart-empty-overlay > span {
       display: block;
-      margin-top: 6px;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 650;
-      line-height: 16px;
+      max-width: 310px;
+      color: #a9adb2;
+      font-size: 11px;
+      line-height: 15px;
+      text-wrap: pretty;
     }
 
     .chart-events {
