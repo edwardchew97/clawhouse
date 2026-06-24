@@ -1173,11 +1173,19 @@ function marketIsStale(snapshot: PaperMarketSnapshotRow, nowMs: number) {
 }
 
 function marketAllowed(account: PaperAccountRow, marketType: MarketType, coin: string) {
-  if (!account.allowed_markets_json) return true;
+  if (!account.allowed_markets_json) return false;
   const markets = parseJson(account.allowed_markets_json);
+  if (isHyperliquidSupportedMarketScope(markets)) return true;
   if (!Array.isArray(markets)) return false;
   const allowed = markets.map(String).map((item) => item.toUpperCase());
   return allowed.includes(coin) || allowed.includes(`${marketType}:${coin}`.toUpperCase());
+}
+
+function isHyperliquidSupportedMarketScope(value: unknown) {
+  return !!value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && (value as { scope?: unknown }).scope === "hyperliquid_supported";
 }
 
 async function requirePaperAccount(db: LedgerDb, id: string) {

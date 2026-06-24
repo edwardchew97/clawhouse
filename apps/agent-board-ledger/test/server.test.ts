@@ -509,9 +509,14 @@ describe("Agent Board Ledger local backend", () => {
       agent_public_key: agentWallet.publicKey,
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
-      starting_balance_usd: 10000,
-      allowed_markets: ["BTC", "ETH"],
-      metadata: { source: "creator-onboarding-test" },
+      starting_balance_usd: 1000000,
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+        untrusted_extra: "must-not-persist",
+      },
     }, { admin: false, signed: true, agentSigned: true });
     const body = await jsonOf<{
       backend_registered: boolean;
@@ -520,9 +525,13 @@ describe("Agent Board Ledger local backend", () => {
       paper_account_id: string;
     }>(response);
     const discoverable = await jsonOf<{ count: number }>(await app.fetch(new Request("http://ledger.test/boards")));
-    const paper = await jsonOf<{ account: { id: string; starting_balance_usd: number } }>(
+    const paper = await jsonOf<{ account: { id: string; starting_balance_usd: number; allowed_markets: unknown; metadata: Record<string, unknown> } }>(
       await app.fetch(new Request("http://ledger.test/paper/accounts/paper-board-1")),
     );
+    const storedBoard = sqliteDb.raw.query<{ metadata_json: string | null }, []>(
+      "SELECT metadata_json FROM boards WHERE id = 'board-1'",
+    ).get();
+    const boardMetadata = JSON.parse(storedBoard?.metadata_json ?? "{}");
 
     expect(response.status).toBe(201);
     expect(body.backend_registered).toBe(true);
@@ -532,6 +541,14 @@ describe("Agent Board Ledger local backend", () => {
     expect(discoverable.count).toBe(1);
     expect(paper.account.id).toBe("paper-board-1");
     expect(paper.account.starting_balance_usd).toBe(10000);
+    expect(paper.account.allowed_markets).toEqual({ scope: "hyperliquid_supported" });
+    expect(paper.account.metadata).toEqual({
+      agent_name: "IronClaw",
+      agent_description: "Public paper agent.",
+      avatar_reference: "avatar-ref",
+      trading_strategy: "Trade Hyperliquid paper markets.",
+    });
+    expect(boardMetadata).toEqual(paper.account.metadata);
   });
 
   test("creator onboarding is idempotent for matching backend records", async () => {
@@ -542,8 +559,12 @@ describe("Agent Board Ledger local backend", () => {
       agent_public_key: agentWallet.publicKey,
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
-      starting_balance_usd: 10000,
-      allowed_markets: ["BTC", "ETH"],
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+      },
     };
     const first = await postJson("/creator-onboarding/register", body, { admin: false, signed: true, agentSigned: true });
     const second = await postJson("/creator-onboarding/register", body, { admin: false, signed: true, agentSigned: true });
@@ -573,8 +594,12 @@ describe("Agent Board Ledger local backend", () => {
       agent_public_key: agentWallet.publicKey,
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
-      starting_balance_usd: 10000,
-      allowed_markets: ["BTC", "ETH"],
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+      },
     }, { admin: false, signed: true, agentSigned: true });
 
     expect(existingBoard.status).toBe(201);
@@ -2184,6 +2209,40 @@ describe("Agent Board Ledger local backend", () => {
     expect(body.order.reference_deviation_bps).toBe(0);
     expect(sqliteDb.raw.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM paper_market_snapshots").get()?.count).toBe(1);
     expect(sqliteDb.raw.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM paper_positions").get()?.count).toBe(1);
+  });
+
+  test("allows any Hyperliquid market when a paper account has explicit Hyperliquid-supported scope", async () => {
+    await registerPaperAccount({ allowed_markets: { scope: "hyperliquid_supported" } });
+    currentRpcFetch = mockHyperliquidFetch({
+      meta: [{ name: "SOL", maxLeverage: 20 }],
+      contexts: [{ markPx: "150", oraclePx: "150", funding: "0.00001" }],
+      books: {
+        SOL: {
+          bids: [{ px: "149", sz: "100", n: 2 }],
+          asks: [{ px: "150", sz: "100", n: 4 }],
+        },
+      },
+    });
+
+    const order = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "unrestricted-sol",
+      coin: "SOL",
+      side: "buy",
+      tif: "Ioc",
+      size: 1,
+      margin_mode: "cross",
+      leverage: 5,
+      max_slippage_bps: 200,
+      reference_px: 150,
+      max_reference_deviation_bps: 10,
+      reason: "Open unrestricted SOL paper position.",
+    });
+    const body = await jsonOf<{ order: { status: string; reject_reason: string | null } }>(order);
+
+    expect(order.status).toBe(201);
+    expect(body.order.status).toBe("filled");
+    expect(body.order.reject_reason).toBeNull();
   });
 
   test("fills a signed Hyperliquid spot paper order and rejects selling more than held", async () => {
