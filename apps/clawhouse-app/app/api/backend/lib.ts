@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 const defaultBackendBaseUrl = "http://clawhouse.v2202606372783474511.luckysrv.de";
-const defaultBoardId = "terminal_chad6";
 
 type BackendFetchOptions = {
   headers?: HeadersInit;
@@ -20,7 +19,7 @@ export function getBackendConfig() {
 
   return {
     baseUrl,
-    defaultBoardId: firstEnv(["CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID"]) ?? defaultBoardId,
+    defaultBoardId: firstEnv(["CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID"]) ?? null,
   };
 }
 

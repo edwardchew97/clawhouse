@@ -38,6 +38,8 @@ const YOCTO_NEAR_PER_NEAR = 1e24;
 const NEAR_RPC_URL_ENV = "AGENT_BOARD_LEDGER_NEAR_RPC_URL";
 const DEFAULT_READ_GRANT_TTL_MS = 10 * 60 * 1000;
 const MAX_READ_GRANT_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_CREATOR_PAPER_STARTING_BALANCE_USD = 10000;
+const HYPERLIQUID_SUPPORTED_MARKET_SCOPE = { scope: "hyperliquid_supported" } as const;
 
 export function createApp(options: AppOptions) {
   const db = options.db;
@@ -318,6 +320,8 @@ async function upsertAgentRegistration(
 
 async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
   const data = asObject(body.json);
+  const metadata = asOptionalObject(data.metadata);
+  const publicProfileMetadata = creatorOnboardingPublicMetadata(data, metadata);
   const agentId = requiredString(data.agentId ?? data.agent_id, "agent_id");
   const agentPublicKey = requiredString(data.agentPublicKey ?? data.agent_public_key, "agent_public_key");
   const boardId = requiredString(data.boardId ?? data.board_id, "board_id");
@@ -337,7 +341,7 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
     owner_wallet_address: cleanString(data.ownerWalletAddress ?? data.owner_wallet_address),
     funding_source: cleanString(data.fundingSource ?? data.funding_source),
     funding_tx_hash: cleanString(data.fundingTxHash ?? data.funding_tx_hash),
-    metadata_json: stringifyOptional(data.boardMetadata ?? data.board_metadata ?? data.metadata),
+    metadata_json: stringifyOptional(publicProfileMetadata),
     created_at: createdAt,
   };
   const paperBody = {
@@ -345,9 +349,10 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
     board_id: boardId,
     agent_id: agentId,
     agent_public_key: agentPublicKey,
-    starting_balance_usd: requiredPositiveNumberField(data.startingBalanceUsd ?? data.starting_balance_usd, "starting_balance_usd"),
-    allowed_markets: data.allowedMarkets ?? data.allowed_markets ?? ["BTC", "ETH"],
-    metadata: data.paperMetadata ?? data.paper_metadata ?? data.metadata,
+    starting_balance_usd: DEFAULT_CREATOR_PAPER_STARTING_BALANCE_USD,
+    market_scope: HYPERLIQUID_SUPPORTED_MARKET_SCOPE.scope,
+    allowed_markets: HYPERLIQUID_SUPPORTED_MARKET_SCOPE,
+    metadata: publicProfileMetadata,
   };
   let registeredAgent: ReturnType<typeof presentAgentRegistration> | null = null;
   let registeredBoard: Board | null = null;
@@ -496,8 +501,7 @@ async function ensurePaperAccountRegistration(
     assertSameRegisteredField(existing.board_id, cleanString(paperBody.board_id), "paper account board_id");
     assertSameRegisteredField(existing.agent_id, cleanString(paperBody.agent_id), "paper account agent_id");
     assertSameRegisteredField(existing.agent_public_key, cleanString(paperBody.agent_public_key), "paper account agent_public_key");
-    const startingBalance = requiredPositiveNumberField(paperBody.starting_balance_usd, "starting_balance_usd");
-    if (Number(existing.starting_balance_usd) !== startingBalance) {
+    if (Number(existing.starting_balance_usd) !== DEFAULT_CREATOR_PAPER_STARTING_BALANCE_USD) {
       throw new RequestError("Existing paper account starting_balance_usd does not match registration", 409);
     }
     assertSameRegisteredField(existing.status, "active", "paper account status");
@@ -509,6 +513,15 @@ async function ensurePaperAccountRegistration(
 
 function assertSameRegisteredField(actual: string | null, expected: string | null, name: string) {
   if (actual !== expected) throw new RequestError(`Existing ${name} does not match registration`, 409);
+}
+
+function creatorOnboardingPublicMetadata(data: JsonObject, metadata: JsonObject) {
+  return {
+    agent_name: requiredString(data.agentName ?? data.agent_name ?? metadata.agent_name, "agent_name"),
+    agent_description: requiredString(data.agentDescription ?? data.agent_description ?? metadata.agent_description, "agent_description"),
+    avatar_reference: requiredString(data.avatarReference ?? data.avatar_reference ?? metadata.avatar_reference, "avatar_reference"),
+    trading_strategy: requiredString(data.tradingStrategy ?? data.trading_strategy ?? metadata.trading_strategy, "trading_strategy"),
+  };
 }
 
 async function assertBoardRegistrationSignature(

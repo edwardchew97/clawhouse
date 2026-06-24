@@ -28,11 +28,9 @@ Set these in the VPS runtime environment when the app needs them:
 - `CLAWHOUSE_KEY_NEAR_NETWORK_ID`
 - `CLAWHOUSE_KEY_NEAR_RPC_URL`
 - `CLAWHOUSE_KEY_MARKET_CONTRACT_ID`
-- `CLAWHOUSE_DEFAULT_AGENT_ID`
 - `CLAWHOUSE_KEY_MARKET_GAS`
 - `CLAWHOUSE_KEY_STORAGE_DEPOSIT_NEAR`
 - `CLAWHOUSE_AGENT_API_BASE_URL`
-- `CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID`
 - `CLAWHOUSE_LEDGER_ADMIN_TOKEN` or `AGENT_BOARD_LEDGER_ADMIN_TOKEN` as a
   server-only secret for wallet-proof read-token exchange
 - `CLAWHOUSE_READ_ACCESS_SIGNING_RECIPIENT` if the NEP-413 recipient should be
@@ -48,10 +46,11 @@ Optional app runtime variables:
 Use `apps/clawhouse-app/.env.staging.example` for staging values. Production
 values are not active until JY reopens a production runtime.
 
-`CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID` must point at a board that exists in the
-selected backend database. If the board does not exist, the app should still
-build and boot, but `/api/backend/board` will return the backend 404 and the UI
-will show backend data as unavailable.
+`CLAWHOUSE_DEFAULT_AGENT_ID` and `CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID` are
+optional. Fresh environments should leave them unset; the app will show an empty
+agent state until onboarding registers a public board and paper account. If they
+are set, `CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID` must point at a board that exists
+in the selected backend database.
 
 Rotating `CLAWHOUSE_LEDGER_ADMIN_TOKEN` / `AGENT_BOARD_LEDGER_ADMIN_TOKEN`
 invalidates active wallet session and holder read cookies because the App uses

@@ -51,8 +51,11 @@ function getCuratedAgents(): CuratedAgentConfig[] {
   const explicitAgents = parseCuratedAgentIds(process.env.CLAWHOUSE_CURATED_AGENT_IDS);
   if (explicitAgents.length) return explicitAgents;
 
-  const defaultAgentId = process.env.CLAWHOUSE_DEFAULT_AGENT_ID || "terminal_chad6";
-  return [agentConfig(defaultAgentId, getBackendConfig().defaultBoardId, "CLAWHOUSE_DEFAULT_AGENT_ID")];
+  const defaultAgentId = process.env.CLAWHOUSE_DEFAULT_AGENT_ID?.trim();
+  const defaultBoardId = getBackendConfig().defaultBoardId;
+  return defaultAgentId && defaultBoardId
+    ? [agentConfig(defaultAgentId, defaultBoardId, "CLAWHOUSE_DEFAULT_AGENT_ID")]
+    : [];
 }
 
 async function readDiscoveryAgent(agent: CuratedAgentConfig): Promise<DiscoveryAgent> {

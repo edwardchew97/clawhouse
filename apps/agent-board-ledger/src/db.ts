@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { Pool, type PoolClient } from "@neondatabase/serverless";
+import pg from "pg";
 import { neonSchemaStatements } from "./neon-schema.js";
 import type {
   AttachmentRow,
@@ -18,7 +19,7 @@ export type RunResult = {
 };
 
 export type LedgerDb = {
-  provider: "sqlite" | "neon-postgres";
+  provider: "sqlite" | "neon-postgres" | "postgres";
   get<T>(sql: string, params?: unknown[]): Promise<T | undefined>;
   all<T>(sql: string, params?: unknown[]): Promise<T[]>;
   run(sql: string, params?: unknown[]): Promise<RunResult>;
@@ -65,6 +66,10 @@ export async function openMigratedRuntimeLedgerDb(env = process.env, openNeonDb:
 }
 
 export function openNeonLedgerDb(databaseUrl: string): LedgerDb {
+  if (isLocalPostgresUrl(databaseUrl)) {
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    return new PostgresLedgerDb(pool, pool);
+  }
   return new NeonLedgerDb(new Pool({ connectionString: databaseUrl }));
 }
 
@@ -122,6 +127,9 @@ function loadSqliteDatabase(): BunSqliteDatabaseConstructor {
 }
 
 type NeonQueryRunner = Pick<Pool, "query"> | Pick<PoolClient, "query">;
+type PostgresPool = pg.Pool;
+type PostgresClient = pg.PoolClient;
+type PostgresQueryRunner = Pick<PostgresPool, "query"> | Pick<PostgresClient, "query">;
 
 class NeonLedgerDb implements LedgerDb {
   readonly provider = "neon-postgres" as const;
@@ -169,6 +177,52 @@ class NeonLedgerDb implements LedgerDb {
   }
 }
 
+class PostgresLedgerDb implements LedgerDb {
+  readonly provider = "postgres" as const;
+
+  constructor(
+    private readonly runner: PostgresQueryRunner,
+    private readonly pool?: PostgresPool,
+  ) {}
+
+  async get<T>(sql: string, params: unknown[] = []): Promise<T | undefined> {
+    const result = await this.runner.query(toPostgresPlaceholders(sql), params);
+    return result.rows[0] as T | undefined;
+  }
+
+  async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+    const result = await this.runner.query(toPostgresPlaceholders(sql), params);
+    return result.rows as T[];
+  }
+
+  async run(sql: string, params: unknown[] = []): Promise<RunResult> {
+    const result = await this.runner.query(toPostgresPlaceholders(sql), params);
+    return { changes: result.rowCount ?? undefined };
+  }
+
+  async transaction<T>(callback: (tx: LedgerDb) => Promise<T>): Promise<T> {
+    if (!this.pool) return await callback(this);
+
+    const client = await this.pool.connect();
+    const tx = new PostgresLedgerDb(client);
+    try {
+      await client.query("BEGIN");
+      const result = await callback(tx);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async close() {
+    if (this.pool) await this.pool.end();
+  }
+}
+
 function toPostgresPlaceholders(sql: string) {
   let index = 0;
   return sql.replaceAll("?", () => `$${++index}`);
@@ -176,6 +230,15 @@ function toPostgresPlaceholders(sql: string) {
 
 function cleanEnv(value: string | undefined) {
   return value && value.trim() !== "" ? value.trim() : undefined;
+}
+
+function isLocalPostgresUrl(databaseUrl: string) {
+  try {
+    const url = new URL(databaseUrl);
+    return url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1";
+  } catch {
+    return false;
+  }
 }
 
 export function migrate(db: Database) {

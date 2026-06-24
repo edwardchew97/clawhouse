@@ -1095,7 +1095,7 @@
             "The backend calls the real NEAR get_state view method and formats NEAR values for the UI."
           ],
           "inputs": {
-            "agentId": "terminal_chad6",
+            "agentId": "",
             "holderId": ""
           },
           "fillDefaultsWhenEmpty": [
@@ -1119,7 +1119,7 @@
             "The response includes UI-ready NEAR amounts plus max_price and attached_deposit protection values."
           ],
           "inputs": {
-            "agentId": "terminal_chad6",
+            "agentId": "",
             "keyAmount": "1"
           },
           "fillDefaultsWhenEmpty": [
@@ -1145,7 +1145,7 @@
             "The route reads account balance and key-market buy quotes, then keeps a reserve for gas and storage before returning the max key amount."
           ],
           "inputs": {
-            "agentId": "terminal_chad6",
+            "agentId": "",
             "holderId": ""
           },
           "fillDefaultsWhenEmpty": [
@@ -1170,7 +1170,7 @@
             "The response includes UI-ready NEAR payout plus min_payout protection values."
           ],
           "inputs": {
-            "agentId": "terminal_chad6",
+            "agentId": "",
             "keyAmount": "1"
           },
           "fillDefaultsWhenEmpty": [
@@ -1257,7 +1257,7 @@
             "If the VPS staging app cannot reach the backend, the response should expose ok:false instead of hiding the backend state."
           ],
           "inputs": {
-            "ledgerBoardId": "terminal_chad6"
+            "ledgerBoardId": ""
           },
           "fillDefaultsWhenEmpty": [
             "ledgerBoardId"
