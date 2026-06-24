@@ -470,7 +470,7 @@ function backendPnlSource(agent) {
 }
 
 function sortedAgents() {
-  const sorted = [...agents];
+  const sorted = visibleDiscoveryAgents();
   sorted.sort((a, b) => {
     const aValue = agentSort === "events" ? agentEventCount(a) : agentRowPnl(a);
     const bValue = agentSort === "events" ? agentEventCount(b) : agentRowPnl(b);
@@ -480,6 +480,29 @@ function sortedAgents() {
     return (a.discoveryIndex ?? 0) - (b.discoveryIndex ?? 0);
   });
   return sorted;
+}
+
+function paperLeaderboardRows() {
+  const rows = chainState.backend?.paperLeaderboard?.leaderboard;
+  return Array.isArray(rows) ? rows : null;
+}
+
+function hasPaperActivity(agent) {
+  return Boolean(paperLeaderboardRow(agent));
+}
+
+function visibleDiscoveryAgents() {
+  const rows = paperLeaderboardRows();
+  if (!rows) return [...agents];
+  const active = agents.filter(hasPaperActivity);
+  return active.length ? active : [...agents];
+}
+
+function ensureVisibleSelectedAgent() {
+  if (requestedAgentId) return;
+  const visible = visibleDiscoveryAgents();
+  if (visible.some((agent) => agentMatchesSelection(agent, selectedId))) return;
+  selectedId = agentSelectionKey(visible[0] ?? agents[0]);
 }
 
 function agentEventCount(agent) {
@@ -914,8 +937,8 @@ function chartModel(agent) {
       points: [],
       events: [],
       tone: "idle",
-      title: "No public paper activity",
-      message: `${rangePrefix}No public paper account or leaderboard row has been recorded for this agent.`,
+      title: "Agent has not started trading yet",
+      message: `${rangePrefix}No paper trades have been recorded for this agent yet.`,
     };
   }
   if (!chainState.accountId && !activity) {
@@ -1277,6 +1300,7 @@ function renderAgentList() {
   }
 
   list.removeAttribute("aria-busy");
+  ensureVisibleSelectedAgent();
   list.innerHTML = sortedAgents().map((agent) => {
     const pnl = agentRowPnl(agent);
     const selectionKey = agentSelectionKey(agent);
@@ -1603,6 +1627,7 @@ function setChartEmptyState(isEmpty, message = "", title = "Backend chart data u
   const overlay = byId("chartEmptyOverlay");
   if (!panel || !overlay) return;
   const isLoading = isEmpty && (loading || chartLoadingState(title, message));
+  const isPaperInactive = title === "Agent has not started trading yet";
   panel.classList.toggle("is-empty", isEmpty);
   panel.classList.toggle("is-loading", isLoading);
   overlay.classList.toggle("is-loading", isLoading);
@@ -1610,6 +1635,7 @@ function setChartEmptyState(isEmpty, message = "", title = "Backend chart data u
   overlay.setAttribute("aria-label", isLoading ? "Loading chart data" : title);
   overlay.hidden = !isEmpty;
   if (!isEmpty) return;
+  byId("chartEmptyKicker").textContent = isPaperInactive ? "Paper trading inactive" : "Chart unavailable";
   byId("chartEmptyTitle").textContent = title;
   byId("chartEmptyDetail").textContent = message || "No backend time series has been recorded for this agent.";
 }
