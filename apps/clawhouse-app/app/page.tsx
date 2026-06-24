@@ -32,20 +32,7 @@ export default function Page() {
               </div>
               <button className="mini-button">Live</button>
             </div>
-            <label className="agent-sort-control">
-              <span>Sort</span>
-              <select id="agentSort" aria-label="Sort curated agents">
-                <option value="pnl">P&amp;L</option>
-                <option value="events">Events</option>
-              </select>
-            </label>
             <div className="agent-list" id="agentList" />
-            <div className="leader-mini">
-              <div className="panel-title">Leaderboard P&amp;L</div>
-              <div className="line"><span>Top agent</span><b id="miniTop">--</b></div>
-              <div className="line"><span>24h best move</span><b className="green" id="miniMove">--</b></div>
-                <div className="line"><span>Data source</span><b id="leaderDataSource">Backend P&amp;L</b></div>
-            </div>
           </aside>
 
           <section className="center">

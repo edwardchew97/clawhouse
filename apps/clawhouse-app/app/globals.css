@@ -327,46 +327,9 @@
       font-size: 11px;
     }
 
-    .agent-sort-control {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: center;
-      gap: 8px;
-      padding: 8px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .agent-sort-control span {
-      color: var(--faint);
-      font-size: 11px;
-    }
-
-    .agent-sort-control select {
-      width: 100%;
-      height: 28px;
-      padding: 0 28px 0 9px;
-      border-radius: 4px;
-      border: 1px solid var(--line);
-      background:
-        linear-gradient(45deg, transparent 50%, var(--muted) 50%) calc(100% - 13px) 11px / 5px 5px no-repeat,
-        linear-gradient(135deg, var(--muted) 50%, transparent 50%) calc(100% - 8px) 11px / 5px 5px no-repeat,
-        #131518;
-      color: #ededed;
-      font: inherit;
-      font-size: 11px;
-      outline: none;
-      appearance: none;
-      cursor: pointer;
-    }
-
-    .agent-sort-control select:focus {
-      border-color: rgba(145, 151, 157, 0.28);
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035);
-    }
-
     .agent-list {
       min-height: 0;
-      padding: 6px;
+      padding: 7px 6px 10px;
       display: grid;
       grid-auto-rows: max-content;
       align-content: start;
@@ -553,7 +516,8 @@
 
     .agent-stats {
       margin-top: 4px;
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) auto;
       align-items: center;
       gap: 6px;
       color: #8f959b;
@@ -568,15 +532,28 @@
       text-overflow: ellipsis;
     }
 
-    .agent-stats span:first-child {
+    .agent-row-metric {
       color: #d7d9db;
       font-weight: 650;
     }
 
+    .agent-row-status {
+      color: #81878d;
+      text-transform: capitalize;
+    }
+
+    .agent-row-status.fresh {
+      color: #9db6ae;
+    }
+
+    .agent-row-status.warn {
+      color: #c7a17a;
+    }
+
     .agent-change {
-      margin-left: auto;
       font-size: 10px;
       font-weight: 700;
+      text-align: right;
     }
 
     .agent-change.up {
@@ -589,26 +566,6 @@
 
     .agent-change.empty {
       color: var(--faint);
-    }
-
-    .leader-mini {
-      border-top: 1px solid var(--line);
-      padding: 9px 10px 10px;
-      background: rgba(255, 255, 255, 0.02);
-    }
-
-    .leader-mini .line {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 10px;
-      color: var(--muted);
-      font-size: 11px;
-    }
-
-    .leader-mini b {
-      color: #fff;
-      font-weight: 650;
     }
 
     .center {
