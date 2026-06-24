@@ -864,6 +864,16 @@ function chartModel(agent) {
   }
 
   const activity = paperActivity(agent);
+  if (!activity && isPaperAgent(agent)) {
+    return {
+      values: [],
+      points: [],
+      events: [],
+      tone: "idle",
+      title: "No public paper activity",
+      message: `${rangePrefix}No public paper account or leaderboard row has been recorded for this agent.`,
+    };
+  }
   if (!chainState.accountId && !activity) {
     return {
       values: [],

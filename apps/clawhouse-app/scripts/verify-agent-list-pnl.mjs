@@ -668,6 +668,9 @@ assert(!element("agentList").innerHTML.includes("agent-row active"), "Agent rows
 const emptyRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "empty_agent");
 emptyRow.click();
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("empty_board", 0.56) });
+const emptyPaperChart = context.window.ClawHouseDemo.getChartModel();
+assert(emptyPaperChart.title === "No public paper activity", "Paper agents without public paper activity should not ask the user to connect a wallet.");
+assert(emptyPaperChart.message.includes("No public paper account"), "Missing paper activity should explain the missing public paper account.");
 rendered = rows();
 assert(rendered[0]?.id === "codex_main_20260620" && rendered[0]?.pnl === "+25.00%", "Selecting another row must not change P&L sorting.");
 assert(rendered[1]?.id === "terminal_chad6" && rendered[1]?.pnl === "--", "Unselected backend detail P&L should stay out of list rows.");
