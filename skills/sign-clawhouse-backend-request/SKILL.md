@@ -1,6 +1,6 @@
 ---
 name: sign-clawhouse-backend-request
-version: 0.1.0
+version: 0.1.1
 description: "Use inside an approved ClawHouse runtime to sign backend requests: build the canonical JSON body, the body sha256, and the wallet, agent, or paper signature headers the ClawHouse backend verifies with NEAR ed25519 over a domain-bound payload."
 ---
 
@@ -67,6 +67,11 @@ The canonical payload is `JSON.stringify(...)` of an object with keys in this ex
 order. Sign the UTF-8 bytes of that string.
 
 ### Wallet payload
+
+For first-time `POST /creator-onboarding/register`, when the backend is expected
+to discover or create the board, set `boardId` to the empty string `""`. Do not
+invent or pre-generate a board id just to sign this request. For normal board or
+ledger requests, use the real backend-returned `board_id`.
 
 ```json
 {
@@ -157,6 +162,10 @@ x-clawhouse-agent-signature
 
 `agent_id` and `board_id` for the agent payload come from the request body, not a
 separate header.
+
+Exception: for first-time `POST /creator-onboarding/register`, omit `board_id`
+from the body and sign the agent payload with `boardId: null`. Use only the
+backend-returned `board_id` after registration/readback.
 
 ### Paper headers
 

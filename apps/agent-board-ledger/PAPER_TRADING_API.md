@@ -130,6 +130,28 @@ Response:
 }
 ```
 
+Creator onboarding should normally use `POST /creator-onboarding/register`
+instead of this lower-level service endpoint. The creator and runtime should not
+invent `paper_account_id`; use the id returned by onboarding readback.
+
+### `GET /boards/:boardId/paper-account`
+
+Reads the paper account currently bound to a public board. Use this when a
+runtime knows the board and needs the backend's real `paper_account_id`.
+
+Response:
+
+```json
+{
+  "ok": true,
+  "board_id": "board-1",
+  "paper_account_id": "paper-1",
+  "account": {},
+  "positions": [],
+  "latest_risk": {}
+}
+```
+
 ### `GET /paper/accounts/:paperAccountId`
 
 Reads a paper account, open positions, and latest risk snapshot.
