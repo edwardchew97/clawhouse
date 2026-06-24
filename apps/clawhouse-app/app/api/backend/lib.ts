@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { boardIdPattern } from "./board-id.js";
 
 const defaultBackendBaseUrl = "https://staging-clawhouse.lucis.finance";
 
@@ -41,7 +42,7 @@ export function publicBackendConfig() {
 }
 
 export function requireBoardId(value: string | null) {
-  if (!value || !/^[a-zA-Z0-9_.:-]{3,96}$/.test(value)) {
+  if (!value || !boardIdPattern.test(value)) {
     throw new BackendInputError("Invalid boardId");
   }
   return value;

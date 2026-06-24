@@ -1,4 +1,4 @@
-import { cleanString, newId, optionalNumber, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
+import { asObject, cleanString, newId, optionalNumber, requiredNumber, requiredPositiveNumber, requiredString, RequestError, stringifyOptional, type LedgerDb } from "./db.js";
 import { sha256Hex, timestampIsFresh, verifySignature } from "./auth.js";
 import type {
   JsonObject,
@@ -1529,12 +1529,6 @@ function normalizeMarginMode(value: unknown, marketType: MarketType): MarginMode
   return mode;
 }
 
-function requiredPositiveNumber(value: unknown, name: string) {
-  const parsed = requiredNumber(value, name);
-  if (parsed <= 0) throw new RequestError(`${name} must be greater than 0`, 400);
-  return parsed;
-}
-
 function optionalPositiveNumber(value: unknown, name: string) {
   const parsed = optionalNumber(value, name);
   if (parsed !== null && parsed <= 0) throw new RequestError(`${name} must be greater than 0`, 400);
@@ -1560,17 +1554,6 @@ function boundedActivityLimit(value: number | undefined) {
     throw new RequestError("Invalid limit", 400);
   }
   return limit;
-}
-
-function asObject(value: unknown): JsonObject {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new RequestError("Request body must be a JSON object", 400);
-  }
-  return value as JsonObject;
-}
-
-function stringifyOptional(value: unknown) {
-  return value === undefined ? null : JSON.stringify(value);
 }
 
 function parseJson(value: string | null) {
