@@ -170,6 +170,8 @@
             "{{ledgerBoardId}}",
             "--agent-id",
             "{{ledgerAgentId}}",
+            "--admin-token",
+            "{{ledgerAdminToken}}",
             "--starting-balance-usd",
             "{{paperTradingStartingBalanceUsd}}",
             "--visibility-mode",
@@ -185,8 +187,9 @@
             "mnemonic"
           ],
           "runningNotes": [
+            "Calling the real service-authorized POST /agents approval path before POST /creator-onboarding/register.",
             "Calling the real POST /creator-onboarding/register backend API with wallet signature headers and Agent signature headers.",
-            "The backend creates or verifies the Agent registration, public board, and paper account in one provisioning request.",
+            "The backend verifies the approved Agent registration, then creates or verifies the public board and paper account.",
             "Reusing the local Workbench wallet artifact from Generate Agent Ledger Key Pair; if that step was skipped, this script creates one locally.",
             "Leave ledgerBoardId empty if you want the registration script to generate a local board id before signing.",
             "Run Generate Agent Ledger Key Pair first to auto-fill a fresh test ledgerAgentId, or edit ledgerAgentId to intentionally reuse an agent id.",
@@ -197,11 +200,13 @@
             "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
             "ledgerBoardId": "",
             "ledgerAgentId": "",
+            "ledgerAdminToken": "local-ledger-admin-token",
             "paperTradingStartingBalanceUsd": "10000",
             "ledgerVisibilityMode": "public"
           },
           "fillDefaultsWhenEmpty": [
             "ledgerWalletFile",
+            "ledgerAdminToken",
             "paperTradingStartingBalanceUsd",
             "ledgerVisibilityMode"
           ],

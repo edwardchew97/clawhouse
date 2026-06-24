@@ -346,8 +346,8 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
     venue_namespace: cleanString(data.venueNamespace ?? data.venue_namespace) ?? "hyperliquid-paper",
     tracking_started_at: normalizedTimestampField(data.trackingStartedAt ?? data.tracking_started_at, createdAt, "tracking_started_at"),
     base_currency: cleanString(data.baseCurrency ?? data.base_currency) ?? "USD",
-    public_status: cleanString(data.publicStatus ?? data.public_status) ?? "active",
-    visibility_mode: cleanString(data.visibilityMode ?? data.visibility_mode) ?? "public",
+    public_status: "active",
+    visibility_mode: "public",
     owner_wallet_address: cleanString(data.ownerWalletAddress ?? data.owner_wallet_address),
     funding_source: cleanString(data.fundingSource ?? data.funding_source),
     funding_tx_hash: cleanString(data.fundingTxHash ?? data.funding_tx_hash),
@@ -376,12 +376,7 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
       boardId: requestedBoardId ?? null,
       createdAt,
     });
-    registeredAgent = await upsertAgentRegistration(tx, {
-      agentId,
-      agentPublicKey,
-      status: cleanString(data.status) ?? "active",
-      metadataJson: stringifyOptional(data.agentMetadata ?? data.agent_metadata ?? data.metadata),
-    }, createdAt);
+    registeredAgent = presentAgentRegistration(await requireActiveAgentRegistration(tx, agentId, agentPublicKey));
     registeredBoard = await ensureBoardRegistration(tx, board);
     await ensurePaperAccountRegistration(tx, paperBody, createdAt);
   });
