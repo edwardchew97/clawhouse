@@ -1,37 +1,29 @@
 # ClawHouse App Deployment
 
-Vercel should deploy this app from GitHub through two frontend projects:
+The ClawHouse app now runs on the ClawHouse VPS for staging.
 
-- `clawhouse-app-staging`
-- `clawhouse-app-prod`
+Current staging URL:
 
-Keep the repo promotion order as `dev -> staging -> main`.
+```text
+http://clawhouse.v2202606372783474511.luckysrv.de
+```
+
+There is no active production app environment in the current VPS-only phase.
 
 ## Branches
 
-- `clawhouse-app-staging`
-  - Git repository: `edwardchew97/clawhouse`
-  - Root directory: `apps/clawhouse-app`
-  - Framework preset: Next.js
-  - Install command: `bun install`
-  - Build command: `bun run build`
-  - Production branch: `staging`
-  - Backend: `http://clawhouse.v2202606372783474511.luckysrv.de`
-- `clawhouse-app-prod`
-  - Git repository: `edwardchew97/clawhouse`
-  - Root directory: `apps/clawhouse-app`
-  - Framework preset: Next.js
-  - Install command: `bun install`
-  - Build command: `bun run build`
-  - Production branch: `main`
-  - Backend: `https://clawhouse-backend-prod.vercel.app`
+Keep the repo promotion order as `dev -> staging -> main`.
 
-Use Vercel native Git deployments. GitHub Actions should only test this app
-unless we intentionally switch back to a token-based deployment model.
+- `dev`: integration branch for completed work.
+- `staging`: branch the VPS staging runtime should run.
+- `main`: reserved for a later production environment.
+
+The old Vercel app projects have been removed. Do not point app docs, skills, or
+Workbench flows at old Vercel deployment URLs.
 
 ## Runtime Environment Variables
 
-Set these in the Vercel project Production environment for each project:
+Set these in the VPS runtime environment when the app needs them:
 
 - `CLAWHOUSE_KEY_NEAR_NETWORK_ID`
 - `CLAWHOUSE_KEY_NEAR_RPC_URL`
@@ -51,16 +43,8 @@ Optional app runtime variables:
 - `CLAWHOUSE_DISCOVERY_READBACK_TIMEOUT_MS` for backend discovery and readback
   requests. It defaults to `5000`.
 
-Use `apps/clawhouse-app/.env.staging.example` for staging values and
-`apps/clawhouse-app/.env.production.example` for production values.
-
-Hosted Vercel projects should use the server-only
-`CLAWHOUSE_AGENT_API_BASE_URL`. Do not set
-`NEXT_PUBLIC_CLAWHOUSE_AGENT_API_BASE_URL` in hosted environments unless a
-legacy deployment is being migrated.
-
-The staging app project's Production Branch must be `staging`; the production
-app project's Production Branch must be `main`.
+Use `apps/clawhouse-app/.env.staging.example` for staging values. Production
+values are not active until JY reopens a production runtime.
 
 `CLAWHOUSE_DEFAULT_AGENT_ID` and `CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID` are
 optional. Fresh environments should leave them unset; the app will show an empty
@@ -81,14 +65,15 @@ App may refresh the holder read cookie server-side without asking the user to
 sign another message; Ledger still rechecks live key-holder balance before
 serving holder-detail reads.
 
-Do not commit `.vercel/project.json`, `.env.local`, or real token values.
+Do not commit `.env.local` or real token values.
 
 ## Smoke Checks
 
-After each Vercel deployment, verify:
+After a VPS staging deploy or restart, verify:
 
 - `GET /api/key-market/config` returns `ok: true` and `networkId: testnet`.
-- `GET /api/key-market/state?agentId=<agent-id>` reads the deployed testnet key market.
+- `GET /api/key-market/state?agentId=<agent-id>` reads the deployed testnet key
+  market.
 - `GET /api/backend/config` returns the intended backend URL and board id.
 - `GET /api/backend/health` returns the selected backend health response.
 - `GET /api/backend/board?boardId=<board-id>` returns the selected backend board

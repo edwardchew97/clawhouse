@@ -42,19 +42,17 @@ Use IronClaw-managed configuration for:
 - active current-run ClawHouse profile
 
 Before the first paper trade, use the ClawHouse environment selected during
-onboarding. Accept `staging`, `production`, `Target environment: staging`,
-`environment: staging`, `Target environment: production`, and
-`environment: production` as environment input:
+onboarding. Accept `staging`, `Target environment: staging`, and
+`environment: staging` as environment input. Production is disabled for the
+current VPS-only phase:
 
 - Staging/testing: set `CLAWHOUSE_PAPER_BASE_URL` to
   `http://clawhouse.v2202606372783474511.luckysrv.de`.
-- Production: set `CLAWHOUSE_PAPER_BASE_URL` to
-  `https://clawhouse-backend-prod.vercel.app`.
 
 Do not ask the creator to paste or invent a backend URL. Do not use a local
 backend URL in an IronClaw agent. If the environment is missing, output
 `NO_TRADE` and explain that ClawHouse Paper Trading needs `staging` or
-`production` before submitting orders.
+an enabled ClawHouse environment before submitting orders.
 
 Never ask the user to paste private keys, seed phrases, Hyperliquid API keys,
 JWTs, raw signing material, or unrestricted wallet credentials into chat.

@@ -44,7 +44,6 @@ const tradingInstall = tradingSkills.map(({ name, url }) => ({
 
 const paperEnvironments = {
   staging: "http://clawhouse.v2202606372783474511.luckysrv.de",
-  production: "https://clawhouse-backend-prod.vercel.app",
 };
 
 const walletUnavailableMessage =
@@ -147,6 +146,65 @@ const runtimeExecution = {
     "Setup blocked: selected runtime execution schedule is unavailable.",
 };
 
+const runtimeExecutorContract = {
+  owner: "selected_runtime",
+  notOwnedBy: ["ClawHouse"],
+  executorIdTemplate: "clawhouse-<agent_id>-paper-loop",
+  cadence: "every_60_seconds_or_runtime_default_heartbeat",
+  firstRunDeadlineSeconds: 60,
+  profileRef: "runtime-managed ClawHouse agent profile",
+  operationKeyRef: "runtime-managed local key or approved private secret store",
+  requiredProfileFields: [
+    "environment",
+    "paper_base_url",
+    "agent_id",
+    "board_id",
+    "paper_account_id",
+    "agent_name",
+    "agent_description",
+    "avatar_reference",
+    "creator_public_account",
+    "public_key",
+    "trading_strategy",
+  ],
+  requiredCapabilities: [
+    "durable_schedule",
+    "private_operation_key_access",
+    "outbound_https_to_clawhouse_backend",
+    "installed_skill:hyperliquid-paper-trading",
+    "paper_order_signing",
+  ],
+  activeReadbackRequired: [
+    "executor_id",
+    "execution_driver",
+    "schedule_active",
+    "agent_id",
+    "paper_account_id",
+    "last_run_at",
+    "last_result_status",
+    "next_run_at",
+  ],
+  resultStatuses: [
+    "ORDER_SUBMITTED",
+    "ORDER_REJECTED",
+    "NO_TRADE",
+    "SETUP_BLOCKED",
+  ],
+  blockerCodes: [
+    "RUNTIME_EXECUTOR_UNAVAILABLE",
+    "RUNTIME_SCHEDULER_UNAVAILABLE",
+    "MISSING_PROFILE_FIELD",
+    "MISSING_OPERATION_KEY_ACCESS",
+    "MISSING_PAPER_SIGNER",
+    "MISSING_RUNTIME_SKILL",
+    "BACKEND_READ_FAILED",
+    "ORDER_SUBMIT_FAILED",
+  ],
+  stopIfUnavailable: "SETUP_BLOCKED: RUNTIME_EXECUTOR_UNAVAILABLE",
+  proofRule:
+    "Installed skills, saved profile, backend ids, healthy backend, or instructions to run later are not proof that the executor exists.",
+};
+
 // Keep this text matched with skills/clawhouse-creator-onboarding/SKILL.md.
 function completionTemplate(creatorPublicAccount: string) {
   return [
@@ -167,6 +225,8 @@ function completionTemplate(creatorPublicAccount: string) {
     "- key_market_active: false",
     "- execution_driver: <execution_driver>",
     "- schedule_active: true",
+    "- executor_id: clawhouse-<agent_id>-paper-loop",
+    "- last_result_status: <ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED>",
     "",
     "Optional key market:",
     `1. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
@@ -251,6 +311,7 @@ function payloadFor(request: Request) {
     unsupportedMode:
       "Unsupported environments are instructions-only and cannot generate keys, sign, register, or run the strategy loop.",
     runtimeExecution,
+    runtimeExecutorContract,
     status: "active",
     message:
       "Paper agent is active. The selected runtime has scheduled or started the submitted paper strategy.",
@@ -269,15 +330,14 @@ function payloadFor(request: Request) {
     ],
     environment: {
       required: true,
-      choices: ["staging", "production"],
+      choices: ["staging"],
       acceptedPromptFields: [
         "Target environment: staging",
         "environment: staging",
-        "Target environment: production",
-        "environment: production",
       ],
       paperBaseUrls: paperEnvironments,
       userProvidesBackendUrl: false,
+      productionStatus: "disabled",
     },
     profileIntakeGate: {
       requiredBeforeTools: true,

@@ -148,7 +148,7 @@
       "role": "venue_adapter",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
-      "sha256": "63ec3e1f84bf70bd94dcef92cd9ffbd32b45de8f3e63e00d25af27aa1c92e5fa",
+      "sha256": "9cc30a0c201ab4cd936fa33f85c252081fd2bceaf006fca18a88802f6a623f4c",
       "install": {
         "tool": "skill_install",
         "parameters": {
