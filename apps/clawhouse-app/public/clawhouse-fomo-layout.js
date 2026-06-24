@@ -2,20 +2,11 @@ const query = new URLSearchParams(window.location.search);
 const requestedAgentId = query.get("agent") || "";
 const DEFAULT_AGENT_BANNER_URL = "/agent-banners/default-agent-banner.png";
 let agents = [
-  normalizeDiscoveryAgent({
-    id: "terminal_chad6",
-    name: "terminal_chad6",
-    initials: "TC",
-    strategy: "terminal_chad6 / key-market and paper trading agent",
-    description: "Reads key-market, backend ledger, and paper-trading data from live APIs only.",
-    gate: "open",
-  })
 ];
 let discoveryLoading = true;
 document.body.classList.add("motion-prep");
 
-let selectedId = requestedAgentId || agentSelectionKey(agents[0]);
-if (!agents.some((agent) => agentMatchesSelection(agent, selectedId))) selectedId = agentSelectionKey(agents[0]);
+let selectedId = requestedAgentId || "";
 let tradeSide = "buy";
 let activeChartRange = "24h";
 let activeEventId = null;
@@ -62,10 +53,10 @@ function agentMatchesSelection(agent, value) {
 
 function resolveSelectedId(value) {
   const match = agents.find((agent) => agentSelectionKey(agent) === value) || agents.find((agent) => agent.id === value);
-  return match ? agentSelectionKey(match) : agentSelectionKey(agents[0]);
+  return match ? agentSelectionKey(match) : agentSelectionKey(agents[0] || {});
 }
 
-const selectedAgent = () => agents.find((agent) => agentSelectionKey(agent) === selectedId) || agents.find((agent) => agent.id === selectedId) || agents[0];
+const selectedAgent = () => agents.find((agent) => agentSelectionKey(agent) === selectedId) || agents.find((agent) => agent.id === selectedId) || agents[0] || null;
 const chainApplies = (agent) => chainState.state?.agent?.agent_id === agent.id;
 const chainBalance = (agent) => {
   const value = chainState.state?.holder_balance;
@@ -106,7 +97,7 @@ function dispatchUiEvent(name) {
 function normalizeDiscoveryAgent(agent = {}, index = 0) {
   const keyStateAgent = agent.keyMarket?.data?.agent || {};
   const pnlLatest = agent.pnl?.data?.latest || {};
-  const id = String(agent.id || keyStateAgent.agent_id || "terminal_chad6");
+  const id = String(agent.id || keyStateAgent.agent_id || `agent_${index + 1}`);
   const name = String(agent.name || keyStateAgent.name || id);
   const displayName = displayNameForAgent(name, id);
   return {
@@ -1185,6 +1176,7 @@ function scheduleBackendRefresh(reason, delayMs = 0) {
 
 async function refreshBackendRead(_reason) {
   const agent = selectedAgent();
+  if (!agent) return;
   const refreshId = ++backendRefreshId;
   try {
     const backend = await fetchJson(`/api/backend/board?boardId=${encodeURIComponent(agent.boardId || agent.id)}`);
@@ -1213,6 +1205,7 @@ function scheduleKeyMarketRefresh(reason, delayMs = 120) {
 
 async function refreshKeyMarketRead(_reason) {
   const agent = selectedAgent();
+  if (!agent) return;
   const refreshId = ++keyMarketRefreshId;
   const side = tradeSide === "sell" ? "sell" : "buy";
   const amount = normalizedAmount(byId("keyAmount")?.value || "1");
@@ -1258,10 +1251,6 @@ async function loadDiscoveryAgents() {
     const nextAgents = Array.isArray(data.agents)
       ? data.agents.map((agent, index) => normalizeDiscoveryAgent(agent, index))
       : [];
-    if (!nextAgents.length) {
-      throw new Error("Discovery API returned no configured agents.");
-    }
-
     agents = nextAgents;
     const preferredId = requestedAgentId && agents.some((agent) => agentMatchesSelection(agent, requestedAgentId))
       ? requestedAgentId
@@ -1275,9 +1264,11 @@ async function loadDiscoveryAgents() {
     };
     chartAnimationPending = true;
     render();
-    scheduleBackendRefresh("discovery", 0);
-    scheduleKeyMarketRefresh("discovery", 0);
-    dispatchUiEvent("clawhouse:agent-change");
+    if (selectedAgent()) {
+      scheduleBackendRefresh("discovery", 0);
+      scheduleKeyMarketRefresh("discovery", 0);
+      dispatchUiEvent("clawhouse:agent-change");
+    }
   } catch (error) {
     discoveryLoading = false;
     chainState = {
@@ -1477,6 +1468,43 @@ function renderHero(agent) {
   byId("chartSub").textContent = activity
     ? `${chart.message} / ${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled orders / ${backendNetwork(agent)}`
     : `${chart.message} / ${backendNetwork(agent)} / ${pnlSource} / key market ${chainApplies(agent) ? "live" : "checking"}`;
+}
+
+function renderFreshStartEmpty() {
+  byId("heroAvatar").textContent = "--";
+  byId("heroBannerImage").src = DEFAULT_AGENT_BANNER_URL;
+  byId("heroName").textContent = "No agents yet";
+  byId("heroDesc").textContent = "Fresh staging is ready. New agents will appear after onboarding registers a public board and paper account.";
+  byId("statPnl").textContent = "--";
+  byId("statPnl").className = "";
+  byId("statKey").textContent = "--";
+  byId("statHolders").textContent = "--";
+  byId("statUpdate").textContent = "fresh start";
+  byId("statGate").textContent = "--";
+  byId("priceMarker").textContent = "backend";
+  byId("priceMarker").style.background = "var(--gray)";
+  byId("chartSub").textContent = "No public agent board has been registered yet.";
+  renderBackendEmpty("roomFeed", "No agent room yet", "Onboard the first paper-trading agent to create the first board.");
+  setActivityHeader("Key Trading Activity", "No agent selected");
+  renderBackendEmpty("keyActivityList", "No verified key trades yet", "Key trades will appear after an agent creates a key market.");
+  byId("quotePay").textContent = "--";
+  byId("quoteReceive").textContent = "--";
+  byId("quoteAverage").textContent = "--";
+  byId("gateButton").textContent = "No agent selected";
+  const tradeButton = byId("tradeButton");
+  if (tradeButton) {
+    tradeButton.textContent = "No agent selected";
+    tradeButton.disabled = true;
+  }
+  const ticket = byId("keyMarketTicket");
+  const ticketControls = byId("keyMarketTicketControls");
+  const ticketEmpty = byId("keyMarketUnavailable");
+  if (ticket) {
+    ticket.classList.add("market-disabled");
+    ticket.setAttribute("aria-disabled", "true");
+  }
+  if (ticketControls) ticketControls.setAttribute("aria-hidden", "true");
+  if (ticketEmpty) ticketEmpty.hidden = false;
 }
 
 function publicEventText(event) {
@@ -2256,10 +2284,15 @@ function syncContentColumns() {
 }
 function render() {
   const agent = selectedAgent();
-  renderGateState(agent);
   renderTicker();
   syncDiscoveryFilters();
   renderAgentList();
+  if (!agent) {
+    renderFreshStartEmpty();
+    syncContentColumns();
+    return;
+  }
+  renderGateState(agent);
   renderHero(agent);
   renderRoom(agent);
   renderKeyActivity(agent);
@@ -2270,11 +2303,13 @@ function render() {
 
 document.querySelectorAll(".ticket-tab").forEach((button) => {
   button.addEventListener("click", () => {
+    const agent = selectedAgent();
+    if (!agent) return;
     tradeSide = button.dataset.side;
     clearQuote();
     document.querySelectorAll(".ticket-tab").forEach((item) => item.classList.remove("active", "buy", "sell"));
     button.classList.add("active", tradeSide);
-    renderTicket(selectedAgent());
+    renderTicket(agent);
     scheduleKeyMarketRefresh("side-change");
     dispatchUiEvent("clawhouse:side-change");
   });
@@ -2311,8 +2346,10 @@ function setChartRange(range) {
 
 document.querySelectorAll("[data-amount]").forEach((button) => {
   button.addEventListener("click", () => {
+    const agent = selectedAgent();
+    if (!agent) return;
     const amount = button.dataset.amount === "max"
-      ? maxAmountForSide(selectedAgent())
+      ? maxAmountForSide(agent)
       : wholeKeyAmount(button.dataset.amount);
     if (amount === null) {
       showToast(tradeSide === "buy" ? "Connect Wallet to read max buy." : "No key balance to sell.");
@@ -2320,7 +2357,7 @@ document.querySelectorAll("[data-amount]").forEach((button) => {
     }
     byId("keyAmount").value = amount.toString();
     clearQuote();
-    renderTicket(selectedAgent());
+    renderTicket(agent);
     scheduleKeyMarketRefresh("amount-change");
     dispatchUiEvent("clawhouse:amount-change");
   });
@@ -2329,8 +2366,10 @@ document.querySelectorAll("[data-amount]").forEach((button) => {
 const keyAmountInput = byId("keyAmount");
 if (keyAmountInput) {
   keyAmountInput.addEventListener("input", () => {
+    const agent = selectedAgent();
+    if (!agent) return;
     clearQuote();
-    renderTicket(selectedAgent());
+    renderTicket(agent);
     scheduleKeyMarketRefresh("amount-change");
     dispatchUiEvent("clawhouse:amount-change");
   });
@@ -2340,6 +2379,7 @@ const tradeButton = byId("tradeButton");
 if (tradeButton) {
   tradeButton.addEventListener("click", () => {
     const agent = selectedAgent();
+    if (!agent) return;
     const amount = Math.max(Number(byId("keyAmount")?.value || 1), 0);
     if (amount <= 0) {
       showToast("Enter a key amount first.");
@@ -2406,7 +2446,7 @@ window.ClawHouseDemo = {
   getTradeSide: () => tradeSide,
   getKeyAmount: () => byId("keyAmount")?.value || "1",
   getChartRange: () => activeChartRange,
-  getChartModel: () => chartModel(selectedAgent()),
+  getChartModel: () => selectedAgent() ? chartModel(selectedAgent()) : null,
   setChartRange,
   setChainState,
   showToast
@@ -2415,7 +2455,7 @@ window.ClawHouseDemo = {
 syncChartRangeButtons();
 render();
 dispatchUiEvent("clawhouse:ready");
-scheduleKeyMarketRefresh("initial", 0);
+if (selectedAgent()) scheduleKeyMarketRefresh("initial", 0);
 void loadDiscoveryAgents();
 window.requestAnimationFrame(() => document.body.classList.add("ui-ready"));
 animateAsciiKey();
