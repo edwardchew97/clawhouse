@@ -436,6 +436,13 @@ function paperSummary(agent) {
   return paperActivity(agent)?.summary ?? {};
 }
 
+function paperOpenPositions(agent) {
+  const positions = paperActivity(agent)?.positions;
+  return Array.isArray(positions)
+    ? positions.filter((position) => String(position?.status || "open").toLowerCase() === "open" && Math.abs(asNumber(position?.signed_size) ?? 0) > 0)
+    : [];
+}
+
 function discoveryPnl(agent) {
   if (agent.pnl === null || agent.pnl === undefined || agent.pnl === "") return null;
   return asNumber(agent.pnl);
@@ -662,6 +669,43 @@ function normalizePaperOrderEvent(order, index, agent, valueIndex, point) {
     move: status,
     summary: `${action}. Backend paper order status: ${status}.${reject}`,
     reason: order.reason || order.reject_reason || "No paper order reason was supplied.",
+    sources: backendEventSources(raw, agent),
+    raw,
+    backend: true,
+    public: true,
+  };
+}
+
+function normalizePaperPositionEvent(position, index, agent, point) {
+  const coin = String(position.coin || "").toUpperCase();
+  const size = asNumber(position.signed_size) ?? 0;
+  const side = size < 0 ? "short" : "long";
+  const action = `${titleCase(side)} ${Math.abs(size)} ${coin || "paper position"}`;
+  const raw = {
+    ...position,
+    event_type: "paper_position",
+    status_claim: "open_position",
+    metadata: {
+      source: "paper_positions",
+      venue: "hyperliquid-paper",
+      market_type: position.market_type,
+      coin,
+      side,
+      leverage: position.leverage,
+    },
+  };
+  return {
+    id: position.id || `paper-position-${index}`,
+    index: 0,
+    timeValue: point?.time ?? null,
+    chartValue: point?.value ?? null,
+    title: `${coin || "Paper"} Position`,
+    label: "open_position",
+    time: formatBackendTime(position.created_at || position.updated_at),
+    action,
+    move: "open_position",
+    summary: `${action}. Position was already open before this chart window.`,
+    reason: "Open paper position is still marked to market, so net worth can move without a new order marker in this chart window.",
     sources: backendEventSources(raw, agent),
     raw,
     backend: true,
@@ -959,11 +1003,27 @@ function chartModel(agent) {
       ? normalizePaperOrderEvent(event, index, agent, valueIndex, points[valueIndex])
       : normalizeBackendEvent(event, index, agent, valueIndex, points[valueIndex]);
   });
+  const positionEvents = activity
+    ? (() => {
+      const firstRiskRow = paperRiskRows[0];
+      const firstRiskTime = rowTimestamp(firstRiskRow);
+      const firstRiskPoint = Number.isFinite(firstRiskTime)
+        ? points[nearestChartPointIndex(points, firstRiskRow, 0, paperRiskRows.length)]
+        : null;
+      if (!firstRiskPoint) return [];
+      return paperOpenPositions(agent)
+        .filter((position) => {
+          const openedAt = rowTimestamp(position);
+          return Number.isFinite(openedAt) && openedAt < firstRiskTime;
+        })
+        .map((position, index) => normalizePaperPositionEvent(position, index, agent, firstRiskPoint));
+    })()
+    : [];
 
   return {
     values: safeValues,
     points,
-    events: normalizedEvents,
+    events: [...positionEvents, ...normalizedEvents].sort((left, right) => (left.timeValue ?? 0) - (right.timeValue ?? 0)),
     tone: "success",
     title: safeValues.length ? undefined : "No chart data yet",
     source,

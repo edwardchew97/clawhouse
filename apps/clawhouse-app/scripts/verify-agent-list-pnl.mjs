@@ -340,6 +340,65 @@ function noFillPaperActivityFixture() {
   };
 }
 
+function oldOpenPositionActivityFixture() {
+  return {
+    ok: true,
+    account: {
+      id: "codex_board",
+      agent_id: "codex_main_20260620",
+      starting_balance_usd: 10000,
+      created_at: "2026-06-23T10:00:00.000Z",
+    },
+    positions: [
+      {
+        id: "paper_pos_old_btc",
+        coin: "BTC",
+        signed_size: 0.001,
+        entry_px: 62449,
+        leverage: 3,
+        status: "open",
+        market_type: "perp",
+        created_at: "2026-06-23T15:58:25.175Z",
+        updated_at: "2026-06-23T15:58:25.175Z",
+      },
+    ],
+    latest_risk: {
+      equity_usd: 10000.23,
+      total_notional_usd: 62.7,
+      created_at: "2026-06-24T01:20:00.000Z",
+    },
+    risk_snapshots: [
+      { equity_usd: 10000.38, created_at: "2026-06-24T01:10:00.000Z" },
+      { equity_usd: 10000.23, created_at: "2026-06-24T01:20:00.000Z" },
+    ],
+    orders: [
+      {
+        id: "paper_ord_old_btc",
+        client_order_id: "paper-client-old-btc",
+        market_type: "perp",
+        coin: "BTC",
+        side: "buy",
+        status: "filled",
+        size: 0.001,
+        avg_fill_px: 62449,
+        margin_mode: "cross",
+        leverage: 3,
+        created_at: "2026-06-23T15:58:25.175Z",
+      },
+    ],
+    fills: [{ id: "fill-old-btc" }],
+    summary: {
+      total_orders: 1,
+      filled_orders: 1,
+      rejected_orders: 0,
+      total_fills: 1,
+      latest_order_at: "2026-06-23T15:58:25.175Z",
+      latest_fill_at: "2026-06-23T15:58:25.175Z",
+      latest_risk_at: "2026-06-24T01:20:00.000Z",
+    },
+  };
+}
+
 function rangeFilteredPaperActivityFixture() {
   return {
     ok: true,
@@ -728,6 +787,13 @@ assert(noFillPaperChart.values.every((value) => value === 1000), "No-fill paper 
 assert(noFillPaperChart.events.length === 0, "No-fill paper chart should not render paper order markers.");
 assert(element("keyActivityList").innerHTML.includes("No verified key trades yet"), "Rejected-only paper activity should keep the key-trade empty state.");
 assert(!element("keyActivityList").innerHTML.includes("stale_market_data"), "Rejected-only paper activity should keep rejected paper order reasons out of key activity.");
+
+context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0, oldOpenPositionActivityFixture()) });
+const oldOpenPositionChart = context.window.ClawHouseDemo.getChartModel();
+const oldOpenPositionEvent = oldOpenPositionChart.events.find((event) => event.raw?.event_type === "paper_position");
+assert(oldOpenPositionEvent, "Paper chart should explain net worth movement from an already-open position.");
+assert(oldOpenPositionEvent.title === "BTC Position", "Open-position marker should identify the positioned coin.");
+assert(oldOpenPositionEvent.timeValue === Date.parse("2026-06-24T01:10:00.000Z") / 1000, "Open-position marker should be pinned to the first visible risk point.");
 
 context.window.ClawHouseDemo.setChartRange("1h");
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("codex_board", 0.25, rangeFilteredPaperActivityFixture()) });
