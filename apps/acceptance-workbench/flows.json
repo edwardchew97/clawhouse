@@ -1254,7 +1254,7 @@
           "runningNotes": [
             "Calling the local ClawHouse App server proxy.",
             "The proxy calls the staging Agent Board Ledger /boards/:id, /events, /portfolio, /pnl, /balance-changes, /prices, /paper/leaderboard, and matching /paper/accounts/:id/activity read paths.",
-            "If the Vercel staging project has no live deployment yet, the response should expose ok:false instead of hiding the backend state."
+            "If the VPS staging app cannot reach the backend, the response should expose ok:false instead of hiding the backend state."
           ],
           "inputs": {
             "ledgerBoardId": "terminal_chad6"
@@ -2970,9 +2970,9 @@
           }
         },
         {
-          "id": "developerSetup.ledger.vercelCronTick",
-          "name": "Check Vercel Cron Adapter",
-          "description": "Calls the Vercel cron GET path that production cron uses, then expects the backend to run real cron reconciliation.",
+          "id": "developerSetup.ledger.cronTick",
+          "name": "Check Ledger Cron Tick",
+          "description": "Calls the deployed ledger cron GET path, then expects the backend to run real cron reconciliation.",
           "type": "http",
           "access": "protected",
           "method": "GET",
@@ -2982,8 +2982,8 @@
           },
           "runningNotes": [
             "Set ledgerBaseUrl to the deployed ClawHouse backend URL before running this step.",
-            "This calls the real Vercel cron adapter path.",
-            "The adapter verifies CRON_SECRET and then runs the existing service-authorized cron reconciliation."
+            "This calls the real deployed cron path.",
+            "The route verifies CRON_SECRET and then runs the existing service-authorized cron reconciliation."
           ],
           "inputs": {
             "ledgerCronSecret": ""

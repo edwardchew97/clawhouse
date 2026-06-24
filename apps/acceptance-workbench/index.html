@@ -1471,19 +1471,19 @@
       staging: {
         label: "Staging",
         branch: "staging",
-        description: "Pre-production target with its own Vercel app, backend environment, and database.",
+        description: "VPS-backed staging target for the staging branch.",
         env: {
-          clawhouseAppBaseUrl: "",
-          ledgerBaseUrl: "https://clawhouse-backend-staging.vercel.app"
+          clawhouseAppBaseUrl: "http://clawhouse.v2202606372783474511.luckysrv.de",
+          ledgerBaseUrl: "http://clawhouse.v2202606372783474511.luckysrv.de"
         }
       },
       production: {
         label: "Production",
         branch: "main",
-        description: "Production target. Use with production credentials only when you intend to touch live data.",
+        description: "Disabled for the current VPS-only phase. Do not run production flows.",
         env: {
           clawhouseAppBaseUrl: "",
-          ledgerBaseUrl: "https://clawhouse-backend-prod.vercel.app"
+          ledgerBaseUrl: ""
         }
       }
     };
