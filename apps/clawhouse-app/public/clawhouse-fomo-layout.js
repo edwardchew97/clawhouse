@@ -44,21 +44,24 @@ const CHART_RANGES = {
 
 const byId = (id) => document.getElementById(id);
 function agentSelectionKey(agent) {
+  if (!agent) return "";
   return agent.boardId || agent.id;
 }
 
 function agentMatchesSelection(agent, value) {
+  if (!agent) return false;
   return agentSelectionKey(agent) === value || agent.id === value;
 }
 
 function resolveSelectedId(value) {
   const match = agents.find((agent) => agentSelectionKey(agent) === value) || agents.find((agent) => agent.id === value);
-  return match ? agentSelectionKey(match) : agentSelectionKey(agents[0] || {});
+  return match ? agentSelectionKey(match) : agentSelectionKey(agents[0]);
 }
 
 const selectedAgent = () => agents.find((agent) => agentSelectionKey(agent) === selectedId) || agents.find((agent) => agent.id === selectedId) || agents[0] || null;
-const chainApplies = (agent) => chainState.state?.agent?.agent_id === agent.id;
+const chainApplies = (agent) => Boolean(agent && chainState.state?.agent?.agent_id === agent.id);
 const chainBalance = (agent) => {
+  if (!agent) return null;
   const value = chainState.state?.holder_balance;
   if (!chainApplies(agent) || value === null || value === undefined) return null;
   const parsed = Number(value);
@@ -66,10 +69,12 @@ const chainBalance = (agent) => {
 };
 const holderBalance = (agent) => chainBalance(agent);
 const maxBuyApplies = (agent) => {
+  if (!agent) return false;
   const maxBuy = chainState.maxBuy;
   return Boolean(maxBuy && maxBuy.agent_id === agent.id && maxBuy.account_id === chainState.accountId);
 };
 const readAccessApplies = (agent) => {
+  if (!agent) return false;
   const access = chainState.readAccess;
   if (!access) return false;
   const boardId = agent.boardId || agent.id;
@@ -80,11 +85,13 @@ const readAccessApplies = (agent) => {
     && expiresAt > Date.now();
 };
 const isUnlocked = (agent) => {
+  if (!agent) return false;
   const balance = holderBalance(agent);
   return Boolean(chainState.accountId && balance !== null && balance > 0 && readAccessApplies(agent));
 };
 
 function keyMarketUnavailable(agent) {
+  if (!agent) return true;
   if (chainApplies(agent)) return false;
   const message = String(chainState.error || "");
   return /Agent key market does not exist|WasmTrap\(Unreachable\)/i.test(message);
@@ -333,6 +340,7 @@ function normalizePct(value) {
 }
 
 function backendApplies(agent) {
+  if (!agent) return false;
   const backend = chainState.backend;
   if (!backend) return false;
   const boardId = agent.boardId ?? agent.id;
@@ -359,6 +367,7 @@ function boardMetadata(agent) {
 }
 
 function isPaperAgent(agent) {
+  if (!agent) return false;
   if (paperLeaderboardRow(agent)) return true;
   const text = [
     agent?.id,
@@ -397,6 +406,7 @@ function backendEvents(agent = selectedAgent()) {
 }
 
 function paperLeaderboardRow(agent) {
+  if (!agent) return null;
   const rows = chainState.backend?.paperLeaderboard?.leaderboard;
   if (!Array.isArray(rows)) return null;
   const boardId = agent.boardId ?? agent.id;
@@ -408,6 +418,7 @@ function paperLeaderboardRow(agent) {
 }
 
 function paperActivity(agent) {
+  if (!agent) return null;
   if (!backendApplies(agent) || !chainState.backend?.ok) return null;
   const activity = chainState.backend?.paperActivity;
   if (!activity?.ok || !activity.account) return null;
@@ -1505,6 +1516,10 @@ function renderFreshStartEmpty() {
   }
   if (ticketControls) ticketControls.setAttribute("aria-hidden", "true");
   if (ticketEmpty) ticketEmpty.hidden = false;
+  lastPnlChartModel = null;
+  activeEventId = null;
+  byId("chartEvents").innerHTML = "";
+  hidePriceMarker();
   renderWalletButton();
   renderBackendStatus();
 }
@@ -1822,9 +1837,10 @@ function resizeTradingViewChart(container) {
 }
 
 function syncChartOverlayForCurrentRange() {
-  if (!lastPnlChartModel) return;
+  const agent = selectedAgent();
+  if (!agent || !lastPnlChartModel) return;
   updatePriceMarker(lastPnlChartModel);
-  renderChartEvents(selectedAgent(), null, lastPnlChartModel);
+  renderChartEvents(agent, null, lastPnlChartModel);
 }
 
 function scheduleChartOverlaySync() {
@@ -1922,6 +1938,14 @@ function tradingViewEventMarkers() {
 }
 
 function drawChart(agent) {
+  if (!agent) {
+    lastPnlChartModel = null;
+    clearTradingViewChart();
+    setChartEmptyState(true, "No public agent board has been registered yet.", "No agents yet");
+    byId("chartEvents").innerHTML = "";
+    hidePriceMarker();
+    return;
+  }
   const container = byId("pnlChart");
   const model = chartModel(agent);
   if (!container || !ensureTradingViewChart(container)) {
@@ -2025,6 +2049,10 @@ function spacedChartEventItems(items) {
 }
 
 function renderChartEvents(agent, _rect, model = chartModel(agent)) {
+  if (!agent) {
+    byId("chartEvents").innerHTML = "";
+    return;
+  }
   const unlocked = isUnlocked(agent);
   const container = byId("pnlChart");
   if (model.points.length < 2 || !model.events.length || !container || !pnlTradingViewChart || !pnlTradingViewSeries) {
@@ -2095,6 +2123,7 @@ function renderChartEvents(agent, _rect, model = chartModel(agent)) {
 
 function openEvent(eventId) {
   const agent = selectedAgent();
+  if (!agent) return;
   const model = lastPnlChartModel || chartModel(agent);
   const event = model.events.find((item) => item.id === eventId);
   if (!event) return;
@@ -2226,7 +2255,8 @@ function eventLeverage(event) {
 function closeModal() {
   byId("eventModal").hidden = true;
   activeEventId = null;
-  if (lastPnlChartModel) renderChartEvents(selectedAgent(), null, lastPnlChartModel);
+  const agent = selectedAgent();
+  if (agent && lastPnlChartModel) renderChartEvents(agent, null, lastPnlChartModel);
 }
 
 function bindUnlockButtons() {
@@ -2245,11 +2275,12 @@ let columnSyncFrame = 0;
 let chartAnimationPending = true;
 
 function drawChartWithMotion() {
+  const agent = selectedAgent();
   if (chartAnimationPending) {
     chartAnimationPending = false;
-    animateChart(selectedAgent());
+    animateChart(agent);
   } else {
-    drawChart(selectedAgent());
+    drawChart(agent);
   }
 }
 
@@ -2344,8 +2375,13 @@ function setChartRange(range) {
   clearChartCrosshair();
   byId("chartEvents").innerHTML = "";
   syncChartRangeButtons();
-  renderHero(selectedAgent());
-  renderRoom(selectedAgent());
+  const agent = selectedAgent();
+  if (agent) {
+    renderHero(agent);
+    renderRoom(agent);
+  } else {
+    renderFreshStartEmpty();
+  }
   syncContentColumns();
   dispatchUiEvent("clawhouse:chart-range-change");
 }
