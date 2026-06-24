@@ -90,6 +90,9 @@
             "clawhouseApp.key.quoteBuy": [
               "agentId"
             ],
+            "clawhouseApp.key.maxBuy": [
+              "agentId"
+            ],
             "clawhouseApp.key.quoteSell": [
               "agentId"
             ],
@@ -270,6 +273,9 @@
               "agentId"
             ],
             "clawhouseApp.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.maxBuy": [
               "agentId"
             ],
             "clawhouseApp.key.quoteSell": [
@@ -461,6 +467,9 @@
               "agentId"
             ],
             "clawhouseApp.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.maxBuy": [
               "agentId"
             ],
             "clawhouseApp.key.quoteSell": [
@@ -737,6 +746,9 @@
               "agentId"
             ],
             "clawhouseApp.key.quoteBuy": [
+              "agentId"
+            ],
+            "clawhouseApp.key.maxBuy": [
               "agentId"
             ],
             "clawhouseApp.key.quoteSell": [
@@ -1019,6 +1031,9 @@
             "clawhouseApp.key.quoteBuy": [
               "agentId"
             ],
+            "clawhouseApp.key.maxBuy": [
+              "agentId"
+            ],
             "clawhouseApp.key.quoteSell": [
               "agentId"
             ],
@@ -1115,6 +1130,31 @@
             "buyMaxPriceYocto": "response.json.json.protection.max_price",
             "buyAttachedDepositYocto": "response.json.json.protection.attached_deposit",
             "buyTotalNear": "response.json.json.quote.total_cost_near"
+          }
+        },
+        {
+          "id": "clawhouseApp.key.maxBuy",
+          "name": "Read App Buy Max",
+          "description": "Reads the wallet-aware maximum buy amount that powers the trade ticket Max button.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{clawhouseAppBaseUrl}}/api/key-market/max-buy?agentId={{agentId}}&accountId={{holderId}}",
+          "runningNotes": [
+            "Calling the Next API max-buy proxy for the connected NEAR account.",
+            "The route reads account balance and key-market buy quotes, then keeps a reserve for gas and storage before returning the max key amount."
+          ],
+          "inputs": {
+            "agentId": "terminal_chad6",
+            "holderId": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "agentId"
+          ],
+          "setVars": {
+            "buyMaxKeyAmount": "response.json.json.maxBuy.amount",
+            "buyMaxSpendableNear": "response.json.json.spendable_near",
+            "buyMaxAttachedDepositNear": "response.json.json.maxBuy.attached_deposit_near"
           }
         },
         {

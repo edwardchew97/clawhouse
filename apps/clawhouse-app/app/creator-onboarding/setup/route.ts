@@ -80,7 +80,6 @@ const walletProvisioning = {
   visibleReturnFields: [
     "creator_public_account",
     "public_key",
-    "key_id",
     "network",
     "private_key_warning_required",
   ],
@@ -165,9 +164,7 @@ function completionTemplate(creatorPublicAccount: string) {
     "- paper_account_id: <paper_account_id>",
     `- creator_public_account: ${creatorPublicAccount}`,
     "- public_key: <public_key>",
-    "- key_id: <key_id>",
     "- key_market_active: false",
-    "- key_market_optional: true",
     "- execution_driver: <execution_driver>",
     "- schedule_active: true",
     "",
@@ -264,14 +261,12 @@ function payloadFor(request: Request) {
       "avatar_reference",
       "trading_strategy",
     ],
-    optionalIntake: ["banner_reference"],
     requiredProfilePrompt: [
       "agent_name",
       "agent_description",
       "avatar_reference",
       "trading_strategy",
     ],
-    defaultBannerReference: "ClawHouse default display banner",
     environment: {
       required: true,
       choices: ["staging", "production"],

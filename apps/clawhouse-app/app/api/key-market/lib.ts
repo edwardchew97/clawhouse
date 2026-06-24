@@ -5,6 +5,8 @@ const defaultNetworkId = "testnet";
 const defaultContractId = "clawhouse-key-20260619125948.testnet";
 const defaultGas = "100000000000000";
 const defaultStorageDepositNear = "0.02";
+const defaultBuyMaxReserveNear = "0.05";
+const defaultBuyMaxSearchLimit = 100_000;
 const defaultRpcUrls: Record<string, string> = {
   mainnet: "https://rpc.mainnet.fastnear.com",
   testnet: "https://rpc.testnet.fastnear.com",
@@ -62,6 +64,9 @@ export function getKeyMarketConfig() {
   const storageDepositYocto = parseNearAmount(
     firstEnv(["CLAWHOUSE_KEY_STORAGE_DEPOSIT_NEAR", "STORAGE_DEPOSIT"]) ?? defaultStorageDepositNear,
   );
+  const buyMaxReserveYocto = parseNearAmount(
+    firstEnv(["CLAWHOUSE_KEY_BUY_MAX_RESERVE_NEAR", "BUY_MAX_RESERVE_NEAR"]) ?? defaultBuyMaxReserveNear,
+  );
 
   return {
     networkId,
@@ -69,6 +74,8 @@ export function getKeyMarketConfig() {
     contractId,
     gas: firstEnv(["CLAWHOUSE_KEY_MARKET_GAS", "NEAR_TGAS_YOCTO"]) ?? defaultGas,
     storageDepositYocto,
+    buyMaxReserveYocto,
+    buyMaxSearchLimit: numberEnv("CLAWHOUSE_KEY_BUY_MAX_SEARCH_LIMIT", defaultBuyMaxSearchLimit),
     defaultAgentId: firstEnv(["CLAWHOUSE_DEFAULT_AGENT_ID"]) ?? "terminal_chad6",
   };
 }
@@ -110,6 +117,13 @@ export function optionalAccountId(value: string | null) {
   if (!value) return null;
   if (!/^[a-z0-9._-]{2,64}$/.test(value)) {
     throw new RouteInputError("Invalid holderId");
+  }
+  return value;
+}
+
+export function requireAccountId(value: string | null) {
+  if (!value || !/^[a-z0-9._-]{2,64}$/.test(value)) {
+    throw new RouteInputError("Invalid accountId");
   }
   return value;
 }
@@ -180,6 +194,13 @@ function firstEnv(names: string[]) {
   return undefined;
 }
 
+function numberEnv(name: string, fallback: number) {
+  const value = process.env[name];
+  if (!value) return fallback;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function rpcUrlForNetwork(value: string | undefined, networkId: string) {
   if (!value) return undefined;
   if (value === `https://rpc.${networkId}.near.org`) {
@@ -196,7 +217,7 @@ function parseNearAmount(value: string) {
   return parsed.toString();
 }
 
-function yoctoToNearString(value: string) {
+export function yoctoToNearString(value: string) {
   if (!/^\d+$/.test(value)) return "";
   return yoctoToNear(BigInt(value));
 }
