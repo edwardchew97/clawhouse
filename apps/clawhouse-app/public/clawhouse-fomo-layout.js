@@ -1505,6 +1505,8 @@ function renderFreshStartEmpty() {
   }
   if (ticketControls) ticketControls.setAttribute("aria-hidden", "true");
   if (ticketEmpty) ticketEmpty.hidden = false;
+  renderWalletButton();
+  renderBackendStatus();
 }
 
 function publicEventText(event) {
@@ -1716,13 +1718,17 @@ function renderTicket(agent) {
     : balance && balance > 0
       ? "Sign proof"
       : "Gate: 1 key";
+  renderWalletButton();
+  renderBackendStatus();
+}
+
+function renderWalletButton() {
   const walletButton = byId("walletButton");
   if (walletButton) {
     walletButton.textContent = chainState.accountId ? shortAccount(chainState.accountId) : "Connect Wallet";
     walletButton.classList.toggle("connected", Boolean(chainState.accountId));
-    walletButton.disabled = busy;
+    walletButton.disabled = Boolean(chainState.pending);
   }
-  renderBackendStatus();
 }
 
 function renderTicketBalance(agent, balance) {
