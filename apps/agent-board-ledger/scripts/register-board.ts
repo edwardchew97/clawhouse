@@ -14,7 +14,6 @@ type Options = {
   keyFile: string;
   boardId?: string;
   agentId: string;
-  serviceToken?: string;
   startingBalanceUsd: number;
   visibilityMode: string;
 };
@@ -27,15 +26,14 @@ async function main() {
   if (process.argv.includes("--help")) {
     printJson({
       usage: "bun scripts/register-board.ts --base-url <url> --key-file <path> --agent-id <id>",
-      options: ["--admin-token <token>", "--starting-balance-usd <number>"],
-      endpoints: ["POST /agents", "POST /creator-onboarding/register"],
+      options: ["--starting-balance-usd <number>"],
+      endpoint: "POST /creator-onboarding/register",
     });
     return;
   }
   const options = parseArgs(process.argv.slice(2));
 
   const wallet = await loadOrCreateWallet(options.keyFile);
-  await ensureAgentRegistration(options, wallet);
   const boardId = options.boardId || `ledger-board-${crypto.randomUUID().slice(0, 8)}`;
   const paperAccountId = `${boardId}-paper`;
   const body = {
@@ -98,37 +96,6 @@ async function main() {
   });
 }
 
-async function ensureAgentRegistration(options: Options, wallet: NearWalletPublicInfo) {
-  if (!options.serviceToken) {
-    throw new Error("Missing --admin-token or AGENT_BOARD_LEDGER_ADMIN_TOKEN for service-authorized agent registration");
-  }
-  const body = {
-    agent_id: options.agentId,
-    agent_public_key: wallet.publicKey,
-    metadata: { source: "acceptance-workbench" },
-  };
-  const rawBody = JSON.stringify(body);
-  const signedAgent = await signAgentBoardLedgerAgentRequest({
-    keyFile: options.keyFile,
-    method: "POST",
-    path: "/agents",
-    body: rawBody,
-    purpose: "agent_registration",
-    boardId: null,
-    agentId: options.agentId,
-    agentPublicKey: wallet.publicKey,
-  });
-  await requestJson(options.baseUrl, "/agents", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${options.serviceToken}`,
-      ...signedAgent.headers,
-    },
-    body: rawBody,
-  });
-}
-
 async function loadOrCreateWallet(keyFile: string): Promise<NearWalletPublicInfo> {
   await mkdir(dirname(keyFile), { recursive: true });
   if (existsSync(keyFile)) return await inspectNearWallet({ keyFile });
@@ -162,7 +129,6 @@ function parseArgs(args: string[]): Options {
     keyFile: resolvePath(values["key-file"] || "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json"),
     boardId: optionalString(values["board-id"]),
     agentId: values["agent-id"] || "ironclaw-workbench",
-    serviceToken: optionalString(values["admin-token"]) ?? optionalString(process.env.AGENT_BOARD_LEDGER_ADMIN_TOKEN),
     startingBalanceUsd: numberOption(values["starting-balance-usd"], 10000, "starting-balance-usd"),
     visibilityMode: values["visibility-mode"] || "public",
   };

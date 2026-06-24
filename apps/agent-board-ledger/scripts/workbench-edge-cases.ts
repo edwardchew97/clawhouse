@@ -66,30 +66,16 @@ async function main() {
   expectSuccess(checks, "service-authenticated rejection board registration", rejectionBoard);
 
   if (isSuccess(rejectionBoard)) {
-    const unauthenticatedObservation = await postJson(options.baseUrl, `/boards/${rejectionBoardId}/observations`, {
+    const manualObservation = await postJson(options.baseUrl, `/boards/${rejectionBoardId}/observations`, {
       wallet_address: wallet.walletAddress,
       current_value_usd: options.currentValueUsd,
       tx_hash: `edge-unauth-${runId}`,
     });
     expectRejected(
       checks,
-      "unauthenticated observation is rejected",
-      unauthenticatedObservation,
-      [401, 403],
-    );
-
-    const futureObservedAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    const futureObservation = await servicePostJson(options, `/boards/${rejectionBoardId}/observations`, {
-      wallet_address: wallet.walletAddress,
-      observed_at: futureObservedAt,
-      current_value_usd: options.currentValueUsd,
-      tx_hash: `edge-future-${runId}`,
-    });
-    expectRejected(
-      checks,
-      "future observed_at is rejected",
-      futureObservation,
-      [400],
+      "manual observation write route is removed",
+      manualObservation,
+      [404],
     );
   }
 
@@ -225,50 +211,15 @@ async function main() {
       });
     }
 
-    const observation = await servicePostJson(options, `/boards/${flowBoardId}/observations`, {
-      wallet_address: wallet.walletAddress,
-      observed_at: new Date().toISOString(),
-      current_value_usd: options.currentValueUsd,
-      client_event_id: clientEventId,
-      tx_hash: txHash,
-      intent_id: intentId,
-      status_claim: "observed_on_wallet",
-      asset_in: "USDC",
-      amount_in: 25,
-      asset_out: "NEAR",
-      amount_out: 10,
-      metadata: {
-        source: "acceptance-workbench-edge",
-      },
-    });
-    expectSuccess(checks, "service-authenticated observation still works", observation);
-    const observationId = stringAt(observation.json, ["observation", "id"]);
-    const observationObservedAt = stringAt(observation.json, ["observation", "observed_at"]);
-
-    const nearPriceUsd = 2;
-    const reconciledNearAmount = options.currentValueUsd / nearPriceUsd;
-    const price = await servicePostJson(options, `/boards/${flowBoardId}/prices`, {
-      asset_id: "native:near",
-      asset_symbol: "NEAR",
-      price_usd: nearPriceUsd,
+    const nearWatch = await servicePostJson(options, `/boards/${flowBoardId}/watch/near-account`, {
+      rpc_url: "mock://near-rpc",
+      price_usd: 2,
       price_source: "acceptance-workbench-edge",
-      observed_at: observationObservedAt,
-    });
-    expectSuccess(checks, "service-authenticated price snapshot still works", price);
-    const priceId = stringAt(price.json, ["prices", "0", "id"]);
-
-    const balanceChange = await servicePostJson(options, `/boards/${flowBoardId}/balance-changes`, {
-      asset_id: "native:near",
-      asset_symbol: "NEAR",
-      normalized_amount: reconciledNearAmount,
-      delta_amount: 6,
-      delta_value_usd: 6 * nearPriceUsd,
-      change_type: "trade",
-      source_observation_id: observationId,
       tx_hash: txHash,
       intent_id: intentId,
     });
-    expectSuccess(checks, "service-authenticated balance change still works", balanceChange);
+    expectSuccess(checks, "service-authenticated NEAR watcher writes observation and balance evidence", nearWatch);
+    const priceId = stringAt(nearWatch.json, ["price", "id"]);
 
     const firstCron = await servicePostJson(options, "/cron/tick", {});
     expectSuccess(checks, "service-authenticated cron tick still works", firstCron);

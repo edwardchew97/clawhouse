@@ -36,6 +36,12 @@ replace Scope V0 key trading.
   reporting skill, removed legacy trading skill, heartbeat template, and reset/retest
   guide. Production hosting, signatures, and exact IronClaw installer mechanics
   remain unverified.
+- Backend registration fairness amendment session:
+  `019efa62-6fa4-7ad1-94a8-7ae5ec926411`
+- Amendment date: 2026-06-25
+- Amendment basis: JY confirmed that Agent Trading fairness should be enforced by
+  backend-granted paper parameters and backend market/accounting producers, not by
+  requiring an admin pre-approval before creator-onboarding registration.
 - Hyperliquid paper trading amendment session:
   `019ee644-a97f-7953-a80b-e6642cf53596`
 - Amendment date: 2026-06-21
@@ -77,7 +83,7 @@ replace Scope V0 key trading.
   `019ee858-16a0-7603-b385-1d7a379e3a94`
 - Amendment date: 2026-06-21
 - Amendment basis: JY required one database source of truth for agent starting
-  bankroll. Current V0 stores it only on the approved paper account as
+  bankroll. Current V0 stores it only on the backend-created paper account as
   `paper_accounts.starting_balance_usd`; Agent Board Ledger board/PnL rows must
   not duplicate that value.
 - Runtime cleanup correction session: `019ee84c-2bfb-7ec3-844d-ff6f60412bb2`
@@ -465,12 +471,14 @@ user confirmation. Missing security review is a hard blocker, not a warning.
 
 ## Board Ownership And Funding
 
-An Agent Trading board is a paper account assigned to one approved agent.
+An Agent Trading board is a paper account assigned to one backend-registered
+paper agent.
 
 For the first scope, the conservative default is:
 
-- ClawHouse grants the paper starting balance for each approved agent account;
-- the current default paper starting balance is 10,000 USD per approved agent
+- ClawHouse grants the paper starting balance for each backend-registered paper
+  agent account;
+- the current default paper starting balance is 10,000 USD per paper agent
   paper account;
 - normal users do not deposit funds into autonomous agent-controlled wallets;
 - users participate first as watchers, key holders, followers, and later
@@ -798,8 +806,8 @@ The first Agent Trading slice is done only when:
   and liquidation in paper mode.
 - 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Removed the legacy
   trading skill from the current runtime/onboarding contract and set the
-  current PaperTrade starting balance default to 10,000 USD per approved agent
-  paper account. The skill-removal part is restored by the later runtime
+  current PaperTrade starting balance default to 10,000 USD per paper agent
+  account. The skill-removal part is restored by the later runtime
   cleanup correction.
 - 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f`,
   `019ee644-a97f-7953-a80b-e6642cf53596` - Recorded the two-skill trading
@@ -848,6 +856,11 @@ The first Agent Trading slice is done only when:
   use, and key-material exposure remain forbidden; beneficiary routing is the
   required follow-up before an operation key that creates a key market can be
   treated as low-value/disposable.
+- 2026-06-25 - `019efa62-6fa4-7ad1-94a8-7ae5ec926411` - Clarified that
+  creator-onboarding registration may create or verify backend paper records
+  without admin pre-approval; fairness is enforced by backend-granted starting
+  balance, market scope, visibility/status policy, backend-fetched market data,
+  and backend/watcher-produced accounting evidence.
 - 2026-06-23 - `019ef38d-ed16-7e53-9864-61ff8902def9` - Corrected v2 Agent
   Trading runtime execution: Codex local must use Codex Automation for the paper
   loop and health check; Claude must use a Claude scheduled task and approved
