@@ -6,6 +6,7 @@
     "clawhouse-app:dev": "cd apps/clawhouse-app && bun run dev",
     "clawhouse-app:build": "cd apps/clawhouse-app && bun run build",
     "clawhouse-app:start": "cd apps/clawhouse-app && bun run start",
+    "clawhouse-app:test": "cd apps/clawhouse-app && bun test",
     "clawhouse-app:typecheck": "cd apps/clawhouse-app && bun run typecheck",
     "local-runtime": "bun scripts/clawhouse-local-runtime.ts",
     "local-runtime:start": "bun scripts/clawhouse-local-runtime.ts start",

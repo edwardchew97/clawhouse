@@ -9,6 +9,7 @@ import type {
   Board,
   EventRow,
   HoldingSnapshot,
+  JsonObject,
   ObservationRow,
   PnlSnapshot,
 } from "./types.js";
@@ -971,6 +972,23 @@ export function requiredNumber(value: unknown, name: string) {
   const parsed = optionalNumber(value, name);
   if (parsed === null) throw new RequestError(`Missing ${name}`, 400);
   return parsed;
+}
+
+export function requiredPositiveNumber(value: unknown, name: string) {
+  const parsed = requiredNumber(value, name);
+  if (parsed <= 0) throw new RequestError(`${name} must be greater than 0`, 400);
+  return parsed;
+}
+
+export function asObject(value: unknown): JsonObject {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new RequestError("Request body must be a JSON object", 400);
+  }
+  return value as JsonObject;
+}
+
+export function stringifyOptional(value: unknown) {
+  return value === undefined ? null : JSON.stringify(value);
 }
 
 export function nowIso() {

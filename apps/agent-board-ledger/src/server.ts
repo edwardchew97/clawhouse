@@ -1,4 +1,4 @@
-import { cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openMigratedRuntimeLedgerDb, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
+import { asObject, cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openMigratedRuntimeLedgerDb, requiredNumber, requiredString, RequestError, stringifyOptional, type LedgerDb } from "./db.js";
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAgentAuthPayload, canonicalAuthPayload, readAgentSignedHeaders, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
 import { refreshHyperliquidPaperMarketSnapshot, refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
 import { listKeyMarketTrades, reportKeyMarketTrade } from "./key-market.js";
@@ -2326,13 +2326,6 @@ async function readBody(request: Request): Promise<BodyResult> {
   }
 }
 
-function asObject(value: unknown): JsonObject {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new RequestError("Request body must be a JSON object", 400);
-  }
-  return value as JsonObject;
-}
-
 function asOptionalObject(value: unknown): JsonObject {
   if (value === undefined || value === null) return {};
   return asObject(value);
@@ -2340,12 +2333,6 @@ function asOptionalObject(value: unknown): JsonObject {
 
 function optionalNumberField(value: unknown, name: string) {
   return requiredOrOptionalNumber(value, name, false);
-}
-
-function requiredPositiveNumberField(value: unknown, name: string) {
-  const parsed = requiredNumber(value, name);
-  if (parsed <= 0) throw new RequestError(`${name} must be greater than 0`, 400);
-  return parsed;
 }
 
 function requiredNonNegativeNumberField(value: unknown, name: string) {
@@ -2554,10 +2541,6 @@ function assertTokenDecimals(decimals: number) {
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36) {
     throw new RequestError("FT decimals must be an integer between 0 and 36", 400);
   }
-}
-
-function stringifyOptional(value: unknown) {
-  return value === undefined ? null : JSON.stringify(value);
 }
 
 function parseJson(value: string | null) {
