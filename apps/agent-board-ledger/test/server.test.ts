@@ -576,6 +576,59 @@ describe("Agent Board Ledger local backend", () => {
     expect(countRows("paper_accounts")).toBe(1);
   });
 
+  test("creator onboarding assigns and reads back board and paper account ids when omitted", async () => {
+    const response = await postJson("/creator-onboarding/register", {
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+      },
+    }, { admin: false, signed: true, agentSigned: true });
+    const body = await jsonOf<{ board_id: string; paper_account_id: string }>(response);
+    const byBoard = await jsonOf<{ paper_account_id: string; account: { id: string; board_id: string } }>(
+      await app.fetch(new Request(`http://ledger.test/boards/${body.board_id}/paper-account`)),
+    );
+
+    expect(response.status).toBe(201);
+    expect(body.board_id).toMatch(/^board_/);
+    expect(body.paper_account_id).toMatch(/^paper_/);
+    expect(byBoard.paper_account_id).toBe(body.paper_account_id);
+    expect(byBoard.account.id).toBe(body.paper_account_id);
+    expect(byBoard.account.board_id).toBe(body.board_id);
+  });
+
+  test("creator onboarding reuses existing board paper account instead of guessing requested id", async () => {
+    await registerBoard({ board_id: "board-1", paper_starting_balance_usd: 10000 });
+    const response = await postJson("/creator-onboarding/register", {
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade any Hyperliquid paper market.",
+      },
+    }, { admin: false, signed: true, agentSigned: true });
+    const body = await jsonOf<{ paper_account_id: string; paperAccount: { allowed_markets: unknown; metadata: Record<string, unknown> } }>(response);
+    const byBoard = await jsonOf<{ paper_account_id: string }>(
+      await app.fetch(new Request("http://ledger.test/boards/board-1/paper-account")),
+    );
+
+    expect(response.status).toBe(201);
+    expect(body.paper_account_id).toBe("paper-board-1");
+    expect(byBoard.paper_account_id).toBe("paper-board-1");
+    expect(body.paperAccount.allowed_markets).toEqual({ scope: "hyperliquid_supported" });
+    expect(body.paperAccount.metadata.trading_strategy).toBe("Trade any Hyperliquid paper market.");
+    expect(countRows("paper_accounts")).toBe(1);
+  });
+
   test("creator onboarding rejects an existing board that is not public active", async () => {
     await registerAgent("ironclaw", agentWallet.publicKey);
     const existingBoard = await postJson("/boards", {
@@ -3068,7 +3121,9 @@ async function postJson(
   }
   if (options.signed) {
     Object.assign(headers, signRequest("POST", path, body, options.signer ?? wallet, {
-      boardId: cleanBodyString(body.board_id ?? body.boardId, "board_id"),
+      boardId: path === "/creator-onboarding/register"
+        ? cleanOptionalBodyString(body.board_id ?? body.boardId) ?? ""
+        : cleanBodyString(body.board_id ?? body.boardId, "board_id"),
       agentId: cleanBodyString(body.agent_id ?? body.agentId, "agent_id"),
     }).headers);
   }
@@ -3084,7 +3139,9 @@ async function postJson(
       ? null
       : path === "/paper/accounts"
         ? cleanOptionalBodyString(body.board_id ?? body.boardId)
-        : cleanBodyString(body.board_id ?? body.boardId, "board_id");
+        : path === "/creator-onboarding/register"
+          ? cleanOptionalBodyString(body.board_id ?? body.boardId)
+          : cleanBodyString(body.board_id ?? body.boardId, "board_id");
     Object.assign(headers, signAgentRequest("POST", path, body, options.agentSigner ?? agentWallet, {
       purpose,
       boardId,
