@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openSqliteLedgerDb, type SqliteLedgerDb } from "../src/db";
 import { canonicalAgentAuthPayload, sha256Hex } from "../src/auth";
-import { canonicalPaperAuthPayload } from "../src/paper-trading";
+import { canonicalPaperAuthPayload, createPaperMarketSnapshot as insertPaperMarketSnapshot } from "../src/paper-trading";
 import { createApp } from "../src/server";
 
 const adminToken = "ledger-admin-token";
@@ -187,13 +187,12 @@ describe("paper-trading input validation", () => {
     expect(res.status).toBe(400);
   });
 
-  test("market snapshot requires bids and asks", async () => {
+  test("manual market snapshot write route is removed", async () => {
     const res = await postJson("/paper/market-snapshots", {
       coin: "BTC", mark_px: 100, source: "test", maintenance_margin_rate: 0.005,
       observed_at: currentNow.toISOString(), asks: [{ px: 100, sz: 1 }],
     });
-    expect(res.status).toBe(400);
-    expect((await json<{ error: string }>(res)).error).toBe("Missing bids");
+    expect(res.status).toBe(404);
   });
 });
 
@@ -928,11 +927,17 @@ async function registerAgent() {
 
 async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
   rememberHyperliquidFixture(overrides);
-  const res = await postJson("/paper/market-snapshots", {
-    source: "test-fixture", maintenance_margin_rate: 0.005, observed_at: currentNow.toISOString(), ...overrides,
-  });
-  expect(res.status).toBe(201);
-  return (await json<{ snapshot: Record<string, any> }>(res)).snapshot;
+  const body = {
+    source: "test-fixture",
+    maintenance_margin_rate: 0.005,
+    observed_at: currentNow.toISOString(),
+    ...overrides,
+  };
+  const result = await insertPaperMarketSnapshot(sqliteDb, {
+    raw: JSON.stringify(body),
+    json: body,
+  }, currentNow.toISOString());
+  return result.snapshot;
 }
 
 function rememberHyperliquidFixture(overrides: Record<string, unknown>) {

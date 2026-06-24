@@ -2,7 +2,7 @@ import { asObject, cleanString, findEventByAssociations, getBoard, latestHolding
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAgentAuthPayload, canonicalAuthPayload, readAgentSignedHeaders, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
 import { refreshHyperliquidPaperMarketSnapshot, refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
 import { listKeyMarketTrades, reportKeyMarketTrade } from "./key-market.js";
-import { PaperAuthError, createPaperAccount, createPaperMarketSnapshot, readPaperAccount, readPaperAccountActivity, readPaperLeaderboard, replayPaperOrder, runPaperRiskCheck, submitPaperOrder } from "./paper-trading.js";
+import { PaperAuthError, createPaperAccount, readPaperAccount, readPaperAccountActivity, readPaperLeaderboard, replayPaperOrder, runPaperRiskCheck, submitPaperOrder } from "./paper-trading.js";
 import type { AgentRegistrationRow, AttachmentRow, BalanceChangeRow, Board, EventRow, HoldingSnapshot, JsonObject, ObservationRow, PaperAccountRow, PnlSnapshot, PriceSnapshotRow, ReadAccessCheckRow } from "./types.js";
 
 type AppOptions = {
@@ -119,14 +119,6 @@ export function createApp(options: AppOptions) {
             201,
           );
         }
-        if (method === "POST" && observationsMatch) {
-          assertServiceBearer(request.headers, adminToken);
-          return json(await createObservation(db, await readBody(request), observationsMatch[1], now()), 201);
-        }
-        if (method === "POST" && balanceChangesMatch) {
-          assertServiceBearer(request.headers, adminToken);
-          return json(await createBalanceChanges(db, await readBody(request), balanceChangesMatch[1], now()), 201);
-        }
         if (method === "GET" && balanceChangesMatch) {
           const board = await requireBoard(db, balanceChangesMatch[1]);
           await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail", rpcFetch);
@@ -201,10 +193,6 @@ export function createApp(options: AppOptions) {
           return json(await readPaperAccountActivity(db, paperAccountActivityMatch[1], {
             limit: boundedPaperActivityLimit(url.searchParams.get("limit")),
           }));
-        }
-        if (method === "POST" && path === "/paper/market-snapshots") {
-          assertServiceBearer(request.headers, adminToken);
-          return json(await createPaperMarketSnapshot(db, await readBody(request), now()), 201);
         }
         if (method === "POST" && path === "/paper/market-snapshots/hyperliquid") {
           assertServiceBearer(request.headers, adminToken);
@@ -376,7 +364,12 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
       boardId: requestedBoardId ?? null,
       createdAt,
     });
-    registeredAgent = presentAgentRegistration(await requireActiveAgentRegistration(tx, agentId, agentPublicKey));
+    registeredAgent = await upsertAgentRegistration(tx, {
+      agentId,
+      agentPublicKey,
+      status: "active",
+      metadataJson: stringifyOptional(publicProfileMetadata),
+    }, createdAt);
     registeredBoard = await ensureBoardRegistration(tx, board);
     await ensurePaperAccountRegistration(tx, paperBody, createdAt);
   });
@@ -833,40 +826,6 @@ async function createAttachment(
   return { ok: true, attachment };
 }
 
-async function createObservation(db: LedgerDb, body: BodyResult, boardId: string, createdAt: string) {
-  const board = await requireBoard(db, boardId);
-  const data = asObject(body.json);
-  const walletAddress = requiredString(data.walletAddress ?? data.wallet_address, "wallet_address");
-
-  if (walletAddress !== board.wallet_address) {
-    throw new RequestError("Observation wallet is not bound to board", 403);
-  }
-
-  const observation: ObservationRow = {
-    id: newId("obs"),
-    board_id: board.id,
-    wallet_address: walletAddress,
-    observed_at: normalizedObservedAt(data.observedAt ?? data.observed_at, createdAt),
-    current_value_usd: requiredNonNegativeNumberField(data.currentValueUsd ?? data.current_value_usd, "current_value_usd"),
-    topup_usd: optionalNonNegativeNumberField(data.topupUsd ?? data.topup_usd, "topup_usd") ?? 0,
-    withdrawal_usd: optionalNonNegativeNumberField(data.withdrawalUsd ?? data.withdrawal_usd, "withdrawal_usd") ?? 0,
-    client_event_id: cleanString(data.clientEventId ?? data.client_event_id),
-    tx_hash: cleanString(data.txHash ?? data.tx_hash),
-    intent_id: cleanString(data.intentId ?? data.intent_id),
-    status_claim: cleanString(data.statusClaim ?? data.status_claim),
-    asset_in: cleanString(data.assetIn ?? data.asset_in),
-    amount_in: optionalNonNegativeNumberField(data.amountIn ?? data.amount_in, "amount_in"),
-    asset_out: cleanString(data.assetOut ?? data.asset_out),
-    amount_out: optionalNonNegativeNumberField(data.amountOut ?? data.amount_out, "amount_out"),
-    metadata_json: stringifyOptional(data.metadata),
-    event_id: null,
-    created_at: createdAt,
-  };
-
-  await insertObservation(db, observation);
-  return { ok: true, observation };
-}
-
 async function insertObservation(db: LedgerDb, observation: ObservationRow) {
   await db.run(
     `INSERT INTO observations
@@ -894,46 +853,6 @@ async function insertObservation(db: LedgerDb, observation: ObservationRow) {
     observation.created_at,
     ],
   );
-}
-
-async function createBalanceChanges(db: LedgerDb, body: BodyResult, boardId: string, createdAt: string) {
-  const board = await requireBoard(db, boardId);
-  const data = asObject(body.json);
-  const inputChanges = Array.isArray(data.changes) ? data.changes : [data];
-  const changes: BalanceChangeRow[] = [];
-  for (const value of inputChanges) {
-    const item = asObject(value);
-    const observedAt = normalizedObservedAt(item.observedAt ?? item.observed_at, createdAt);
-    const walletAddress = cleanString(item.walletAddress ?? item.wallet_address) ?? board.wallet_address;
-    if (walletAddress !== board.wallet_address) {
-      throw new RequestError("Balance change wallet is not bound to board", 403);
-    }
-    changes.push({
-      id: newId("bal"),
-      board_id: board.id,
-      tracked_wallet_id: await trackedWalletId(db, board.id, walletAddress),
-      wallet_address: walletAddress,
-      observed_at: observedAt,
-      asset_id: requiredString(item.assetId ?? item.asset_id, "asset_id"),
-      asset_symbol: cleanString(item.assetSymbol ?? item.asset_symbol),
-      raw_amount: cleanString(item.rawAmount ?? item.raw_amount),
-      normalized_amount: optionalNumberField(item.normalizedAmount ?? item.normalized_amount, "normalized_amount"),
-      decimals: optionalIntegerField(item.decimals, "decimals"),
-      delta_amount: optionalNumberField(item.deltaAmount ?? item.delta_amount, "delta_amount"),
-      delta_value_usd: optionalNumberField(item.deltaValueUsd ?? item.delta_value_usd, "delta_value_usd"),
-      change_type: cleanString(item.changeType ?? item.change_type) ?? "unknown_change",
-      source_observation_id: cleanString(item.sourceObservationId ?? item.source_observation_id),
-      source_event_id: cleanString(item.sourceEventId ?? item.source_event_id),
-      tx_hash: cleanString(item.txHash ?? item.tx_hash),
-      intent_id: cleanString(item.intentId ?? item.intent_id),
-      visibility_status: cleanString(item.visibilityStatus ?? item.visibility_status) ?? "complete",
-      metadata_json: stringifyOptional(item.metadata),
-      created_at: createdAt,
-    });
-  }
-
-  for (const change of changes) await insertBalanceChange(db, change);
-  return { ok: true, board_id: board.id, balance_changes: changes.map(presentBalanceChange) };
 }
 
 async function createPriceSnapshots(db: LedgerDb, body: BodyResult, boardId: string, createdAt: string) {
