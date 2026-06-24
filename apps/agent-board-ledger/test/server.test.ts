@@ -502,6 +502,7 @@ describe("Agent Board Ledger local backend", () => {
   });
 
   test("creator onboarding registers agent board and paper account with one signed request", async () => {
+    await registerAgent("ironclaw", agentWallet.publicKey);
     const response = await postJson("/creator-onboarding/register", {
       board_id: "board-1",
       paper_account_id: "paper-board-1",
@@ -510,6 +511,10 @@ describe("Agent Board Ledger local backend", () => {
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
       starting_balance_usd: 1000000,
+      allowed_markets: ["DOGE"],
+      status: "paused",
+      public_status: "draft",
+      visibility_mode: "private",
       metadata: {
         agent_name: "IronClaw",
         agent_description: "Public paper agent.",
@@ -525,11 +530,11 @@ describe("Agent Board Ledger local backend", () => {
       paper_account_id: string;
     }>(response);
     const discoverable = await jsonOf<{ count: number }>(await app.fetch(new Request("http://ledger.test/boards")));
-    const paper = await jsonOf<{ account: { id: string; starting_balance_usd: number; allowed_markets: unknown; metadata: Record<string, unknown> } }>(
+    const paper = await jsonOf<{ account: { id: string; status: string; starting_balance_usd: number; allowed_markets: unknown; metadata: Record<string, unknown> } }>(
       await app.fetch(new Request("http://ledger.test/paper/accounts/paper-board-1")),
     );
-    const storedBoard = sqliteDb.raw.query<{ metadata_json: string | null }, []>(
-      "SELECT metadata_json FROM boards WHERE id = 'board-1'",
+    const storedBoard = sqliteDb.raw.query<{ public_status: string; visibility_mode: string; metadata_json: string | null }, []>(
+      "SELECT public_status, visibility_mode, metadata_json FROM boards WHERE id = 'board-1'",
     ).get();
     const boardMetadata = JSON.parse(storedBoard?.metadata_json ?? "{}");
 
@@ -539,7 +544,10 @@ describe("Agent Board Ledger local backend", () => {
     expect(body.board_id).toBe("board-1");
     expect(body.paper_account_id).toBe("paper-board-1");
     expect(discoverable.count).toBe(1);
+    expect(storedBoard?.public_status).toBe("active");
+    expect(storedBoard?.visibility_mode).toBe("public");
     expect(paper.account.id).toBe("paper-board-1");
+    expect(paper.account.status).toBe("active");
     expect(paper.account.starting_balance_usd).toBe(10000);
     expect(paper.account.allowed_markets).toEqual({ scope: "hyperliquid_supported" });
     expect(paper.account.metadata).toEqual({
@@ -551,7 +559,31 @@ describe("Agent Board Ledger local backend", () => {
     expect(boardMetadata).toEqual(paper.account.metadata);
   });
 
+  test("creator onboarding rejects a self-signed agent that was not approved", async () => {
+    const response = await postJson("/creator-onboarding/register", {
+      board_id: "board-1",
+      paper_account_id: "paper-board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+      },
+    }, { admin: false, signed: true, agentSigned: true });
+
+    expect(response.status).toBe(403);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("Agent registration not found");
+    expect(countRows("agent_registrations")).toBe(0);
+    expect(countRows("boards")).toBe(0);
+    expect(countRows("paper_accounts")).toBe(0);
+  });
+
   test("creator onboarding is idempotent for matching backend records", async () => {
+    await registerAgent("ironclaw", agentWallet.publicKey);
     const body = {
       board_id: "board-1",
       paper_account_id: "paper-board-1",
@@ -577,6 +609,7 @@ describe("Agent Board Ledger local backend", () => {
   });
 
   test("creator onboarding assigns and reads back board and paper account ids when omitted", async () => {
+    await registerAgent("ironclaw", agentWallet.publicKey);
     const response = await postJson("/creator-onboarding/register", {
       agent_id: "ironclaw",
       agent_public_key: agentWallet.publicKey,
