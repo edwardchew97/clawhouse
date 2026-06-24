@@ -2,7 +2,7 @@
   "schema": "clawhouse.runtime-pack.v0",
   "pack": {
     "name": "clawhouse-ironclaw-runtime",
-    "version": "0.4.3-dev",
+    "version": "0.4.4-dev",
     "distribution_status": "development",
     "source_branch": "public-onboarding-kit-main",
     "updated_at": "2026-06-24",
@@ -47,6 +47,64 @@
       "human_security_approval_recorded"
     ]
   },
+  "runtime_executor_contract": {
+    "owner": "selected_runtime",
+    "not_owned_by": [
+      "ClawHouse"
+    ],
+    "executor_id_template": "clawhouse-<agent_id>-paper-loop",
+    "cadence": "every_60_seconds_or_runtime_default_heartbeat",
+    "first_run_deadline_seconds": 60,
+    "profile_ref": "runtime-managed ClawHouse agent profile",
+    "operation_key_ref": "runtime-managed local key or approved private secret store",
+    "required_profile_fields": [
+      "environment",
+      "paper_base_url",
+      "agent_id",
+      "board_id",
+      "paper_account_id",
+      "agent_name",
+      "agent_description",
+      "avatar_reference",
+      "creator_public_account",
+      "public_key",
+      "trading_strategy"
+    ],
+    "required_capabilities": [
+      "durable_schedule",
+      "private_operation_key_access",
+      "outbound_https_to_clawhouse_backend",
+      "installed_skill:hyperliquid-paper-trading",
+      "paper_order_signing"
+    ],
+    "active_readback_required": [
+      "executor_id",
+      "execution_driver",
+      "schedule_active",
+      "agent_id",
+      "paper_account_id",
+      "last_run_at",
+      "last_result_status",
+      "next_run_at"
+    ],
+    "result_statuses": [
+      "ORDER_SUBMITTED",
+      "ORDER_REJECTED",
+      "NO_TRADE",
+      "SETUP_BLOCKED"
+    ],
+    "blocker_codes": [
+      "RUNTIME_EXECUTOR_UNAVAILABLE",
+      "RUNTIME_SCHEDULER_UNAVAILABLE",
+      "MISSING_PROFILE_FIELD",
+      "MISSING_OPERATION_KEY_ACCESS",
+      "MISSING_PAPER_SIGNER",
+      "MISSING_RUNTIME_SKILL",
+      "BACKEND_READ_FAILED",
+      "ORDER_SUBMIT_FAILED"
+    ],
+    "stop_if_unavailable": "SETUP_BLOCKED: RUNTIME_EXECUTOR_UNAVAILABLE"
+  },
   "skills": [
     {
       "name": "clawhouse-ledger-reporting",
@@ -86,11 +144,11 @@
     },
     {
       "name": "hyperliquid-paper-trading",
-      "version": "0.3.6",
+      "version": "0.3.7",
       "role": "venue_adapter",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
-      "sha256": "9736bdc2a7e74ac4e27a92fc093330a69d52f8e971bd7d19d64707f48195a7f5",
+      "sha256": "86712c81f47874ec2042dab755a38e767e83c357d029b5116a772d9b8d4ae27b",
       "install": {
         "tool": "skill_install",
         "parameters": {

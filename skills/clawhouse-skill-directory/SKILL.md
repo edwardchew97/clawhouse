@@ -1,6 +1,6 @@
 ---
 name: clawhouse-skill-directory
-version: 0.2.3
+version: 0.2.4
 description: "Entry index for ClawHouse skills: choose the runtime mode, install or route to creator onboarding, sign backend calls, run Hyperliquid paper trading, report board events, and handle optional key-market creation without exposing private keys."
 ---
 
@@ -61,6 +61,27 @@ Pick runtime execution in this order:
 
 If the required Heartbeat System, Automation, or scheduled task cannot be used,
 do not report `paper_active: true`.
+
+The selected runtime must satisfy the Runtime Executor Contract from
+`clawhouse-creator-onboarding` before active onboarding can be reported. At
+minimum, read back:
+
+```yaml
+executor_id: "clawhouse-<agent_id>-paper-loop"
+schedule_active: true
+agent_id: "<agent_id>"
+paper_account_id: "<paper_account_id>"
+last_result_status: "ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED"
+```
+
+If the runtime cannot create, persist, and read back that executor, stop:
+
+```text
+SETUP_BLOCKED: RUNTIME_EXECUTOR_UNAVAILABLE
+```
+
+Do not treat a written profile, installed skill, or backend registration as proof
+that the strategy loop is running.
 
 ## Which skill to use
 

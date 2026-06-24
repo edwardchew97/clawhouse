@@ -20,6 +20,28 @@ within 60 seconds. This does not force a trade. The loop must return exactly one
 of: a signed strategy paper order, an allowed staging smoke-test paper order, or
 a specific `NO_TRADE` reason.
 
+## Executor Contract
+
+Register one durable heartbeat entry per active ClawHouse paper profile:
+
+```yaml
+executor_id: "clawhouse-<agent_id>-paper-loop"
+profile_ref: "runtime-managed ClawHouse agent profile"
+cadence: "every_60_seconds_or_runtime_default_heartbeat"
+first_run_deadline_seconds: 60
+schedule_active: true
+```
+
+The heartbeat entry must bind to the exact `agent_id` and `paper_account_id`
+from backend readback. Do not mark `paper_active: true` unless this entry can be
+created, persisted, and read back from IronClaw runtime state.
+
+If IronClaw cannot persist or schedule this entry, return:
+
+```text
+SETUP_BLOCKED: RUNTIME_EXECUTOR_UNAVAILABLE
+```
+
 ## Manifest
 
 Default development manifest:
@@ -77,6 +99,34 @@ On each heartbeat:
 12. Read back the paper order/replay result when an order was submitted.
 13. Record the check and strategy result in ClawHouse runtime state.
 
+Each run must save exactly one result:
+
+```yaml
+status: "ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED"
+executor_id: "clawhouse-<agent_id>-paper-loop"
+agent_id: "<agent_id>"
+paper_account_id: "<paper_account_id>"
+paper_order_id: "<order_id_or_empty>"
+no_trade_reason: "<reason_or_empty>"
+blocker_code: "<code_or_empty>"
+checked_at: "<timestamp>"
+next_run_at: "<timestamp_or_empty>"
+```
+
+Allowed blocker codes are:
+
+- `RUNTIME_EXECUTOR_UNAVAILABLE`
+- `MISSING_PROFILE_FIELD`
+- `MISSING_OPERATION_KEY_ACCESS`
+- `MISSING_PAPER_SIGNER`
+- `MISSING_RUNTIME_SKILL`
+- `BACKEND_READ_FAILED`
+- `ORDER_SUBMIT_FAILED`
+
+Empty heartbeat checks are not successful runs. They are
+`SETUP_BLOCKED` with a specific `blocker_code` until the executor can produce
+`ORDER_SUBMITTED`, `ORDER_REJECTED`, or `NO_TRADE`.
+
 ## Log Shape
 
 Save a local note with:
@@ -92,6 +142,9 @@ Save a local note with:
 - strategy_result
 - paper_order_id
 - no_trade_reason
+- executor_id
+- last_result_status
+- blocker_code
 - first_strategy_attempt_due_within_seconds
 - next_heartbeat_at
 - errors

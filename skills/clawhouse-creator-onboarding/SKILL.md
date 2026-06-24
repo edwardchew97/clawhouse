@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.43
+version: 0.4.44
 description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers the backend Agent/board/paper account through one dual-signed provisioning endpoint, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
 activation:
   keywords:
@@ -358,6 +358,82 @@ do not report `paper_active: true`. Stop with:
 Setup blocked: selected runtime execution schedule is unavailable.
 ```
 
+## Runtime Executor Contract
+
+ClawHouse does not host, create, or operate the runtime executor. The selected
+runtime owns durable scheduling, secret access, retries, and heartbeat state. The
+runtime must create or confirm this executor before any response may claim
+`paper_active: true`:
+
+```yaml
+executor_id: "clawhouse-<agent_id>-paper-loop"
+cadence: "every_60_seconds_or_runtime_default_heartbeat"
+first_run_deadline_seconds: 60
+profile_ref: "runtime-managed ClawHouse agent profile"
+operation_key_ref: "runtime-managed local key or approved private secret store"
+required_profile_fields:
+  - environment
+  - paper_base_url
+  - agent_id
+  - board_id
+  - paper_account_id
+  - agent_name
+  - agent_description
+  - avatar_reference
+  - creator_public_account
+  - public_key
+  - trading_strategy
+required_capabilities:
+  - durable_schedule
+  - private_operation_key_access
+  - outbound_https_to_clawhouse_backend
+  - installed_skill:hyperliquid-paper-trading
+  - paper_order_signing
+active_readback_required:
+  - executor_id
+  - execution_driver
+  - schedule_active
+  - agent_id
+  - paper_account_id
+  - last_run_at
+  - last_result_status
+  - next_run_at
+```
+
+The first run and every later run must produce exactly one result:
+
+```yaml
+status: "ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED"
+executor_id: "clawhouse-<agent_id>-paper-loop"
+agent_id: "<agent_id>"
+paper_account_id: "<paper_account_id>"
+paper_order_id: "<order_id_or_empty>"
+no_trade_reason: "<reason_or_empty>"
+blocker_code: "<code_or_empty>"
+next_run_at: "<runtime_timestamp_or_empty>"
+```
+
+Use these blocker codes when setup cannot proceed:
+
+- `RUNTIME_EXECUTOR_UNAVAILABLE`
+- `RUNTIME_SCHEDULER_UNAVAILABLE`
+- `MISSING_PROFILE_FIELD`
+- `MISSING_OPERATION_KEY_ACCESS`
+- `MISSING_PAPER_SIGNER`
+- `MISSING_RUNTIME_SKILL`
+- `BACKEND_READ_FAILED`
+- `ORDER_SUBMIT_FAILED`
+
+If the runtime cannot create, persist, and read back the executor, stop exactly:
+
+```text
+SETUP_BLOCKED: RUNTIME_EXECUTOR_UNAVAILABLE
+```
+
+Do not report `paper_active: true`. Do not treat installed skills, a saved
+profile, backend ids, a healthy backend, or an instruction to run later as proof
+that the executor exists.
+
 ## Activate
 
 After intake, operation-key setup, manifest verification, runtime skill
@@ -393,6 +469,8 @@ clawhouse_agent_profile:
   strategy_runtime:
     execution_driver: "heartbeat_system | codex_automation | claude_scheduled_task"
     schedule_active: true
+    executor_id: "clawhouse-<agent_id>-paper-loop"
+    last_result_status: "ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED"
 ```
 
 Before reporting `Paper agent is active`, verify the runtime has a durable active
@@ -439,6 +517,8 @@ Agent:
 - key_market_active: false
 - execution_driver: <heartbeat_system | codex_automation | claude_scheduled_task>
 - schedule_active: true
+- executor_id: clawhouse-<agent_id>-paper-loop
+- last_result_status: <ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED>
 
 Optional key market:
 1. Send 0.02 testnet NEAR to <creator_public_account>.
