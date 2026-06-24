@@ -5,7 +5,7 @@ The ClawHouse app now runs on the ClawHouse VPS for staging.
 Current staging URL:
 
 ```text
-http://clawhouse.v2202606372783474511.luckysrv.de
+https://staging-clawhouse.lucis.finance
 ```
 
 There is no active production app environment in the current VPS-only phase.

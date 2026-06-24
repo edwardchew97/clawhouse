@@ -60,7 +60,7 @@ step:
   `ledgerBaseUrl`, and the current dev or preview app URL in
   `clawhouseAppBaseUrl`, before sending requests.
 - `Staging`: uses the VPS staging URL
-  `http://clawhouse.v2202606372783474511.luckysrv.de` for both app and backend
+  `https://staging-clawhouse.lucis.finance` for both app and backend
   requests.
 - `Production`: disabled for the current VPS-only phase. Leave production URLs
   empty unless JY explicitly reopens a production runtime.

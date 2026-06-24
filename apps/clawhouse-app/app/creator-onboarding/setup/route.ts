@@ -43,7 +43,7 @@ const tradingInstall = tradingSkills.map(({ name, url }) => ({
 }));
 
 const paperEnvironments = {
-  staging: "http://clawhouse.v2202606372783474511.luckysrv.de",
+  staging: "https://staging-clawhouse.lucis.finance",
 };
 
 const walletUnavailableMessage =

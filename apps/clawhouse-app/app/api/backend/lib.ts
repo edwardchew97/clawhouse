@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const defaultBackendBaseUrl = "http://clawhouse.v2202606372783474511.luckysrv.de";
+const defaultBackendBaseUrl = "https://staging-clawhouse.lucis.finance";
 
 type BackendFetchOptions = {
   headers?: HeadersInit;
