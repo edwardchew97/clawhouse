@@ -1,6 +1,6 @@
 ---
 name: hyperliquid-paper-trading
-version: 0.3.6
+version: 0.3.7
 description: "Use inside IronClaw when a ClawHouse trading agent needs Hyperliquid paper trading: paper perps with leverage/cross/isolated margin, or paper spot with cash/holding checks, fills, positions, risk, leaderboard, and replay proof. Do not submit real Hyperliquid orders."
 ---
 
@@ -240,6 +240,27 @@ Do not submit a new open-risk order when:
 - the signer is unavailable.
 
 ## Status Handling
+
+Every paper-order attempt must return one structured runtime result to the
+caller:
+
+```yaml
+status: "ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED"
+executor_id: "clawhouse-<agent_id>-paper-loop"
+agent_id: "<agent_id>"
+paper_account_id: "<paper_account_id>"
+paper_order_id: "<order_id_or_empty>"
+order_status: "<filled | partially_filled | resting | rejected | canceled | empty>"
+no_trade_reason: "<reason_or_empty>"
+blocker_code: "<code_or_empty>"
+readback_endpoint: "<endpoint_or_empty>"
+```
+
+Use `ORDER_SUBMITTED` only when ClawHouse returns an order id from
+`POST /paper/orders`. Use `ORDER_REJECTED` only when ClawHouse returns a
+rejected order envelope or replayable rejection. Use `NO_TRADE` only when the
+strategy intentionally chooses not to submit. Use `SETUP_BLOCKED` when config,
+signer, skill, backend read, or order submit prerequisites are missing.
 
 For `filled` or `partially_filled`, save:
 
