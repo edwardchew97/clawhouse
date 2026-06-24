@@ -7,16 +7,18 @@ runtime, not by ClawHouse.
 ## Rule
 
 Check for ClawHouse runtime updates. Do not trade from heartbeat unless a
-separate active strategy and user-approved routine explicitly allow it.
+separate active strategy and user-approved routine explicitly allow it, or the
+active profile targets staging paper trading.
 
 When `clawhouse_agent_profile.paper_active` is true and
 `strategy_runtime.schedule_active` is true, the Heartbeat System owns the
 ClawHouse paper strategy loop for that profile. It must not wait for the creator
 to run shell commands or backend calls.
 
-After a new ClawHouse paper profile is registered, run the first strategy attempt
-within 60 seconds. The first attempt may submit a signed paper order or record a
-specific `NO_TRADE` reason, but it must not be silent.
+After a new ClawHouse paper profile is registered, run one visible first loop
+within 60 seconds. This does not force a trade. The loop must return exactly one
+of: a signed strategy paper order, an allowed staging smoke-test paper order, or
+a specific `NO_TRADE` reason.
 
 ## Manifest
 
@@ -68,7 +70,9 @@ On each heartbeat:
    - current `trading_strategy`.
 11. For a valid active profile, run the strategy through
    `hyperliquid-paper-trading`. Submit a signed paper order only when the
-   strategy and risk checks allow it. Otherwise record a specific `NO_TRADE`
+   strategy and risk checks allow it, or when `environment` is `staging` and the
+   runtime is submitting one tiny paper-only smoke-test order with a
+   `STAGING_TEST_ORDER:` reason. Otherwise record a specific `NO_TRADE`
    reason.
 12. Read back the paper order/replay result when an order was submitted.
 13. Record the check and strategy result in ClawHouse runtime state.
