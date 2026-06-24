@@ -413,6 +413,27 @@
           }
         },
         {
+          "id": "agentRegistration.ledger.getBoardPaperAccount",
+          "name": "Read Board Paper Account",
+          "description": "Reads the backend-derived paper account for the registered board so Workbench verifies board id to real paper account id readback instead of relying on a guessed id.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/paper-account",
+          "runningNotes": [
+            "Reading the real GET /boards/:id/paper-account endpoint.",
+            "The backend returns the true paper_account_id bound to this board.",
+            "This step fails if onboarding only guessed a paper account id instead of persisting the backend account."
+          ],
+          "inputs": {
+            "ledgerBoardId": ""
+          },
+          "setVars": {
+            "paperTradingAccountId": "response.json.json.paper_account_id",
+            "paperTradingAccountStatus": "response.json.json.account.status"
+          }
+        },
+        {
           "id": "agentRegistration.key.create",
           "name": "Create Agent Key Market",
           "description": "Creates a real NEAR testnet key market for the approved agent. Change agentId before sending if the market already exists.",

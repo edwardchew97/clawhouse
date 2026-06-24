@@ -85,6 +85,7 @@ export function createApp(options: AppOptions) {
         const nearFtWatchMatch = path.match(/^\/boards\/([^/]+)\/watch\/near-ft$/);
         const portfolioMatch = path.match(/^\/boards\/([^/]+)\/portfolio$/);
         const pnlMatch = path.match(/^\/boards\/([^/]+)\/pnl$/);
+        const boardPaperAccountMatch = path.match(/^\/boards\/([^/]+)\/paper-account$/);
         const keyMarketTradesMatch = path.match(/^\/key-market\/trades$/);
         const paperAccountMatch = path.match(/^\/paper\/accounts\/([^/]+)$/);
         const paperAccountActivityMatch = path.match(/^\/paper\/accounts\/([^/]+)\/activity$/);
@@ -174,6 +175,11 @@ export function createApp(options: AppOptions) {
           const board = await requireBoard(db, pnlMatch[1]);
           await assertBoardRead(db, request, url, board, adminToken, now(), "key_holder_detail", rpcFetch);
           return json(await readPnl(db, board.id));
+        }
+        if (method === "GET" && boardPaperAccountMatch) {
+          const board = await requireBoard(db, boardPaperAccountMatch[1]);
+          await assertBoardRead(db, request, url, board, adminToken, now(), "public_summary", rpcFetch);
+          return json(await readPaperAccountForBoard(db, board.id));
         }
         if (method === "GET" && keyMarketTradesMatch) {
           return json(await listKeyMarketTrades(db, env, url.searchParams));
@@ -324,8 +330,12 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
   const publicProfileMetadata = creatorOnboardingPublicMetadata(data, metadata);
   const agentId = requiredString(data.agentId ?? data.agent_id, "agent_id");
   const agentPublicKey = requiredString(data.agentPublicKey ?? data.agent_public_key, "agent_public_key");
-  const boardId = requiredString(data.boardId ?? data.board_id, "board_id");
-  const paperAccountId = requiredString(data.paperAccountId ?? data.paper_account_id, "paper_account_id");
+  const requestedBoardId = cleanString(data.boardId ?? data.board_id);
+  const existingBoard = requestedBoardId
+    ? null
+    : await findCreatorOnboardingBoard(db, agentId, agentPublicKey);
+  const boardId = requestedBoardId ?? existingBoard?.id ?? newId("board");
+  const requestedPaperAccountId = cleanString(data.paperAccountId ?? data.paper_account_id);
   const board: Board = {
     id: boardId,
     agent_id: agentId,
@@ -345,7 +355,7 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
     created_at: createdAt,
   };
   const paperBody = {
-    paper_account_id: paperAccountId,
+    paper_account_id: requestedPaperAccountId,
     board_id: boardId,
     agent_id: agentId,
     agent_public_key: agentPublicKey,
@@ -358,12 +368,12 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
   let registeredBoard: Board | null = null;
 
   await db.transaction(async (tx) => {
-    await assertBoardRegistrationSignature(tx, request, body.raw, board, Date.parse(createdAt), createdAt);
+    await assertBoardRegistrationSignature(tx, request, body.raw, board, Date.parse(createdAt), createdAt, requestedBoardId ?? "");
     await assertAgentSignature(tx, request, body.raw, {
       purpose: "creator_onboarding_registration",
       agentId,
       agentPublicKey,
-      boardId,
+      boardId: requestedBoardId ?? null,
       createdAt,
     });
     registeredAgent = await upsertAgentRegistration(tx, {
@@ -373,19 +383,19 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
       metadataJson: stringifyOptional(data.agentMetadata ?? data.agent_metadata ?? data.metadata),
     }, createdAt);
     registeredBoard = await ensureBoardRegistration(tx, board);
-    await ensurePaperAccountRegistration(tx, paperAccountId, paperBody, createdAt);
+    await ensurePaperAccountRegistration(tx, paperBody, createdAt);
   });
 
-  const paperAccount = (await readPaperAccount(db, paperAccountId)).account;
+  const paperAccountReadback = await readPaperAccountForBoard(db, boardId);
   return {
     ok: true,
     backend_registered: true,
     agent_id: agentId,
     board_id: boardId,
-    paper_account_id: paperAccountId,
+    paper_account_id: paperAccountReadback.paper_account_id,
     agent: registeredAgent,
     board: registeredBoard,
-    paperAccount,
+    paperAccount: paperAccountReadback.account,
   };
 }
 
@@ -436,10 +446,30 @@ async function ensureBoardRegistration(db: LedgerDb, board: Board) {
     assertSameRegisteredField(existing.public_key, board.public_key, "board public_key");
     assertSameRegisteredField(existing.public_status, board.public_status, "board public_status");
     assertSameRegisteredField(existing.visibility_mode, board.visibility_mode, "board visibility_mode");
+    if (!existing.metadata_json && board.metadata_json) {
+      await db.run("UPDATE boards SET metadata_json = ? WHERE id = ?", [board.metadata_json, board.id]);
+      return { ...existing, metadata_json: board.metadata_json };
+    }
     return existing;
   }
   await insertBoardRegistration(db, board);
   return board;
+}
+
+async function findCreatorOnboardingBoard(db: LedgerDb, agentId: string, agentPublicKey: string) {
+  const boards = await db.all<Board>(
+    `SELECT * FROM boards
+      WHERE agent_id = ?
+        AND agent_public_key = ?
+        AND public_status = 'active'
+        AND visibility_mode = 'public'
+      ORDER BY created_at DESC, id DESC`,
+    [agentId, agentPublicKey],
+  );
+  if (boards.length > 1) {
+    throw new RequestError("Multiple active public boards found for agent", 409);
+  }
+  return boards[0] ?? null;
 }
 
 async function insertBoardRegistration(db: LedgerDb, board: Board) {
@@ -492,11 +522,16 @@ async function insertBoardRegistration(db: LedgerDb, board: Board) {
 
 async function ensurePaperAccountRegistration(
   db: LedgerDb,
-  paperAccountId: string,
   paperBody: JsonObject,
   createdAt: string,
 ) {
-  const existing = await db.get<PaperAccountRow>("SELECT * FROM paper_accounts WHERE id = ?", [paperAccountId]);
+  const requestedPaperAccountId = cleanString(paperBody.paper_account_id);
+  const boardId = cleanString(paperBody.board_id);
+  const existing = requestedPaperAccountId
+    ? await db.get<PaperAccountRow>("SELECT * FROM paper_accounts WHERE id = ?", [requestedPaperAccountId])
+    : boardId
+      ? await db.get<PaperAccountRow>("SELECT * FROM paper_accounts WHERE board_id = ? ORDER BY created_at DESC, id DESC LIMIT 1", [boardId])
+      : null;
   if (existing) {
     assertSameRegisteredField(existing.board_id, cleanString(paperBody.board_id), "paper account board_id");
     assertSameRegisteredField(existing.agent_id, cleanString(paperBody.agent_id), "paper account agent_id");
@@ -505,10 +540,62 @@ async function ensurePaperAccountRegistration(
       throw new RequestError("Existing paper account starting_balance_usd does not match registration", 409);
     }
     assertSameRegisteredField(existing.status, "active", "paper account status");
-    return existing;
+    return await updateCreatorPaperAccount(db, existing, paperBody, createdAt);
   }
-  await createPaperAccount(db, { raw: JSON.stringify(paperBody), json: paperBody }, createdAt);
-  return await db.get<PaperAccountRow>("SELECT * FROM paper_accounts WHERE id = ?", [paperAccountId]);
+  const existingForBoard = boardId
+    ? await db.get<PaperAccountRow>("SELECT * FROM paper_accounts WHERE board_id = ? ORDER BY created_at DESC, id DESC LIMIT 1", [boardId])
+    : null;
+  if (existingForBoard) {
+    assertSameRegisteredField(existingForBoard.agent_id, cleanString(paperBody.agent_id), "paper account agent_id");
+    assertSameRegisteredField(existingForBoard.agent_public_key, cleanString(paperBody.agent_public_key), "paper account agent_public_key");
+    if (Number(existingForBoard.starting_balance_usd) !== DEFAULT_CREATOR_PAPER_STARTING_BALANCE_USD) {
+      throw new RequestError("Existing paper account starting_balance_usd does not match registration", 409);
+    }
+    assertSameRegisteredField(existingForBoard.status, "active", "paper account status");
+    return await updateCreatorPaperAccount(db, existingForBoard, paperBody, createdAt);
+  }
+  const accountBody = {
+    ...paperBody,
+    paper_account_id: requestedPaperAccountId ?? newId("paper"),
+  };
+  await createPaperAccount(db, { raw: JSON.stringify(accountBody), json: accountBody }, createdAt);
+  const created = await db.get<PaperAccountRow>("SELECT * FROM paper_accounts WHERE id = ?", [accountBody.paper_account_id]);
+  if (!created) throw new RequestError("Paper account not found after registration", 500);
+  return created;
+}
+
+async function updateCreatorPaperAccount(
+  db: LedgerDb,
+  account: PaperAccountRow,
+  paperBody: JsonObject,
+  updatedAt: string,
+) {
+  const allowedMarketsJson = stringifyOptional(paperBody.allowed_markets);
+  const metadataJson = stringifyOptional(paperBody.metadata);
+  await db.run(
+    "UPDATE paper_accounts SET allowed_markets_json = ?, metadata_json = ?, updated_at = ? WHERE id = ?",
+    [allowedMarketsJson, metadataJson, updatedAt, account.id],
+  );
+  return {
+    ...account,
+    allowed_markets_json: allowedMarketsJson,
+    metadata_json: metadataJson,
+    updated_at: updatedAt,
+  };
+}
+
+async function readPaperAccountForBoard(db: LedgerDb, boardId: string) {
+  const paperAccount = await db.get<PaperAccountRow>(
+    "SELECT * FROM paper_accounts WHERE board_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+    [boardId],
+  );
+  if (!paperAccount) throw new RequestError("Paper account not found", 404);
+  const accountReadback = await readPaperAccount(db, paperAccount.id);
+  return {
+    ...accountReadback,
+    board_id: boardId,
+    paper_account_id: paperAccount.id,
+  };
 }
 
 function assertSameRegisteredField(actual: string | null, expected: string | null, name: string) {
@@ -531,6 +618,7 @@ async function assertBoardRegistrationSignature(
   board: Board,
   nowMs: number,
   createdAt: string,
+  signedBoardId = board.id,
 ) {
   const headers = readSignedHeaders(request.headers);
 
@@ -555,7 +643,7 @@ async function assertBoardRegistrationSignature(
     bodyHash: actualBodyHash,
     timestamp: headers.timestamp,
     nonce: headers.nonce,
-    boardId: board.id,
+    boardId: signedBoardId,
     agentId: board.agent_id,
     walletAddress: headers.walletAddress,
   });
