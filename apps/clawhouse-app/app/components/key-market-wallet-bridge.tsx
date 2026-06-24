@@ -57,7 +57,7 @@ type DemoChainState = {
 };
 
 type DemoApi = {
-  getSelectedAgent: () => DemoAgent;
+  getSelectedAgent: () => DemoAgent | null;
   getTradeSide: () => TradeSide;
   getKeyAmount: () => string;
   setChainState: (state: DemoChainState) => void;
@@ -353,10 +353,24 @@ export function KeyMarketWalletBridge() {
 
       busyRef.current = true;
       const agent = demo.getSelectedAgent();
+      const accountId = accountRef.current.accountId;
+      if (!agent) {
+        busyRef.current = false;
+        const message = "No agent selected.";
+        renderChainState({
+          accountId,
+          pending: false,
+          phase: "idle",
+          statusTitle: "No agent selected",
+          statusBody: "Onboard the first paper-trading agent before buying keys.",
+          statusTone: "idle",
+        });
+        showToast(message);
+        return;
+      }
       const side = forcedSide ?? demo.getTradeSide();
       const amount = normalizedAmount(forcedSide ? "1" : demo.getKeyAmount());
       const actionLabel = side === "buy" ? "Buy" : "Sell";
-      const accountId = accountRef.current.accountId;
 
       let quoteResponse: QuoteResponse;
       try {
@@ -513,6 +527,31 @@ export function KeyMarketWalletBridge() {
       if (!demo || !config) return;
 
       const agent = demo.getSelectedAgent();
+      if (!agent) {
+        renderChainState({
+          accountId: account?.accountId ?? null,
+          contractId: config.contractId,
+          networkId: config.networkId,
+          pending: false,
+          phase: "idle",
+          state: null,
+          quote: null,
+          quoteSide: null,
+          protection: null,
+          maxBuy: null,
+          maxBuyError: null,
+          activity: null,
+          activityError: null,
+          backend: null,
+          readAccess: null,
+          readAccessError: null,
+          error: null,
+          statusTitle: "No agent selected",
+          statusBody: "Fresh staging has no public agent board yet.",
+          statusTone: "idle",
+        });
+        return;
+      }
       const side = demo.getTradeSide();
       const amount = normalizedAmount(demo.getKeyAmount());
       const holderParam = account?.accountId ? `&holderId=${encodeURIComponent(account.accountId)}` : "";

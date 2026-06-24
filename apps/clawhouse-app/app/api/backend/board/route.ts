@@ -19,7 +19,33 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const boardId = requireBoardId(searchParams.get("boardId") ?? getBackendConfig().defaultBoardId);
+    const configuredBoardId = searchParams.get("boardId") ?? getBackendConfig().defaultBoardId;
+    if (!configuredBoardId) {
+      return NextResponse.json({
+        ok: false,
+        config: publicBackendConfig(),
+        boardId: null,
+        board: null,
+        events: null,
+        portfolio: null,
+        pnl: null,
+        balanceChanges: null,
+        prices: null,
+        paperLeaderboard: null,
+        paperActivity: null,
+        errors: {
+          board: "No default board configured",
+          events: null,
+          portfolio: null,
+          pnl: null,
+          balanceChanges: null,
+          prices: null,
+          paperLeaderboard: null,
+          paperActivity: null,
+        },
+      });
+    }
+    const boardId = requireBoardId(configuredBoardId);
     const path = `/boards/${encodeURIComponent(boardId)}`;
     let clearReadCookie = false;
     let readToken = "";

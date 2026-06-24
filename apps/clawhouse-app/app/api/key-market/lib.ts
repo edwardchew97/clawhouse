@@ -76,7 +76,7 @@ export function getKeyMarketConfig() {
     storageDepositYocto,
     buyMaxReserveYocto,
     buyMaxSearchLimit: numberEnv("CLAWHOUSE_KEY_BUY_MAX_SEARCH_LIMIT", defaultBuyMaxSearchLimit),
-    defaultAgentId: firstEnv(["CLAWHOUSE_DEFAULT_AGENT_ID"]) ?? "terminal_chad6",
+    defaultAgentId: firstEnv(["CLAWHOUSE_DEFAULT_AGENT_ID"]) ?? null,
   };
 }
 

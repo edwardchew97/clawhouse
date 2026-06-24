@@ -43,7 +43,7 @@ const tradingInstall = tradingSkills.map(({ name, url }) => ({
 }));
 
 const paperEnvironments = {
-  staging: "https://clawhouse-backend-staging.vercel.app",
+  staging: "http://clawhouse.v2202606372783474511.luckysrv.de",
   production: "https://clawhouse-backend-prod.vercel.app",
 };
 
