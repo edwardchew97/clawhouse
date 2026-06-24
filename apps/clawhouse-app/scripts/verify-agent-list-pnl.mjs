@@ -171,7 +171,8 @@ class FakeElement {
   }
 }
 
-function agent(id, boardId, totalPnlPct, holders) {
+function agent(id, boardId, totalPnlPct, holders, keyMarketStatus = "unavailable") {
+  const keyMarketAvailable = keyMarketStatus === "available";
   return {
     id,
     boardId,
@@ -182,8 +183,8 @@ function agent(id, boardId, totalPnlPct, holders) {
     gate: "1 key",
     status: "available",
     keyMarket: {
-      status: "available",
-      data: { agent: { agent_id: id, name: id, supply: holders } },
+      status: keyMarketStatus,
+      data: keyMarketAvailable ? { agent: { agent_id: id, name: id, supply: holders } } : undefined,
     },
     board: {
       status: "available",
@@ -763,6 +764,14 @@ assert(pageSource.includes('data-agent-filter="last24h"'), "Agent Discovery shou
 assert(pageSource.includes('data-agent-filter="keyEnabled"'), "Agent Discovery should expose a key trading enabled filter.");
 assert(element("agentList").innerHTML.includes("Equity $1,250.00"), "Agent rows should show paper equity instead of key counts.");
 assert(!element("agentList").innerHTML.includes("0 keys"), "Agent rows should not show unhelpful zero key counts.");
+filterCheckbox("keyEnabled").click();
+rendered = rows();
+assert(rendered.length === 0, "Key trading filter should hide agents without a real key-market readback.");
+assert(element("agentList").innerHTML.includes("No agents found"), "Empty filtered Agent Discovery should render a clear empty state.");
+assert(element("agentList").innerHTML.includes("Clear filters"), "Empty filtered Agent Discovery should offer a filter reset action.");
+filterCheckbox("keyEnabled").click();
+rendered = rows();
+assert(rendered.length === 1, "Clearing key trading filter should restore paper-active rows.");
 
 const codexRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "codex_main_20260620");
 codexRow.click();

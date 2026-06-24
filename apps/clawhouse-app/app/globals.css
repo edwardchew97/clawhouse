@@ -376,19 +376,54 @@
     }
 
     .agent-list-empty {
-      min-height: 72px;
+      min-height: 156px;
       display: grid;
       align-content: center;
-      gap: 4px;
-      padding: 12px 10px;
+      justify-items: start;
+      gap: 8px;
+      margin: 6px;
+      padding: 18px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.055);
+      border-radius: 6px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.012));
       color: #81878d;
       font-size: 11px;
       line-height: 14px;
     }
 
+    .agent-list-empty-kicker {
+      color: #9db6ae;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
     .agent-list-empty strong {
+      color: #f4f4f4;
+      font-size: 16px;
+      line-height: 18px;
+    }
+
+    .agent-list-empty p {
+      max-width: 250px;
+      margin: 0;
+      color: #8f959b;
+      font-size: 12px;
+      line-height: 16px;
+    }
+
+    .agent-clear-filters {
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid rgba(99, 216, 189, 0.26);
+      border-radius: 4px;
+      background: rgba(99, 216, 189, 0.08);
       color: #d7d9db;
-      font-size: 13px;
+      font-size: 11px;
+      font-weight: 650;
+      cursor: pointer;
     }
 
     .agent-row {

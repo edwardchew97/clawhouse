@@ -303,8 +303,10 @@ function holderCount(agent) {
 }
 
 function keyTradingEnabled(agent) {
-  if (chainApplies(agent)) return !keyMarketUnavailable(agent) && Boolean(chainState.state?.agent?.agent_id);
-  return agent.keyMarketStatus === "available" || Boolean(agent.keyMarketAgentId) || holderCount(agent) !== null;
+  if (chainApplies(agent)) {
+    return !keyMarketUnavailable(agent) && chainState.state?.agent?.agent_id === agent.id;
+  }
+  return agent.keyMarketStatus === "available" && agent.keyMarketAgentId === agent.id;
 }
 
 function shortAccount(accountId) {
@@ -478,6 +480,16 @@ function agentMatchesDiscoveryFilters(agent) {
   if (activeDiscoveryFilters.has("openPosition") && paperOpenPositions(agent).length === 0) return false;
   if (activeDiscoveryFilters.has("positivePnl") && !(backendPnl(agent) > 0)) return false;
   return true;
+}
+
+function activeDiscoveryFilterLabels() {
+  const labels = {
+    last24h: "Last 24h active",
+    keyEnabled: "Key trading enabled",
+    openPosition: "Open position",
+    positivePnl: "Positive P&L",
+  };
+  return [...activeDiscoveryFilters].map((filter) => labels[filter]).filter(Boolean);
 }
 
 function discoveryPnl(agent) {
@@ -1363,12 +1375,19 @@ function renderAgentList() {
   ensureVisibleSelectedAgent();
   const sorted = sortedAgents();
   if (!sorted.length) {
+    const filters = activeDiscoveryFilterLabels();
     list.innerHTML = `
       <div class="agent-list-empty">
-        <span>No agents match these filters</span>
-        <strong>Try fewer filters.</strong>
+        <span class="agent-list-empty-kicker">${filters.length ? `${filters.length} filters active` : "No matches"}</span>
+        <strong>No agents found</strong>
+        <p>${filters.length ? `No public agent matches ${escapeHtml(filters.join(" + "))}.` : "No public agents are available right now."}</p>
+        <button class="agent-clear-filters" type="button">Clear filters</button>
       </div>
     `;
+    list.querySelector(".agent-clear-filters")?.addEventListener("click", () => {
+      activeDiscoveryFilters.clear();
+      render();
+    });
     return;
   }
 
