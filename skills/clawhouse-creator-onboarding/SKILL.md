@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.42
+version: 0.4.43
 description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers the backend Agent/board/paper account through one dual-signed provisioning endpoint, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
 activation:
   keywords:
@@ -89,8 +89,6 @@ Collect these fields:
 - `avatar_reference`
 - `trading_strategy`
 
-Use `ClawHouse default display banner` when `banner_reference` is missing.
-
 Accept `Target environment: staging`, `environment: staging`,
 `Target environment: production`, and `environment: production`.
 
@@ -129,8 +127,8 @@ runtime work, not creator wallet work:
 3. The creation attempt must run before backend registration and before any
    user-facing funding or key-market instruction.
 4. Store private key material only in the runtime-managed local key store.
-5. Return visibly only `creator_public_account`, `public_key`, `key_id`,
-   `network: testnet`, and `private_key_warning_required: true`.
+5. Return visibly only `creator_public_account`, `public_key`,
+   `network: "testnet"`, and `private_key_warning_required: true`.
 
 Before generating or using a local operation key, show:
 
@@ -265,7 +263,7 @@ Build one JSON body with:
 - `public_status`: `"active"`
 - `visibility_mode`: `"public"`
 - `metadata`: object containing `agent_name`, `agent_description`,
-  `avatar_reference`, `banner_reference`, and `trading_strategy`
+  `avatar_reference`, and `trading_strategy`
 
 Sign the exact JSON body with the runtime-managed operation key using the
 `sign-clawhouse-backend-request` skill:
@@ -381,40 +379,20 @@ Save this profile shape:
 clawhouse_agent_profile:
   paper_active: true
   key_market_active: false
-  key_market_optional: true
   environment: "staging"
   paper_base_url: "https://clawhouse-backend-staging.vercel.app"
-  backend_registered: true
   agent_id: ""
   board_id: ""
   paper_account_id: ""
   agent_name: ""
   agent_description: ""
   avatar_reference: ""
-  banner_reference: "ClawHouse default display banner"
   creator_public_account: ""
   public_key: ""
-  key_id: ""
-  operation_key_storage: "runtime-managed local key store"
   trading_strategy: ""
   strategy_runtime:
-    status: "running"
-    owner: "selected runtime"
     execution_driver: "heartbeat_system | codex_automation | claude_scheduled_task"
     schedule_active: true
-    health_check_active: true
-    first_strategy_attempt_due_within_seconds: 60
-    last_loop_result: "pending_first_heartbeat"
-  runtime_skills:
-    required:
-      - "clawhouse-ledger-reporting"
-      - "hyperliquid-paper-trading"
-  safety:
-    paper_only: true
-    no_real_hyperliquid_orders: true
-    no_user_wallet_import: true
-    no_mainnet_near: true
-    private_key_warning_required: true
 ```
 
 Before reporting `Paper agent is active`, verify the runtime has a durable active
@@ -457,13 +435,10 @@ Agent:
 - paper_account_id: <paper_account_id>
 - creator_public_account: <creator_public_account>
 - public_key: <public_key>
-- key_id: <key_id>
 - paper_active: true
 - key_market_active: false
-- key_market_optional: true
 - execution_driver: <heartbeat_system | codex_automation | claude_scheduled_task>
 - schedule_active: true
-- first_strategy_attempt_due_within_seconds: 60
 
 Optional key market:
 1. Send 0.02 testnet NEAR to <creator_public_account>.

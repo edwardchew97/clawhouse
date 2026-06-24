@@ -2,6 +2,15 @@ Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-s
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
+## 0. Default Response Style
+
+- For debugging, status, or "why is this happening" questions, answer in this
+  order:
+  1. First give one plain-language conclusion.
+  2. Then give the shortest reason.
+  3. Only expand into evidence, IDs, logs, tables, command output, or proof if
+     JY asks for proof or the decision needs it.
+
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**

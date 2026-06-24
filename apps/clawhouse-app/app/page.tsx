@@ -126,6 +126,7 @@ export default function Page() {
                   <span className="chart-skeleton-tick tick-b" />
                   <span className="chart-skeleton-tick tick-c" />
                 </div>
+                <div className="chart-empty-kicker" id="chartEmptyKicker">Paper trading inactive</div>
                 <strong id="chartEmptyTitle">Connect Wallet</strong>
                 <span id="chartEmptyDetail">Connect Wallet to load holder-gated chart data.</span>
               </div>
@@ -146,45 +147,39 @@ export default function Page() {
           </section>
 
           <aside className="right">
-            <section className="panel ticket">
-              <div className="ticket-tabs">
-                <button className="ticket-tab active buy" data-side="buy" type="button">Buy Key</button>
-                <button className="ticket-tab" data-side="sell" type="button">Sell Key</button>
-              </div>
-              <div className="input-box">
-                <input id="keyAmount" defaultValue="1" inputMode="decimal" aria-label="Key amount" />
-                <span>KEY</span>
-              </div>
-              <div className="quick">
-                <button data-amount="1" type="button">1</button>
-                <button data-amount="2" type="button">2</button>
-                <button data-amount="5" type="button">5</button>
-                <button data-amount="10" type="button">10</button>
-              </div>
-              <div className="quote">
-                <div className="quote-line"><span>You pay</span><b id="quotePay">--</b></div>
-                <div className="quote-line"><span>You receive</span><b id="quoteReceive">--</b></div>
-                <div className="quote-line"><span>Average price per key</span><b id="quoteAverage">--</b></div>
-              </div>
-              <button className="primary" id="tradeButton" type="button">Connect Wallet</button>
-            </section>
-
-            <section className="panel position">
-              <div className="panel-title" id="positionTitle">Your Key Position</div>
-              <div className="panel-sub" id="positionSub">Key balance only, not copy-trade portfolio</div>
-              <div className="position-grid">
-                <div className="stat">
-                  <label id="posKeysLabel">Keys</label>
-                  <strong id="posKeys">--</strong>
+            <section className="panel ticket" id="keyMarketTicket">
+              <div className="ticket-controls" id="keyMarketTicketControls">
+                <div className="ticket-tabs">
+                  <button className="ticket-tab active buy" data-side="buy" type="button">Buy Key</button>
+                  <button className="ticket-tab" data-side="sell" type="button">Sell Key</button>
                 </div>
-                <div className="stat">
-                  <label id="posEntryLabel">Entry</label>
-                  <strong id="posEntry">-</strong>
+                <div className="input-box">
+                  <input id="keyAmount" defaultValue="1" inputMode="decimal" aria-label="Key amount" />
+                  <span>KEY</span>
                 </div>
-                <div className="stat">
-                  <label id="posExitLabel">Exit</label>
-                  <strong id="posExit">-</strong>
+                <div className="ticket-balance">
+                  <span>You own</span>
+                  <b id="ticketOwnedKeys">--</b>
+                  <span id="ticketMaxBuy">Max buy --</span>
                 </div>
+                <div className="quick">
+                  <button data-amount="1" type="button">1</button>
+                  <button data-amount="2" type="button">2</button>
+                  <button data-amount="5" type="button">5</button>
+                  <button data-amount="10" type="button">10</button>
+                  <button data-amount="max" id="maxAmountButton" type="button">Max</button>
+                </div>
+                <div className="quote">
+                  <div className="quote-line"><span>You pay</span><b id="quotePay">--</b></div>
+                  <div className="quote-line"><span>You receive</span><b id="quoteReceive">--</b></div>
+                  <div className="quote-line"><span>Average price per key</span><b id="quoteAverage">--</b></div>
+                </div>
+                <button className="primary" id="tradeButton" type="button">Connect Wallet</button>
+              </div>
+              <div className="ticket-market-empty" id="keyMarketUnavailable" aria-live="polite" hidden>
+                <div className="ticket-market-kicker">Key market inactive</div>
+                <strong>Key trading is not enabled for this agent</strong>
+                <span>Paper performance remains visible. Choose a key-enabled agent to buy or sell.</span>
               </div>
             </section>
 
