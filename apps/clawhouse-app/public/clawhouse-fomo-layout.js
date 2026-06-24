@@ -17,7 +17,6 @@ document.body.classList.add("motion-prep");
 let selectedId = requestedAgentId || agentSelectionKey(agents[0]);
 if (!agents.some((agent) => agentMatchesSelection(agent, selectedId))) selectedId = agentSelectionKey(agents[0]);
 let tradeSide = "buy";
-let agentSort = "pnl";
 let activeChartRange = "24h";
 let activeEventId = null;
 let chainState = {
@@ -472,8 +471,8 @@ function backendPnlSource(agent) {
 function sortedAgents() {
   const sorted = visibleDiscoveryAgents();
   sorted.sort((a, b) => {
-    const aValue = agentSort === "events" ? agentEventCount(a) : agentRowPnl(a);
-    const bValue = agentSort === "events" ? agentEventCount(b) : agentRowPnl(b);
+    const aValue = agentRowPnl(a);
+    const bValue = agentRowPnl(b);
     if (aValue === null && bValue !== null) return 1;
     if (aValue !== null && bValue === null) return -1;
     if (aValue !== null && bValue !== null && aValue !== bValue) return bValue - aValue;
@@ -507,6 +506,27 @@ function ensureVisibleSelectedAgent() {
 
 function agentEventCount(agent) {
   return chartModel(agent).events.length;
+}
+
+function agentRowReadout(agent) {
+  const paper = paperLeaderboardRow(agent);
+  if (paper) {
+    const freshness = String(paper.stale_data_status || "").replace(/_/g, " ");
+    const updated = formatBackendTime(paper.created_at);
+    const liquidations = asNumber(paper.liquidation_count) ?? 0;
+    return {
+      primary: `Equity ${formatUsd(paper.equity_usd)}`,
+      secondary: `${freshness || "paper"} · ${updated}${liquidations > 0 ? ` · ${liquidations} liq` : ""}`,
+      tone: freshness.includes("stale") ? "warn" : "fresh",
+    };
+  }
+
+  const holders = holderCount(agent);
+  return {
+    primary: keyPriceLabel(agent),
+    secondary: holders === null ? "key market checking" : `${holders} key holders`,
+    tone: "idle",
+  };
 }
 
 function formatBackendTime(value) {
@@ -1307,7 +1327,7 @@ function renderAgentList() {
     const selected = selectionKey === selectedId;
     const title = agentTitle(agent);
     const pnlTone = pnl === null ? "empty" : pnl < 0 ? "down" : "up";
-    const holders = holderCount(agent);
+    const readout = agentRowReadout(agent);
     const rowTag = isPaperAgent(agent) ? "paper" : "key market";
     return `
     <button class="agent-row" data-agent="${escapeHtml(selectionKey)}" data-agent-id="${escapeHtml(agent.id)}" data-selected="${selected ? "true" : "false"}" aria-label="Open ${escapeHtml(title)}">
@@ -1319,8 +1339,8 @@ function renderAgentList() {
         </div>
         <div class="agent-meta">${escapeHtml(agent.strategy)}</div>
         <div class="agent-stats">
-          <span>${keyPriceLabel(agent)}</span>
-          <span>${holders === null ? "--" : holders} keys</span>
+          <span class="agent-row-metric">${escapeHtml(readout.primary)}</span>
+          <span class="agent-row-status ${escapeHtml(readout.tone)}">${escapeHtml(readout.secondary)}</span>
           <b class="agent-change ${pnlTone}">${pnlLabel(pnl)}</b>
         </div>
       </div>
@@ -1366,9 +1386,6 @@ function renderHero(agent) {
   byId("statGate").textContent = isUnlocked(agent) ? "Unlocked" : holderBalance(agent) > 0 ? "Sign proof" : "1 key";
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
-  byId("miniTop").textContent = title;
-  byId("miniMove").textContent = pnl === null ? "--" : signedPct(pnl);
-  byId("leaderDataSource").textContent = pnlSource;
   byId("chartSub").textContent = activity
     ? `${chart.message} / ${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled orders / ${backendNetwork(agent)}`
     : `${chart.message} / ${backendNetwork(agent)} / ${pnlSource} / key market ${chainApplies(agent) ? "live" : "checking"}`;
@@ -2201,16 +2218,6 @@ function setChartRange(range) {
   renderRoom(selectedAgent());
   syncContentColumns();
   dispatchUiEvent("clawhouse:chart-range-change");
-}
-
-const agentSortControl = byId("agentSort");
-if (agentSortControl) {
-  agentSortControl.value = agentSort;
-  agentSortControl.addEventListener("change", () => {
-    agentSort = agentSortControl.value === "events" ? "events" : "pnl";
-    renderAgentList();
-    dispatchUiEvent("clawhouse:agent-sort-change");
-  });
 }
 
 document.querySelectorAll("[data-amount]").forEach((button) => {

@@ -499,7 +499,10 @@ function selectedBackend(boardId, totalPnlPct, paperActivity = null, leaderboard
         {
           paper_account_id: "codex_board",
           agent_id: "codex_main_20260620",
+          equity_usd: 1250,
           paper_pnl_pct: 0.25,
+          stale_data_status: "fresh",
+          created_at: "2026-06-24T01:23:45.000Z",
         },
         {
           agent_id: "ledger-lane-agent-edge-20260620-0936-a13c",
@@ -731,6 +734,10 @@ assert(!element("agentList").innerHTML.includes("empty_agent"), "Inactive paper 
 assert(!element("agentList").innerHTML.includes("terminal_chad6"), "Rows without public paper activity should not remain visible after backend readback.");
 assert(rendered[0]?.selected === "true", "The selected row should move to the first visible active paper agent.");
 assert(!element("agentList").innerHTML.includes("agent-row active"), "Agent rows should not use the old active class.");
+assert(!pageSource.includes("agentSort"), "Agent Discovery sort control should not be present.");
+assert(!pageSource.includes("Leaderboard P&L"), "The redundant leaderboard summary should not be present.");
+assert(element("agentList").innerHTML.includes("Equity $1,250.00"), "Agent rows should show paper equity instead of key counts.");
+assert(!element("agentList").innerHTML.includes("0 keys"), "Agent rows should not show unhelpful zero key counts.");
 
 const codexRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "codex_main_20260620");
 codexRow.click();
