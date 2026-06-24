@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const defaultBackendBaseUrl = "https://clawhouse-backend-staging.vercel.app";
+const defaultBackendBaseUrl = "http://clawhouse.v2202606372783474511.luckysrv.de";
 const defaultBoardId = "terminal_chad6";
 
 type BackendFetchOptions = {
