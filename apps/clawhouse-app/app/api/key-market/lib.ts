@@ -1,6 +1,6 @@
 import { JsonRpcProvider, nearToYocto, yoctoToNear } from "near-api-js";
 import { NextResponse } from "next/server";
-import { defaultKeyMarketContractId } from "./constants.js";
+import { defaultKeyMarketContractId } from "./constants";
 
 const defaultNetworkId = "testnet";
 const defaultGas = "100000000000000";

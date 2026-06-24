@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { defaultKeyMarketContractId } from "../../api/key-market/constants.js";
+import { defaultKeyMarketContractId } from "../../api/key-market/constants";
 
 export const dynamic = "force-dynamic";
 
