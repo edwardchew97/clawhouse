@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { boardIdPattern } from "./board-id.js";
+import { boardIdPattern } from "./board-id";
 
 const defaultBackendBaseUrl = "https://staging-clawhouse.lucis.finance";
 

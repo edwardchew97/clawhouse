@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { NextResponse } from "next/server";
 import { baseDecode } from "near-api-js";
-import { boardIdPattern } from "../board-id.js";
+import { boardIdPattern } from "../board-id";
 
 const challengeMaxAgeMs = 5 * 60 * 1000;
 const readTokenTtlMs = 12 * 60 * 60 * 1000;
