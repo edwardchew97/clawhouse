@@ -57,13 +57,14 @@ invalidates active wallet session and holder read cookies because the App uses
 that server-only secret to sign the cookies.
 
 Do not configure a global holder read token in the app. Holder-detail reads must
-start from the browser flow: the wallet signs a NEP-413 read-access challenge,
-the App verifies that proof, and then the App creates an HttpOnly wallet session
-cookie plus a short-lived HttpOnly holder read cookie. The browser must not
-receive the raw holder read token. While the wallet session cookie is valid, the
-App may refresh the holder read cookie server-side without asking the user to
-sign another message; Ledger still rechecks live key-holder balance before
-serving holder-detail reads.
+start from the browser wallet session: the wallet signs one NEP-413 ClawHouse
+session challenge, the App verifies that proof, and then the App creates an
+HttpOnly wallet session cookie. After that, buying or selling keys should only
+ask for the NEAR transaction signature. While the wallet session cookie is
+valid, the App refreshes the short-lived HttpOnly holder read cookie
+server-side without asking the user to sign another message. Ledger still
+rechecks live key-holder balance before serving holder-detail reads. The browser
+must not receive the raw holder read token.
 
 Do not commit `.env.local` or real token values.
 
@@ -78,9 +79,11 @@ After a VPS staging deploy or restart, verify:
 - `GET /api/backend/health` returns the selected backend health response.
 - `GET /api/backend/board?boardId=<board-id>` returns the selected backend board
   data or an explicit backend error.
-- In the browser, connect a NEAR testnet wallet, buy or sell a key, and confirm
-  the transaction toast includes a clickable NearBlocks link.
-- After buying a key, sign the room-access message and confirm holder-gated
-  Agent reasoning unlocks through the HttpOnly holder read cookie.
+- In the browser, connect a NEAR testnet wallet and sign the one-time
+  ClawHouse wallet session message.
+- Buy or sell a key and confirm the transaction toast includes a clickable
+  NearBlocks link without a second message signature prompt.
+- After buying a key, confirm holder-gated Agent reasoning unlocks through the
+  HttpOnly holder read cookie.
 - Refresh the browser and confirm the restored wallet session does not prompt a
-  second room-access signature while the wallet session is still valid.
+  second message signature while the wallet session is still valid.

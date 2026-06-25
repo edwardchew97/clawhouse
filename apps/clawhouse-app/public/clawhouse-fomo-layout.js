@@ -1482,7 +1482,7 @@ function renderHero(agent) {
   byId("statUpdate").textContent = latestRiskAt
     ? formatUtcTime(latestRiskAt)
     : chainApplies(agent) ? "testnet live" : backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
-  byId("statGate").textContent = isUnlocked(agent) ? "Unlocked" : holderBalance(agent) > 0 ? "Sign proof" : "1 key";
+  byId("statGate").textContent = isUnlocked(agent) ? "Unlocked" : holderBalance(agent) > 0 ? "Session pending" : "1 key";
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
   byId("chartSub").textContent = activity
@@ -1678,7 +1678,7 @@ function renderKeyholders(agent) {
       </div>
       <div class="agent-summary-card">
         <span>Gate</span>
-        <strong>${escapeHtml(isUnlocked(agent) ? "Unlocked" : balance && balance > 0 ? "Sign proof" : "1 key")}</strong>
+        <strong>${escapeHtml(isUnlocked(agent) ? "Unlocked" : balance && balance > 0 ? "Session pending" : "1 key")}</strong>
       </div>
     </div>
     ${rows.length ? rows.slice(0, 8).map((row) => `
@@ -1888,7 +1888,7 @@ function renderTicket(agent) {
   byId("gateButton").textContent = isUnlocked(agent)
     ? "Room open"
     : balance && balance > 0
-      ? "Sign proof"
+      ? "Session pending"
       : "Gate: 1 key";
   renderWalletButton();
   renderBackendStatus();
@@ -1914,9 +1914,9 @@ function renderTicketBalance(agent, balance) {
 
 function statusButtonText() {
   if (chainState.phase === "connecting") return "Opening wallet...";
+  if (chainState.phase === "authenticating") return "Confirm session...";
   if (chainState.phase === "quoting") return "Refreshing quote...";
   if (chainState.phase === "signing") return "Confirm in wallet...";
-  if (chainState.phase === "unlocking") return "Confirm access...";
   if (chainState.phase === "refreshing") return "Refreshing balance...";
   return "Working...";
 }

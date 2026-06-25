@@ -31,12 +31,17 @@ type ReadAccessState = {
   expiresAt: string;
 };
 
+type WalletSessionState = {
+  accountId: string;
+  expiresAt: string;
+};
+
 type DemoChainState = {
   accountId?: string | null;
   contractId?: string;
   networkId?: string;
   pending?: boolean;
-  phase?: "idle" | "connecting" | "quoting" | "signing" | "refreshing" | "unlocking";
+  phase?: "idle" | "connecting" | "authenticating" | "quoting" | "signing" | "refreshing";
   lastTxHash?: string | null;
   explorerUrl?: string | null;
   state?: Record<string, unknown> | null;
@@ -73,7 +78,7 @@ type QuoteResponse = {
   };
 };
 
-type ReadTokenChallengeResponse = {
+type WalletSessionChallengeResponse = {
   challenge: {
     challenge: string;
     message: string;
@@ -82,9 +87,10 @@ type ReadTokenChallengeResponse = {
   };
 };
 
-type ReadTokenResponse = {
+type WalletSessionResponse = {
   valid: boolean;
-  expiresAt: string;
+  accountId?: string;
+  expiresAt?: string;
 };
 
 type ReadSessionResponse = {
@@ -107,6 +113,8 @@ export function KeyMarketWalletBridge() {
   const configRef = useRef<KeyMarketConfig | null>(null);
   const initializeRef = useRef<Promise<void> | null>(null);
   const busyRef = useRef(false);
+  const walletSessionRef = useRef<WalletSessionState | null>(null);
+  const walletSessionRequestRef = useRef<{ accountId: string; promise: Promise<WalletSessionState | null> } | null>(null);
   const readAccessRef = useRef<ReadAccessState | null>(null);
   const readAccessRequestRef = useRef<{ key: string; promise: Promise<ReadAccessState | null> } | null>(null);
   const clearSessionRef = useRef<Promise<void> | null>(null);
@@ -146,11 +154,26 @@ export function KeyMarketWalletBridge() {
             contractId: config.contractId,
             networkId: config.networkId,
           });
-          void refreshWalletRead("wallet:signIn");
+          void ensureWalletSession("wallet:signIn")
+            .then(() => refreshWalletRead("wallet:signIn"))
+            .catch((error) => {
+              const message = errorMessage(error, "Wallet session signature failed.");
+              renderChainState({
+                accountId: accountRef.current?.accountId ?? null,
+                pending: false,
+                phase: "idle",
+                statusTitle: "Wallet session failed",
+                statusBody: message,
+                statusTone: "error",
+              });
+              showToast(message);
+            });
         });
         connector.on("wallet:signOut", () => {
           walletRef.current = null;
           accountRef.current = null;
+          walletSessionRef.current = null;
+          walletSessionRequestRef.current = null;
           readAccessRef.current = null;
           readAccessRequestRef.current = null;
           void clearReadSession();
@@ -183,7 +206,24 @@ export function KeyMarketWalletBridge() {
           contractId: configRef.current?.contractId,
           networkId: configRef.current?.networkId,
         });
-        if (accountRef.current) window.setTimeout(() => void refreshWalletRead("restore"), 0);
+        if (accountRef.current) {
+          window.setTimeout(() => {
+            void ensureWalletSession("restore")
+              .then(() => refreshWalletRead("restore"))
+              .catch((error) => {
+                const message = errorMessage(error, "Wallet session signature failed.");
+                renderChainState({
+                  accountId: accountRef.current?.accountId ?? null,
+                  pending: false,
+                  phase: "idle",
+                  statusTitle: "Wallet session failed",
+                  statusBody: message,
+                  statusTone: "error",
+                });
+                showToast(message);
+              });
+          }, 0);
+        }
       } catch {
         renderChainState({
           accountId: null,
@@ -248,6 +288,7 @@ export function KeyMarketWalletBridge() {
             statusBody: shortAccount(accountRef.current.accountId),
             statusTone: "success",
           });
+          await ensureWalletSession("restore");
           await refreshWalletRead("restore");
           return;
         }
@@ -267,6 +308,7 @@ export function KeyMarketWalletBridge() {
           statusTone: accountRef.current ? "success" : "idle",
         });
         showToast(accountRef.current ? `Connected ${shortAccount(accountRef.current.accountId)}` : "Wallet connected.");
+        if (accountRef.current) await ensureWalletSession("connect");
         await refreshWalletRead("connect");
       } catch (error) {
         renderChainState({
@@ -299,6 +341,8 @@ export function KeyMarketWalletBridge() {
         await clearReadSession();
         walletRef.current = null;
         accountRef.current = null;
+        walletSessionRef.current = null;
+        walletSessionRequestRef.current = null;
         readAccessRef.current = null;
         readAccessRequestRef.current = null;
         renderChainState({
@@ -595,7 +639,7 @@ export function KeyMarketWalletBridge() {
           expiresAt: activeAccess.expiresAt,
         } : null,
         readAccessError: activeAccessResult.status === "rejected"
-          ? errorMessage(activeAccessResult.reason, "Room access signature failed.")
+          ? errorMessage(activeAccessResult.reason, "Room access refresh failed.")
           : null,
         error: firstRejectedMessage([stateResult, quoteResult]),
       });
@@ -603,8 +647,7 @@ export function KeyMarketWalletBridge() {
 
     async function ensureReadAccess(agent: DemoAgent, state: Record<string, unknown> | null) {
       const account = accountRef.current;
-      const wallet = walletRef.current;
-      if (!account || !wallet || !state) {
+      if (!account || !state) {
         readAccessRef.current = null;
         return null;
       }
@@ -616,8 +659,6 @@ export function KeyMarketWalletBridge() {
       }
 
       const boardId = agent.boardId ?? agent.id;
-      const config = configRef.current;
-      if (!config) throw new Error("Key-market config is unavailable.");
       const cached = readAccessRef.current;
       if (
         cached
@@ -636,51 +677,8 @@ export function KeyMarketWalletBridge() {
       const requestPromise = (async () => {
         const sessionAccess = await restoreReadSession(boardId, account.accountId);
         if (sessionAccess) return sessionAccess;
-
-        if (!wallet.manifest.features.signMessage) {
-          throw new Error("Selected wallet does not support signed room access.");
-        }
-
-        renderChainState({
-          accountId: account.accountId,
-          pending: true,
-          phase: "unlocking",
-          statusTitle: "Confirm room access",
-          statusBody: "Sign a wallet message to unlock Agent reasoning.",
-          statusTone: "pending",
-        });
-
-        const challengeResponse = await fetchJson<ReadTokenChallengeResponse>("/api/backend/read-token/nonce", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ boardId, holderAccountId: account.accountId }),
-        });
-        const signedMessage = await wallet.signMessage({
-          network: config.networkId,
-          signerId: account.accountId,
-          message: challengeResponse.challenge.message,
-          recipient: challengeResponse.challenge.recipient,
-          nonce: base64UrlToBytes(challengeResponse.challenge.nonce),
-        });
-        const readTokenResponse = await fetchJson<ReadTokenResponse>("/api/backend/read-token", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            challenge: challengeResponse.challenge.challenge,
-            signedMessage,
-          }),
-        });
-
-        if (!readTokenResponse.valid) {
-          readAccessRef.current = null;
-          return null;
-        }
-        readAccessRef.current = {
-          boardId,
-          holderAccountId: account.accountId,
-          expiresAt: readTokenResponse.expiresAt,
-        };
-        return readAccessRef.current;
+        readAccessRef.current = null;
+        return null;
       })();
       readAccessRequestRef.current = { key: requestKey, promise: requestPromise };
 
@@ -715,6 +713,106 @@ export function KeyMarketWalletBridge() {
         return null;
       }
       readAccessRef.current = restored;
+      return restored;
+    }
+
+    async function ensureWalletSession(_reason: string) {
+      const account = accountRef.current;
+      const wallet = walletRef.current;
+      const config = configRef.current;
+      if (!account || !wallet || !config) return null;
+
+      const cached = walletSessionRef.current;
+      if (
+        cached
+        && cached.accountId === account.accountId
+        && Date.parse(cached.expiresAt) > Date.now() + 30_000
+      ) {
+        return cached;
+      }
+
+      if (walletSessionRequestRef.current?.accountId === account.accountId) {
+        return walletSessionRequestRef.current.promise;
+      }
+
+      const requestPromise = (async () => {
+        const restored = await restoreWalletSession(account.accountId);
+        if (restored) return restored;
+
+        if (!wallet.manifest.features.signMessage) {
+          throw new Error("Selected wallet does not support signed ClawHouse sessions.");
+        }
+
+        renderChainState({
+          accountId: account.accountId,
+          pending: true,
+          phase: "authenticating",
+          statusTitle: "Confirm ClawHouse session",
+          statusBody: "Sign once to keep this wallet session active for 30 days.",
+          statusTone: "pending",
+        });
+
+        const challengeResponse = await fetchJson<WalletSessionChallengeResponse>("/api/backend/read-token/wallet-session/nonce", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ accountId: account.accountId }),
+        });
+        const signedMessage = await wallet.signMessage({
+          network: config.networkId,
+          signerId: account.accountId,
+          message: challengeResponse.challenge.message,
+          recipient: challengeResponse.challenge.recipient,
+          nonce: base64UrlToBytes(challengeResponse.challenge.nonce),
+        });
+        const sessionResponse = await fetchJson<WalletSessionResponse>("/api/backend/read-token/wallet-session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            challenge: challengeResponse.challenge.challenge,
+            signedMessage,
+          }),
+        });
+        if (!sessionResponse.valid || !sessionResponse.accountId || !sessionResponse.expiresAt) {
+          walletSessionRef.current = null;
+          return null;
+        }
+        walletSessionRef.current = {
+          accountId: sessionResponse.accountId,
+          expiresAt: sessionResponse.expiresAt,
+        };
+        return walletSessionRef.current;
+      })();
+      walletSessionRequestRef.current = { accountId: account.accountId, promise: requestPromise };
+
+      try {
+        return await requestPromise;
+      } finally {
+        if (walletSessionRequestRef.current?.promise === requestPromise) {
+          walletSessionRequestRef.current = null;
+        }
+      }
+    }
+
+    async function restoreWalletSession(accountId: string) {
+      const session = await fetchJson<WalletSessionResponse>(
+        `/api/backend/read-token/wallet-session?accountId=${encodeURIComponent(accountId)}`,
+      );
+      if (!session.valid || !session.accountId || !session.expiresAt) {
+        walletSessionRef.current = null;
+        return null;
+      }
+      const restored = {
+        accountId: session.accountId,
+        expiresAt: session.expiresAt,
+      };
+      if (
+        restored.accountId !== accountId
+        || Date.parse(restored.expiresAt) <= Date.now() + 30_000
+      ) {
+        walletSessionRef.current = null;
+        return null;
+      }
+      walletSessionRef.current = restored;
       return restored;
     }
 
