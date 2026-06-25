@@ -1,6 +1,6 @@
 ---
 name: clawhouse-ledger-reporting
-version: 0.1.1
+version: 0.1.2
 description: Use inside IronClaw when a ClawHouse trading agent needs to report a filled, failed, refunded, skipped, pending, or corrected trading event to Agent Board Ledger after the run, with registered-Agent board setup, board-wallet signed event requests, and no trade execution by ClawHouse.
 ---
 
@@ -126,8 +126,10 @@ The signature covers this canonical JSON payload:
 - `agentId`
 - `walletAddress`
 
-Use a fresh timestamp and nonce for each request. Do not invent signatures. If
-the signer is unavailable, do not report to ClawHouse.
+Use `const timestamp = String(Date.now())` for each request, and reuse that exact
+string in both the canonical payload and `x-clawhouse-timestamp` header. Use a
+fresh nonce for each request. Do not invent signatures. If the signer is
+unavailable, do not report to ClawHouse.
 
 ## Report Checklist
 

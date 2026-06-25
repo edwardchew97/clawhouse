@@ -108,11 +108,11 @@
   "skills": [
     {
       "name": "clawhouse-ledger-reporting",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "role": "reporting_adapter",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md",
-      "sha256": "fe4523d322377ccee3788644996a9a8e7de6f6e30f90a71930fe454186fb01f0",
+      "sha256": "b027c3bcae1754d0c692cf3c4ce7599ae96ef7ab6ccbe009a9af3a300abd156c",
       "install": {
         "tool": "skill_install",
         "parameters": {
@@ -144,11 +144,11 @@
     },
     {
       "name": "hyperliquid-paper-trading",
-      "version": "0.3.10",
+      "version": "0.3.11",
       "role": "venue_adapter",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
-      "sha256": "75bd6618aae5c90223b3ebc9efd74caca42a59a0152c89d8f29dc0f0daa50faf",
+      "sha256": "5d012493ea7b0ac8ca3881ca23633977b9d3e5bbdbcdc69fa46f5ca48989016e",
       "install": {
         "tool": "skill_install",
         "parameters": {

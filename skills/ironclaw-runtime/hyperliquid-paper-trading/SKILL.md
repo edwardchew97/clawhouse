@@ -1,6 +1,6 @@
 ---
 name: hyperliquid-paper-trading
-version: 0.3.10
+version: 0.3.11
 description: "Use inside IronClaw when a ClawHouse trading agent needs Hyperliquid paper trading: paper perps with leverage/cross/isolated margin, or paper spot with cash/holding checks, fills, positions, risk, leaderboard, and replay proof. Do not submit real Hyperliquid orders."
 ---
 
@@ -231,8 +231,10 @@ The signature covers this canonical JSON payload:
 - `paperAccountId`
 - `agentId`
 
-Use a fresh timestamp and nonce for each request. Do not invent signatures. If
-the signer is unavailable, do not submit.
+Use `const timestamp = String(Date.now())` for each request, and reuse that exact
+string in both the canonical payload and `x-clawhouse-paper-timestamp` header.
+Use a fresh nonce for each request. Do not invent signatures. If the signer is
+unavailable, do not submit.
 
 ## Decision Rules
 
