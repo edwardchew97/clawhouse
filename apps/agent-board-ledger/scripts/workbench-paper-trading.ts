@@ -170,6 +170,35 @@ async function runPaperTradingFlow(
   });
   expectOrderStatus(checks, "multi-coin cross-margin IOC refreshes existing position marks before margin validation", ethCross, "filled");
 
+  const reduceOnlyClose = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
+    paper_account_id: paperAccountId,
+    client_order_id: `reduce-only-close-${runId}`,
+    coin: "BTC",
+    side: "sell",
+    tif: "Ioc",
+    size: 0.01,
+    reduce_only: true,
+    margin_mode: "cross",
+    leverage: 10,
+    max_slippage_bps: 200,
+    reason: "Workbench closes the open cross BTC paper long with reduce-only.",
+  });
+  expectOrderStatus(checks, "reduce-only order closes the open long", reduceOnlyClose, "filled");
+
+  const afterCloseAccount = await getJson(options.baseUrl, `/paper/accounts/${paperAccountId}`);
+  checks.push({
+    name: "paper account readback shows the cross BTC long is closed",
+    ok: isSuccess(afterCloseAccount)
+      && !arrayAt(afterCloseAccount.json, ["positions"]).some((position) => (
+        stringAt(position, ["coin"]) === "BTC"
+          && stringAt(position, ["margin_mode"]) === "cross"
+          && stringAt(position, ["status"]) === "open"
+          && Math.abs(numberAt(position, ["signed_size"]) ?? 0) > 0
+      )),
+    status: afterCloseAccount.status,
+    expected: "no open cross BTC position after reduce-only close",
+  });
+
   const isolatedMarginReject = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
     paper_account_id: paperAccountId,
     client_order_id: `isolated-margin-reject-${runId}`,
