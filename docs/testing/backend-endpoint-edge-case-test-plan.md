@@ -20,7 +20,6 @@ Endpoint sources:
 - `apps/agent-board-ledger/src/server.ts`
 - `apps/agent-board-ledger/src/paper-trading.ts`
 - `apps/agent-board-ledger/src/hyperliquid.ts`
-- `apps/agent-board-ledger/src/vercel.ts`
 - `apps/agent-board-ledger/api/ledger.ts`
 - `apps/agent-board-ledger/api/cron.ts`
 - `apps/clawhouse-app/app/api/key-market/*`
@@ -138,14 +137,6 @@ Run these once for every route family where they apply:
 | P07 | `POST /paper/accounts/:paperAccountId/risk-check` | service bearer | `runPaperRiskCheck` |
 | P08 | `GET /paper/leaderboard` | none | `readPaperLeaderboard` |
 | P09 | `GET /paper/orders/:orderId/replay` | none | `replayPaperOrder` |
-
-### Vercel Adapter
-
-| ID | Method and path | Auth | Handler |
-| --- | --- | --- | --- |
-| V01 | `/api/ledger?ledgerPath=<path>` with `DELETE`, `GET`, `OPTIONS`, `PATCH`, `POST`, `PUT` | target-route auth | `api/ledger.ts` plus `handleVercelLedgerRequest` |
-| V02 | `GET /api/cron` | `Authorization: Bearer <CRON_SECRET>` | `api/cron.ts` plus `prepareCronTickRequest` |
-| V03 | `GET /health`, `/boards/:path*`, `/paper/:path*`, `/cron/:path*` on Vercel | target-route auth | `vercel.json` rewrites to `V01` |
 
 ### ClawHouse App BFF
 
@@ -921,18 +912,6 @@ Edge cases:
   at framework level if hosted.
 - Direct `GET /cron/tick` through the adapter follows the same cron-secret path.
 
-### V03: Vercel rewrites
-
-Happy path:
-
-- `/health` rewrites to `/api/ledger?ledgerPath=/health`.
-- `/boards/:path*` rewrites to `/api/ledger?ledgerPath=/boards/:path*`.
-- `/paper/:path*` rewrites to `/api/ledger?ledgerPath=/paper/:path*`.
-- `/cron/:path*` rewrites to `/api/ledger?ledgerPath=/cron/:path*`.
-
-Edge cases:
-
-- Rewritten board and paper paths preserve auth headers and request body.
 - Rewritten unknown nested path returns target `404`.
 - Paths with trailing slash are normalized consistently with direct adapter
   calls.
@@ -1218,7 +1197,6 @@ high-value cases:
 - cron discovery, conflict investigations, duplicate snapshot prevention,
   high-water/drawdown, topup/withdrawal accounting, missing observation wallet,
   future observation rejection, invalid accounting numbers;
-- Vercel route normalization and cron-secret adapter behavior;
 - NEAR account/FT watch and NEAR key-market holder checks;
 - paper IOC/GTC/ALO order behavior, leverage-cap rejection, liquidation,
   reduce-only, Hyperliquid snapshot refresh, paper leaderboard, and replay.
