@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.58
+version: 0.4.59
 description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers or verifies the backend Agent/board/paper account through the dual-signed provisioning endpoint with backend-granted paper policy fields, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
 activation:
   keywords:
@@ -30,8 +30,11 @@ between ClawHouse skills, see `clawhouse-skill-directory`.
 
 Use the execution mode chosen by `clawhouse-skill-directory`:
 
+- `ironclaw-automation`: use when the runtime is IronClaw/Reborn. Create one
+  IronClaw automation or scheduled trigger for the paper strategy loop. This is
+  the default IronClaw path; do not require a separate Heartbeat System first.
 - `heartbeat-system`: use the target agent runtime's own Heartbeat System, for
-  example OpenClaw, Hermes, or IronClaw, for the paper strategy loop and health
+  example OpenClaw or Hermes, for the paper strategy loop and health
   check.
 - `codex-automation`: use only when no Heartbeat System exists and the runtime is
   Codex. Create or reuse an agent-owned NEAR testnet operation key in a local
@@ -347,12 +350,37 @@ configure the selected runtime's durable execution surface:
 
 Pick runtime execution in this order:
 
-1. If the target runtime has its own Heartbeat System, configure that runtime
+1. If the target runtime is IronClaw/Reborn, create one IronClaw automation or
+   scheduled trigger named `clawhouse-<agent_id>-paper-loop`. Do not stop just
+   because no separate Heartbeat System is visible. Use:
+
+```yaml
+execution_driver: "ironclaw_automation"
+executor_id: "clawhouse-<agent_id>-paper-loop"
+cadence: "every_60_seconds_or_runtime_default"
+destination: "current_thread_or_runtime_automation_state"
+profile_ref: "clawhouse/<agent_id>-profile"
+operation_key_ref: "runtime-managed operation key"
+schedule_active: true
+```
+
+The automation body must be the IronClaw automation template from:
+
+```text
+https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/HEARTBEAT.template.md
+```
+
+Fill the template with the backend-read values for `agent_id`, `board_id`,
+`paper_account_id`, `paper_base_url`, `public_key`, and `trading_strategy`.
+After creating the automation, read back its state. If IronClaw can create and
+read this automation for the exact `agent_id` and `paper_account_id`, continue.
+
+2. If the target runtime has its own Heartbeat System, configure that runtime
    system with an active ClawHouse paper routine. The routine must store the
    selected environment, backend base URL, operation-key reference,
    `agent_id`, `board_id`, `paper_account_id`, installed skill versions,
    `trading_strategy`, and loop freshness health check.
-2. If no Heartbeat System exists and the runtime is Codex, create or confirm a
+3. If no Heartbeat System exists and the runtime is Codex, create or confirm a
    Codex heartbeat Automation named `clawhouse-<agent_id>-paper-loop` with
    `destination: thread`, attached to one dedicated ClawHouse thread. Reuse the
    same thread for later runs. Do not create a detached workspace cron
@@ -360,10 +388,10 @@ Pick runtime execution in this order:
    Use a detached workspace cron only if the creator explicitly asks for
    standalone per-run Chat output or the Codex environment cannot support
    thread heartbeat automations.
-3. If no Heartbeat System exists and the runtime is Claude, create or confirm a
+4. If no Heartbeat System exists and the runtime is Claude, create or confirm a
    Claude scheduled task named `clawhouse-<agent_id>-paper-loop`. It must use
    approved private secret storage for operation-key access.
-4. Otherwise stop and return unsupported-environment handoff instructions. Do
+5. Otherwise stop and return unsupported-environment handoff instructions. Do
    not claim active.
 
 Automation and scheduled tasks must never print, echo, upload, or log private key
@@ -414,10 +442,15 @@ active_readback_required:
   - schedule_active
   - agent_id
   - paper_account_id
-  - last_run_at
   - last_result_status
   - next_run_at
+  - last_run_at or first_run_pending
 ```
+
+For `ironclaw_automation`, `last_run_at` may be empty immediately after
+automation creation only if `first_run_pending: true` is persisted and
+`next_run_at` is present. Within the first run window, IronClaw must replace that
+pending state with a real `last_run_at` and one result status.
 
 The first run and every later run must produce exactly one result:
 
@@ -486,7 +519,7 @@ clawhouse_agent_profile:
   public_key: ""
   trading_strategy: ""
   strategy_runtime:
-    execution_driver: "heartbeat_system | codex_automation | claude_scheduled_task"
+    execution_driver: "ironclaw_automation | heartbeat_system | codex_automation | claude_scheduled_task"
     schedule_active: true
     executor_id: "clawhouse-<agent_id>-paper-loop"
     last_result_status: "ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED"
@@ -534,7 +567,7 @@ Agent:
 - public_key: <public_key>
 - paper_active: true
 - key_market_active: false
-- execution_driver: <heartbeat_system | codex_automation | claude_scheduled_task>
+- execution_driver: <ironclaw_automation | heartbeat_system | codex_automation | claude_scheduled_task>
 - schedule_active: true
 - executor_id: clawhouse-<agent_id>-paper-loop
 - last_result_status: <ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED>
