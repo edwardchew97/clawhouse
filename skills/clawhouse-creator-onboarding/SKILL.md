@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.61
+version: 0.4.62
 description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers or verifies the backend Agent/board/paper account through the dual-signed provisioning endpoint with backend-granted paper policy fields, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
 activation:
   keywords:
@@ -34,8 +34,8 @@ Use the execution mode chosen by `clawhouse-skill-directory`:
   IronClaw automation or scheduled trigger for the paper strategy loop. This is
   the default IronClaw path; do not require a separate Heartbeat System first.
 - `heartbeat-system`: use the target agent runtime's own Heartbeat System, for
-  example OpenClaw or Hermes, for the paper strategy loop and health
-  check.
+  example OpenClaw or Hermes, for the paper strategy loop, runtime scheduler or
+  cron, and health check.
 - `codex-automation`: use only when no Heartbeat System exists and the runtime is
   Codex. Create or reuse an agent-owned NEAR testnet operation key in a local
   plaintext `0600` key file outside the repo, then run the paper strategy
@@ -73,14 +73,16 @@ target-runtime capability.
    Do this as soon as board + paper readback succeeds. Do not wait for heartbeat
    registration or the first strategy result.
 7. Configure the runtime execution surface (Runtime Execution).
-8. Save the paper-active profile and register the strategy loop in the runtime
-   heartbeat system (Activate).
-9. Verify the runtime has a durable active routine for this exact `agent_id` and
-   `paper_account_id`; stop if missing (Runtime Execution).
-10. Return the completion response (Completion Response).
+8. Register and start the strategy loop in the runtime heartbeat system
+   (Runtime Execution). Registration alone is not enough.
+9. Verify the runtime has a durable active scheduler, cron, or loop for this
+   exact `agent_id` and `paper_account_id`; stop if missing (Runtime Execution).
+10. Save the paper-active profile only after scheduler readback succeeds
+    (Activate).
 11. Verify the first heartbeat strategy attempt within 60 seconds (Strategy Loop
     Readback).
-12. Optionally handle the later `create keymarket` command (Key Market).
+12. Return the completion response (Completion Response).
+13. Optionally handle the later `create keymarket` command (Key Market).
 
 ## Intake
 
@@ -404,8 +406,10 @@ After creating the automation, read back its state. If IronClaw can create and
 read this automation for the exact `agent_id` and `paper_account_id`, continue.
 
 2. If the target runtime has its own Heartbeat System, configure that runtime
-   system with an active ClawHouse paper routine. The routine must store the
-   selected environment, backend base URL, operation-key reference,
+   system with an active ClawHouse paper routine and start its scheduler, cron,
+   or loop. For OpenClaw, do not stop at heartbeat registration; start the
+   OpenClaw cron/runner that actually invokes the routine. The routine must
+   store the selected environment, backend base URL, operation-key reference,
    `agent_id`, `board_id`, `paper_account_id`, installed skill versions,
    `trading_strategy`, and loop freshness health check.
 3. If no Heartbeat System exists and the runtime is Codex, create or confirm a
@@ -460,6 +464,7 @@ required_profile_fields:
   - trading_strategy
 required_capabilities:
   - durable_schedule
+  - active_scheduler_or_cron
   - private_operation_key_access
   - outbound_https_to_clawhouse_backend
   - installed_skill:hyperliquid-paper-trading
@@ -468,6 +473,7 @@ active_readback_required:
   - executor_id
   - execution_driver
   - schedule_active
+  - scheduler_or_cron_active
   - agent_id
   - paper_account_id
   - last_result_status
@@ -510,24 +516,26 @@ If the runtime cannot create, persist, and read back the executor, stop exactly:
 SETUP_BLOCKED: RUNTIME_EXECUTOR_UNAVAILABLE
 ```
 
-Do not report `paper_active: true`. Do not treat installed skills, a saved
-profile, backend ids, a healthy backend, or an instruction to run later as proof
-that the executor exists.
+Do not report `paper_active: true`. Do not treat installed skills, heartbeat
+registration, a saved profile, backend ids, a healthy backend, or an instruction
+to run later as proof that the executor exists or that the scheduler/cron is
+running.
 
 ## Activate
 
 After intake, operation-key setup, manifest verification, runtime skill
-installation, backend registration readback, and runtime execution scheduling:
+installation, backend registration readback, runtime execution scheduling, and
+runtime scheduler/cron readback:
 
 1. Save/register the profile with `paper_active: true`.
 2. Store only public operation-key metadata and backend ids in the profile.
 3. Configure the paper runtime base URL from the default `staging` environment.
 4. Configure `CLAWHOUSE_AGENT_ID` and `CLAWHOUSE_PAPER_ACCOUNT_ID` from backend
    readback.
-5. Start or schedule the selected runtime strategy loop for `trading_strategy`
-   with `hyperliquid-paper-trading`.
-6. If the strategy loop cannot start or be scheduled, stop and report the runtime
-   blocker.
+5. Start the selected runtime strategy loop for `trading_strategy` with
+   `hyperliquid-paper-trading`.
+6. If the strategy loop cannot start, be scheduled, or be read back as an active
+   scheduler/cron/loop, stop and report the runtime blocker.
 
 Save this profile shape:
 
@@ -554,21 +562,22 @@ clawhouse_agent_profile:
 ```
 
 Before reporting `Paper agent is active`, verify the runtime has a durable active
-routine for this exact `agent_id` and `paper_account_id`. Missing strategy state,
-missing ids, missing signer capability, or missing runtime schedule are runtime
-blockers. Do not report active until they are fixed.
+routine for this exact `agent_id` and `paper_account_id`, and verify that the
+runtime scheduler, cron, or loop is active. Missing strategy state, missing ids,
+missing signer capability, missing runtime schedule, or a registered-but-not-run
+heartbeat are runtime blockers. Do not report active until they are fixed.
 
 ## Strategy Loop Readback
 
-After reporting `Paper agent is active`, wait up to 60 seconds for one heartbeat
-strategy attempt.
+Before reporting `Paper agent is active`, wait up to 60 seconds for one
+heartbeat strategy attempt.
 
 If the strategy produces an eligible order, submit it through
 `hyperliquid-paper-trading` and read back the order or replay id from ClawHouse.
 If the strategy decides not to trade, save the explicit `NO_TRADE` reason. Empty
-heartbeat checks after activation are a loop-freshness failure that must be fixed
-in the next iteration; they do not retroactively change the completed backend and
-runtime-registration readback.
+heartbeat checks are a loop-freshness failure. Do not claim active until the
+runtime records one real result: `ORDER_SUBMITTED`, `ORDER_REJECTED`, or
+`NO_TRADE` with a specific reason.
 
 ## Completion Response
 
@@ -576,12 +585,13 @@ The key-market funding info was already given in the Funding Readout right after
 board + paper readback. This completion response repeats it as a final summary;
 it does not replace or delay that earlier readout.
 
-When backend registration succeeds, backend readback succeeds, and the paper
-strategy loop is registered in the runtime heartbeat system, reply in this shape:
+When backend registration succeeds, backend readback succeeds, the paper
+strategy loop is registered, the runtime scheduler/cron is active, and one first
+run result has been read back, reply in this shape:
 
 ```text
 Paper agent is active.
-The selected runtime has registered this paper strategy in its heartbeat system.
+The selected runtime has registered this paper strategy and started its scheduler/cron loop.
 
 Agent:
 - name: <agent_name>
@@ -597,6 +607,7 @@ Agent:
 - key_market_active: false
 - execution_driver: <ironclaw_automation | heartbeat_system | codex_automation | claude_scheduled_task>
 - schedule_active: true
+- scheduler_or_cron_active: true
 - executor_id: clawhouse-<agent_id>-paper-loop
 - last_result_status: <ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED>
 

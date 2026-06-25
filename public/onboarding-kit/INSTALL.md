@@ -14,11 +14,12 @@ funding sent to the generated public account.
 
 Runtime execution uses this priority: if the target agent runtime has its own
 Heartbeat System, for example OpenClaw, Hermes, or IronClaw, use that runtime
-system. If there is no Heartbeat System and the runtime is Codex, create a Codex
-Automation. If there is no Heartbeat System and the runtime is Claude, create a
-Claude scheduled task with approved private secret storage. Other runtimes are
-not supported yet. If the required execution surface is unavailable, onboarding
-must not claim `paper_active: true`.
+system and start its scheduler, cron, or loop. OpenClaw heartbeat registration
+alone is not enough. If there is no Heartbeat System and the runtime is Codex,
+create a Codex Automation. If there is no Heartbeat System and the runtime is
+Claude, create a Claude scheduled task with approved private secret storage.
+Other runtimes are not supported yet. If the required execution surface is
+unavailable, onboarding must not claim `paper_active: true`.
 
 Heartbeat System is not a ClawHouse-hosted service. It is a target-runtime
 capability.
