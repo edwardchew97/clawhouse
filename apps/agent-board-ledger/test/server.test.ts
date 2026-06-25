@@ -389,13 +389,13 @@ describe("Agent Board Ledger local backend", () => {
     expect("dbPath" in body).toBe(false);
   });
 
-  test("runtime DB requires a Neon/Postgres URL instead of falling back to SQLite", async () => {
+  test("runtime DB requires a Postgres URL instead of falling back to SQLite", async () => {
     await expect(openRuntimeLedgerDb({})).rejects.toThrow(
-      "Missing AGENT_BOARD_LEDGER_DATABASE_URL, DATABASE_URL, or ledgerDatabaseUrl; runtime storage must use Neon/Postgres",
+      "Missing AGENT_BOARD_LEDGER_DATABASE_URL, DATABASE_URL, or ledgerDatabaseUrl; runtime storage must use Postgres",
     );
   });
 
-  test("runtime DB open does not run Neon migrations", async () => {
+  test("runtime DB open does not run Postgres migrations", async () => {
     const fake = createFakeLedgerDb();
     const db = await openRuntimeLedgerDb(
       { AGENT_BOARD_LEDGER_DATABASE_URL: "postgres://runtime.test/db" },
@@ -406,7 +406,7 @@ describe("Agent Board Ledger local backend", () => {
     expect(fake.runs).toEqual([]);
   });
 
-  test("explicit migrated runtime DB open runs Neon migrations", async () => {
+  test("explicit migrated runtime DB open runs Postgres migrations", async () => {
     const fake = createFakeLedgerDb();
     const db = await openMigratedRuntimeLedgerDb(
       { AGENT_BOARD_LEDGER_DATABASE_URL: "postgres://runtime.test/db" },
@@ -3598,7 +3598,7 @@ function createFakeLedgerDb() {
   const runs: string[] = [];
   const state = { closed: false };
   const db: LedgerDb = {
-    provider: "neon-postgres",
+    provider: "postgres",
     async get<T>() {
       return undefined as T | undefined;
     },

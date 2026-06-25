@@ -1,6 +1,6 @@
 ---
 name: clawhouse-local-runtime
-description: Start, inspect, refresh, or stop the local ClawHouse dev runtime from Codex. Use when JY asks to launch or keep ready the latest dev branch with Agent Board Ledger backend, ClawHouse App, Acceptance Workbench, Neon database migration/checks, health checks, logs, and automatic refresh when origin/dev changes.
+description: Start, inspect, refresh, or stop the local ClawHouse dev runtime from Codex. Use when JY asks to launch or keep ready the latest dev branch with Agent Board Ledger backend, ClawHouse App, Acceptance Workbench, Postgres database migration/checks, health checks, logs, and automatic refresh when origin/dev changes.
 ---
 
 # ClawHouse Local Runtime
@@ -14,7 +14,7 @@ This skill owns the local developer runtime only:
 - Agent Board Ledger backend.
 - ClawHouse App.
 - Acceptance Workbench.
-- Neon/Postgres migration and schema check through existing repo scripts.
+- Postgres migration and schema check through existing repo scripts.
 - Runtime health, logs, and auto-refresh from `origin/dev`.
 
 This skill does not own:
@@ -81,7 +81,7 @@ The repo script manages a separate runtime worktree:
 /Users/Edward/Documents/clawhouse/.worktrees/clawhouse-local-runtime-dev
 ```
 
-It fetches `origin/dev`, restores known generated runtime files, checks out the runtime worktree detached at latest `origin/dev`, installs Bun dependencies for the app/backend/Workbench script dependencies, runs the existing Neon migration and schema check, starts services, writes status under `work/clawhouse-local-runtime/`, and polls `origin/dev` for updates.
+It fetches `origin/dev`, restores known generated runtime files, checks out the runtime worktree detached at latest `origin/dev`, installs Bun dependencies for the app/backend/Workbench script dependencies, runs the existing Postgres migration and schema check, starts services, writes status under `work/clawhouse-local-runtime/`, and polls `origin/dev` for updates.
 
 Never print secrets, database URLs, tokens, private keys, or raw `.env` values. It is acceptable to report whether required env keys are present.
 
