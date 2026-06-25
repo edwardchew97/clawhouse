@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { defaultKeyMarketContractId } from "../../api/key-market/constants";
+import { firstEnv } from "../../lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -512,12 +513,4 @@ function creatorPublicAccount(request: Request) {
 function cleanAccountId(value: string | null | undefined) {
   if (!value) return "";
   return /^[a-z0-9._-]{2,64}$/.test(value) ? value : "";
-}
-
-function firstEnv(names: string[]) {
-  for (const name of names) {
-    const value = process.env[name];
-    if (value) return value;
-  }
-  return undefined;
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { firstEnv } from "../../lib/env";
 import { boardIdPattern } from "./board-id";
 
 const defaultBackendBaseUrl = "https://staging-clawhouse.lucis.finance";
@@ -92,14 +93,6 @@ class BackendHttpError extends Error {
   constructor(public readonly status: number, message: string) {
     super(message);
   }
-}
-
-function firstEnv(names: string[]) {
-  for (const name of names) {
-    const value = process.env[name]?.trim();
-    if (value) return value;
-  }
-  return undefined;
 }
 
 function trimTrailingSlash(value: string) {
