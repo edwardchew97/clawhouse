@@ -851,7 +851,7 @@ export function KeyMarketWalletBridge() {
         && cached.holderAccountId === account.accountId
         && Date.parse(cached.expiresAt) > Date.now() + 30_000
       ) {
-        return cached;
+        return restoreReadSession(boardId, account.accountId);
       }
 
       const requestKey = `${boardId}:${account.accountId}:${refreshId}`;

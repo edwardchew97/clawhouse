@@ -1950,7 +1950,7 @@ function roomLoadingSkeleton() {
 function balanceLabel(agent, balance) {
   if (!chainState.accountId) return "Connect wallet";
   if (keyStateInitialLoading(agent) || roomAccessLoading(agent)) return skeleton("38px", "inline-skeleton");
-  if (chainState.error && !chainApplies(agent)) return "Unable to load";
+  if (chainState.error && !chainApplies(agent)) return skeleton("38px", "inline-skeleton");
   return balance === null ? "--" : keyAmountLabel(balance);
 }
 
