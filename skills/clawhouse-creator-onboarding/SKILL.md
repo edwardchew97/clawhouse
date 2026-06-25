@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.60
+version: 0.4.61
 description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers or verifies the backend Agent/board/paper account through the dual-signed provisioning endpoint with backend-granted paper policy fields, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
 activation:
   keywords:
@@ -155,9 +155,21 @@ execution with the pinned package `@near-js/crypto@2.5.1`:
 
 1. Generate `KeyPair.fromRandom("ed25519")`.
 2. Derive `public_key` from `keyPair.getPublicKey().toString()`.
-3. Derive `creator_public_account` from `keyToImplicitAddress(public_key)`.
-4. Set `key_id` to `near-ed25519:<creator_public_account>`.
-5. Store `keyPair.toString()` only in the runtime-managed local key store.
+3. Derive `creator_public_account` from
+   `keyToImplicitAddress(keyPair.getPublicKey())`; do not derive it from
+   `agent_id`, a hash, a random suffix, or hand-written string manipulation.
+4. Verify `creator_public_account` matches `/^[0-9a-f]{64}$/`.
+5. Verify
+   `creator_public_account === keyToImplicitAddress(PublicKey.fromString(public_key))`.
+6. Set `key_id` to `near-ed25519:<creator_public_account>`.
+7. Store `keyPair.toString()` only in the runtime-managed local key store.
+
+If either public-account verification fails, stop before backend registration
+and before any funding instruction:
+
+```text
+Setup blocked: generated creator_public_account does not match the NEAR implicit account derived from public_key. Regenerate the operation key and do not fund this address.
+```
 
 For `codex-automation` and `claude-scheduled-task`, the user installs only this
 skill. Do not ask the user to install a signer daemon, policy engine, wallet app,
