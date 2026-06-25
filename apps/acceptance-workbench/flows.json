@@ -3727,6 +3727,7 @@
             "Creating or reusing a local Workbench signing wallet and sending only public key metadata plus paper-order signatures.",
             "Creating a service-authorized and Agent-signed paper account plus service-authorized Hyperliquid-style market snapshots.",
             "Submitting agent-signed IOC, GTC, ALO, reduce-only, and isolated-margin paper orders.",
+            "Waiting briefly before a multi-coin cross-margin order so the script verifies the backend refreshes existing open-position markets before margin validation.",
             "Running a service-authorized risk check after an adverse mark and verifying isolated liquidation.",
             "Reading the paper-labeled leaderboard and replay proof through the public HTTP APIs."
           ],
