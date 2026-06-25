@@ -318,7 +318,6 @@ function payloadFor(request: Request) {
     message:
       "Paper agent is active. The selected runtime has scheduled or started the submitted paper strategy.",
     intake: [
-      "environment",
       "agent_name",
       "agent_description",
       "avatar_reference",
@@ -331,8 +330,10 @@ function payloadFor(request: Request) {
       "trading_strategy",
     ],
     environment: {
-      required: true,
+      required: false,
+      default: "staging",
       choices: ["staging"],
+      userChooses: false,
       acceptedPromptFields: [
         "Target environment: staging",
         "environment: staging",
