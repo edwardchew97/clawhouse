@@ -76,6 +76,10 @@ const holderBalance = (agent) => chainBalance(agent);
 const keyStateLoading = (agent) => Boolean(agent && chainState.stateLoading);
 const quoteLoading = () => Boolean(chainState.quoteLoading || chainState.phase === "quoting");
 const keyActivityLoading = (agent) => Boolean(agent && chainState.activityLoading);
+const keyStateInitialLoading = (agent) => keyStateLoading(agent) && !chainApplies(agent);
+const quoteApplies = (agent) => Boolean(agent && chainApplies(agent) && chainState.quoteSide === tradeSide && chainState.quote);
+const quoteInitialLoading = (agent) => quoteLoading() && !quoteApplies(agent);
+const keyActivityInitialLoading = (agent) => keyActivityLoading(agent) && !keyActivityTrades(agent).length;
 const maxBuyApplies = (agent) => {
   if (!agent) return false;
   const maxBuy = chainState.maxBuy;
@@ -1323,31 +1327,62 @@ async function refreshKeyMarketRead(_reason) {
     maxBuyLoading: Boolean(shouldRefreshMaxBuy),
   };
   render();
-  const [stateResult, quoteResult, activityResult, maxBuyResult] = await Promise.allSettled([
-    fetchJson(statePath),
-    fetchJson(quotePath),
-    fetchJson(activityPath),
-    shouldRefreshMaxBuy ? fetchJson(maxBuyPath) : Promise.resolve(chainState.maxBuy),
-  ]);
-  if (refreshId !== keyMarketRefreshId) return;
 
-  chainState = {
-    ...chainState,
-    state: stateResult.status === "fulfilled" ? stateResult.value.state : null,
-    quote: quoteResult.status === "fulfilled" ? quoteResult.value.quote : null,
-    quoteSide: quoteResult.status === "fulfilled" ? side : null,
-    protection: quoteResult.status === "fulfilled" ? quoteResult.value.protection : null,
-    maxBuy: maxBuyResult.status === "fulfilled" ? maxBuyResult.value : chainState.maxBuy,
-    maxBuyError: maxBuyResult.status === "rejected" ? errorMessage(maxBuyResult.reason, "Max buy read failed.") : null,
-    stateLoading: false,
-    quoteLoading: false,
-    activityLoading: false,
-    maxBuyLoading: false,
-    activity: activityResult.status === "fulfilled" ? activityResult.value : null,
-    activityError: firstRejectedMessage([activityResult]),
-    error: firstRejectedMessage([stateResult, quoteResult]),
-  };
-  render();
+  const statePromise = fetchJson(statePath)
+    .then((data) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, state: data.state, stateLoading: false, error: null };
+      render();
+    })
+    .catch((error) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, stateLoading: false, error: errorMessage(error, "Key market state read failed.") };
+      render();
+    });
+
+  const quotePromise = fetchJson(quotePath)
+    .then((data) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, quote: data.quote, quoteSide: side, protection: data.protection, quoteLoading: false, error: null };
+      render();
+    })
+    .catch((error) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, quoteLoading: false, error: errorMessage(error, "Key market quote read failed.") };
+      render();
+    });
+
+  const activityPromise = fetchJson(activityPath)
+    .then((data) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, activity: data, activityLoading: false, activityError: null };
+      render();
+    })
+    .catch((error) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, activityLoading: false, activityError: errorMessage(error, "Key activity read failed.") };
+      render();
+    });
+
+  const maxBuyPromise = shouldRefreshMaxBuy
+    ? fetchJson(maxBuyPath)
+      .then((data) => {
+        if (refreshId !== keyMarketRefreshId) return;
+        chainState = { ...chainState, maxBuy: data, maxBuyLoading: false, maxBuyError: null };
+        render();
+      })
+      .catch((error) => {
+        if (refreshId !== keyMarketRefreshId) return;
+        chainState = { ...chainState, maxBuyLoading: false, maxBuyError: errorMessage(error, "Max buy read failed.") };
+        render();
+      })
+    : Promise.resolve().then(() => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, maxBuyLoading: false };
+      render();
+    });
+
+  await Promise.allSettled([statePromise, quotePromise, activityPromise, maxBuyPromise]);
 }
 
 async function loadDiscoveryAgents() {
@@ -1726,19 +1761,19 @@ function loadingRows(count = 3) {
 
 function balanceLabel(agent, balance) {
   if (!chainState.accountId) return "Connect wallet";
-  if (keyStateLoading(agent)) return skeleton("38px", "inline-skeleton");
+  if (keyStateInitialLoading(agent)) return skeleton("38px", "inline-skeleton");
   if (chainState.error && !chainApplies(agent)) return "Unable to load";
   return balance === null ? "--" : keyAmountLabel(balance);
 }
 
 function maxBuyLabel(agent, balance) {
   if (!chainState.accountId) return "Connect wallet";
-  if (chainState.maxBuyLoading) return `Max buy ${skeleton("34px", "inline-skeleton")}`;
   if (chainState.maxBuyError) return "Max buy unavailable";
   if (tradeSide === "sell") {
-    return keyStateLoading(agent) ? `Sellable ${skeleton("38px", "inline-skeleton")}` : `Sellable ${balance === null ? "--" : keyAmountLabel(balance)}`;
+    return keyStateInitialLoading(agent) ? `Sellable ${skeleton("38px", "inline-skeleton")}` : `Sellable ${balance === null ? "--" : keyAmountLabel(balance)}`;
   }
   const maxBuy = buyMaxAmount(agent);
+  if (chainState.maxBuyLoading && maxBuy === null) return `Max buy ${skeleton("34px", "inline-skeleton")}`;
   return `Max buy ${maxBuy === null ? "--" : keyAmountLabel(maxBuy)}`;
 }
 
@@ -1746,7 +1781,7 @@ function gateLabel(agent, options = {}) {
   const balance = holderBalance(agent);
   if (isUnlocked(agent)) return "Room open";
   if (!chainState.accountId) return options.compact ? "1 key" : "Gate: 1 key";
-  if (keyStateLoading(agent)) return options.compact ? "Checking" : `Checking ${skeleton("34px", "inline-skeleton")}`;
+  if (keyStateInitialLoading(agent)) return options.compact ? "Checking" : `Checking ${skeleton("34px", "inline-skeleton")}`;
   if (roomAccessLoading(agent)) return options.compact ? "Opening" : "Opening room...";
   if (chainState.readAccessError) return options.compact ? "Access error" : "Access unavailable";
   return balance && balance > 0 ? "Opening room..." : options.compact ? "1 key" : "Gate: 1 key";
@@ -1808,7 +1843,7 @@ function keyholderRows(agent) {
     rows.push({
       title: chainState.accountId,
       meta: isUnlocked(agent) ? "Connected wallet / room access active" : roomAccessLoading(agent) ? "Connected wallet / opening room" : "Connected wallet",
-      value: keyStateLoading(agent) ? skeleton("48px", "inline-skeleton align-right") : holderBalance(agent) === null ? "--" : keyAmountLabel(holderBalance(agent)),
+      value: keyStateInitialLoading(agent) ? skeleton("48px", "inline-skeleton align-right") : holderBalance(agent) === null ? "--" : keyAmountLabel(holderBalance(agent)),
     });
   }
 
@@ -1838,7 +1873,7 @@ function renderKeyholders(agent) {
     <div class="agent-summary-grid">
       <div class="agent-summary-card">
         <span>Total keys</span>
-        <strong>${holders === null && keyStateLoading(agent) ? skeleton("42px") : escapeHtml(holders === null ? "--" : holders.toLocaleString())}</strong>
+        <strong>${holders === null && keyStateInitialLoading(agent) ? skeleton("42px") : escapeHtml(holders === null ? "--" : holders.toLocaleString())}</strong>
       </div>
       <div class="agent-summary-card">
         <span>Your keys</span>
@@ -1855,7 +1890,7 @@ function renderKeyholders(agent) {
           <strong>${row.url ? `<a href="${escapeHtml(row.url)}" target="_blank" rel="noreferrer">${escapeHtml(shortAccount(row.title))}</a>` : escapeHtml(shortAccount(row.title))}</strong>
           <span class="keyholder-meta">${escapeHtml(row.meta)}</span>
         </div>
-        <div class="keyholder-value">${escapeHtml(row.value)}</div>
+        <div class="keyholder-value">${String(row.value).includes("<") ? row.value : escapeHtml(row.value)}</div>
       </div>
     `).join("") : `
       <div class="backend-empty">
@@ -1944,8 +1979,8 @@ function renderAgentBase(agent) {
 }
 
 function renderKeyActivity(agent) {
-  setActivityHeader("Key Trading Activity", "NEAR testnet key market");
-  if (keyActivityLoading(agent)) {
+  setActivityHeader("Key Trading Activity", "NEAR testnet key market", keyActivityLoading(agent));
+  if (keyActivityInitialLoading(agent)) {
     byId("keyActivityList").innerHTML = loadingRows(3);
     return;
   }
@@ -1971,8 +2006,10 @@ function renderKeyActivity(agent) {
   `).join("");
 }
 
-function setActivityHeader(title, subtitle) {
-  byId("activityPanelTitle").textContent = title;
+function setActivityHeader(title, subtitle, loading = false) {
+  const titleNode = byId("activityPanelTitle");
+  titleNode.textContent = title;
+  titleNode.classList.toggle("is-refreshing", loading);
   byId("activityPanelSub").textContent = subtitle;
 }
 
@@ -2031,7 +2068,7 @@ function renderTicket(agent) {
   const maxAmount = maxAmountForSide(agent);
   const busy = Boolean(chainState.pending);
   const marketUnavailable = keyMarketUnavailable(agent);
-  const quote = chainApplies(agent) && chainState.quoteSide === tradeSide ? chainState.quote : null;
+  const quote = quoteApplies(agent) ? chainState.quote : null;
   const chainTotal = tradeSide === "sell" ? quote?.payout_near : quote?.total_cost_near;
   renderTicketBalance(agent, balance);
   const ticket = byId("keyMarketTicket");
@@ -2045,7 +2082,7 @@ function renderTicket(agent) {
     ticketControls.setAttribute("aria-hidden", marketUnavailable ? "true" : "false");
   }
   if (ticketEmpty) ticketEmpty.hidden = !marketUnavailable;
-  if (quoteLoading()) {
+  if (quoteInitialLoading(agent)) {
     setInlineState("quotePay", skeleton("88px", "inline-skeleton align-right"));
     setInlineState("quoteReceive", skeleton("54px", "inline-skeleton align-right"));
     setInlineState("quoteAverage", skeleton("88px", "inline-skeleton align-right"));
