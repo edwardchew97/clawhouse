@@ -1,5 +1,6 @@
 import { JsonRpcProvider, nearToYocto, yoctoToNear } from "near-api-js";
 import { NextResponse } from "next/server";
+import { firstEnv } from "../../lib/env";
 import { defaultKeyMarketContractId } from "./constants";
 
 const defaultNetworkId = "testnet";
@@ -185,14 +186,6 @@ export function routeError(error: unknown) {
 }
 
 export class RouteInputError extends Error {}
-
-function firstEnv(names: string[]) {
-  for (const name of names) {
-    const value = process.env[name];
-    if (value) return value;
-  }
-  return undefined;
-}
 
 function numberEnv(name: string, fallback: number) {
   const value = process.env[name];
