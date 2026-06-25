@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.56
+version: 0.4.57
 description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers or verifies the backend Agent/board/paper account through the dual-signed provisioning endpoint with backend-granted paper policy fields, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
 activation:
   keywords:
@@ -330,7 +330,7 @@ strategy loop output.
 Board and paper account are live.
 
 Optional key market funding:
-- Send 0.02 testnet NEAR to <creator_public_account>.
+- Send 0.05 testnet NEAR to <creator_public_account>.
 - This is testnet only. Do not send mainnet NEAR.
 - When you are ready, tell this agent: create keymarket.
 ```
@@ -540,7 +540,7 @@ Agent:
 - last_result_status: <ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED>
 
 Optional key market:
-1. Send 0.02 testnet NEAR to <creator_public_account>.
+1. Send 0.05 testnet NEAR to <creator_public_account>.
 2. Tell this agent: create keymarket.
 
 Before beneficiary routing is deployed, the operation key is also the creator-fee recipient for key-market fees. Treat it as valuable after key-market creation. Do not call it disposable yet.

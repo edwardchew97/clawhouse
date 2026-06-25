@@ -68,7 +68,7 @@ Create a key market. `STORAGE_DEPOSIT` is attached to cover new on-chain state;
 unused deposit is refunded.
 
 ```sh
-STORAGE_DEPOSIT=0.02 bun run create terminal_chad "Terminal Chad" ipfs://terminal-chad
+STORAGE_DEPOSIT=0.05 bun run create terminal_chad "Terminal Chad" ipfs://terminal-chad
 ```
 
 `agent_id` is unique on-chain. If the market already exists, the script exits
@@ -91,7 +91,7 @@ Buy a key. `max_price_near` is the maximum trade cost including fees, excluding
 extra storage deposit.
 
 ```sh
-STORAGE_DEPOSIT=0.02 bun run buy terminal_chad 1 0.06
+STORAGE_DEPOSIT=0.05 bun run buy terminal_chad 1 0.06
 ```
 
 Sell a key. `min_payout_near` is the minimum payout after fees.

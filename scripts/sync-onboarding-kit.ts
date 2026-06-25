@@ -337,6 +337,9 @@ async function validateContractsConfig(kitRepo: string) {
   if (stateArgs.agent_id !== "<agent_id>" || stateArgs.holder_id !== "<optional_account_id_or_null>") {
     errors.push("contracts.json get_state method_args must include agent_id and holder_id placeholders");
   }
+  if (expected.storageDepositNear !== "0.05") {
+    errors.push("contracts.json storage_deposit_near must be 0.05 for creator key-market funding buffer");
+  }
   if (!/^\d+(?:\.\d+)?$/.test(expected.storageDepositNear)) errors.push("contracts.json storage_deposit_near must be numeric");
   if (!/^\d+$/.test(expected.gasTgas)) errors.push("contracts.json gas_tgas must be integer TGas");
   if (Object.prototype.hasOwnProperty.call(keyMarket, "gas_units")) {

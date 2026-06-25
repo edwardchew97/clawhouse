@@ -152,6 +152,8 @@ describe("creator onboarding setup route", () => {
         networkId: string;
         rpcUrl: string;
         contractId: string;
+        fundingAmountNear: string;
+        fundingNetwork: string;
         createMethod: string;
         preflightMethod: string;
         stateReadMethod: string;
@@ -194,6 +196,8 @@ describe("creator onboarding setup route", () => {
       networkId: testnet.network_id,
       rpcUrl: testnet.rpc_url,
       contractId: keyMarket.contract_id,
+      fundingAmountNear: keyMarket.storage_deposit_near,
+      fundingNetwork: "testnet NEAR",
       createMethod: keyMarket.create_method,
       preflightMethod: keyMarket.preflight_method,
       stateReadMethod: keyMarket.state_read_method,
@@ -263,7 +267,7 @@ describe("creator onboarding setup route", () => {
         getAgent: contracts.environments.testnet.key_market.method_args.get_agent,
         getState: contracts.environments.testnet.key_market.method_args.get_state,
       },
-      storageDepositYocto: "20000000000000000000000",
+      storageDepositYocto: "50000000000000000000000",
     });
   });
 
@@ -273,6 +277,14 @@ describe("creator onboarding setup route", () => {
     expect(() => GET(new Request("http://clawhouse.test/creator-onboarding/setup"))).toThrow(
       "Key-market contract environment is disabled: mainnet",
     );
+  });
+
+  test("keeps mainnet key-market onboarding disabled until configured", () => {
+    const mainnet = contracts.environments.mainnet;
+
+    expect(mainnet.status).toBe("disabled");
+    expect(mainnet.key_market.contract_id).toBeNull();
+    expect(mainnet.key_market.storage_deposit_near).toBeNull();
   });
 });
 
