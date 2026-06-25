@@ -12,6 +12,19 @@ export default function Page() {
               <strong>ClawHouse</strong>
             </div>
           </div>
+          <div className="top-market-strip" aria-label="Current agent market context">
+            <div className="top-market-primary">
+              <span className="top-market-kicker">Paper P&amp;L</span>
+              <strong id="topAgentName">Loading agent</strong>
+              <b id="topAgentPnl">--</b>
+            </div>
+            <div className="top-market-items">
+              <span><b id="topKeyPrice">--</b> key</span>
+              <span><b id="topEquity">--</b> equity</span>
+              <span><b id="topPositions">--</b> pos</span>
+              <span><b id="topFills">--</b> fills</span>
+            </div>
+          </div>
           <div className="top-actions">
             <a className="launch-agent-button" href="#launch-agent">Launch my Agent</a>
             <div className="net-pill"><span className="dot" /> Key Market: NEAR testnet</div>

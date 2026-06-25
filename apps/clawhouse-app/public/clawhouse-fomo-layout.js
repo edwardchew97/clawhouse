@@ -1604,6 +1604,13 @@ function renderHero(agent) {
   const marketMeta = activity
     ? `${agent.desc} · ${backendNetwork(agent)} paper · ${summary.total_orders ?? 0} orders`
     : `${agent.desc} · ${backendNetwork(agent)} · ${pnlSource}`;
+  byId("topAgentName").textContent = title;
+  byId("topAgentPnl").textContent = pnl === null ? "--" : signedPct(pnl);
+  byId("topAgentPnl").className = pnl === null ? "" : pnl >= 0 ? "green" : "red";
+  byId("topKeyPrice").textContent = keyPriceLabel(agent).replace(" tNEAR", "");
+  byId("topEquity").textContent = formatCompactUsd(equity);
+  byId("topPositions").textContent = openPositions.toLocaleString();
+  byId("topFills").textContent = filledOrders.toLocaleString();
   byId("marketAvatar").innerHTML = agentIcon(agent);
   byId("marketName").textContent = title;
   byId("marketMeta").textContent = marketMeta;
@@ -1634,6 +1641,13 @@ function renderHero(agent) {
 }
 
 function renderFreshStartEmpty() {
+  byId("topAgentName").textContent = "No agents";
+  byId("topAgentPnl").textContent = "--";
+  byId("topAgentPnl").className = "";
+  byId("topKeyPrice").textContent = "--";
+  byId("topEquity").textContent = "--";
+  byId("topPositions").textContent = "--";
+  byId("topFills").textContent = "--";
   byId("marketAvatar").textContent = "--";
   byId("marketName").textContent = "No agents yet";
   byId("marketMeta").textContent = "Fresh staging is ready.";

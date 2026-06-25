@@ -92,8 +92,7 @@
 
     .topbar {
       display: grid;
-      grid-template-columns: 246px minmax(520px, 680px);
-      justify-content: space-between;
+      grid-template-columns: 246px minmax(360px, 1fr) max-content;
       align-items: center;
       gap: 10px;
       padding: 0 12px;
@@ -136,6 +135,92 @@
       line-height: 13px;
     }
 
+    .top-market-strip {
+      min-width: 0;
+      height: 30px;
+      display: grid;
+      grid-template-columns: minmax(190px, max-content) minmax(0, 1fr);
+      align-items: center;
+      gap: 12px;
+      padding: 0 10px;
+      border-left: 1px solid rgba(255, 255, 255, 0.07);
+      border-right: 1px solid rgba(255, 255, 255, 0.07);
+      color: var(--muted);
+      overflow: hidden;
+    }
+
+    .top-market-primary {
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      white-space: nowrap;
+    }
+
+    .top-market-kicker {
+      color: var(--faint);
+      font-size: 11px;
+      line-height: 12px;
+      font-weight: 820;
+    }
+
+    .top-market-primary strong {
+      max-width: 150px;
+      color: #fff;
+      font-size: 12px;
+      line-height: 14px;
+      font-weight: 850;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .top-market-primary b,
+    .top-market-items b {
+      color: #fff;
+      font-size: 11px;
+      line-height: 12px;
+      font-weight: 850;
+    }
+
+    .top-market-primary b.green,
+    .top-market-items b.green {
+      color: var(--green);
+    }
+
+    .top-market-primary b.red,
+    .top-market-items b.red {
+      color: var(--red);
+    }
+
+    .top-market-items {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .top-market-items span {
+      position: relative;
+      min-width: max-content;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 12px;
+      font-weight: 720;
+    }
+
+    .top-market-items span + span::before {
+      content: "";
+      position: absolute;
+      left: -7px;
+      top: 2px;
+      width: 1px;
+      height: 10px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
     .top-actions {
       display: flex;
       justify-content: flex-end;
@@ -156,6 +241,37 @@
       color: var(--muted);
       font-size: 11px;
       white-space: nowrap;
+    }
+
+    @media (max-width: 1180px) {
+      .top-market-strip {
+        display: none;
+      }
+
+      .topbar {
+        grid-template-columns: minmax(0, 1fr) max-content;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .topbar {
+        grid-template-columns: minmax(0, 1fr) max-content;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .top-actions .launch-agent-button,
+      .top-actions .net-pill {
+        display: none;
+      }
+
+      .top-actions {
+        width: auto;
+      }
+
+      .wallet {
+        min-width: 104px;
+      }
     }
 
     .dot {
@@ -3288,15 +3404,15 @@
       }
 
       .topbar {
-        grid-template-columns: 1fr;
-        height: auto;
-        padding: 10px;
+        grid-template-columns: minmax(0, 1fr) max-content;
+        height: 48px;
+        padding: 0 10px;
       }
 
       .top-actions {
-        width: 100%;
+        width: auto;
         max-width: none;
-        justify-self: stretch;
+        justify-self: end;
       }
 
       .main {
