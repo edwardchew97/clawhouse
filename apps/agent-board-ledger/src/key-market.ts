@@ -1,4 +1,4 @@
-import { cleanString, newId, requiredString, RequestError, type LedgerDb } from "./db.js";
+import { cleanString, newId, normalizeBodyFields, requiredString, RequestError, type LedgerDb } from "./db.js";
 import type { JsonObject, KeyMarketTradeRow } from "./types.js";
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -11,6 +11,11 @@ const defaultRpcUrls: Record<string, string> = {
   testnet: "https://rpc.testnet.fastnear.com",
   mainnet: "https://rpc.mainnet.fastnear.com",
 };
+const keyMarketEnv = {
+  networkId: ["CLAWHOUSE_KEY_NEAR_NETWORK_ID", "KEY_NEAR_NETWORK_ID", "NEAR_NETWORK_ID"],
+  contractId: ["CLAWHOUSE_KEY_MARKET_CONTRACT_ID", "KEY_MARKET_CONTRACT_ID", "CONTRACT_ID"],
+  rpcUrl: ["CLAWHOUSE_KEY_NEAR_RPC_URL", "KEY_NEAR_RPC_URL", "AGENT_BOARD_LEDGER_NEAR_RPC_URL", "NEAR_NODE_URL"],
+} as const;
 
 export async function listKeyMarketTrades(db: LedgerDb, env: RuntimeEnv, searchParams: URLSearchParams) {
   const agentId = cleanString(searchParams.get("agentId") ?? searchParams.get("agent_id"));
@@ -50,11 +55,11 @@ export async function reportKeyMarketTrade(
   body: BodyResultLike,
   createdAt: string,
 ) {
-  const data = objectRecord(body.json);
-  const txHash = requiredString(data.txHash ?? data.tx_hash, "tx_hash");
-  const signerId = requiredString(data.signerId ?? data.signer_id ?? data.accountId ?? data.account_id, "signer_id");
+  const data = normalizeBodyFields(body.json);
+  const txHash = requiredString(data.txHash, "tx_hash");
+  const signerId = requiredString(data.signerId ?? data.accountId, "signer_id");
   const expected = {
-    agentId: cleanString(data.agentId ?? data.agent_id),
+    agentId: cleanString(data.agentId),
     side: optionalTradeSide(data.side),
     amount: integerString(data.amount, "amount", false),
   };
@@ -164,27 +169,26 @@ export async function reportKeyMarketTrade(
 }
 
 function keyMarketConfig(env: RuntimeEnv) {
-  const networkId = cleanEnv(env.CLAWHOUSE_KEY_NEAR_NETWORK_ID)
-    ?? cleanEnv(env.KEY_NEAR_NETWORK_ID)
-    ?? cleanEnv(env.NEAR_NETWORK_ID)
-    ?? defaultNetworkId;
-  const contractId = cleanEnv(env.CLAWHOUSE_KEY_MARKET_CONTRACT_ID)
-    ?? cleanEnv(env.KEY_MARKET_CONTRACT_ID)
-    ?? cleanEnv(env.CONTRACT_ID)
-    ?? defaultContractId;
-  const rpcUrl = cleanEnv(env.CLAWHOUSE_KEY_NEAR_RPC_URL)
-    ?? cleanEnv(env.KEY_NEAR_RPC_URL)
-    ?? cleanEnv(env.AGENT_BOARD_LEDGER_NEAR_RPC_URL)
-    ?? cleanEnv(env.NEAR_NODE_URL)
+  const networkId = firstConfigEnv(env, keyMarketEnv.networkId) ?? defaultNetworkId;
+  const contractId = firstConfigEnv(env, keyMarketEnv.contractId) ?? defaultContractId;
+  const rpcUrl = firstConfigEnv(env, keyMarketEnv.rpcUrl)
     ?? defaultRpcUrls[networkId]
     ?? `https://rpc.${networkId}.near.org`;
 
   return { networkId, contractId, rpcUrl };
 }
 
+function firstConfigEnv(env: RuntimeEnv, names: readonly string[]) {
+  for (const name of names) {
+    const value = cleanEnv(env[name]);
+    if (value) return value;
+  }
+  return null;
+}
+
 function assertReportedKeyMarketConfig(input: JsonObject, config: ReturnType<typeof keyMarketConfig>) {
-  const reportedNetworkId = cleanString(input.networkId ?? input.network_id);
-  const reportedContractId = cleanString(input.contractId ?? input.contract_id);
+  const reportedNetworkId = cleanString(input.networkId);
+  const reportedContractId = cleanString(input.contractId);
   if (reportedNetworkId && reportedNetworkId !== config.networkId) {
     throw new RequestError("Reported network_id does not match configured key-market network", 400);
   }

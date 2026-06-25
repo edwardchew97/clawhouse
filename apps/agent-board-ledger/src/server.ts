@@ -1,4 +1,4 @@
-import { asObject, cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, openMigratedRuntimeLedgerDb, requiredNumber, requiredString, RequestError, stringifyOptional, type LedgerDb } from "./db.js";
+import { asObject, cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, normalizeBodyFields, openMigratedRuntimeLedgerDb, requiredNumber, requiredString, RequestError, stringifyOptional, type LedgerDb } from "./db.js";
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAgentAuthPayload, canonicalAuthPayload, readAgentSignedHeaders, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
 import { refreshHyperliquidPaperMarketSnapshot, refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
 import { listKeyMarketTrades, reportKeyMarketTrade } from "./key-market.js";
@@ -261,9 +261,9 @@ async function listDiscoverableBoards(db: LedgerDb) {
 }
 
 async function registerAgent(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
-  const data = asObject(body.json);
-  const agentId = requiredString(data.agentId ?? data.agent_id, "agent_id");
-  const agentPublicKey = requiredString(data.agentPublicKey ?? data.agent_public_key, "agent_public_key");
+  const data = normalizeBodyFields(body.json);
+  const agentId = requiredString(data.agentId, "agent_id");
+  const agentPublicKey = requiredString(data.agentPublicKey, "agent_public_key");
   const status = cleanString(data.status) ?? "active";
   const metadataJson = stringifyOptional(data.metadata);
 
@@ -313,32 +313,32 @@ async function upsertAgentRegistration(
 }
 
 async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
-  const data = asObject(body.json);
+  const data = normalizeBodyFields(body.json);
   const metadata = asOptionalObject(data.metadata);
   const publicProfileMetadata = creatorOnboardingPublicMetadata(data, metadata);
-  const agentId = requiredString(data.agentId ?? data.agent_id, "agent_id");
-  const agentPublicKey = requiredString(data.agentPublicKey ?? data.agent_public_key, "agent_public_key");
-  const requestedBoardId = cleanString(data.boardId ?? data.board_id);
+  const agentId = requiredString(data.agentId, "agent_id");
+  const agentPublicKey = requiredString(data.agentPublicKey, "agent_public_key");
+  const requestedBoardId = cleanString(data.boardId);
   const existingBoard = requestedBoardId
     ? null
     : await findCreatorOnboardingBoard(db, agentId, agentPublicKey);
   const boardId = requestedBoardId ?? existingBoard?.id ?? newId("board");
-  const requestedPaperAccountId = cleanString(data.paperAccountId ?? data.paper_account_id);
+  const requestedPaperAccountId = cleanString(data.paperAccountId);
   const board: Board = {
     id: boardId,
     agent_id: agentId,
     agent_public_key: agentPublicKey,
-    wallet_address: requiredString(data.walletAddress ?? data.wallet_address, "wallet_address"),
-    public_key: requiredString(data.publicKey ?? data.public_key, "public_key"),
+    wallet_address: requiredString(data.walletAddress, "wallet_address"),
+    public_key: requiredString(data.publicKey, "public_key"),
     chain: cleanString(data.chain) ?? "near",
-    venue_namespace: cleanString(data.venueNamespace ?? data.venue_namespace) ?? "hyperliquid-paper",
-    tracking_started_at: normalizedTimestampField(data.trackingStartedAt ?? data.tracking_started_at, createdAt, "tracking_started_at"),
-    base_currency: cleanString(data.baseCurrency ?? data.base_currency) ?? "USD",
+    venue_namespace: cleanString(data.venueNamespace) ?? "hyperliquid-paper",
+    tracking_started_at: normalizedTimestampField(data.trackingStartedAt, createdAt, "tracking_started_at"),
+    base_currency: cleanString(data.baseCurrency) ?? "USD",
     public_status: "active",
     visibility_mode: "public",
-    owner_wallet_address: cleanString(data.ownerWalletAddress ?? data.owner_wallet_address),
-    funding_source: cleanString(data.fundingSource ?? data.funding_source),
-    funding_tx_hash: cleanString(data.fundingTxHash ?? data.funding_tx_hash),
+    owner_wallet_address: cleanString(data.ownerWalletAddress),
+    funding_source: cleanString(data.fundingSource),
+    funding_tx_hash: cleanString(data.fundingTxHash),
     metadata_json: stringifyOptional(publicProfileMetadata),
     created_at: createdAt,
   };
@@ -388,23 +388,23 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
 }
 
 async function createBoard(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
-  const data = asObject(body.json);
-  const id = cleanString(data.boardId) ?? cleanString(data.board_id) ?? newId("board");
+  const data = normalizeBodyFields(body.json);
+  const id = cleanString(data.boardId) ?? newId("board");
   const board: Board = {
     id,
-    agent_id: requiredString(data.agentId ?? data.agent_id, "agent_id"),
-    agent_public_key: requiredString(data.agentPublicKey ?? data.agent_public_key, "agent_public_key"),
-    wallet_address: requiredString(data.walletAddress ?? data.wallet_address, "wallet_address"),
-    public_key: requiredString(data.publicKey ?? data.public_key, "public_key"),
+    agent_id: requiredString(data.agentId, "agent_id"),
+    agent_public_key: requiredString(data.agentPublicKey, "agent_public_key"),
+    wallet_address: requiredString(data.walletAddress, "wallet_address"),
+    public_key: requiredString(data.publicKey, "public_key"),
     chain: cleanString(data.chain) ?? "near",
-    venue_namespace: cleanString(data.venueNamespace ?? data.venue_namespace) ?? "near-intents",
-    tracking_started_at: normalizedTimestampField(data.trackingStartedAt ?? data.tracking_started_at, createdAt, "tracking_started_at"),
-    base_currency: cleanString(data.baseCurrency ?? data.base_currency) ?? "USD",
-    public_status: cleanString(data.publicStatus ?? data.public_status) ?? "draft",
-    visibility_mode: cleanString(data.visibilityMode ?? data.visibility_mode) ?? "private",
-    owner_wallet_address: cleanString(data.ownerWalletAddress ?? data.owner_wallet_address),
-    funding_source: cleanString(data.fundingSource ?? data.funding_source),
-    funding_tx_hash: cleanString(data.fundingTxHash ?? data.funding_tx_hash),
+    venue_namespace: cleanString(data.venueNamespace) ?? "near-intents",
+    tracking_started_at: normalizedTimestampField(data.trackingStartedAt, createdAt, "tracking_started_at"),
+    base_currency: cleanString(data.baseCurrency) ?? "USD",
+    public_status: cleanString(data.publicStatus) ?? "draft",
+    visibility_mode: cleanString(data.visibilityMode) ?? "private",
+    owner_wallet_address: cleanString(data.ownerWalletAddress),
+    funding_source: cleanString(data.fundingSource),
+    funding_tx_hash: cleanString(data.fundingTxHash),
     metadata_json: stringifyOptional(data.metadata),
     created_at: createdAt,
   };
@@ -592,10 +592,10 @@ function assertSameRegisteredField(actual: string | null, expected: string | nul
 
 function creatorOnboardingPublicMetadata(data: JsonObject, metadata: JsonObject) {
   return {
-    agent_name: requiredString(data.agentName ?? data.agent_name ?? metadata.agent_name, "agent_name"),
-    agent_description: requiredString(data.agentDescription ?? data.agent_description ?? metadata.agent_description, "agent_description"),
-    avatar_reference: requiredString(data.avatarReference ?? data.avatar_reference ?? metadata.avatar_reference, "avatar_reference"),
-    trading_strategy: requiredString(data.tradingStrategy ?? data.trading_strategy ?? metadata.trading_strategy, "trading_strategy"),
+    agent_name: requiredString(data.agentName ?? metadata.agent_name, "agent_name"),
+    agent_description: requiredString(data.agentDescription ?? metadata.agent_description, "agent_description"),
+    avatar_reference: requiredString(data.avatarReference ?? metadata.avatar_reference, "avatar_reference"),
+    trading_strategy: requiredString(data.tradingStrategy ?? metadata.trading_strategy, "trading_strategy"),
   };
 }
 
@@ -716,8 +716,8 @@ async function assertPaperAccountRegistrationSignature(
   body: BodyResult,
   createdAt: string,
 ) {
-  const data = asObject(body.json);
-  const boardId = cleanString(data.boardId ?? data.board_id);
+  const data = normalizeBodyFields(body.json);
+  const boardId = cleanString(data.boardId);
   let agentId: string;
   let agentPublicKey: string;
 
@@ -726,17 +726,17 @@ async function assertPaperAccountRegistrationSignature(
     agentId = board.agent_id;
     agentPublicKey = requiredBoardAgentPublicKey(board);
 
-    const suppliedAgentId = cleanString(data.agentId ?? data.agent_id);
+    const suppliedAgentId = cleanString(data.agentId);
     if (suppliedAgentId && suppliedAgentId !== agentId) {
       throw new RequestError("paper account agent_id must match board agent_id", 400);
     }
-    const suppliedAgentPublicKey = cleanString(data.agentPublicKey ?? data.agent_public_key);
+    const suppliedAgentPublicKey = cleanString(data.agentPublicKey);
     if (suppliedAgentPublicKey && suppliedAgentPublicKey !== agentPublicKey) {
       throw new RequestError("paper account agent_public_key must match board agent_public_key", 400);
     }
   } else {
-    agentId = requiredString(data.agentId ?? data.agent_id, "agent_id");
-    agentPublicKey = requiredString(data.agentPublicKey ?? data.agent_public_key, "agent_public_key");
+    agentId = requiredString(data.agentId, "agent_id");
+    agentPublicKey = requiredString(data.agentPublicKey, "agent_public_key");
   }
 
   await assertAgentSignature(db, request, body.raw, {
@@ -758,7 +758,7 @@ async function createEvent(
 ) {
   const board = await requireBoard(db, context.params.boardId);
   await assertSignedRequest(db, request, body.raw, context.path, board, Date.parse(createdAt), createdAt);
-  const data = asObject(body.json);
+  const data = normalizeBodyFields(body.json);
   const existing = await findEventByAssociations(db, board.id, data);
 
   if (existing) {
@@ -770,18 +770,18 @@ async function createEvent(
     board_id: board.id,
     agent_id: board.agent_id,
     wallet_address: board.wallet_address,
-    event_type: cleanString(data.eventType ?? data.event_type) ?? "agent_reported",
-    client_event_id: cleanString(data.clientEventId ?? data.client_event_id),
-    tx_hash: cleanString(data.txHash ?? data.tx_hash),
-    intent_id: cleanString(data.intentId ?? data.intent_id),
-    status_claim: cleanString(data.statusClaim ?? data.status_claim),
-    asset_in: cleanString(data.assetIn ?? data.asset_in),
-    amount_in: optionalNonNegativeNumberField(data.amountIn ?? data.amount_in, "amount_in"),
-    asset_out: cleanString(data.assetOut ?? data.asset_out),
-    amount_out: optionalNonNegativeNumberField(data.amountOut ?? data.amount_out, "amount_out"),
+    event_type: cleanString(data.eventType) ?? "agent_reported",
+    client_event_id: cleanString(data.clientEventId),
+    tx_hash: cleanString(data.txHash),
+    intent_id: cleanString(data.intentId),
+    status_claim: cleanString(data.statusClaim),
+    asset_in: cleanString(data.assetIn),
+    amount_in: optionalNonNegativeNumberField(data.amountIn, "amount_in"),
+    asset_out: cleanString(data.assetOut),
+    amount_out: optionalNonNegativeNumberField(data.amountOut, "amount_out"),
     reason: cleanString(data.reason),
     metadata_json: stringifyOptional(data.metadata),
-    reported_at: normalizedTimestampField(data.reportedAt ?? data.reported_at, createdAt, "reported_at"),
+    reported_at: normalizedTimestampField(data.reportedAt, createdAt, "reported_at"),
     created_at: createdAt,
   };
 
@@ -805,8 +805,8 @@ async function createAttachment(
   ]);
   if (!event) throw new RequestError("Event not found", 404);
 
-  const data = asObject(body.json);
-  const attachmentType = cleanString(data.attachmentType ?? data.attachment_type ?? data.type) ?? "reason";
+  const data = normalizeBodyFields(body.json);
+  const attachmentType = cleanString(data.attachmentType ?? data.type) ?? "reason";
   if (!attachmentTypes.has(attachmentType)) {
     throw new RequestError("Invalid attachment_type", 400);
   }
@@ -857,19 +857,19 @@ async function insertObservation(db: LedgerDb, observation: ObservationRow) {
 
 async function createPriceSnapshots(db: LedgerDb, body: BodyResult, boardId: string, createdAt: string) {
   const board = await requireBoard(db, boardId);
-  const data = asObject(body.json);
+  const data = normalizeBodyFields(body.json);
   const inputSnapshots = Array.isArray(data.prices) ? data.prices : Array.isArray(data.snapshots) ? data.snapshots : [data];
   const prices = inputSnapshots.map((value) => {
-    const item = asObject(value);
+    const item = normalizeBodyFields(value);
     return {
       id: newId("price"),
       board_id: board.id,
-      asset_id: requiredString(item.assetId ?? item.asset_id, "asset_id"),
-      asset_symbol: cleanString(item.assetSymbol ?? item.asset_symbol),
-      price_usd: optionalNonNegativeNumberField(item.priceUsd ?? item.price_usd, "price_usd"),
-      price_source: requiredString(item.priceSource ?? item.price_source, "price_source"),
-      observed_at: normalizedObservedAt(item.observedAt ?? item.observed_at, createdAt),
-      staleness_status: cleanString(item.stalenessStatus ?? item.staleness_status) ?? "fresh",
+      asset_id: requiredString(item.assetId, "asset_id"),
+      asset_symbol: cleanString(item.assetSymbol),
+      price_usd: optionalNonNegativeNumberField(item.priceUsd, "price_usd"),
+      price_source: requiredString(item.priceSource, "price_source"),
+      observed_at: normalizedObservedAt(item.observedAt, createdAt),
+      staleness_status: cleanString(item.stalenessStatus) ?? "fresh",
       metadata_json: stringifyOptional(item.metadata),
       created_at: createdAt,
     } satisfies PriceSnapshotRow;
@@ -881,13 +881,13 @@ async function createPriceSnapshots(db: LedgerDb, body: BodyResult, boardId: str
 
 async function createReadAccessCheck(db: LedgerDb, body: BodyResult, boardId: string, createdAt: string) {
   const board = await requireBoard(db, boardId);
-  const data = asObject(body.json);
-  const accessResult = cleanString(data.accessResult ?? data.access_result) ?? "granted";
-  const accessLevel = normalizeAccessLevel(data.accessLevel ?? data.access_level);
-  const readToken = cleanString(data.readToken ?? data.read_token);
+  const data = normalizeBodyFields(body.json);
+  const accessResult = cleanString(data.accessResult) ?? "granted";
+  const accessLevel = normalizeAccessLevel(data.accessLevel);
+  const readToken = cleanString(data.readToken);
   const metadata = asOptionalObject(data.metadata);
   const expiresAt = normalizeReadGrantExpiry(
-    cleanString(data.expiresAt ?? data.expires_at) ?? cleanString(metadata.expires_at),
+    cleanString(data.expiresAt) ?? cleanString(metadata.expires_at),
     createdAt,
     accessResult,
     accessLevel,
@@ -903,12 +903,12 @@ async function createReadAccessCheck(db: LedgerDb, body: BodyResult, boardId: st
   const check: ReadAccessCheckRow = {
     id: newId("read"),
     board_id: board.id,
-    requester_wallet_address: cleanString(data.requesterWalletAddress ?? data.requester_wallet_address),
+    requester_wallet_address: cleanString(data.requesterWalletAddress),
     access_level: accessLevel,
     access_result: accessResult,
     reason: cleanString(data.reason),
-    key_contract_id: cleanString(data.keyContractId ?? data.key_contract_id),
-    checked_at: normalizedTimestampField(data.checkedAt ?? data.checked_at, createdAt, "checked_at"),
+    key_contract_id: cleanString(data.keyContractId),
+    checked_at: normalizedTimestampField(data.checkedAt, createdAt, "checked_at"),
     metadata_json: JSON.stringify({
       ...metadata,
       expires_at: expiresAt,
@@ -930,24 +930,24 @@ async function checkNearKeyMarketReadAccess(
   createdAt: string,
 ) {
   const board = await requireBoard(db, boardId);
-  const data = asObject(body.json);
-  const rpcUrl = requiredString(data.rpcUrl ?? data.rpc_url ?? env[NEAR_RPC_URL_ENV], "rpc_url");
-  const keyContractId = requiredString(data.keyContractId ?? data.key_contract_id, "key_contract_id");
-  const holderAccountId = requiredString(data.holderAccountId ?? data.holder_account_id ?? data.requesterWalletAddress ?? data.requester_wallet_address, "holder_account_id");
-  const suppliedAgentId = cleanString(data.agentId ?? data.agent_id);
+  const data = normalizeBodyFields(body.json);
+  const rpcUrl = requiredString(data.rpcUrl ?? env[NEAR_RPC_URL_ENV], "rpc_url");
+  const keyContractId = requiredString(data.keyContractId, "key_contract_id");
+  const holderAccountId = requiredString(data.holderAccountId ?? data.requesterWalletAddress, "holder_account_id");
+  const suppliedAgentId = cleanString(data.agentId);
   if (suppliedAgentId && suppliedAgentId !== board.agent_id) {
     throw new RequestError("agent_id must match board agent_id", 400);
   }
   const agentId = board.agent_id;
-  const readToken = cleanString(data.readToken ?? data.read_token);
-  const accessLevel = normalizeAccessLevel(data.accessLevel ?? data.access_level);
-  const checkedAt = normalizedTimestampField(data.checkedAt ?? data.checked_at, createdAt, "checked_at");
+  const readToken = cleanString(data.readToken);
+  const accessLevel = normalizeAccessLevel(data.accessLevel);
+  const checkedAt = normalizedTimestampField(data.checkedAt, createdAt, "checked_at");
   const rawBalance = await viewNearKeyMarketBalance(rpcFetch, rpcUrl, keyContractId, agentId, holderAccountId);
   const holderBalance = rawBalance === null ? "0" : decimalIntegerString(rawBalance, "holder_key_balance");
   const accessResult = BigInt(holderBalance) > 0n ? "granted" : "denied";
   const metadata = asOptionalObject(data.metadata);
   const expiresAt = normalizeReadGrantExpiry(
-    cleanString(data.expiresAt ?? data.expires_at) ?? cleanString(metadata.expires_at),
+    cleanString(data.expiresAt) ?? cleanString(metadata.expires_at),
     createdAt,
     accessResult,
     accessLevel,
@@ -1022,16 +1022,16 @@ async function runNearAccountWatch(
   createdAt: string,
 ) {
   const board = await requireBoard(db, boardId);
-  const data = asObject(body.json);
-  const rpcUrl = requiredString(data.rpcUrl ?? data.rpc_url ?? env[NEAR_RPC_URL_ENV], "rpc_url");
-  const observedAt = normalizedObservedAt(data.observedAt ?? data.observed_at, createdAt);
+  const data = normalizeBodyFields(body.json);
+  const rpcUrl = requiredString(data.rpcUrl ?? env[NEAR_RPC_URL_ENV], "rpc_url");
+  const observedAt = normalizedObservedAt(data.observedAt, createdAt);
   const account = await viewNearAccount(rpcFetch, rpcUrl, board.wallet_address);
   const normalizedNear = Number(account.amount) / YOCTO_NEAR_PER_NEAR;
   if (!Number.isFinite(normalizedNear)) {
     throw new RequestError("NEAR account balance is too large to normalize safely", 502);
   }
 
-  const priceUsd = optionalNonNegativeNumberField(data.priceUsd ?? data.price_usd, "price_usd");
+  const priceUsd = optionalNonNegativeNumberField(data.priceUsd, "price_usd");
   const previous = await latestBalanceChangeForAsset(db, board.id, "native:near");
   const previousAmount = previous?.normalized_amount ?? null;
   const deltaAmount = previousAmount === null ? null : normalizedNear - previousAmount;
@@ -1042,9 +1042,9 @@ async function runNearAccountWatch(
     asset_id: "native:near",
     asset_symbol: "NEAR",
     price_usd: priceUsd,
-    price_source: cleanString(data.priceSource ?? data.price_source) ?? "watcher_input",
+    price_source: cleanString(data.priceSource) ?? "watcher_input",
     observed_at: observedAt,
-    staleness_status: cleanString(data.stalenessStatus ?? data.staleness_status) ?? "fresh",
+    staleness_status: cleanString(data.stalenessStatus) ?? "fresh",
     metadata_json: stringifyOptional({ source: "near_rpc_account_watch", rpc_url: rpcUrl }),
     created_at: createdAt,
   } satisfies PriceSnapshotRow);
@@ -1057,12 +1057,12 @@ async function runNearAccountWatch(
     wallet_address: board.wallet_address,
     observed_at: observedAt,
     current_value_usd: currentValueUsd,
-    topup_usd: optionalNonNegativeNumberField(data.topupUsd ?? data.topup_usd, "topup_usd") ?? 0,
-    withdrawal_usd: optionalNonNegativeNumberField(data.withdrawalUsd ?? data.withdrawal_usd, "withdrawal_usd") ?? 0,
-    client_event_id: cleanString(data.clientEventId ?? data.client_event_id),
-    tx_hash: cleanString(data.txHash ?? data.tx_hash),
-    intent_id: cleanString(data.intentId ?? data.intent_id),
-    status_claim: cleanString(data.statusClaim ?? data.status_claim) ?? "observed_on_near_rpc",
+    topup_usd: optionalNonNegativeNumberField(data.topupUsd, "topup_usd") ?? 0,
+    withdrawal_usd: optionalNonNegativeNumberField(data.withdrawalUsd, "withdrawal_usd") ?? 0,
+    client_event_id: cleanString(data.clientEventId),
+    tx_hash: cleanString(data.txHash),
+    intent_id: cleanString(data.intentId),
+    status_claim: cleanString(data.statusClaim) ?? "observed_on_near_rpc",
     asset_in: null,
     amount_in: null,
     asset_out: "NEAR",
@@ -1092,11 +1092,11 @@ async function runNearAccountWatch(
     decimals: 24,
     delta_amount: deltaAmount,
     delta_value_usd: deltaAmount === null || priceUsd === null ? null : deltaAmount * priceUsd,
-    change_type: cleanString(data.changeType ?? data.change_type) ?? classifyNearBalanceChange(deltaAmount),
+    change_type: cleanString(data.changeType) ?? classifyNearBalanceChange(deltaAmount),
     source_observation_id: observation?.id ?? null,
     source_event_id: null,
-    tx_hash: cleanString(data.txHash ?? data.tx_hash),
-    intent_id: cleanString(data.intentId ?? data.intent_id),
+    tx_hash: cleanString(data.txHash),
+    intent_id: cleanString(data.intentId),
     visibility_status: priceUsd === null ? "missing_price" : "complete",
     metadata_json: stringifyOptional({
       source: "near_rpc_account_watch",
@@ -1128,15 +1128,12 @@ async function runNearFtWatch(
   createdAt: string,
 ) {
   const board = await requireBoard(db, boardId);
-  const data = asObject(body.json);
-  const rpcUrl = requiredString(data.rpcUrl ?? data.rpc_url ?? env[NEAR_RPC_URL_ENV], "rpc_url");
-  const tokenContractId = requiredString(
-    data.tokenContractId ?? data.token_contract_id ?? data.contractId ?? data.contract_id,
-    "token_contract_id",
-  );
-  const observedAt = normalizedObservedAt(data.observedAt ?? data.observed_at, createdAt);
+  const data = normalizeBodyFields(body.json);
+  const rpcUrl = requiredString(data.rpcUrl ?? env[NEAR_RPC_URL_ENV], "rpc_url");
+  const tokenContractId = requiredString(data.tokenContractId ?? data.contractId, "token_contract_id");
+  const observedAt = normalizedObservedAt(data.observedAt, createdAt);
   const suppliedDecimals = optionalIntegerField(data.decimals, "decimals");
-  const suppliedSymbol = cleanString(data.assetSymbol ?? data.asset_symbol);
+  const suppliedSymbol = cleanString(data.assetSymbol);
   const metadata = suppliedDecimals === null
     ? await viewNearFtMetadata(rpcFetch, rpcUrl, tokenContractId)
     : null;
@@ -1145,11 +1142,11 @@ async function runNearFtWatch(
   assertTokenDecimals(decimals);
 
   const assetSymbol = suppliedSymbol ?? metadata?.symbol ?? tokenContractId;
-  const assetId = cleanString(data.assetId ?? data.asset_id) ?? `ft:${tokenContractId}`;
+  const assetId = cleanString(data.assetId) ?? `ft:${tokenContractId}`;
   const rawBalance = await viewNearFtBalance(rpcFetch, rpcUrl, tokenContractId, board.wallet_address);
   const normalizedAmount = decimalAmountFromRaw(rawBalance, decimals);
-  const priceUsd = optionalNonNegativeNumberField(data.priceUsd ?? data.price_usd, "price_usd");
-  const currentValueUsd = optionalNonNegativeNumberField(data.currentValueUsd ?? data.current_value_usd, "current_value_usd")
+  const priceUsd = optionalNonNegativeNumberField(data.priceUsd, "price_usd");
+  const currentValueUsd = optionalNonNegativeNumberField(data.currentValueUsd, "current_value_usd")
     ?? (priceUsd === null ? null : normalizedAmount * priceUsd);
   const previous = await latestBalanceChangeForAsset(db, board.id, assetId);
   const previousAmount = previous?.normalized_amount ?? null;
@@ -1160,9 +1157,9 @@ async function runNearFtWatch(
     asset_id: assetId,
     asset_symbol: assetSymbol,
     price_usd: priceUsd,
-    price_source: cleanString(data.priceSource ?? data.price_source) ?? "watcher_input",
+    price_source: cleanString(data.priceSource) ?? "watcher_input",
     observed_at: observedAt,
-    staleness_status: cleanString(data.stalenessStatus ?? data.staleness_status) ?? "fresh",
+    staleness_status: cleanString(data.stalenessStatus) ?? "fresh",
     metadata_json: stringifyOptional({
       source: "near_rpc_ft_watch",
       rpc_url: rpcUrl,
@@ -1179,12 +1176,12 @@ async function runNearFtWatch(
     wallet_address: board.wallet_address,
     observed_at: observedAt,
     current_value_usd: currentValueUsd,
-    topup_usd: optionalNonNegativeNumberField(data.topupUsd ?? data.topup_usd, "topup_usd") ?? 0,
-    withdrawal_usd: optionalNonNegativeNumberField(data.withdrawalUsd ?? data.withdrawal_usd, "withdrawal_usd") ?? 0,
-    client_event_id: cleanString(data.clientEventId ?? data.client_event_id),
-    tx_hash: cleanString(data.txHash ?? data.tx_hash),
-    intent_id: cleanString(data.intentId ?? data.intent_id),
-    status_claim: cleanString(data.statusClaim ?? data.status_claim) ?? "observed_on_near_rpc",
+    topup_usd: optionalNonNegativeNumberField(data.topupUsd, "topup_usd") ?? 0,
+    withdrawal_usd: optionalNonNegativeNumberField(data.withdrawalUsd, "withdrawal_usd") ?? 0,
+    client_event_id: cleanString(data.clientEventId),
+    tx_hash: cleanString(data.txHash),
+    intent_id: cleanString(data.intentId),
+    status_claim: cleanString(data.statusClaim) ?? "observed_on_near_rpc",
     asset_in: null,
     amount_in: null,
     asset_out: assetSymbol,
@@ -1215,11 +1212,11 @@ async function runNearFtWatch(
     decimals,
     delta_amount: deltaAmount,
     delta_value_usd: deltaAmount === null || priceUsd === null ? null : deltaAmount * priceUsd,
-    change_type: cleanString(data.changeType ?? data.change_type) ?? classifyNearBalanceChange(deltaAmount),
+    change_type: cleanString(data.changeType) ?? classifyNearBalanceChange(deltaAmount),
     source_observation_id: observation?.id ?? null,
     source_event_id: null,
-    tx_hash: cleanString(data.txHash ?? data.tx_hash),
-    intent_id: cleanString(data.intentId ?? data.intent_id),
+    tx_hash: cleanString(data.txHash),
+    intent_id: cleanString(data.intentId),
     visibility_status: priceUsd === null ? "missing_price" : "complete",
     metadata_json: stringifyOptional({
       source: "near_rpc_ft_watch",

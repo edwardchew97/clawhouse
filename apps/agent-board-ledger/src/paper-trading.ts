@@ -1,4 +1,4 @@
-import { asObject, cleanString, newId, optionalNumber, requiredNumber, requiredPositiveNumber, requiredString, RequestError, stringifyOptional, type LedgerDb } from "./db.js";
+import { asObject, cleanString, newId, normalizeBodyFields, optionalNumber, requiredNumber, requiredPositiveNumber, requiredString, RequestError, stringifyOptional, type LedgerDb } from "./db.js";
 import { sha256Hex, timestampIsFresh, verifySignature } from "./auth.js";
 import {
   PAPER_PRICE_DECIMALS,
@@ -101,27 +101,27 @@ export function canonicalPaperAuthPayload(input: {
 }
 
 export async function createPaperAccount(db: LedgerDb, body: BodyInput, createdAt: string) {
-  const data = asObject(body.json);
-  const startingBalance = requiredPositiveNumber(data.startingBalanceUsd ?? data.starting_balance_usd, "starting_balance_usd");
-  const requestedBoardId = cleanString(data.boardId ?? data.board_id);
+  const data = normalizeBodyFields(body.json);
+  const startingBalance = requiredPositiveNumber(data.startingBalanceUsd, "starting_balance_usd");
+  const requestedBoardId = cleanString(data.boardId);
   const identity = await resolvePaperAccountIdentity(db, {
     boardId: requestedBoardId,
-    agentId: cleanString(data.agentId ?? data.agent_id),
-    agentPublicKey: cleanString(data.agentPublicKey ?? data.agent_public_key),
+    agentId: cleanString(data.agentId),
+    agentPublicKey: cleanString(data.agentPublicKey),
   });
   const account: PaperAccountRow = {
-    id: cleanString(data.paperAccountId ?? data.paper_account_id) ?? newId("paper_acct"),
+    id: cleanString(data.paperAccountId) ?? newId("paper_acct"),
     board_id: requestedBoardId,
     agent_id: identity.agentId,
     agent_public_key: identity.agentPublicKey,
-    base_currency: cleanString(data.baseCurrency ?? data.base_currency) ?? "USD",
+    base_currency: cleanString(data.baseCurrency) ?? "USD",
     quote_decimals: PAPER_QUOTE_DECIMALS,
-    starting_balance_raw: quoteAtoms(data.startingBalanceUsd ?? data.starting_balance_usd),
+    starting_balance_raw: quoteAtoms(data.startingBalanceUsd),
     starting_balance_usd: startingBalance,
-    cash_balance_raw: quoteAtoms(data.startingBalanceUsd ?? data.starting_balance_usd),
+    cash_balance_raw: quoteAtoms(data.startingBalanceUsd),
     cash_balance_usd: startingBalance,
     status: cleanString(data.status) ?? "active",
-    allowed_markets_json: stringifyOptional(data.allowedMarkets ?? data.allowed_markets),
+    allowed_markets_json: stringifyOptional(data.allowedMarkets),
     metadata_json: stringifyOptional(data.metadata),
     created_at: createdAt,
     updated_at: createdAt,
@@ -207,24 +207,24 @@ async function requireActiveAgentRegistration(db: LedgerDb, agentId: string, age
 }
 
 export async function createPaperMarketSnapshot(db: LedgerDb, body: BodyInput, createdAt: string) {
-  const data = asObject(body.json);
+  const data = normalizeBodyFields(body.json);
   const snapshot: PaperMarketSnapshotRow = {
-    id: cleanString(data.snapshotId ?? data.snapshot_id) ?? newId("paper_mkt"),
+    id: cleanString(data.snapshotId) ?? newId("paper_mkt"),
     ingest_sequence: await nextIngestSequence(db, "paper_market_snapshots"),
-    market_type: normalizeMarketType(data.marketType ?? data.market_type),
+    market_type: normalizeMarketType(data.marketType),
     coin: normalizeCoin(data.coin),
     source: cleanString(data.source) ?? "hyperliquid",
     price_decimals: PAPER_PRICE_DECIMALS,
-    mark_px_raw: priceAtoms(data.markPx ?? data.mark_px),
-    mark_px: requiredPositiveNumber(data.markPx ?? data.mark_px, "mark_px"),
-    oracle_px_raw: priceAtoms(data.oraclePx ?? data.oracle_px),
-    oracle_px: optionalPositiveNumber(data.oraclePx ?? data.oracle_px, "oracle_px"),
-    funding_rate: optionalNumber(data.fundingRate ?? data.funding_rate, "funding_rate"),
-    max_leverage: optionalPositiveNumber(data.maxLeverage ?? data.max_leverage, "max_leverage"),
-    maintenance_margin_rate: optionalPositiveNumber(data.maintenanceMarginRate ?? data.maintenance_margin_rate, "maintenance_margin_rate") ?? DEFAULT_MAINTENANCE_MARGIN_RATE,
+    mark_px_raw: priceAtoms(data.markPx),
+    mark_px: requiredPositiveNumber(data.markPx, "mark_px"),
+    oracle_px_raw: priceAtoms(data.oraclePx),
+    oracle_px: optionalPositiveNumber(data.oraclePx, "oracle_px"),
+    funding_rate: optionalNumber(data.fundingRate, "funding_rate"),
+    max_leverage: optionalPositiveNumber(data.maxLeverage, "max_leverage"),
+    maintenance_margin_rate: optionalPositiveNumber(data.maintenanceMarginRate, "maintenance_margin_rate") ?? DEFAULT_MAINTENANCE_MARGIN_RATE,
     book_json: JSON.stringify(readBook(data)),
-    observed_at: normalizedTimestamp(data.observedAt ?? data.observed_at, createdAt, "observed_at"),
-    staleness_status: cleanString(data.stalenessStatus ?? data.staleness_status) ?? "fresh",
+    observed_at: normalizedTimestamp(data.observedAt, createdAt, "observed_at"),
+    staleness_status: cleanString(data.stalenessStatus) ?? "fresh",
     created_at: createdAt,
   };
 
@@ -680,24 +680,24 @@ function requiredHeader(headers: Headers, name: string) {
 }
 
 function parseOrderInput(value: unknown): OrderInput {
-  const data = asObject(value);
-  const marketType = normalizeMarketType(data.marketType ?? data.market_type);
-  const tif = cleanString(data.tif ?? data.timeInForce ?? data.time_in_force ?? data.orderType ?? data.order_type) ?? "Ioc";
+  const data = normalizeBodyFields(value);
+  const marketType = normalizeMarketType(data.marketType);
+  const tif = cleanString(data.tif ?? data.timeInForce ?? data.orderType) ?? "Ioc";
   const normalizedTif = normalizeTif(tif);
-  const maxSlippageInput = data.maxSlippageBps ?? data.max_slippage_bps;
-  const referencePx = data.referencePx ?? data.reference_px;
-  const maxReferenceDeviationBps = data.maxReferenceDeviationBps ?? data.max_reference_deviation_bps;
+  const maxSlippageInput = data.maxSlippageBps;
+  const referencePx = data.referencePx;
+  const maxReferenceDeviationBps = data.maxReferenceDeviationBps;
   return {
-    paperAccountId: requiredString(data.paperAccountId ?? data.paper_account_id, "paper_account_id"),
-    clientOrderId: requiredString(data.clientOrderId ?? data.client_order_id, "client_order_id"),
+    paperAccountId: requiredString(data.paperAccountId, "paper_account_id"),
+    clientOrderId: requiredString(data.clientOrderId, "client_order_id"),
     marketType,
     coin: normalizeCoin(data.coin),
     side: normalizeSide(data.side),
     tif: normalizedTif,
-    limitPx: optionalPositiveNumber(data.limitPx ?? data.limit_px, "limit_px"),
+    limitPx: optionalPositiveNumber(data.limitPx, "limit_px"),
     size: requiredPositiveNumber(data.size, "size"),
-    reduceOnly: Boolean(data.reduceOnly ?? data.reduce_only ?? false),
-    marginMode: normalizeMarginMode(data.marginMode ?? data.margin_mode, marketType),
+    reduceOnly: Boolean(data.reduceOnly ?? false),
+    marginMode: normalizeMarginMode(data.marginMode, marketType),
     leverage: marketType === "spot"
       ? optionalPositiveNumber(data.leverage, "leverage") ?? 1
       : requiredPositiveNumber(data.leverage, "leverage"),
@@ -706,7 +706,7 @@ function parseOrderInput(value: unknown): OrderInput {
     referencePx: requiredPositiveNumber(referencePx, "reference_px"),
     maxReferenceDeviationBps: requiredPositiveNumber(maxReferenceDeviationBps, "max_reference_deviation_bps"),
     reason: cleanString(data.reason),
-    strategyHash: cleanString(data.strategyHash ?? data.strategy_hash),
+    strategyHash: cleanString(data.strategyHash),
   };
 }
 

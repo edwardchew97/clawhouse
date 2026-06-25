@@ -1,7 +1,7 @@
 import { JsonRpcProvider, nearToYocto, yoctoToNear } from "near-api-js";
 import { NextResponse } from "next/server";
 import { firstEnv } from "../../lib/env";
-import { defaultKeyMarketContractId } from "./constants";
+import { defaultKeyMarketContractId, keyMarketEnv } from "./constants";
 
 const defaultNetworkId = "testnet";
 const defaultGas = "100000000000000";
@@ -49,35 +49,30 @@ export type MarketState = {
 };
 
 export function getKeyMarketConfig() {
-  const networkId = firstEnv(["CLAWHOUSE_KEY_NEAR_NETWORK_ID", "KEY_NEAR_NETWORK_ID", "NEAR_NETWORK_ID"])
-    ?? defaultNetworkId;
+  const networkId = firstEnv([...keyMarketEnv.networkId]) ?? defaultNetworkId;
   const nodeUrl = rpcUrlForNetwork(
-    firstEnv(["CLAWHOUSE_KEY_NEAR_RPC_URL", "KEY_NEAR_RPC_URL", "NEAR_NODE_URL"]),
+    firstEnv([...keyMarketEnv.rpcUrl]),
     networkId,
   )
     ?? defaultRpcUrls[networkId]
     ?? `https://rpc.${networkId}.near.org`;
-  const contractId = firstEnv([
-    "CLAWHOUSE_KEY_MARKET_CONTRACT_ID",
-    "KEY_MARKET_CONTRACT_ID",
-    "CONTRACT_ID",
-  ]) ?? defaultKeyMarketContractId;
+  const contractId = firstEnv([...keyMarketEnv.contractId]) ?? defaultKeyMarketContractId;
   const storageDepositYocto = parseNearAmount(
-    firstEnv(["CLAWHOUSE_KEY_STORAGE_DEPOSIT_NEAR", "STORAGE_DEPOSIT"]) ?? defaultStorageDepositNear,
+    firstEnv([...keyMarketEnv.storageDepositNear]) ?? defaultStorageDepositNear,
   );
   const buyMaxReserveYocto = parseNearAmount(
-    firstEnv(["CLAWHOUSE_KEY_BUY_MAX_RESERVE_NEAR", "BUY_MAX_RESERVE_NEAR"]) ?? defaultBuyMaxReserveNear,
+    firstEnv([...keyMarketEnv.buyMaxReserveNear]) ?? defaultBuyMaxReserveNear,
   );
 
   return {
     networkId,
     nodeUrl,
     contractId,
-    gas: firstEnv(["CLAWHOUSE_KEY_MARKET_GAS", "NEAR_TGAS_YOCTO"]) ?? defaultGas,
+    gas: firstEnv([...keyMarketEnv.gas]) ?? defaultGas,
     storageDepositYocto,
     buyMaxReserveYocto,
-    buyMaxSearchLimit: numberEnv("CLAWHOUSE_KEY_BUY_MAX_SEARCH_LIMIT", defaultBuyMaxSearchLimit),
-    defaultAgentId: firstEnv(["CLAWHOUSE_DEFAULT_AGENT_ID"]) ?? null,
+    buyMaxSearchLimit: numberEnv(keyMarketEnv.buyMaxSearchLimit, defaultBuyMaxSearchLimit),
+    defaultAgentId: firstEnv([...keyMarketEnv.defaultAgentId]) ?? null,
   };
 }
 

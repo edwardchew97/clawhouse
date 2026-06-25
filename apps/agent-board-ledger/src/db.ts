@@ -1112,6 +1112,17 @@ export function asObject(value: unknown): JsonObject {
   return value as JsonObject;
 }
 
+export function normalizeBodyFields(value: unknown): JsonObject {
+  const raw = asObject(value);
+  const normalized: JsonObject = { ...raw };
+  for (const [key, fieldValue] of Object.entries(raw)) {
+    if (!key.includes("_")) continue;
+    const camelKey = key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+    normalized[camelKey] ??= fieldValue;
+  }
+  return normalized;
+}
+
 export function stringifyOptional(value: unknown) {
   return value === undefined ? null : JSON.stringify(value);
 }
