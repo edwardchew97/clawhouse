@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import {
   formatQuote,
+  localBuyQuote,
+  localSellQuote,
+  type MarketState,
   quoteProtection,
   requireAgentId,
   requireAmount,
   routeError,
   RouteInputError,
   viewFunction,
-  type PriceQuote,
 } from "../lib";
 
 export const dynamic = "force-dynamic";
@@ -22,10 +24,13 @@ export async function GET(request: Request) {
 
     const agentId = requireAgentId(searchParams.get("agentId"));
     const amount = requireAmount(searchParams.get("amount"));
-    const quote = await viewFunction<PriceQuote>(side === "buy" ? "get_buy_price" : "get_sell_price", {
+    const state = await viewFunction<MarketState>("get_state", {
       agent_id: agentId,
-      amount,
+      holder_id: null,
     });
+    const quote = side === "buy"
+      ? localBuyQuote(agentId, state.agent.supply, amount)
+      : localSellQuote(agentId, state.agent.supply, amount);
 
     return NextResponse.json({
       ok: true,
