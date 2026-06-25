@@ -504,12 +504,12 @@ export function KeyMarketWalletBridge() {
         const explorerUrl = nearBlocksTxUrl(txHash, config.networkId);
         renderChainState({
           accountId,
-          pending: true,
-          phase: "refreshing",
+          pending: false,
+          phase: "idle",
           lastTxHash: txHash,
           explorerUrl,
           statusTitle: `${actionLabel} confirmed on NEAR`,
-          statusBody: txHash ? `Tx ${shortHash(txHash)} confirmed. Refreshing key balance.` : "Wallet returned success. Refreshing key balance.",
+          statusBody: txHash ? `Tx ${shortHash(txHash)} confirmed. Refreshing key data.` : "Wallet returned success. Refreshing key data.",
           statusTone: "success",
         });
         showToast(
@@ -618,47 +618,143 @@ export function KeyMarketWalletBridge() {
         activityLoading: true,
         maxBuyLoading: Boolean(maxBuyPath),
       });
-      const [stateResult, quoteResult, activityResult, maxBuyResult] = await Promise.allSettled([
-        fetchJson<{ state: Record<string, unknown> }>(statePath),
-        fetchJson<QuoteResponse>(quotePath),
-        fetchJson<Record<string, unknown>>(activityPath),
-        maxBuyPath ? fetchJson<Record<string, unknown>>(maxBuyPath) : Promise.resolve(null),
-      ]);
-      const state = stateResult.status === "fulfilled" ? stateResult.value.state : null;
-      const activeAccessResult = await Promise.allSettled([ensureReadAccess(agent, state)]).then((results) => results[0]);
-      const activeAccess = activeAccessResult.status === "fulfilled" ? activeAccessResult.value : null;
-      const backendResult = await Promise.allSettled([
-        fetchBackendBoard(agent),
-      ]).then((results) => results[0]);
+      const statePromise = fetchJson<{ state: Record<string, unknown> }>(statePath)
+        .then((response) => {
+          renderChainState({
+            accountId: account?.accountId ?? null,
+            contractId: config.contractId,
+            networkId: config.networkId,
+            state: response.state,
+            stateLoading: false,
+            error: null,
+          });
+          return response.state;
+        })
+        .catch((error) => {
+          renderChainState({
+            accountId: account?.accountId ?? null,
+            contractId: config.contractId,
+            networkId: config.networkId,
+            stateLoading: false,
+            error: errorMessage(error, "Key market state read failed."),
+          });
+          return null;
+        });
 
+      const quotePromise = fetchJson<QuoteResponse>(quotePath)
+        .then((response) => {
+          renderChainState({
+            accountId: account?.accountId ?? null,
+            contractId: config.contractId,
+            networkId: config.networkId,
+            quote: response.quote,
+            quoteSide: side,
+            protection: response.protection,
+            quoteLoading: false,
+            error: null,
+          });
+        })
+        .catch((error) => {
+          renderChainState({
+            accountId: account?.accountId ?? null,
+            contractId: config.contractId,
+            networkId: config.networkId,
+            quoteLoading: false,
+            error: errorMessage(error, "Key market quote read failed."),
+          });
+        });
+
+      const activityPromise = fetchJson<Record<string, unknown>>(activityPath)
+        .then((activity) => {
+          renderChainState({
+            accountId: account?.accountId ?? null,
+            contractId: config.contractId,
+            networkId: config.networkId,
+            activity,
+            activityLoading: false,
+            activityError: null,
+          });
+        })
+        .catch((error) => {
+          renderChainState({
+            accountId: account?.accountId ?? null,
+            contractId: config.contractId,
+            networkId: config.networkId,
+            activityLoading: false,
+            activityError: errorMessage(error, "Key activity read failed."),
+          });
+        });
+
+      const maxBuyPromise = maxBuyPath
+        ? fetchJson<Record<string, unknown>>(maxBuyPath)
+          .then((maxBuy) => {
+            renderChainState({
+              accountId: account?.accountId ?? null,
+              contractId: config.contractId,
+              networkId: config.networkId,
+              maxBuy,
+              maxBuyLoading: false,
+              maxBuyError: null,
+            });
+          })
+          .catch((error) => {
+            renderChainState({
+              accountId: account?.accountId ?? null,
+              contractId: config.contractId,
+              networkId: config.networkId,
+              maxBuyLoading: false,
+              maxBuyError: errorMessage(error, "Max buy read failed."),
+            });
+          })
+        : Promise.resolve().then(() => {
+          renderChainState({ accountId: account?.accountId ?? null, maxBuy: null, maxBuyLoading: false, maxBuyError: null });
+        });
+
+      const activeAccessPromise = statePromise
+        .then((state) => ensureReadAccess(agent, state))
+        .then((activeAccess) => {
+          renderChainState({
+            accountId: account?.accountId ?? null,
+            contractId: config.contractId,
+            networkId: config.networkId,
+            readAccess: activeAccess ? {
+              boardId: activeAccess.boardId,
+              holderAccountId: activeAccess.holderAccountId,
+              expiresAt: activeAccess.expiresAt,
+            } : null,
+            readAccessError: null,
+          });
+        })
+        .catch((error) => {
+          renderChainState({
+            accountId: account?.accountId ?? null,
+            contractId: config.contractId,
+            networkId: config.networkId,
+            readAccess: null,
+            readAccessError: errorMessage(error, "Room access refresh failed."),
+          });
+        });
+
+      const backendPromise = fetchBackendBoard(agent)
+        .then((backend) => {
+          renderChainState({ accountId: account?.accountId ?? null, contractId: config.contractId, networkId: config.networkId, backend });
+        })
+        .catch((error) => {
+          renderChainState({
+            accountId: account?.accountId ?? null,
+            contractId: config.contractId,
+            networkId: config.networkId,
+            backend: { ok: false, error: errorMessage(error, "Backend read failed.") },
+          });
+        });
+
+      await Promise.allSettled([statePromise, quotePromise, activityPromise, maxBuyPromise, activeAccessPromise, backendPromise]);
       renderChainState({
         accountId: account?.accountId ?? null,
         contractId: config.contractId,
         networkId: config.networkId,
         pending: false,
         phase: "idle",
-        state,
-        quote: quoteResult.status === "fulfilled" ? quoteResult.value.quote : null,
-        quoteSide: quoteResult.status === "fulfilled" ? side : null,
-        protection: quoteResult.status === "fulfilled" ? quoteResult.value.protection : null,
-        maxBuy: maxBuyResult.status === "fulfilled" ? maxBuyResult.value : null,
-        maxBuyError: maxBuyResult.status === "rejected" ? errorMessage(maxBuyResult.reason, "Max buy read failed.") : null,
-        stateLoading: false,
-        quoteLoading: false,
-        activityLoading: false,
-        maxBuyLoading: false,
-        activity: activityResult.status === "fulfilled" ? activityResult.value : null,
-        activityError: firstRejectedMessage([activityResult]),
-        backend: backendResult.status === "fulfilled" ? backendResult.value : { ok: false, error: firstRejectedMessage([backendResult]) },
-        readAccess: activeAccess ? {
-          boardId: activeAccess.boardId,
-          holderAccountId: activeAccess.holderAccountId,
-          expiresAt: activeAccess.expiresAt,
-        } : null,
-        readAccessError: activeAccessResult.status === "rejected"
-          ? errorMessage(activeAccessResult.reason, "Room access refresh failed.")
-          : null,
-        error: firstRejectedMessage([stateResult, quoteResult]),
       });
     }
 
