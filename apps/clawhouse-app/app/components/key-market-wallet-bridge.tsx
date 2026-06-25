@@ -632,6 +632,7 @@ export function KeyMarketWalletBridge() {
         ? `/api/key-market/max-buy?agentId=${encodeURIComponent(agent.id)}&accountId=${encodeURIComponent(account.accountId)}`
         : "";
       let shouldRetryReadAccess = Boolean(account?.accountId);
+      let shouldRetryBackend = false;
       let restoredReadAccess: ReadAccessState | null = null;
       renderChainState({
         accountId: account?.accountId ?? null,
@@ -771,10 +772,20 @@ export function KeyMarketWalletBridge() {
         });
 
       const backendPromise = activeAccessPromise
-        .then(() => refreshStillApplies() ? fetchBackendBoard(agent) : null)
-        .then((backend) => {
-          if (!backend) return;
-          renderRefreshState({ accountId: account?.accountId ?? null, contractId: config.contractId, networkId: config.networkId, backend, backendLoading: false });
+        .then((activeAccess) => refreshStillApplies() ? fetchBackendBoard(agent).then((backend) => ({ activeAccess, backend })) : null)
+        .then((result) => {
+          if (!result) return;
+          if (result.activeAccess && !backendHasReadablePaperActivity(result.backend)) {
+            shouldRetryBackend = true;
+            renderRefreshState({
+              accountId: account?.accountId ?? null,
+              contractId: config.contractId,
+              networkId: config.networkId,
+              backendLoading: true,
+            });
+            return;
+          }
+          renderRefreshState({ accountId: account?.accountId ?? null, contractId: config.contractId, networkId: config.networkId, backend: result.backend, backendLoading: false });
         })
         .catch((error) => {
           renderRefreshState({
@@ -787,8 +798,11 @@ export function KeyMarketWalletBridge() {
         });
 
       await Promise.allSettled([statePromise, quotePromise, activityPromise, maxBuyPromise, activeAccessPromise, backendPromise]);
-      const retryingReadAccess = refreshStillApplies() && account?.accountId && shouldRetryReadAccess && !restoredReadAccess && retryAttempt < 3;
-      if (retryingReadAccess) {
+      const retryingRoomRead = refreshStillApplies()
+        && account?.accountId
+        && ((shouldRetryReadAccess && !restoredReadAccess) || shouldRetryBackend)
+        && retryAttempt < 3;
+      if (retryingRoomRead) {
         window.setTimeout(() => {
           if (refreshStillApplies()) void refreshWalletRead(`read-access-retry:${retryAttempt + 1}`);
         }, 800 * (retryAttempt + 1));
@@ -799,9 +813,9 @@ export function KeyMarketWalletBridge() {
         networkId: config.networkId,
         pending: false,
         phase: "idle",
-        backendLoading: Boolean(retryingReadAccess),
-        readAccessLoading: Boolean(retryingReadAccess),
-        ...(retryingReadAccess ? { readAccessError: null } : {}),
+        backendLoading: Boolean(retryingRoomRead),
+        readAccessLoading: Boolean(retryingRoomRead && !restoredReadAccess),
+        ...(retryingRoomRead ? { readAccessError: null } : {}),
       });
     }
 
@@ -1048,6 +1062,11 @@ function readAccessRetryAttempt(reason: string) {
 
 function readAccessCacheKey(boardId: string, holderAccountId: string) {
   return `${boardId}:${holderAccountId}`;
+}
+
+function backendHasReadablePaperActivity(backend: Record<string, unknown>) {
+  const paperActivity = backend.paperActivity as { ok?: unknown; account?: unknown } | undefined;
+  return Boolean(paperActivity?.ok && paperActivity.account);
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {

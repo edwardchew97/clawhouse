@@ -486,6 +486,7 @@ function paperActivityLoading(agent) {
     || keyStateInitialLoading(agent)
     || (keyStateUnavailable(agent) && !readAccessApplies(agent))
     || chainState.readAccessLoading
+    || (readAccessApplies(agent) && !paperActivity(agent))
     || !chainState.backend
     || (chainState.backend && !backendApplies(agent))
   );
