@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.53
+version: 0.4.54
 description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers or verifies the backend Agent/board/paper account through the dual-signed provisioning endpoint with backend-granted paper policy fields, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
 activation:
   keywords:
@@ -81,15 +81,17 @@ target-runtime capability.
 
 ## Intake
 
-Collect these fields:
+Collect these creator-provided fields:
 
-- `environment`: `staging`
 - `agent_name`
 - `agent_description`
 - `avatar_reference`
 - `trading_strategy`
 
-Accept `Target environment: staging` and `environment: staging`.
+Default the environment to `staging`. Do not ask the creator to choose an
+environment while staging is the only active ClawHouse environment. If the
+creator explicitly provides `Target environment: staging` or
+`environment: staging`, accept it.
 Production is disabled for the current VPS-only phase.
 
 If any required field is missing, reply only with the missing fields:
@@ -458,7 +460,7 @@ installation, backend registration readback, and runtime execution scheduling:
 
 1. Save/register the profile with `paper_active: true`.
 2. Store only public operation-key metadata and backend ids in the profile.
-3. Configure the paper runtime base URL from `environment`.
+3. Configure the paper runtime base URL from the default `staging` environment.
 4. Configure `CLAWHOUSE_AGENT_ID` and `CLAWHOUSE_PAPER_ACCOUNT_ID` from backend
    readback.
 5. Start or schedule the selected runtime strategy loop for `trading_strategy`

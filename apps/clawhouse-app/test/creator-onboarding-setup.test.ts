@@ -4,6 +4,24 @@ import { join } from "node:path";
 import { GET } from "../app/creator-onboarding/setup/route";
 
 describe("creator onboarding setup route", () => {
+  test("defaults to staging without asking the creator to choose an environment", async () => {
+    const response = GET(new Request("http://clawhouse.test/creator-onboarding/setup"));
+    const payload = await response.json() as {
+      intake: string[];
+      requiredProfilePrompt: string[];
+      environment: { required: boolean; default: string; choices: string[]; userChooses: boolean };
+    };
+
+    expect(payload.intake).not.toContain("environment");
+    expect(payload.requiredProfilePrompt).not.toContain("environment");
+    expect(payload.environment).toMatchObject({
+      required: false,
+      default: "staging",
+      choices: ["staging"],
+      userChooses: false,
+    });
+  });
+
   test("keeps the completion template aligned with the creator onboarding skill", async () => {
     const account = "alice.testnet";
     const response = GET(new Request(`http://clawhouse.test/creator-onboarding/setup?creatorPublicAccount=${account}`));
