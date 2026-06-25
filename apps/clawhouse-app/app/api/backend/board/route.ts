@@ -54,8 +54,6 @@ export async function GET(request: Request) {
         const holderReadCookie = readHolderReadCookie(request, ledgerAdminAuthorizationHeader());
         if (holderReadCookie?.boardId === boardId) {
           readToken = holderReadCookie.readToken;
-        } else if (holderReadCookie) {
-          clearReadCookie = true;
         }
       } catch {
         clearReadCookie = true;
