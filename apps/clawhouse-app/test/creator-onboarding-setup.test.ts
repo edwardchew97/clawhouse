@@ -66,6 +66,42 @@ describe("creator onboarding setup route", () => {
       ),
     ]);
   });
+
+  test("describes Hyperliquid-supported market discovery without user API keys", async () => {
+    const response = GET(new Request("http://clawhouse.test/creator-onboarding/setup"));
+    const payload = await response.json() as {
+      marketScope: {
+        scope: string;
+        userProvidesMarketList: boolean;
+        userProvidesHyperliquidApiKey: boolean;
+        publicInfoUrl: string;
+        discovery: {
+          perpsMetadataRequest: { type: string };
+          spotMetadataRequest: { type: string };
+        };
+        perps: { maxLeverageSource: string };
+        spot: { requiredMarginMode: string; requiredLeverage: number };
+      };
+    };
+
+    expect(payload.marketScope).toMatchObject({
+      scope: "hyperliquid_supported",
+      userProvidesMarketList: false,
+      userProvidesHyperliquidApiKey: false,
+      publicInfoUrl: "https://api.hyperliquid.xyz/info",
+      discovery: {
+        perpsMetadataRequest: { type: "metaAndAssetCtxs" },
+        spotMetadataRequest: { type: "spotMetaAndAssetCtxs" },
+      },
+      perps: {
+        maxLeverageSource: "metaAndAssetCtxs[0].universe[].maxLeverage",
+      },
+      spot: {
+        requiredMarginMode: "spot",
+        requiredLeverage: 1,
+      },
+    });
+  });
 });
 
 function skillInstall(name: string, url: string) {

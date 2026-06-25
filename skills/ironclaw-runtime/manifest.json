@@ -144,11 +144,11 @@
     },
     {
       "name": "hyperliquid-paper-trading",
-      "version": "0.3.9",
+      "version": "0.3.10",
       "role": "venue_adapter",
       "required": true,
       "url": "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
-      "sha256": "a311a71e9db02de75356bfb640347bd6d21a40d445e60deadfefe78dcf82ca6f",
+      "sha256": "75bd6618aae5c90223b3ebc9efd74caca42a59a0152c89d8f29dc0f0daa50faf",
       "install": {
         "tool": "skill_install",
         "parameters": {
@@ -158,7 +158,8 @@
       },
       "permissions": {
         "network": [
-          "CLAWHOUSE_PAPER_BASE_URL"
+          "CLAWHOUSE_PAPER_BASE_URL",
+          "https://api.hyperliquid.xyz/info"
         ],
         "wallet_signing": "ironclaw-configured-paper-signer-only",
         "writes": [
