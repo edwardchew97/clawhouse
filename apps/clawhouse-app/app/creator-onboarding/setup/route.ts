@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { defaultKeyMarketContractId } from "../../api/key-market/constants";
+import { getPublicKeyMarketContractConfig, publicContractsPayload } from "../../api/key-market/contracts";
 import { firstEnv } from "../../lib/env";
 
 export const dynamic = "force-dynamic";
@@ -292,14 +292,20 @@ function completionTemplate(creatorPublicAccount: string) {
 }
 
 function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: boolean) {
-  const contractId =
-    firstEnv(["CLAWHOUSE_KEY_MARKET_CONTRACT_ID", "KEY_MARKET_CONTRACT_ID", "CONTRACT_ID"]) ??
-    defaultKeyMarketContractId;
+  const contractConfig = getPublicKeyMarketContractConfig();
 
   return {
     fundingAmountNear: "0.02",
     fundingNetwork: "NEAR testnet",
-    contractId,
+    environment: contractConfig.environment,
+    networkId: contractConfig.networkId,
+    rpcUrl: contractConfig.nodeUrl,
+    contractId: contractConfig.contractId,
+    createMethod: contractConfig.createMethod,
+    preflightMethod: contractConfig.preflightMethod,
+    stateReadMethod: contractConfig.stateReadMethod,
+    gasTgas: contractConfig.gasTgas,
+    gas: contractConfig.gas,
     fundTo: creatorPublicAccount,
     fundingAddressRequired: true,
     fundingAddressProvided: hasCreatorPublicAccount,
@@ -321,14 +327,15 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
       runner: "agent-key-market create",
       cwd: "agent-key-market",
       script: "scripts/create-agent-key.ts",
-      storageDepositNear: "0.02",
+      storageDepositNear: contractConfig.storageDepositNear,
       env: {
-        STORAGE_DEPOSIT: "0.02",
+        STORAGE_DEPOSIT: contractConfig.storageDepositNear,
         ACCOUNT_ID: creatorPublicAccount,
-        CONTRACT_ID: contractId,
-        NEAR_NETWORK_ID: "testnet",
-        CLAWHOUSE_OPERATION_KEY_FILE:
-          "~/.clawhouse/agents/<agent_id>/operation-key.json",
+        CONTRACT_ID: contractConfig.contractId,
+        NEAR_NETWORK_ID: contractConfig.networkId,
+        NEAR_NODE_URL: contractConfig.nodeUrl,
+        NEAR_TGAS: contractConfig.gasTgas,
+        [contractConfig.signer.keyFileEnv]: "~/.clawhouse/agents/<agent_id>/operation-key.json",
       },
       signerAccount: creatorPublicAccount,
       args: ["<agent_id>", "<agent_name>", "<metadata_uri>"],
@@ -488,6 +495,12 @@ function payloadFor(request: Request) {
       traderStatus: "active",
     },
     keyMarketSetup: keyMarketSetup(account, hasAccount),
+    contracts: {
+      source: "apps/clawhouse-app/config/public-onboarding-contracts.json",
+      publicKitUrl:
+        "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/contracts.json",
+      config: publicContractsPayload(),
+    },
     completion: {
       useAfterOnboardingCompletion: true,
       useAfterActivationApproval: false,

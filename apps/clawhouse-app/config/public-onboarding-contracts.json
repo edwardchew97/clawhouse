@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0.0",
+  "default_environment": "testnet",
+  "environment_env": "CLAWHOUSE_KEY_MARKET_ENVIRONMENT",
+  "environments": {
+    "testnet": {
+      "status": "enabled",
+      "network_id": "testnet",
+      "rpc_url": "https://rpc.testnet.fastnear.com",
+      "fallback_rpc_urls": [
+        "https://rpc.testnet.near.org"
+      ],
+      "key_market": {
+        "contract_id": "clawhouse-key-20260619125948.testnet",
+        "create_method": "create_agent_key",
+        "preflight_method": "get_agent",
+        "state_read_method": "get_state",
+        "storage_deposit_near": "0.02",
+        "gas_tgas": "100",
+        "chain_verification": {
+          "status": "unverified",
+          "required_proof": "testnet create_agent_key transaction hash plus get_agent readback"
+        },
+        "signer": {
+          "source": "runtime_managed_operation_key",
+          "account_id_env": [
+            "ACCOUNT_ID",
+            "NEAR_ACCOUNT_ID"
+          ],
+          "key_file_env": "CLAWHOUSE_OPERATION_KEY_FILE"
+        }
+      }
+    },
+    "mainnet": {
+      "status": "disabled",
+      "network_id": "mainnet",
+      "rpc_url": "https://rpc.mainnet.fastnear.com",
+      "fallback_rpc_urls": [],
+      "key_market": {
+        "contract_id": null,
+        "create_method": "create_agent_key",
+        "preflight_method": "get_agent",
+        "state_read_method": "get_state",
+        "storage_deposit_near": null,
+        "gas_tgas": null,
+        "chain_verification": {
+          "status": "disabled",
+          "required_proof": "mainnet contract deployment, create_agent_key transaction hash, and get_agent readback"
+        },
+        "signer": {
+          "source": "runtime_managed_operation_key",
+          "account_id_env": [
+            "ACCOUNT_ID",
+            "NEAR_ACCOUNT_ID"
+          ],
+          "key_file_env": "CLAWHOUSE_OPERATION_KEY_FILE"
+        }
+      },
+      "disabled_reason": "Mainnet key-market onboarding is not enabled yet."
+    }
+  }
+}

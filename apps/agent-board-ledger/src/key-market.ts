@@ -168,7 +168,7 @@ export async function reportKeyMarketTrade(
   };
 }
 
-function keyMarketConfig(env: RuntimeEnv) {
+export function keyMarketConfig(env: RuntimeEnv) {
   const networkId = firstConfigEnv(env, keyMarketEnv.networkId) ?? defaultNetworkId;
   const contractId = firstConfigEnv(env, keyMarketEnv.contractId) ?? defaultContractId;
   const rpcUrl = firstConfigEnv(env, keyMarketEnv.rpcUrl)
