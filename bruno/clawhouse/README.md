@@ -135,7 +135,8 @@ This folder covers the public creator onboarding backend write path:
 4. `GET /paper/accounts/:paper_account_id` to confirm the paper account exists
 
 Open the Body tab before sending `Register Creator Onboarding` if you want to
-edit `agent_id`, `board_id`, `paper_account_id`, `starting_balance_usd`,
-`allowed_markets`, or metadata. Keep the generated public keys and wallet
-address matched to the local signer variables unless you intentionally want to
-test signature rejection.
+edit `agent_id` or metadata. Do not add `board_id`, `paper_account_id`,
+`starting_balance_usd`, or `allowed_markets`; creator onboarding resolves or
+assigns those fields through the backend. Keep the generated public keys and
+wallet address matched to the local signer variables unless you intentionally
+want to test signature rejection.
