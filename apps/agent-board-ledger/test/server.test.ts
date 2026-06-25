@@ -528,8 +528,9 @@ describe("Agent Board Ledger local backend", () => {
       paper_account_id: string;
     }>(response);
     const discoverable = await jsonOf<{ count: number }>(await app.fetch(new Request("http://ledger.test/boards")));
+    const blockedPaper = await app.fetch(new Request("http://ledger.test/paper/accounts/paper-board-1"));
     const paper = await jsonOf<{ account: { id: string; status: string; starting_balance_usd: number; allowed_markets: unknown; metadata: Record<string, unknown> } }>(
-      await app.fetch(new Request("http://ledger.test/paper/accounts/paper-board-1")),
+      await serviceGet("/paper/accounts/paper-board-1"),
     );
     const storedBoard = sqliteDb.raw.query<{ public_status: string; visibility_mode: string; metadata_json: string | null }, []>(
       "SELECT public_status, visibility_mode, metadata_json FROM boards WHERE id = 'board-1'",
@@ -544,6 +545,8 @@ describe("Agent Board Ledger local backend", () => {
     expect(discoverable.count).toBe(1);
     expect(storedBoard?.public_status).toBe("active");
     expect(storedBoard?.visibility_mode).toBe("public");
+    expect(blockedPaper.status).toBe(403);
+    expect((await jsonOf<{ error: string }>(blockedPaper)).error).toBe("Read access required");
     expect(paper.account.id).toBe("paper-board-1");
     expect(paper.account.status).toBe("active");
     expect(paper.account.starting_balance_usd).toBe(10000);
@@ -803,6 +806,65 @@ describe("Agent Board Ledger local backend", () => {
     expect((await jsonOf<{ error: string }>(blockedWithoutToken)).error).toBe("Read access required");
     expect(blockedExpiredToken.status).toBe(403);
     expect((await jsonOf<{ error: string }>(blockedExpiredToken)).error).toBe("Read access denied");
+  });
+
+  test("gates board-linked paper account activity and order replay behind holder read access", async () => {
+    await registerBoard();
+    await createPaperMarketSnapshot({
+      coin: "BTC",
+      mark_px: 100,
+      bids: [{ px: 99, sz: 5 }],
+      asks: [{ px: 100, sz: 1 }],
+    });
+
+    const orderResponse = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-board-1",
+      client_order_id: "board-linked-ioc",
+      coin: "BTC",
+      side: "buy",
+      tif: "Ioc",
+      size: 0.5,
+      margin_mode: "cross",
+      leverage: 10,
+      reason: "Holder-only paper order reasoning.",
+    });
+    const orderBody = await jsonOf<{ order: { id: string; status: string } }>(orderResponse);
+
+    const blockedAccount = await app.fetch(new Request("http://ledger.test/paper/accounts/paper-board-1"));
+    const blockedActivity = await app.fetch(new Request("http://ledger.test/paper/accounts/paper-board-1/activity?limit=10"));
+    const blockedReplay = await app.fetch(new Request(`http://ledger.test/paper/orders/${orderBody.order.id}/replay`));
+    const readToken = "holder-paper-read-token";
+    const grant = await postJson("/boards/board-1/read-access/checks", {
+      requester_wallet_address: "holder.testnet",
+      access_level: "key_holder_detail",
+      access_result: "granted",
+      read_token: readToken,
+      expires_at: "2026-06-20T00:00:00.000Z",
+    });
+    const allowedActivity = await app.fetch(new Request("http://ledger.test/paper/accounts/paper-board-1/activity?limit=10", {
+      headers: { "x-clawhouse-read-token": readToken },
+    }));
+    const allowedReplay = await app.fetch(new Request(`http://ledger.test/paper/orders/${orderBody.order.id}/replay`, {
+      headers: { "x-clawhouse-read-token": readToken },
+    }));
+    const activityBody = await jsonOf<{ orders: Array<{ reason: string | null }>; fills: unknown[] }>(allowedActivity);
+    const replayBody = await jsonOf<{ replay: { order: { reason: string | null }; fills: unknown[] } }>(allowedReplay);
+
+    expect(orderResponse.status).toBe(201);
+    expect(orderBody.order.status).toBe("filled");
+    expect(blockedAccount.status).toBe(403);
+    expect((await jsonOf<{ error: string }>(blockedAccount)).error).toBe("Read access required");
+    expect(blockedActivity.status).toBe(403);
+    expect((await jsonOf<{ error: string }>(blockedActivity)).error).toBe("Read access required");
+    expect(blockedReplay.status).toBe(403);
+    expect((await jsonOf<{ error: string }>(blockedReplay)).error).toBe("Read access required");
+    expect(grant.status).toBe(201);
+    expect(allowedActivity.status).toBe(200);
+    expect(activityBody.orders[0]?.reason).toBe("Holder-only paper order reasoning.");
+    expect(activityBody.fills).toHaveLength(1);
+    expect(allowedReplay.status).toBe(200);
+    expect(replayBody.replay.order.reason).toBe("Holder-only paper order reasoning.");
+    expect(replayBody.replay.fills).toHaveLength(1);
   });
 
   test("rejects invalid read access expiration timestamps", async () => {
