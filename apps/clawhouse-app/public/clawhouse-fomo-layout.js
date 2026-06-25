@@ -1506,7 +1506,8 @@ function agentListSkeletonRows() {
 
 function renderAgentList() {
   const list = byId("agentList");
-  if (discoveryLoading) {
+  const readbackLoading = agents.length > 0 && !chainState.backend;
+  if (discoveryLoading || readbackLoading) {
     list.setAttribute("aria-busy", "true");
     list.innerHTML = agentListSkeletonRows();
     return;
