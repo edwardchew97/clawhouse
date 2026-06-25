@@ -33,7 +33,47 @@ describe("creator onboarding setup route", () => {
 
     expect(payload.completion.template).toBe(completionTemplateFromSkill(skill, account));
   });
+
+  test("returns exact raw URLs for every installable skill", async () => {
+    const response = GET(new Request("http://clawhouse.test/creator-onboarding/setup"));
+    const payload = await response.json() as {
+      install: Array<{
+        tool: string;
+        parameters: { name: string; url: string };
+      }>;
+    };
+
+    expect(payload.install).toEqual([
+      skillInstall(
+        "clawhouse-skill-directory",
+        "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-skill-directory/SKILL.md",
+      ),
+      skillInstall(
+        "clawhouse-creator-onboarding",
+        "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md",
+      ),
+      skillInstall(
+        "sign-clawhouse-backend-request",
+        "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/sign-clawhouse-backend-request/SKILL.md",
+      ),
+      skillInstall(
+        "clawhouse-ledger-reporting",
+        "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/clawhouse-ledger-reporting/SKILL.md",
+      ),
+      skillInstall(
+        "hyperliquid-paper-trading",
+        "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/hyperliquid-paper-trading/SKILL.md",
+      ),
+    ]);
+  });
 });
+
+function skillInstall(name: string, url: string) {
+  return {
+    tool: "skill_install",
+    parameters: { name, url },
+  };
+}
 
 function completionTemplateFromSkill(skill: string, creatorPublicAccount: string) {
   const sectionStart = skill.indexOf("## Completion Response");
