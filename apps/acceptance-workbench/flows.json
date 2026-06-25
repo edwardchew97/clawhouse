@@ -407,6 +407,51 @@
           }
         },
         {
+          "id": "agentRegistration.ledger.rejectInvalidWalletAddress",
+          "name": "Reject Invalid Wallet Address",
+          "description": "Calls the real creator-onboarding backend request with a wallet address that cannot be derived from the generated public key, and expects the backend to reject it before creating records.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "scripts/register-board.ts",
+            "--base-url",
+            "{{ledgerBaseUrl}}",
+            "--key-file",
+            "{{ledgerWalletFile}}",
+            "--board-id",
+            "invalid-wallet-{{ledgerBoardId}}",
+            "--agent-id",
+            "invalid-wallet-{{ledgerAgentId}}",
+            "--wallet-address-suffix",
+            "82",
+            "--expect-error",
+            "wallet_address must be a 64-character lowercase NEAR implicit account"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Calling the real POST /creator-onboarding/register backend API with a deliberately invalid wallet address.",
+            "The script still signs with the generated keypair, but the backend must reject the body wallet_address before creating records.",
+            "This step passes only when the backend returns the expected validation error."
+          ],
+          "inputs": {
+            "ledgerWalletFile": "work/acceptance-workbench/agent-board-ledger/workbench-wallet.json",
+            "ledgerBoardId": "",
+            "ledgerAgentId": ""
+          },
+          "fillDefaultsWhenEmpty": [
+            "ledgerWalletFile"
+          ]
+        },
+        {
           "id": "agentRegistration.ledger.getBoardPaperAccount",
           "name": "Read Board Paper Account",
           "description": "Reads the backend-derived paper account for the registered board so Workbench verifies board id to real paper account id readback instead of relying on a guessed id.",

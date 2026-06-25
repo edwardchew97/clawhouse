@@ -16,6 +16,8 @@ type Options = {
   agentId: string;
   startingBalanceUsd: number;
   visibilityMode: string;
+  walletAddressSuffix: string;
+  expectError?: string;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -26,7 +28,7 @@ async function main() {
   if (process.argv.includes("--help")) {
     printJson({
       usage: "bun scripts/register-board.ts --base-url <url> --key-file <path> --agent-id <id>",
-      options: ["--starting-balance-usd <number>"],
+      options: ["--starting-balance-usd <number>", "--wallet-address-suffix <suffix>", "--expect-error <message>"],
       endpoint: "POST /creator-onboarding/register",
     });
     return;
@@ -41,7 +43,7 @@ async function main() {
     paper_account_id: paperAccountId,
     agent_id: options.agentId,
     agent_public_key: wallet.publicKey,
-    wallet_address: wallet.walletAddress,
+    wallet_address: `${wallet.walletAddress}${options.walletAddressSuffix}`,
     public_key: wallet.publicKey,
     base_currency: "USD",
     public_status: "active",
@@ -80,7 +82,21 @@ async function main() {
       ...signedAgent.headers,
     },
     body: rawBody,
-  });
+  }, options.expectError);
+
+  if (options.expectError) {
+    printJson({
+      ok: true,
+      baseUrl: options.baseUrl,
+      wallet,
+      boardId,
+      agentId: options.agentId,
+      rejected: true,
+      expectedError: options.expectError,
+      response,
+    });
+    return;
+  }
 
   printJson({
     ok: true,
@@ -102,10 +118,20 @@ async function loadOrCreateWallet(keyFile: string): Promise<NearWalletPublicInfo
   return await generateNearWallet({ keyFile });
 }
 
-async function requestJson(baseUrl: string, path: string, init: RequestInit) {
+async function requestJson(baseUrl: string, path: string, init: RequestInit, expectError?: string) {
   const response = await fetch(new URL(path, ensureTrailingSlash(baseUrl)), init);
   const text = await response.text();
   const json = parseJson(text, path);
+  if (expectError) {
+    const error = typeof json.error === "string" ? json.error : "";
+    if (response.ok || json.ok !== false && !error) {
+      throw new Error(`Ledger returned success for expected failure ${init.method ?? "GET"} ${path}: ${text}`);
+    }
+    if (error !== expectError) {
+      throw new Error(`Ledger returned unexpected error for ${init.method ?? "GET"} ${path}: ${text}`);
+    }
+    return json;
+  }
   if (!response.ok || json.ok === false) {
     throw new Error(`Ledger returned ${response.status} for ${init.method ?? "GET"} ${path}: ${text}`);
   }
@@ -131,6 +157,8 @@ function parseArgs(args: string[]): Options {
     agentId: values["agent-id"] || "ironclaw-workbench",
     startingBalanceUsd: numberOption(values["starting-balance-usd"], 10000, "starting-balance-usd"),
     visibilityMode: values["visibility-mode"] || "public",
+    walletAddressSuffix: values["wallet-address-suffix"] ?? "",
+    expectError: optionalString(values["expect-error"]) ?? undefined,
   };
 }
 

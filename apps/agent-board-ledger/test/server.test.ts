@@ -557,6 +557,49 @@ describe("Agent Board Ledger local backend", () => {
     expect(boardMetadata).toEqual(paper.account.metadata);
   });
 
+  test("creator onboarding rejects a wallet address that is not a NEAR implicit account", async () => {
+    const response = await postJson("/creator-onboarding/register", {
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: `${wallet.walletAddress}82`,
+      public_key: wallet.publicKey,
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+      },
+    }, { admin: false, signed: true, agentSigned: true });
+
+    expect(response.status).toBe(400);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("wallet_address must be a 64-character lowercase NEAR implicit account");
+    expect(countRows("agent_registrations")).toBe(0);
+    expect(countRows("boards")).toBe(0);
+    expect(countRows("paper_accounts")).toBe(0);
+  });
+
+  test("creator onboarding rejects a wallet address that does not match public key", async () => {
+    const otherWallet = createWallet();
+    const response = await postJson("/creator-onboarding/register", {
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: otherWallet.walletAddress,
+      public_key: wallet.publicKey,
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+      },
+    }, { admin: false, signed: true, agentSigned: true });
+
+    expect(response.status).toBe(400);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("wallet_address must match public_key NEAR implicit account");
+    expect(countRows("agent_registrations")).toBe(0);
+    expect(countRows("boards")).toBe(0);
+    expect(countRows("paper_accounts")).toBe(0);
+  });
+
   test("creator onboarding rejects an existing agent id registered under a different public key", async () => {
     const first = await postJson("/creator-onboarding/register", {
       board_id: "board-1",
