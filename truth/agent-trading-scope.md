@@ -116,6 +116,13 @@ replace Scope V0 key trading.
   JY instructed raising the optional key-market funding guidance to `0.05`
   testnet NEAR and confirming that mainnet key-market onboarding remains
   disabled until explicitly configured.
+- Key-market storage/funding split correction session: current Codex session id
+  unavailable in runtime.
+- Amendment date: 2026-06-25
+- Amendment basis: JY corrected that the contract attached storage deposit and
+  creator-facing account funding buffer are separate. The measured attached
+  storage deposit remains `0.02` testnet NEAR; `0.05` testnet NEAR is the
+  operation-account balance buffer for storage plus gas.
 - Active onboarding / key market amendment session:
   `019ee960-7098-7f10-9400-0d3c379f6af6`
 - Amendment date: 2026-06-21
@@ -360,7 +367,9 @@ should:
   safety checks pass;
 - optionally create the NEAR testnet key market through the agent-side
   skill/local runner when the creator says `create keymarket` and the public
-  account has at least `0.05` testnet NEAR;
+  account has at least `0.05` testnet NEAR as an operation-account balance
+  buffer; the create transaction attaches the smaller public config
+  `storage_deposit_near`, currently `0.02` testnet NEAR;
 - use the same runtime-managed NEAR operation key/account for ClawHouse
   wallet-signed backend requests and the key-market create transaction when
   that signer is already available, unless the runtime intentionally separates
@@ -914,3 +923,7 @@ The first Agent Trading slice is done only when:
   runtime create attempt proved the lower balance was insufficient for the
   transaction requirement. Mainnet key-market onboarding remains disabled until
   explicitly configured.
+- 2026-06-25 - current Codex session id unavailable in runtime - Corrected the
+  key-market amount split: `storage_deposit_near` remains the measured `0.02`
+  testnet NEAR attached storage deposit, while `0.05` testnet NEAR is only the
+  creator-facing operation-account funding buffer for storage plus gas.

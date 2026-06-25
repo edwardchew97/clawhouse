@@ -153,6 +153,7 @@ describe("creator onboarding setup route", () => {
         rpcUrl: string;
         contractId: string;
         fundingAmountNear: string;
+        storageDepositNear: string;
         fundingNetwork: string;
         createMethod: string;
         preflightMethod: string;
@@ -196,7 +197,8 @@ describe("creator onboarding setup route", () => {
       networkId: testnet.network_id,
       rpcUrl: testnet.rpc_url,
       contractId: keyMarket.contract_id,
-      fundingAmountNear: keyMarket.storage_deposit_near,
+      fundingAmountNear: keyMarket.funding_amount_near,
+      storageDepositNear: keyMarket.storage_deposit_near,
       fundingNetwork: "testnet NEAR",
       createMethod: keyMarket.create_method,
       preflightMethod: keyMarket.preflight_method,
@@ -267,7 +269,7 @@ describe("creator onboarding setup route", () => {
         getAgent: contracts.environments.testnet.key_market.method_args.get_agent,
         getState: contracts.environments.testnet.key_market.method_args.get_state,
       },
-      storageDepositYocto: "50000000000000000000000",
+      storageDepositYocto: "20000000000000000000000",
     });
   });
 
@@ -285,6 +287,7 @@ describe("creator onboarding setup route", () => {
     expect(mainnet.status).toBe("disabled");
     expect(mainnet.key_market.contract_id).toBeNull();
     expect(mainnet.key_market.storage_deposit_near).toBeNull();
+    expect(mainnet.key_market.funding_amount_near).toBeNull();
   });
 });
 

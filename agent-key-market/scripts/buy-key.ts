@@ -14,7 +14,7 @@ type Quote = {
 const agentId = requiredArg("agent_id", 2);
 const amount = requiredArg("amount", 3);
 const maxPriceNear = requiredArg("max_price_near", 4);
-const storageDepositNear = process.argv[5] ?? process.env.STORAGE_DEPOSIT ?? "0.05";
+const storageDepositNear = process.argv[5] ?? process.env.STORAGE_DEPOSIT ?? "0.02";
 
 const quote = await viewFunction<Quote>("get_buy_price", {
   agent_id: agentId,
