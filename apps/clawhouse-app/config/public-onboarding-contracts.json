@@ -15,6 +15,26 @@
         "create_method": "create_agent_key",
         "preflight_method": "get_agent",
         "state_read_method": "get_state",
+        "method_args": {
+          "create_agent_key": {
+            "agent_id": "<agent_id>",
+            "name": "<agent_name>",
+            "metadata_uri": "<metadata_uri>"
+          },
+          "get_agent": {
+            "agent_id": "<agent_id>"
+          },
+          "get_state": {
+            "agent_id": "<agent_id>",
+            "holder_id": "<optional_account_id_or_null>"
+          }
+        },
+        "method_notes": {
+          "agent_id": "Use the backend-returned ClawHouse agent_id from creator onboarding. It must match the Agent Board Ledger agent_id used for discovery.",
+          "name": "Use the creator-provided agent_name from the current onboarding profile.",
+          "metadata_uri": "Use the current onboarding profile metadata URI when available; otherwise use an empty string.",
+          "holder_id": "Omit or set null for market state only; set to a NEAR account id when reading holder balance."
+        },
         "storage_deposit_near": "0.02",
         "gas_tgas": "100",
         "chain_verification": {
@@ -41,6 +61,26 @@
         "create_method": "create_agent_key",
         "preflight_method": "get_agent",
         "state_read_method": "get_state",
+        "method_args": {
+          "create_agent_key": {
+            "agent_id": "<agent_id>",
+            "name": "<agent_name>",
+            "metadata_uri": "<metadata_uri>"
+          },
+          "get_agent": {
+            "agent_id": "<agent_id>"
+          },
+          "get_state": {
+            "agent_id": "<agent_id>",
+            "holder_id": "<optional_account_id_or_null>"
+          }
+        },
+        "method_notes": {
+          "agent_id": "Use the backend-returned ClawHouse agent_id from creator onboarding. It must match the Agent Board Ledger agent_id used for discovery.",
+          "name": "Use the creator-provided agent_name from the current onboarding profile.",
+          "metadata_uri": "Use the current onboarding profile metadata URI when available; otherwise use an empty string.",
+          "holder_id": "Omit or set null for market state only; set to a NEAR account id when reading holder balance."
+        },
         "storage_deposit_near": null,
         "gas_tgas": null,
         "chain_verification": {

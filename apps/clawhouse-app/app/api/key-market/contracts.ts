@@ -13,6 +13,12 @@ export type PublicKeyMarketContractConfig = {
   createMethod: string;
   preflightMethod: string;
   stateReadMethod: string;
+  methodArgs: {
+    createAgentKey: Record<string, string>;
+    getAgent: Record<string, string>;
+    getState: Record<string, string>;
+  };
+  methodNotes: Record<string, string>;
   storageDepositNear: string;
   gasTgas: string;
   gas: string;
@@ -52,6 +58,12 @@ export function getPublicKeyMarketContractConfig(environment = selectedContractE
     createMethod: keyMarket.create_method,
     preflightMethod: keyMarket.preflight_method,
     stateReadMethod: keyMarket.state_read_method,
+    methodArgs: {
+      createAgentKey: { ...keyMarket.method_args.create_agent_key },
+      getAgent: { ...keyMarket.method_args.get_agent },
+      getState: { ...keyMarket.method_args.get_state },
+    },
+    methodNotes: { ...keyMarket.method_notes },
     storageDepositNear: keyMarket.storage_deposit_near,
     gasTgas: keyMarket.gas_tgas,
     gas: teraToGas(keyMarket.gas_tgas as `${number}`).toString(),
