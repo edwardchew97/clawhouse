@@ -76,6 +76,30 @@ const paperEnvironments = {
   staging: "https://staging-clawhouse.lucis.finance",
 };
 
+const hyperliquidMarketScope = {
+  scope: "hyperliquid_supported",
+  meaning:
+    "Supports every Hyperliquid perps and spot market returned by public Hyperliquid metadata, subject to ClawHouse paper account, freshness, margin, depth, and risk checks.",
+  userProvidesMarketList: false,
+  userProvidesHyperliquidApiKey: false,
+  publicInfoUrl: "https://api.hyperliquid.xyz/info",
+  discovery: {
+    perpsMetadataRequest: { type: "metaAndAssetCtxs" },
+    spotMetadataRequest: { type: "spotMetaAndAssetCtxs" },
+    bookRequest: { type: "l2Book", coin: "<coin_or_spot_book_symbol>" },
+  },
+  perps: {
+    coinSource: "metaAndAssetCtxs[0].universe[].name",
+    maxLeverageSource: "metaAndAssetCtxs[0].universe[].maxLeverage",
+  },
+  spot: {
+    coinSource: "spotMetaAndAssetCtxs[0].universe[].name",
+    bookSymbolSource: "spotMetaAndAssetCtxs[0].universe[].index or known spot name",
+    requiredMarginMode: "spot",
+    requiredLeverage: 1,
+  },
+};
+
 const walletUnavailableMessage =
   "Setup blocked: ClawHouse operation-key setup is unavailable. Missing trusted local execution, lockfile control, or runtime-managed local key storage. I cannot create the agent operation key safely in this environment.";
 
@@ -436,6 +460,7 @@ function payloadFor(request: Request) {
       hashVerification:
         "Require manifest sha256 metadata. If the runtime has no built-in hash utility, continue after URL/name/version/permission/forbidden-behavior/secret-safety checks and report hash_not_recomputed_no_builtin_hasher.",
     },
+    marketScope: hyperliquidMarketScope,
     install: [...entryInstall, ...localSkillInstall, ...requiredInstall, ...tradingInstall],
     installEntry: entryInstall,
     installLocal: localSkillInstall,

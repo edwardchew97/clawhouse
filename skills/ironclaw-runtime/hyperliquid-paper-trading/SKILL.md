@@ -1,6 +1,6 @@
 ---
 name: hyperliquid-paper-trading
-version: 0.3.9
+version: 0.3.10
 description: "Use inside IronClaw when a ClawHouse trading agent needs Hyperliquid paper trading: paper perps with leverage/cross/isolated margin, or paper spot with cash/holding checks, fills, positions, risk, leaderboard, and replay proof. Do not submit real Hyperliquid orders."
 ---
 
@@ -12,6 +12,11 @@ Use this skill for Hyperliquid paper trading, including:
 
 - `market_type: "perp"` for paper perps;
 - `market_type: "spot"` for paper spot.
+
+ClawHouse paper accounts created through creator onboarding use
+`allowed_markets: { scope: "hyperliquid_supported" }`. Treat that as support for
+the live Hyperliquid public perps and spot metadata universe, not as a static
+prompt-provided symbol list.
 
 Submit paper orders to ClawHouse only after required paper account and signing
 configuration is present. Do not submit real orders to Hyperliquid.
@@ -29,6 +34,31 @@ Do not submit market snapshots with the order. The backend refreshes Hyperliquid
 market snapshots from public market-data endpoints and uses those snapshots for
 depth checks, leverage caps, spot cash/holding checks, margin, liquidation,
 leaderboard, and replay proof.
+
+## Hyperliquid Market Discovery
+
+Do not ask the creator for a supported-market list, max leverage table, or
+Hyperliquid API key. Use public Hyperliquid market data:
+
+- perps metadata: `POST https://api.hyperliquid.xyz/info` with
+  `{ "type": "metaAndAssetCtxs" }`;
+- spot metadata: `POST https://api.hyperliquid.xyz/info` with
+  `{ "type": "spotMetaAndAssetCtxs" }`;
+- book data: `POST https://api.hyperliquid.xyz/info` with
+  `{ "type": "l2Book", "coin": "<coin_or_spot_book_symbol>" }`.
+
+For perps, use the returned `universe[].name` as `coin` and
+`universe[].maxLeverage` as the market's max leverage. For spot, use the returned
+spot `universe[].name` or resolved book symbol for `coin`, keep
+`margin_mode: "spot"`, and keep `leverage: 1`.
+
+Before returning `SETUP_BLOCKED` for missing supported markets or max leverage,
+attempt public Hyperliquid metadata discovery. If the target market is present in
+Hyperliquid public metadata, the paper account scope allows it; let ClawHouse
+backend perform the final freshness, market, margin, depth, and risk checks.
+Only return `SETUP_BLOCKED` when public metadata cannot be read, the target
+market is absent from public metadata, or required ClawHouse config/signing is
+missing.
 
 ## Required Configuration
 
