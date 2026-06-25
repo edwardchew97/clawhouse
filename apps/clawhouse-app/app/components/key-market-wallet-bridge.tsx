@@ -582,6 +582,7 @@ export function KeyMarketWalletBridge() {
       const config = configRef.current;
       const account = accountRef.current;
       if (!demo || !config) return;
+      const retryAttempt = readAccessRetryAttempt(_reason);
 
       const agent = demo.getSelectedAgent();
       const refreshId = ++walletReadRefreshRef.current;
@@ -630,6 +631,8 @@ export function KeyMarketWalletBridge() {
       const maxBuyPath = account?.accountId
         ? `/api/key-market/max-buy?agentId=${encodeURIComponent(agent.id)}&accountId=${encodeURIComponent(account.accountId)}`
         : "";
+      let shouldRetryReadAccess = Boolean(account?.accountId);
+      let restoredReadAccess: ReadAccessState | null = null;
       renderChainState({
         accountId: account?.accountId ?? null,
         contractId: config.contractId,
@@ -644,6 +647,8 @@ export function KeyMarketWalletBridge() {
       });
       const statePromise = fetchJson<{ state: Record<string, unknown> }>(statePath)
         .then((response) => {
+          const balance = Number(response.state?.holder_balance);
+          shouldRetryReadAccess = Number.isFinite(balance) ? balance > 0 : Boolean(account?.accountId);
           renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
@@ -655,6 +660,7 @@ export function KeyMarketWalletBridge() {
           return response.state;
         })
         .catch((error) => {
+          shouldRetryReadAccess = Boolean(account?.accountId);
           renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
@@ -737,6 +743,7 @@ export function KeyMarketWalletBridge() {
       const activeAccessPromise = statePromise
         .then((state) => ensureReadAccess(agent, state, refreshId))
         .then((activeAccess) => {
+          restoredReadAccess = activeAccess;
           renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
@@ -780,14 +787,21 @@ export function KeyMarketWalletBridge() {
         });
 
       await Promise.allSettled([statePromise, quotePromise, activityPromise, maxBuyPromise, activeAccessPromise, backendPromise]);
+      const retryingReadAccess = refreshStillApplies() && account?.accountId && shouldRetryReadAccess && !restoredReadAccess && retryAttempt < 3;
+      if (retryingReadAccess) {
+        window.setTimeout(() => {
+          if (refreshStillApplies()) void refreshWalletRead(`read-access-retry:${retryAttempt + 1}`);
+        }, 800 * (retryAttempt + 1));
+      }
       renderRefreshState({
         accountId: account?.accountId ?? null,
         contractId: config.contractId,
         networkId: config.networkId,
         pending: false,
         phase: "idle",
-        backendLoading: false,
-        readAccessLoading: false,
+        backendLoading: Boolean(retryingReadAccess),
+        readAccessLoading: Boolean(retryingReadAccess),
+        ...(retryingReadAccess ? { readAccessError: null } : {}),
       });
     }
 
@@ -1023,6 +1037,11 @@ async function fetchBackendBoard(agent: DemoAgent) {
 
 function agentSelectionKey(agent: DemoAgent) {
   return agent.boardId ?? agent.id;
+}
+
+function readAccessRetryAttempt(reason: string) {
+  const match = reason.match(/^read-access-retry:(\d+)$/);
+  return match ? Number(match[1]) || 0 : 0;
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
