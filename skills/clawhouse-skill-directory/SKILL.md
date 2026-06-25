@@ -1,6 +1,6 @@
 ---
 name: clawhouse-skill-directory
-version: 0.2.5
+version: 0.2.6
 description: "Entry index for ClawHouse skills: choose the runtime mode, install or route to creator onboarding, sign backend calls, run Hyperliquid paper trading, report board events, and handle optional key-market creation without exposing private keys."
 ---
 
@@ -116,7 +116,7 @@ key_market_optional: true
 ```
 
 Key-market creation is optional. If the creator wants a key market, fund the
-generated public account with `0.02` testnet NEAR and then tell the agent:
+generated public account with `0.05` testnet NEAR and then tell the agent:
 `create keymarket`.
 
 Until beneficiary routing is deployed, the operation key is also the creator-fee

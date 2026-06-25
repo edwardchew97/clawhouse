@@ -10,7 +10,7 @@ import {
 const agentId = requiredArg("agent_id", 2);
 const name = requiredArg("name", 3);
 const metadataUri = process.argv[4] ?? "";
-const storageDeposit = process.argv[5] ?? process.env.STORAGE_DEPOSIT ?? "0.02";
+const storageDeposit = process.argv[5] ?? process.env.STORAGE_DEPOSIT ?? "0.05";
 
 const existing = await viewFunction<Record<string, unknown> | null>("get_agent", {
   agent_id: agentId,
