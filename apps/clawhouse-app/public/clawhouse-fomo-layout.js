@@ -1387,9 +1387,16 @@ async function refreshBackendRead(_reason) {
       ? await fetchJson(`/api/backend/hyperliquid-prices?coins=${encodeURIComponent(coins.join(","))}`).catch((error) => ({ ok: false, error: errorMessage(error, "Price read failed.") }))
       : { ok: true, prices: [] };
     if (refreshId !== backendRefreshId) return;
+    const nextBackend = { ...backend, hyperliquidPrices };
+    if (chainState.accountId && readAccessApplies(agent) && paperActivity(agent) && !nextBackend.paperActivity?.ok) {
+      chainState = { ...chainState, backendLoading: false };
+      render();
+      scheduleBackendRefresh("poll", BACKEND_REFRESH_MS);
+      return;
+    }
     chainState = {
       ...chainState,
-      backend: { ...backend, hyperliquidPrices },
+      backend: nextBackend,
       backendLoading: false,
     };
   } catch (error) {
