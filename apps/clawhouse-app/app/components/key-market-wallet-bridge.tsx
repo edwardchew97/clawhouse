@@ -724,6 +724,7 @@ export function KeyMarketWalletBridge() {
             } : null,
             readAccessError: null,
           });
+          return activeAccess;
         })
         .catch((error) => {
           renderChainState({
@@ -733,9 +734,11 @@ export function KeyMarketWalletBridge() {
             readAccess: null,
             readAccessError: errorMessage(error, "Room access refresh failed."),
           });
+          return null;
         });
 
-      const backendPromise = fetchBackendBoard(agent)
+      const backendPromise = activeAccessPromise
+        .then(() => fetchBackendBoard(agent))
         .then((backend) => {
           renderChainState({ accountId: account?.accountId ?? null, contractId: config.contractId, networkId: config.networkId, backend });
         })
