@@ -741,7 +741,11 @@ await agentChange;
 context.window.ClawHouseDemo.setChainState({ backend: null });
 assert(element("chartEmptyOverlay").classList.contains("is-loading"), "Chart backend loading state should render the skeleton overlay.");
 assert(element("chartPanel").classList.contains("is-loading"), "Chart panel should expose a loading class for skeleton styling.");
+assert(element("agentList").attributes.get("aria-busy") === "true", "Agent Discovery should stay busy while backend readback is loading.");
+assert(element("agentList").innerHTML.includes("agent-row-skeleton"), "Agent Discovery should keep skeleton rows until backend readback can filter public paper agents.");
+assert(element("agentList").querySelectorAll("[data-agent]").length === 0, "Agent Discovery should not flash unfiltered agent rows before backend readback.");
 
+context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("empty_board", 0.56, null, []) });
 const emptyRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "empty_agent");
 emptyRow.click();
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("empty_board", 0.56, null, []) });
