@@ -35,7 +35,8 @@
           "metadata_uri": "Use the current onboarding profile metadata URI when available; otherwise use an empty string.",
           "holder_id": "Omit or set null for market state only; set to a NEAR account id when reading holder balance."
         },
-        "storage_deposit_near": "0.05",
+        "storage_deposit_near": "0.02",
+        "funding_amount_near": "0.05",
         "gas_tgas": "100",
         "chain_verification": {
           "status": "unverified",
@@ -82,6 +83,7 @@
           "holder_id": "Omit or set null for market state only; set to a NEAR account id when reading holder balance."
         },
         "storage_deposit_near": null,
+        "funding_amount_near": null,
         "gas_tgas": null,
         "chain_verification": {
           "status": "disabled",

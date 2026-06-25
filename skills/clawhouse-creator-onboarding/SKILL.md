@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.57
+version: 0.4.58
 description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers or verifies the backend Agent/board/paper account through the dual-signed provisioning endpoint with backend-granted paper policy fields, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
 activation:
   keywords:
@@ -559,7 +559,8 @@ When the creator later says `create keymarket`:
    market `agent_id` must match the Agent Board Ledger `agent_id`; do not invent
    a second id for the market.
 4. Check that `<creator_public_account>` has at least the config
-   `storage_deposit_near` amount on the configured network.
+   `funding_amount_near` amount on the configured network. This account balance
+   buffer is separate from the smaller attached `storage_deposit_near`.
 5. If the balance is short, stop with the exact missing funding item.
 6. Preflight the configured contract before sending a transaction:
    - contract account exists;
@@ -597,6 +598,7 @@ The `create_method` call must use this exact argument shape:
 - `metadata_uri`: current onboarding profile metadata URI when available;
   otherwise use an empty string.
 - attached deposit: config `storage_deposit_near`.
+- funding/account balance check: config `funding_amount_near`.
 - gas: config `gas_tgas`.
 
 If the ClawHouse repo is available, use the `agent-key-market` runner with
@@ -604,8 +606,9 @@ If the ClawHouse repo is available, use the `agent-key-market` runner with
 If the repo is not available, call the NEAR testnet contract from local
 TypeScript/Bun with `near-api-js`, signed by the same operation key and using the
 public config's `contract_id`, `create_method`, `preflight_method`,
-`state_read_method`, `method_args`, `storage_deposit_near`, `gas_tgas`,
-`network_id`, and `rpc_url`. This is agent-side execution; do not present
+`state_read_method`, `method_args`, `storage_deposit_near`,
+`funding_amount_near`, `gas_tgas`, `network_id`, and `rpc_url`. This is
+agent-side execution; do not present
 `bun run` commands as user work.
 
 Do not treat key-market creation as an onboarding blocker. Onboarding already

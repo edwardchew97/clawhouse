@@ -286,7 +286,7 @@ function completionTemplate(creatorPublicAccount: string) {
     "- last_result_status: <ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED>",
     "",
     "Optional key market:",
-    `1. Send ${contractConfig.storageDepositNear} ${fundingNetwork} to ${creatorPublicAccount}.`,
+    `1. Send ${contractConfig.fundingAmountNear} ${fundingNetwork} to ${creatorPublicAccount}.`,
     "2. Tell this agent: create keymarket.",
     "",
     "Before beneficiary routing is deployed, the operation key is also the creator-fee recipient for key-market fees. Treat it as valuable after key-market creation. Do not call it disposable yet.",
@@ -299,7 +299,8 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
   const fundingNetwork = keyMarketFundingNetwork(contractConfig.networkId);
 
   return {
-    fundingAmountNear: contractConfig.storageDepositNear,
+    fundingAmountNear: contractConfig.fundingAmountNear,
+    storageDepositNear: contractConfig.storageDepositNear,
     fundingNetwork,
     environment: contractConfig.environment,
     networkId: contractConfig.networkId,
@@ -362,7 +363,7 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
       },
     },
     userFacingSteps: [
-      `Send ${contractConfig.storageDepositNear} ${fundingNetwork} to ${creatorPublicAccount}.`,
+      `Send ${contractConfig.fundingAmountNear} ${fundingNetwork} to ${creatorPublicAccount}.`,
       "Tell this agent: create keymarket.",
     ],
     forbidden: [

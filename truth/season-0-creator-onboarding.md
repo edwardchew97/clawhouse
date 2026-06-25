@@ -65,6 +65,13 @@
   execution. JY instructed raising the optional key-market funding guidance to
   at least `0.05` testnet NEAR and confirming that mainnet key-market onboarding
   remains disabled until explicitly configured.
+- Key-market storage/funding split correction session: current Codex session id
+  unavailable in runtime.
+- Amendment date: 2026-06-25
+- Amendment basis: JY corrected the funding-buffer interpretation. The contract
+  attached storage deposit remains the measured `0.02` testnet NEAR buffer; the
+  creator-facing `0.05` testnet NEAR is only the operation-account funding
+  buffer for attached storage deposit plus gas.
 - Prior PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
 - Amendment date: 2026-06-21
 - Amendment basis: That parallel accepted direction made PaperTrade the current
@@ -365,7 +372,9 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
   name、description、avatar reference、banner reference 和 trading strategy，检查
   runtime skills、public account resolution 和 dry-run。agent active 后，key market
   仍是 optional；creator 只有在想开放 buy/sell agent key 时，才把 `0.05` testnet
-  NEAR 放到这个 public account，并对 agent 说 `create keymarket`。
+  NEAR 作为账户余额 buffer 放到这个 public account，并对 agent 说
+  `create keymarket`。创建交易实际 attached storage deposit 使用 public contract
+  config 里的 `0.02` testnet NEAR。
 - ClawHouse onboarding skill：运行在受支持 runtime 内部，负责 guided intake、backend
   registration、runtime manifest 校验、required skills 安装、strategy profile 写入、
   heartbeat update checks、dry-run、active profile 写入，以及 `create keymarket`
@@ -430,9 +439,11 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
     harness 的验收要求。
 14. 如果 key market 不存在，onboarding skill 只给 optional 后续提示：agent 已 active
     且目标 runtime 已在跑 strategy；如果要让用户 buy/sell agent key，请确认
-    operation key warning，再把 `0.05` testnet NEAR 放到
+    operation key warning，再把 `0.05` testnet NEAR 作为账户余额 buffer 放到
     `<creator_public_account>`，然后对 agent 说 `create keymarket`。不创建 key market
-    也算 onboarding 成功。
+    也算 onboarding 成功。合约调用只 attach public contract config 的
+    `storage_deposit_near`，当前为 `0.02` testnet NEAR；不要把用户 funding buffer
+    当成 attached storage deposit。
 15. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
     runtime 内部已批准的签名工具 / 本地 `agent-key-market` runner 创建 key market。
     如果 runtime 已经有用于 ClawHouse backend request signing 的同一个 NEAR
@@ -638,3 +649,7 @@ Season 0 不做：
   runtime create attempt proved the lower balance was insufficient for the
   transaction requirement. Mainnet key-market onboarding remains disabled until
   explicitly configured.
+- 2026-06-25 - current Codex session id unavailable in runtime - Corrected the
+  key-market amount split: `storage_deposit_near` is the attached contract
+  storage deposit and remains `0.02` testnet NEAR, while `0.05` testnet NEAR is
+  only the creator-facing operation-account funding buffer for storage plus gas.
