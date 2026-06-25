@@ -54,6 +54,8 @@ type DemoChainState = {
   quoteLoading?: boolean;
   maxBuyLoading?: boolean;
   activityLoading?: boolean;
+  backendLoading?: boolean;
+  readAccessLoading?: boolean;
   activity?: Record<string, unknown> | null;
   activityError?: string | null;
   backend?: Record<string, unknown> | null;
@@ -122,6 +124,7 @@ export function KeyMarketWalletBridge() {
   const readAccessRef = useRef<ReadAccessState | null>(null);
   const readAccessRequestRef = useRef<{ key: string; promise: Promise<ReadAccessState | null> } | null>(null);
   const clearSessionRef = useRef<Promise<void> | null>(null);
+  const walletReadRefreshRef = useRef(0);
 
   useEffect(() => {
     let disposed = false;
@@ -180,13 +183,16 @@ export function KeyMarketWalletBridge() {
           walletSessionRequestRef.current = null;
           readAccessRef.current = null;
           readAccessRequestRef.current = null;
+          walletReadRefreshRef.current += 1;
           void clearReadSession();
           renderChainState({
             accountId: null,
             contractId: config.contractId,
             networkId: config.networkId,
             readAccess: null,
+            readAccessLoading: false,
             backend: null,
+            backendLoading: false,
           });
         });
 
@@ -349,6 +355,7 @@ export function KeyMarketWalletBridge() {
         walletSessionRequestRef.current = null;
         readAccessRef.current = null;
         readAccessRequestRef.current = null;
+        walletReadRefreshRef.current += 1;
         renderChainState({
           accountId: null,
           pending: false,
@@ -359,7 +366,9 @@ export function KeyMarketWalletBridge() {
           statusBody: "Connect Wallet",
           statusTone: "idle",
           readAccess: null,
+          readAccessLoading: false,
           backend: null,
+          backendLoading: false,
         });
         busyRef.current = false;
         showToast("NEAR wallet disconnected.");
@@ -575,6 +584,7 @@ export function KeyMarketWalletBridge() {
       if (!demo || !config) return;
 
       const agent = demo.getSelectedAgent();
+      const refreshId = ++walletReadRefreshRef.current;
       if (!agent) {
         renderChainState({
           accountId: account?.accountId ?? null,
@@ -591,7 +601,9 @@ export function KeyMarketWalletBridge() {
           activity: null,
           activityError: null,
           backend: null,
+          backendLoading: false,
           readAccess: null,
+          readAccessLoading: false,
           readAccessError: null,
           error: null,
           statusTitle: "No agent selected",
@@ -600,6 +612,15 @@ export function KeyMarketWalletBridge() {
         });
         return;
       }
+      const selectedKey = agentSelectionKey(agent);
+      const refreshStillApplies = () => {
+        if (disposed || refreshId !== walletReadRefreshRef.current) return false;
+        const currentAgent = demo.getSelectedAgent();
+        return Boolean(currentAgent && agentSelectionKey(currentAgent) === selectedKey);
+      };
+      const renderRefreshState = (state: DemoChainState) => {
+        if (refreshStillApplies()) renderChainState(state);
+      };
       const side = demo.getTradeSide();
       const amount = normalizedAmount(demo.getKeyAmount());
       const holderParam = account?.accountId ? `&holderId=${encodeURIComponent(account.accountId)}` : "";
@@ -617,10 +638,13 @@ export function KeyMarketWalletBridge() {
         quoteLoading: true,
         activityLoading: true,
         maxBuyLoading: Boolean(maxBuyPath),
+        backendLoading: true,
+        readAccessLoading: Boolean(account?.accountId),
+        readAccessError: null,
       });
       const statePromise = fetchJson<{ state: Record<string, unknown> }>(statePath)
         .then((response) => {
-          renderChainState({
+          renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
@@ -631,7 +655,7 @@ export function KeyMarketWalletBridge() {
           return response.state;
         })
         .catch((error) => {
-          renderChainState({
+          renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
@@ -643,7 +667,7 @@ export function KeyMarketWalletBridge() {
 
       const quotePromise = fetchJson<QuoteResponse>(quotePath)
         .then((response) => {
-          renderChainState({
+          renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
@@ -655,7 +679,7 @@ export function KeyMarketWalletBridge() {
           });
         })
         .catch((error) => {
-          renderChainState({
+          renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
@@ -666,7 +690,7 @@ export function KeyMarketWalletBridge() {
 
       const activityPromise = fetchJson<Record<string, unknown>>(activityPath)
         .then((activity) => {
-          renderChainState({
+          renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
@@ -676,7 +700,7 @@ export function KeyMarketWalletBridge() {
           });
         })
         .catch((error) => {
-          renderChainState({
+          renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
@@ -688,7 +712,7 @@ export function KeyMarketWalletBridge() {
       const maxBuyPromise = maxBuyPath
         ? fetchJson<Record<string, unknown>>(maxBuyPath)
           .then((maxBuy) => {
-            renderChainState({
+            renderRefreshState({
               accountId: account?.accountId ?? null,
               contractId: config.contractId,
               networkId: config.networkId,
@@ -698,7 +722,7 @@ export function KeyMarketWalletBridge() {
             });
           })
           .catch((error) => {
-            renderChainState({
+            renderRefreshState({
               accountId: account?.accountId ?? null,
               contractId: config.contractId,
               networkId: config.networkId,
@@ -707,13 +731,13 @@ export function KeyMarketWalletBridge() {
             });
           })
         : Promise.resolve().then(() => {
-          renderChainState({ accountId: account?.accountId ?? null, maxBuy: null, maxBuyLoading: false, maxBuyError: null });
+          renderRefreshState({ accountId: account?.accountId ?? null, maxBuy: null, maxBuyLoading: false, maxBuyError: null });
         });
 
       const activeAccessPromise = statePromise
         .then((state) => ensureReadAccess(agent, state))
         .then((activeAccess) => {
-          renderChainState({
+          renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
@@ -722,42 +746,48 @@ export function KeyMarketWalletBridge() {
               holderAccountId: activeAccess.holderAccountId,
               expiresAt: activeAccess.expiresAt,
             } : null,
+            readAccessLoading: false,
             readAccessError: null,
           });
           return activeAccess;
         })
         .catch((error) => {
-          renderChainState({
+          renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
             readAccess: null,
+            readAccessLoading: false,
             readAccessError: errorMessage(error, "Room access refresh failed."),
           });
           return null;
         });
 
       const backendPromise = activeAccessPromise
-        .then(() => fetchBackendBoard(agent))
+        .then(() => refreshStillApplies() ? fetchBackendBoard(agent) : null)
         .then((backend) => {
-          renderChainState({ accountId: account?.accountId ?? null, contractId: config.contractId, networkId: config.networkId, backend });
+          if (!backend) return;
+          renderRefreshState({ accountId: account?.accountId ?? null, contractId: config.contractId, networkId: config.networkId, backend, backendLoading: false });
         })
         .catch((error) => {
-          renderChainState({
+          renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
+            backendLoading: false,
             backend: { ok: false, error: errorMessage(error, "Backend read failed.") },
           });
         });
 
       await Promise.allSettled([statePromise, quotePromise, activityPromise, maxBuyPromise, activeAccessPromise, backendPromise]);
-      renderChainState({
+      renderRefreshState({
         accountId: account?.accountId ?? null,
         contractId: config.contractId,
         networkId: config.networkId,
         pending: false,
         phase: "idle",
+        backendLoading: false,
+        readAccessLoading: false,
       });
     }
 
@@ -987,6 +1017,10 @@ async function reportKeyMarketActivity(body: Record<string, string>) {
 async function fetchBackendBoard(agent: DemoAgent) {
   const boardId = agent.boardId ?? agent.id;
   return fetchJson<Record<string, unknown>>(`/api/backend/board?boardId=${encodeURIComponent(boardId)}`);
+}
+
+function agentSelectionKey(agent: DemoAgent) {
+  return agent.boardId ?? agent.id;
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {

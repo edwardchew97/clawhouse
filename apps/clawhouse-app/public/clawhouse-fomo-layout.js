@@ -33,7 +33,9 @@ let chainState = {
   activity: null,
   activityError: null,
   backend: null,
+  backendLoading: false,
   readAccess: null,
+  readAccessLoading: false,
   readAccessError: null,
   error: null
 };
@@ -105,6 +107,12 @@ const roomAccessLoading = (agent) => {
   if (!agent || !chainState.accountId) return false;
   const balance = holderBalance(agent);
   return Boolean(
+    chainState.readAccessLoading
+    || chainState.backendLoading
+    || keyStateInitialLoading(agent)
+    || (chainState.backend && !backendApplies(agent))
+    || !chainState.backend
+    ||
     chainState.pending && (chainState.phase === "authenticating" || chainState.phase === "refreshing")
     || (balance !== null && balance > 0 && !readAccessApplies(agent) && !chainState.readAccessError)
   );
@@ -218,6 +226,10 @@ function setChainState(nextState) {
   if (Object.prototype.hasOwnProperty.call(nextState, "quote")) loadingClears.quoteLoading = false;
   if (Object.prototype.hasOwnProperty.call(nextState, "maxBuy")) loadingClears.maxBuyLoading = false;
   if (Object.prototype.hasOwnProperty.call(nextState, "activity")) loadingClears.activityLoading = false;
+  if (Object.prototype.hasOwnProperty.call(nextState, "backend")) loadingClears.backendLoading = false;
+  if (Object.prototype.hasOwnProperty.call(nextState, "readAccess") || Object.prototype.hasOwnProperty.call(nextState, "readAccessError")) {
+    loadingClears.readAccessLoading = false;
+  }
   chainState = { ...chainState, ...loadingClears, ...nextState };
   render();
 }
@@ -464,8 +476,28 @@ function paperActivityReadError(agent) {
   return typeof error === "string" && error.trim() ? error.trim() : null;
 }
 
+function paperActivityLoading(agent) {
+  if (!agent) return false;
+  return Boolean(
+    chainState.backendLoading
+    || keyStateInitialLoading(agent)
+    || chainState.readAccessLoading
+    || !chainState.backend
+    || (chainState.backend && !backendApplies(agent))
+  );
+}
+
 function paperActivityAccessState(agent) {
   const error = paperActivityReadError(agent);
+  if (paperActivityLoading(agent)) {
+    return {
+      tone: "idle",
+      title: "Room data loading",
+      message: "Loading holder-gated paper activity.",
+      badge: "Loading",
+      loading: true,
+    };
+  }
   if (!error || !/read access/i.test(error)) return null;
   if (!chainState.accountId) {
     return {
@@ -476,22 +508,30 @@ function paperActivityAccessState(agent) {
     };
   }
   const balance = holderBalance(agent);
-  if (keyStateInitialLoading(agent) || balance === null) {
+  if (balance === null) {
     return {
       tone: "idle",
-      title: "Checking key ownership",
-      message: "Reading the connected wallet's key balance before loading holder-gated paper activity.",
-      badge: "Checking",
+      title: "Room data loading",
+      message: "Loading holder-gated paper activity.",
+      badge: "Loading",
+      loading: true,
     };
   }
   if (balance > 0) {
+    if (roomAccessLoading(agent)) {
+      return {
+        tone: "idle",
+        title: "Room data loading",
+        message: "Loading holder-gated paper activity.",
+        badge: "Loading",
+        loading: true,
+      };
+    }
     return {
       tone: "idle",
-      title: roomAccessLoading(agent) ? "Opening room access" : "Room access unavailable",
-      message: roomAccessLoading(agent)
-        ? "Refreshing holder read access for this board."
-        : "Holder access was not available for this board yet. Refresh or reconnect the wallet session.",
-      badge: roomAccessLoading(agent) ? "Opening" : "Access",
+      title: "Room access unavailable",
+      message: "Holder access was not available for this board yet. Refresh or reconnect the wallet session.",
+      badge: "Access",
     };
   }
   return {
@@ -1328,6 +1368,11 @@ async function refreshBackendRead(_reason) {
   const agent = selectedAgent();
   if (!agent) return;
   const refreshId = ++backendRefreshId;
+  const showLoading = _reason !== "poll" || !backendApplies(agent);
+  if (showLoading) {
+    chainState = { ...chainState, backendLoading: true };
+    render();
+  }
   try {
     const backend = await fetchJson(`/api/backend/board?boardId=${encodeURIComponent(agent.boardId || agent.id)}`);
     const openPositions = Array.isArray(backend?.paperActivity?.positions)
@@ -1341,11 +1386,13 @@ async function refreshBackendRead(_reason) {
     chainState = {
       ...chainState,
       backend: { ...backend, hyperliquidPrices },
+      backendLoading: false,
     };
   } catch (error) {
     if (refreshId !== backendRefreshId) return;
     chainState = {
       ...chainState,
+      backendLoading: false,
       backend: { ok: false, error: errorMessage(error, "Backend read failed.") },
     };
   }
@@ -1832,6 +1879,19 @@ function loadingRows(count = 3) {
   `).join("");
 }
 
+function roomLoadingSkeleton() {
+  return `
+    <div class="chat-empty chat-empty-loading" aria-busy="true" aria-label="Loading room events">
+      <div class="chat-empty-copy">
+        <span>${skeleton("62px", "inline-skeleton")}</span>
+        <strong>${skeleton("156px", "inline-skeleton")}</strong>
+        <p>${skeleton("280px", "inline-skeleton")}</p>
+      </div>
+      <div class="chat-empty-badge">${skeleton("54px", "inline-skeleton")}</div>
+    </div>
+  `;
+}
+
 function balanceLabel(agent, balance) {
   if (!chainState.accountId) return "Connect wallet";
   if (keyStateInitialLoading(agent)) return skeleton("38px", "inline-skeleton");
@@ -1867,6 +1927,10 @@ function renderRoom(agent) {
     ? sortedByObservedAt(paperOrders(agent)).slice(-12).reverse().map((order, index) => normalizePaperOrderEvent(order, index, agent, 0, null))
     : chartModel(agent).events;
   if (!events.length) {
+    if (accessState?.loading || paperActivityLoading(agent)) {
+      byId("roomFeed").innerHTML = roomLoadingSkeleton();
+      return;
+    }
     const title = accessState?.title || "No readable room events yet";
     const detail = accessState?.message || "Orders and agent updates will appear here when this board reports activity.";
     const badge = accessState?.badge || "Idle";
@@ -2247,7 +2311,7 @@ function setChartEmptyState(isEmpty, message = "", title = "Backend chart data u
   if (!panel || !overlay) return;
   const isLoading = isEmpty && (loading || chartLoadingState(title, message));
   const isPaperInactive = title === "Agent has not started trading yet";
-  const isRoomAccess = title === "Connect Wallet" || title === "Checking key ownership" || title === "Opening room access" || title === "Room access unavailable" || title === "Key required";
+  const isRoomAccess = title === "Connect Wallet" || title === "Room data loading" || title === "Room access unavailable" || title === "Key required";
   panel.classList.toggle("is-empty", isEmpty);
   panel.classList.toggle("is-loading", isLoading);
   overlay.classList.toggle("is-loading", isLoading);
