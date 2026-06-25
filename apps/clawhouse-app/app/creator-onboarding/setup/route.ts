@@ -7,6 +7,24 @@ export const dynamic = "force-dynamic";
 const manifestUrl =
   "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/manifest.json";
 
+const entrySkills = [
+  {
+    name: "clawhouse-skill-directory",
+    url: "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-skill-directory/SKILL.md",
+  },
+];
+
+const localSkills = [
+  {
+    name: "clawhouse-creator-onboarding",
+    url: "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md",
+  },
+  {
+    name: "sign-clawhouse-backend-request",
+    url: "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/sign-clawhouse-backend-request/SKILL.md",
+  },
+];
+
 const requiredSkills = [
   {
     name: "clawhouse-ledger-reporting",
@@ -42,6 +60,16 @@ const requiredInstall = requiredSkills.map((skill) => ({
 const tradingInstall = tradingSkills.map(({ name, url }) => ({
   tool: "skill_install",
   parameters: { name, url },
+}));
+
+const entryInstall = entrySkills.map((skill) => ({
+  tool: "skill_install",
+  parameters: skill,
+}));
+
+const localSkillInstall = localSkills.map((skill) => ({
+  tool: "skill_install",
+  parameters: skill,
 }));
 
 const paperEnvironments = {
@@ -400,13 +428,17 @@ function payloadFor(request: Request) {
     operationKeyProvisioning: walletProvisioning,
     manifest: {
       url: manifestUrl,
+      entrySkills,
+      localSkills,
       requiredSkills,
       tradingSkills,
       futureTradingSkills: "Add one verified manifest entry per venue or trading pattern.",
       hashVerification:
         "Require manifest sha256 metadata. If the runtime has no built-in hash utility, continue after URL/name/version/permission/forbidden-behavior/secret-safety checks and report hash_not_recomputed_no_builtin_hasher.",
     },
-    install: [...requiredInstall, ...tradingInstall],
+    install: [...entryInstall, ...localSkillInstall, ...requiredInstall, ...tradingInstall],
+    installEntry: entryInstall,
+    installLocal: localSkillInstall,
     installRequired: requiredInstall,
     installTrading: tradingInstall,
     agentState: {
@@ -464,7 +496,6 @@ function payloadFor(request: Request) {
       "tool_search_clawhouse",
       "tool_info_clawhouse_creator_onboarding",
       "tool_install_clawhouse_creator_onboarding",
-      "skill_install_clawhouse_creator_onboarding_during_fixed_flow",
       "skill_install_clawhouse_creator_onboarding_without_url",
       "skill_install_runtime_skill_without_url",
       "http_without_literal_url",
