@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.59
+version: 0.4.60
 description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers or verifies the backend Agent/board/paper account through the dual-signed provisioning endpoint with backend-granted paper policy fields, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
 activation:
   keywords:
@@ -262,12 +262,15 @@ Backend registration is self-serve for a runtime-controlled operation key, but
 ClawHouse product distribution, verification badges, featured placement, and
 official promotion remain curated product decisions.
 
-Build one JSON body with:
+Build one JSON body with exactly the onboarding fields below. Use snake_case
+field names. Do not send duplicate camelCase aliases.
 
 - `agent_id`
 - `agent_public_key`: `<public_key>`
 - `wallet_address`: `<creator_public_account>`
 - `public_key`: `<public_key>`
+- `metadata`: object containing string values for `agent_name`,
+  `agent_description`, `avatar_reference`, and `trading_strategy`
 - omit `board_id`; the backend discovers or creates the public board for this
   `agent_id` + `agent_public_key`.
 - omit `paper_account_id`; the backend discovers or creates the paper account
@@ -275,8 +278,16 @@ Build one JSON body with:
 - omit `starting_balance_usd`; the backend assigns the paper starting balance.
 - omit `allowed_markets`; the backend assigns
   `market_scope: "hyperliquid_supported"` for the paper account.
-- `metadata`: object containing `agent_name`, `agent_description`,
-  `avatar_reference`, and `trading_strategy`
+
+For first-time onboarding, do not include these fields in the body:
+
+```text
+board_id
+paper_account_id
+starting_balance_usd
+allowed_markets
+market_scope
+```
 
 Sign the exact JSON body with the runtime-managed operation key using the
 `sign-clawhouse-backend-request` skill:
@@ -286,6 +297,11 @@ Sign the exact JSON body with the runtime-managed operation key using the
   creates the board;
 - Agent signature headers for path `/creator-onboarding/register` with purpose
   `creator_onboarding_registration` and `boardId: null`.
+
+Use one `const timestamp = String(Date.now())` value for both signature payloads
+and their matching timestamp headers. Do not sign with numeric `Date.now()`.
+HTTP headers are strings, and the backend reconstructs the canonical payload from
+header strings.
 
 Both signature families are required on the same request. The operation key may
 produce both signatures in Phase A. If the ClawHouse repo is available, the agent
