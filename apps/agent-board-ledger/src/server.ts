@@ -188,9 +188,11 @@ export function createApp(options: AppOptions) {
           return json(await createPaperAccount(db, body, createdAt), 201);
         }
         if (method === "GET" && paperAccountMatch) {
+          await assertPaperAccountRead(db, request, url, paperAccountMatch[1], adminToken, now(), "key_holder_detail", rpcFetch);
           return json(await readPaperAccount(db, paperAccountMatch[1]));
         }
         if (method === "GET" && paperAccountActivityMatch) {
+          await assertPaperAccountRead(db, request, url, paperAccountActivityMatch[1], adminToken, now(), "key_holder_detail", rpcFetch);
           return json(await readPaperAccountActivity(db, paperAccountActivityMatch[1], {
             limit: boundedPaperActivityLimit(url.searchParams.get("limit")),
           }));
@@ -218,6 +220,7 @@ export function createApp(options: AppOptions) {
           return json(await readPaperLeaderboard(db));
         }
         if (method === "GET" && paperOrderReplayMatch) {
+          await assertPaperOrderRead(db, request, url, paperOrderReplayMatch[1], adminToken, now(), "key_holder_detail", rpcFetch);
           return json(await replayPaperOrder(db, paperOrderReplayMatch[1]));
         }
 
@@ -1911,6 +1914,38 @@ async function requireBoard(db: LedgerDb, boardId: string) {
   const board = await getBoard(db, boardId);
   if (!board) throw new RequestError("Board not found", 404);
   return board;
+}
+
+async function assertPaperAccountRead(
+  db: LedgerDb,
+  request: Request,
+  url: URL,
+  paperAccountId: string,
+  adminToken: string | null | undefined,
+  createdAt: string,
+  requiredLevel: AccessLevel,
+  rpcFetch: FetchLike,
+) {
+  const account = await db.get<PaperAccountRow>("SELECT * FROM paper_accounts WHERE id = ?", [paperAccountId]);
+  if (!account) throw new RequestError("Paper account not found", 404);
+  if (!account.board_id) return;
+  const board = await requireBoard(db, account.board_id);
+  await assertBoardRead(db, request, url, board, adminToken, createdAt, requiredLevel, rpcFetch);
+}
+
+async function assertPaperOrderRead(
+  db: LedgerDb,
+  request: Request,
+  url: URL,
+  orderId: string,
+  adminToken: string | null | undefined,
+  createdAt: string,
+  requiredLevel: AccessLevel,
+  rpcFetch: FetchLike,
+) {
+  const order = await db.get<{ paper_account_id: string }>("SELECT paper_account_id FROM paper_orders WHERE id = ?", [orderId]);
+  if (!order) throw new RequestError("Paper order not found", 404);
+  await assertPaperAccountRead(db, request, url, order.paper_account_id, adminToken, createdAt, requiredLevel, rpcFetch);
 }
 
 function requiredBoardAgentPublicKey(board: Board) {

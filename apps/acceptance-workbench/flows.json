@@ -1313,7 +1313,7 @@
         {
           "id": "clawhouseApp.backend.board",
           "name": "Read App Staging Backend Board",
-          "description": "Reads the selected Agent Board through the ClawHouse App server proxy, including events, portfolio, PnL, balance changes, price snapshots, labeled Paper leaderboard data, and public Paper activity used by the app chart and Agent Base View tabs.",
+          "description": "Reads the selected Agent Board through the ClawHouse App server proxy, including events, portfolio, PnL, balance changes, price snapshots, labeled Paper leaderboard data, and holder-gated Paper activity when a holder read token cookie is available.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -1321,7 +1321,7 @@
           "runningNotes": [
             "Calling the local ClawHouse App server proxy.",
             "The proxy calls the staging Agent Board Ledger /boards/:id, /events, /portfolio, /pnl, /balance-changes, /prices, /paper/leaderboard, and matching /paper/accounts/:id/activity read paths.",
-            "The Chatroom tab uses the paper orders/events from this response, and the Positions tab uses the response paperActivity.positions open-position rows.",
+            "Board-linked paper account and activity reads require service authorization or a holder read token; without one, errors.paperActivity should report the read-access failure.",
             "If the VPS staging app cannot reach the backend, the response should expose ok:false instead of hiding the backend state."
           ],
           "inputs": {
@@ -2510,14 +2510,14 @@
         {
           "id": "paperTrade.account.read",
           "name": "Read Paper Account",
-          "description": "Reads the implemented paper account endpoint after signed order flow to verify account, positions, and latest risk snapshot.",
+          "description": "Reads the implemented paper account endpoint after signed order flow to verify account, positions, and latest risk snapshot. Board-linked paper accounts require service authorization or holder read access.",
           "type": "http",
           "access": "public",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/paper/accounts/{{paperTradingAccountId}}",
           "runningNotes": [
             "Reading the real GET /paper/accounts/:id endpoint.",
-            "The response includes the paper account, open positions, and latest risk snapshot."
+            "The response includes the paper account, open positions, and latest risk snapshot when the account is unlinked test data or the request is authorized."
           ],
           "inputs": {
             "paperTradingAccountId": ""
@@ -2531,14 +2531,14 @@
         {
           "id": "paperTrade.activity.read",
           "name": "Read Paper Activity Timeline",
-          "description": "Reads the public paper account activity endpoint used by the ClawHouse app chart: recent orders, fills, open positions, summary counts, and recent risk snapshots.",
+          "description": "Reads the paper account activity endpoint used by the ClawHouse app chart after authorization: recent orders, fills, open positions, summary counts, and recent risk snapshots.",
           "type": "http",
           "access": "public",
           "method": "GET",
           "url": "{{ledgerBaseUrl}}/paper/accounts/{{paperTradingAccountId}}/activity?limit=120",
           "runningNotes": [
             "Reading the real GET /paper/accounts/:id/activity endpoint.",
-            "The response includes order counts, recent filled/rejected orders, fills, open positions, and risk snapshots for the TradingView paper portfolio chart."
+            "Board-linked paper activity is holder-gated because it includes order reasoning, fills, open positions, and risk snapshots for the TradingView paper portfolio chart."
           ],
           "inputs": {
             "paperTradingAccountId": ""
