@@ -1,1 +1,10 @@
-export const defaultKeyMarketContractId = "clawhouse-key-20260619125948.testnet";
+export const keyMarketEnv = {
+  networkId: ["CLAWHOUSE_KEY_NEAR_NETWORK_ID", "KEY_NEAR_NETWORK_ID", "NEAR_NETWORK_ID"],
+  rpcUrl: ["CLAWHOUSE_KEY_NEAR_RPC_URL", "KEY_NEAR_RPC_URL", "NEAR_NODE_URL"],
+  contractId: ["CLAWHOUSE_KEY_MARKET_CONTRACT_ID", "KEY_MARKET_CONTRACT_ID", "CONTRACT_ID"],
+  storageDepositNear: ["CLAWHOUSE_KEY_STORAGE_DEPOSIT_NEAR", "STORAGE_DEPOSIT"],
+  buyMaxReserveNear: ["CLAWHOUSE_KEY_BUY_MAX_RESERVE_NEAR", "BUY_MAX_RESERVE_NEAR"],
+  gas: ["CLAWHOUSE_KEY_MARKET_GAS", "NEAR_TGAS_YOCTO"],
+  buyMaxSearchLimit: "CLAWHOUSE_KEY_BUY_MAX_SEARCH_LIMIT",
+  defaultAgentId: ["CLAWHOUSE_DEFAULT_AGENT_ID"],
+} as const;

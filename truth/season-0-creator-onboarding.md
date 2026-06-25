@@ -46,6 +46,17 @@
   self-serve create-or-verify for a runtime-managed operation key. Fairness comes
   from backend-granted paper parameters, while ClawHouse product distribution and
   verified/featured status remain curated.
+- Public contract config amendment session: current Codex session id unavailable
+  in runtime.
+- Amendment date: 2026-06-25
+- Amendment basis: JY accepted the cross-review decision that optional
+  key-market creation must use a committed public contract config as source of
+  truth, with testnet enabled, mainnet disabled, FastNEAR as the canonical
+  testnet RPC, `gas_tgas` as the only stored gas source, and explicit
+  `create_agent_key`, `get_agent`, and `get_state` method fields. The public
+  config is repo/publication truth, not chain verification; it remains
+  chain-unverified until a testnet `create_agent_key` transaction hash and
+  `get_agent` readback are recorded.
 - Prior PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
 - Amendment date: 2026-06-21
 - Amendment basis: That parallel accepted direction made PaperTrade the current
@@ -606,3 +617,11 @@ Season 0 不做：
   creator-onboarding backend paper registration is self-serve create-or-verify
   for a signed runtime operation key, while ClawHouse product distribution,
   verification, badges, featured placement, and promotion remain curated.
+- 2026-06-25 - current Codex session id unavailable in runtime - Added the
+  public contract-config source-of-truth decision for optional key-market
+  creation: `apps/clawhouse-app/config/public-onboarding-contracts.json` owns
+  network/RPC/contract/method/deposit/gas/signing field names, public kit
+  publishes it as `contracts.json`, mainnet remains disabled, and runtime
+  preflight must distinguish missing contract/code/method from a missing agent.
+  The config is explicitly chain-unverified until a testnet `create_agent_key`
+  transaction hash and `get_agent` readback proof are recorded.

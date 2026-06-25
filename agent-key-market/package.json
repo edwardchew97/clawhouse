@@ -8,6 +8,7 @@
     "buy": "bun run scripts/buy-key.ts",
     "sell": "bun run scripts/sell-key.ts",
     "state": "bun run scripts/get-state.ts",
+    "preflight": "bun run scripts/preflight-key-market.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

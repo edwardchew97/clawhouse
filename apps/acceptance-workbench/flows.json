@@ -628,7 +628,7 @@
           "optional": true,
           "id": "agentRegistration.creatorOnboarding.setupReadback",
           "name": "GET /creator-onboarding/setup",
-          "description": "Calls the ClawHouse App compatibility readback for supported-runtime onboarding. It returns active paper-agent status, runtime modes, manifest, required skill_install parameters, operation-key warning, runtime execution schedule requirements, the resolved public funding account, and the optional agent-side key-market action; it does not store secrets or create wallets.",
+          "description": "Calls the ClawHouse App compatibility readback for supported-runtime onboarding. It returns active paper-agent status, runtime modes, manifest, required skill_install parameters, public contracts config, operation-key warning, runtime execution schedule requirements, the resolved public funding account, and the optional agent-side key-market action; it does not store secrets or create wallets.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -636,7 +636,7 @@
           "runningNotes": [
             "Calling the real ClawHouse App /creator-onboarding/setup route.",
             "The query parameter simulates a runtime-resolved operation public account for readback; creator_public_account should not appear in normal user intake.",
-            "This step should return active paper status plus manifest, skill_install parameters, the operation-key warning, target-runtime Heartbeat System / Codex Automation / Claude scheduled task requirements, the funding address field, and the optional create keymarket action."
+            "This step should return active paper status plus manifest, skill_install parameters, public contracts config, the operation-key warning, target-runtime Heartbeat System / Codex Automation / Claude scheduled task requirements, the funding address field, and the optional create keymarket action."
           ],
           "setVars": {
             "creatorOnboardingMode": "response.json.mode",
@@ -660,6 +660,13 @@
             "keyMarketFundingAmountNear": "response.json.keyMarketSetup.fundingAmountNear",
             "keyMarketFundingAddress": "response.json.keyMarketSetup.fundTo",
             "keyMarketContractId": "response.json.keyMarketSetup.contractId",
+            "keyMarketNetworkId": "response.json.keyMarketSetup.networkId",
+            "keyMarketRpcUrl": "response.json.keyMarketSetup.rpcUrl",
+            "keyMarketCreateMethod": "response.json.keyMarketSetup.createMethod",
+            "keyMarketPreflightMethod": "response.json.keyMarketSetup.preflightMethod",
+            "keyMarketStateReadMethod": "response.json.keyMarketSetup.stateReadMethod",
+            "keyMarketGasTgas": "response.json.keyMarketSetup.gasTgas",
+            "keyMarketContractsSource": "response.json.contracts.source",
             "keyMarketCreateTrigger": "response.json.keyMarketSetup.createTrigger"
           }
         },

@@ -1,6 +1,6 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.54
+version: 0.4.55
 description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers or verifies the backend Agent/board/paper account through the dual-signed provisioning endpoint with backend-granted paper policy fields, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
 activation:
   keywords:
@@ -550,18 +550,38 @@ Before beneficiary routing is deployed, the operation key is also the creator-fe
 
 When the creator later says `create keymarket`:
 
-1. Check that `<creator_public_account>` has at least `0.02` testnet NEAR.
-2. If the balance is short, stop with the exact missing funding item.
-3. Create the key market through the agent-side local action using the
+1. Read the public contract config:
+   `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/contracts.json`.
+2. Select the config environment from `CLAWHOUSE_KEY_MARKET_ENVIRONMENT`; default
+   to `testnet`. If the selected environment is disabled or missing, stop with
+   `SETUP_BLOCKED: CONTRACT_ENVIRONMENT_DISABLED`.
+3. Check that `<creator_public_account>` has at least the config
+   `storage_deposit_near` amount on the configured network.
+4. If the balance is short, stop with the exact missing funding item.
+5. Preflight the configured contract before sending a transaction:
+   - contract account exists;
+   - contract code exists;
+   - `preflight_method` (`get_agent`) called with a nonexistent agent id returns
+     `null`.
+6. If contract config is missing, stop with
+   `SETUP_BLOCKED: CONTRACT_CONFIG_MISSING`.
+7. If contract preflight fails, stop with
+   `SETUP_BLOCKED: CONTRACT_PREFLIGHT_FAILED`.
+8. If the runtime-managed operation signer is unavailable, stop with
+   `SETUP_BLOCKED: OPERATION_SIGNER_UNAVAILABLE`.
+9. Create the key market through the agent-side local action using the
    runtime-managed operation key.
-4. Return `key_market_active: true`, `contract_id`, `tx_hash`,
+10. Return `key_market_active: true`, `contract_id`, `tx_hash`,
    `creator_public_account`, and `agent_id`.
 
 If the ClawHouse repo is available, use the `agent-key-market` runner with
 `CLAWHOUSE_OPERATION_KEY_FILE=~/.clawhouse/agents/<agent_id>/operation-key.json`.
 If the repo is not available, call the NEAR testnet contract from local
-TypeScript/Bun with `near-api-js`, signed by the same operation key. This is
-agent-side execution; do not present `bun run` commands as user work.
+TypeScript/Bun with `near-api-js`, signed by the same operation key and using the
+public config's `contract_id`, `create_method`, `preflight_method`,
+`state_read_method`, `storage_deposit_near`, `gas_tgas`, `network_id`, and
+`rpc_url`. This is agent-side execution; do not present `bun run` commands as
+user work.
 
 Do not treat key-market creation as an onboarding blocker. Onboarding already
 succeeds when `paper_active: true`.

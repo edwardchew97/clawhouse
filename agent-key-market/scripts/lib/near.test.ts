@@ -1,8 +1,20 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { extractTransactionHash, formatTransactionResult, readPrivateKey } from "./near";
+import { join, resolve } from "node:path";
+import { extractTransactionHash, formatTransactionResult, readEnv, readPrivateKey } from "./near";
+
+const contracts = JSON.parse(
+  readFileSync(resolve(import.meta.dir, "../../../apps/clawhouse-app/config/public-onboarding-contracts.json"), "utf8"),
+) as {
+  environments: {
+    testnet: {
+      network_id: string;
+      rpc_url: string;
+    };
+  };
+};
 
 describe("transaction hash formatting", () => {
   test("reads the hash from the signed transaction view", () => {
@@ -36,6 +48,53 @@ describe("transaction hash formatting", () => {
 });
 
 describe("operation key file loading", () => {
+  test("defaults to the public onboarding testnet RPC", () => {
+    const previousContractId = process.env.CONTRACT_ID;
+    const previousAccountId = process.env.ACCOUNT_ID;
+    const previousNetworkId = process.env.NEAR_NETWORK_ID;
+    const previousNodeUrl = process.env.NEAR_NODE_URL;
+
+    try {
+      process.env.CONTRACT_ID = "contract.testnet";
+      process.env.ACCOUNT_ID = "agent.testnet";
+      delete process.env.NEAR_NETWORK_ID;
+      delete process.env.NEAR_NODE_URL;
+
+      expect(readEnv()).toMatchObject({
+        networkId: contracts.environments.testnet.network_id,
+        nodeUrl: contracts.environments.testnet.rpc_url,
+        contractId: "contract.testnet",
+        accountId: "agent.testnet",
+      });
+    } finally {
+      restoreEnv("CONTRACT_ID", previousContractId);
+      restoreEnv("ACCOUNT_ID", previousAccountId);
+      restoreEnv("NEAR_NETWORK_ID", previousNetworkId);
+      restoreEnv("NEAR_NODE_URL", previousNodeUrl);
+    }
+  });
+
+  test("requires an explicit RPC for unsupported networks", () => {
+    const previousContractId = process.env.CONTRACT_ID;
+    const previousAccountId = process.env.ACCOUNT_ID;
+    const previousNetworkId = process.env.NEAR_NETWORK_ID;
+    const previousNodeUrl = process.env.NEAR_NODE_URL;
+
+    try {
+      process.env.CONTRACT_ID = "contract.sandbox";
+      process.env.ACCOUNT_ID = "agent.sandbox";
+      process.env.NEAR_NETWORK_ID = "sandbox";
+      delete process.env.NEAR_NODE_URL;
+
+      expect(() => readEnv()).toThrow("Unsupported NEAR_NETWORK_ID sandbox");
+    } finally {
+      restoreEnv("CONTRACT_ID", previousContractId);
+      restoreEnv("ACCOUNT_ID", previousAccountId);
+      restoreEnv("NEAR_NETWORK_ID", previousNetworkId);
+      restoreEnv("NEAR_NODE_URL", previousNodeUrl);
+    }
+  });
+
   test("reads a ClawHouse operation key file", async () => {
     const previousKeyFile = process.env.CLAWHOUSE_OPERATION_KEY_FILE;
     const dir = await mkdtemp(join(tmpdir(), "clawhouse-operation-key-"));
@@ -104,3 +163,11 @@ describe("operation key file loading", () => {
     }
   });
 });
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}

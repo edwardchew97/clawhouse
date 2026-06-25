@@ -1,17 +1,11 @@
 import { JsonRpcProvider, nearToYocto, yoctoToNear } from "near-api-js";
 import { NextResponse } from "next/server";
 import { firstEnv } from "../../lib/env";
-import { defaultKeyMarketContractId } from "./constants";
+import { getPublicKeyMarketContractConfig } from "./contracts";
+import { keyMarketEnv } from "./constants";
 
-const defaultNetworkId = "testnet";
-const defaultGas = "100000000000000";
-const defaultStorageDepositNear = "0.02";
 const defaultBuyMaxReserveNear = "0.05";
 const defaultBuyMaxSearchLimit = 100_000;
-const defaultRpcUrls: Record<string, string> = {
-  mainnet: "https://rpc.mainnet.fastnear.com",
-  testnet: "https://rpc.testnet.fastnear.com",
-};
 const slippageBps = BigInt(100);
 const bpsDenominator = BigInt(10_000);
 
@@ -49,35 +43,30 @@ export type MarketState = {
 };
 
 export function getKeyMarketConfig() {
-  const networkId = firstEnv(["CLAWHOUSE_KEY_NEAR_NETWORK_ID", "KEY_NEAR_NETWORK_ID", "NEAR_NETWORK_ID"])
-    ?? defaultNetworkId;
-  const nodeUrl = rpcUrlForNetwork(
-    firstEnv(["CLAWHOUSE_KEY_NEAR_RPC_URL", "KEY_NEAR_RPC_URL", "NEAR_NODE_URL"]),
-    networkId,
-  )
-    ?? defaultRpcUrls[networkId]
-    ?? `https://rpc.${networkId}.near.org`;
-  const contractId = firstEnv([
-    "CLAWHOUSE_KEY_MARKET_CONTRACT_ID",
-    "KEY_MARKET_CONTRACT_ID",
-    "CONTRACT_ID",
-  ]) ?? defaultKeyMarketContractId;
+  const publicConfig = getPublicKeyMarketContractConfig();
+  const networkId = mirrorEnv("network_id", firstEnv([...keyMarketEnv.networkId]), publicConfig.networkId);
+  const nodeUrl = mirrorRpcEnv(firstEnv([...keyMarketEnv.rpcUrl]), publicConfig);
+  const contractId = mirrorEnv("contract_id", firstEnv([...keyMarketEnv.contractId]), publicConfig.contractId);
   const storageDepositYocto = parseNearAmount(
-    firstEnv(["CLAWHOUSE_KEY_STORAGE_DEPOSIT_NEAR", "STORAGE_DEPOSIT"]) ?? defaultStorageDepositNear,
+    mirrorEnv(
+      "storage_deposit_near",
+      firstEnv([...keyMarketEnv.storageDepositNear]),
+      publicConfig.storageDepositNear,
+    ),
   );
   const buyMaxReserveYocto = parseNearAmount(
-    firstEnv(["CLAWHOUSE_KEY_BUY_MAX_RESERVE_NEAR", "BUY_MAX_RESERVE_NEAR"]) ?? defaultBuyMaxReserveNear,
+    firstEnv([...keyMarketEnv.buyMaxReserveNear]) ?? defaultBuyMaxReserveNear,
   );
 
   return {
     networkId,
     nodeUrl,
     contractId,
-    gas: firstEnv(["CLAWHOUSE_KEY_MARKET_GAS", "NEAR_TGAS_YOCTO"]) ?? defaultGas,
+    gas: mirrorEnv("gas", firstEnv([...keyMarketEnv.gas]), publicConfig.gas),
     storageDepositYocto,
     buyMaxReserveYocto,
-    buyMaxSearchLimit: numberEnv("CLAWHOUSE_KEY_BUY_MAX_SEARCH_LIMIT", defaultBuyMaxSearchLimit),
-    defaultAgentId: firstEnv(["CLAWHOUSE_DEFAULT_AGENT_ID"]) ?? null,
+    buyMaxSearchLimit: numberEnv(keyMarketEnv.buyMaxSearchLimit, defaultBuyMaxSearchLimit),
+    defaultAgentId: firstEnv([...keyMarketEnv.defaultAgentId]) ?? null,
   };
 }
 
@@ -194,12 +183,16 @@ function numberEnv(name: string, fallback: number) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function rpcUrlForNetwork(value: string | undefined, networkId: string) {
-  if (!value) return undefined;
-  if (value === `https://rpc.${networkId}.near.org`) {
-    return defaultRpcUrls[networkId];
-  }
-  return value;
+function mirrorRpcEnv(value: string | undefined, publicConfig: ReturnType<typeof getPublicKeyMarketContractConfig>) {
+  if (!value || value === publicConfig.nodeUrl) return publicConfig.nodeUrl;
+  if (value === `https://rpc.${publicConfig.networkId}.near.org`) return publicConfig.nodeUrl;
+  throw new Error(`Key-market rpc_url env does not match public contract config: ${value}`);
+}
+
+function mirrorEnv(label: string, value: string | undefined, expected: string) {
+  if (!value) return expected;
+  if (value === expected) return value;
+  throw new Error(`Key-market ${label} env does not match public contract config: ${value}`);
 }
 
 function parseNearAmount(value: string) {

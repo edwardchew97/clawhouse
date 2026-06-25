@@ -99,6 +99,15 @@ replace Scope V0 key trading.
   Hyperliquid paper perps and Hyperliquid paper spot through the same
   `hyperliquid-paper-trading` runtime skill, while removing the legacy spot
   runtime/onboarding path from current documentation.
+- Hyperliquid market universe clarification session:
+  `019efcf9-468c-7e03-93f3-7f65979152a6`
+- Amendment date: 2026-06-25
+- Amendment basis: A Heartbeat run blocked because no concrete supported market
+  list or max leverage values were present. JY clarified that ClawHouse should
+  tell agents to use Hyperliquid public market metadata and that Season 0 paper
+  trading supports the full Hyperliquid market universe exposed by that public
+  metadata, subject to ClawHouse paper account, freshness, margin, and risk
+  checks.
 - Active onboarding / key market amendment session:
   `019ee960-7098-7f10-9400-0d3c379f6af6`
 - Amendment date: 2026-06-21
@@ -190,6 +199,13 @@ OutLayer is deferred. NEAR Intents is no longer the first agent-trading/PnL
 lane, and no legacy spot runtime skill is exposed in current onboarding.
 The current runtime skill supports both Hyperliquid paper perps and Hyperliquid
 paper spot through `market_type`.
+
+`allowed_markets: { scope: "hyperliquid_supported" }` means the paper account may
+trade any Hyperliquid perps or spot market returned by Hyperliquid public market
+metadata. It is not a static ClawHouse-maintained symbol list. Agents and
+backend workers should derive concrete symbols, perps max leverage, spot book
+symbols, marks, and books from the public Hyperliquid info endpoint. Users must
+not provide Hyperliquid API keys or private account data for this paper lane.
 
 In V0:
 
@@ -731,6 +747,8 @@ The first Agent Trading slice is done only when:
 - Paper PnL snapshots are written periodically and after material events;
 - stale market data blocks new open-risk orders and is visible in leaderboard
   state;
+- the supported Hyperliquid market universe is the live public Hyperliquid
+  perps and spot metadata universe, not a manually pasted prompt list;
 - holder/key-gated read API is scoped as a read surface, not key trading;
 - no OutLayer, real order submission, custody, copy trading, or user-funded
   autonomous trading is required;
@@ -754,7 +772,9 @@ The first Agent Trading slice is done only when:
   worker before OutLayer migration?
 - What price freshness threshold blocks leaderboard updates?
 - What should be public versus key-holder-only in the event timeline?
-- Which Hyperliquid markets are allowed for the first public season?
+- Which Hyperliquid markets should be highlighted in UI examples, while the
+  backend-supported paper universe remains the live Hyperliquid public metadata
+  universe?
 - What exact liquidation SLA should be product-facing after local proof:
   target is 2 seconds after fresh mark/book update for risk check and 5 seconds
   for liquidation event write.
@@ -875,3 +895,9 @@ The first Agent Trading slice is done only when:
   ownership wording: Heartbeat System means the target runtime's own capability,
   such as OpenClaw, Hermes, or IronClaw. It is not owned or hosted by ClawHouse,
   and must not be described as a mixed ClawHouse/runtime hybrid.
+- 2026-06-25 - `019efcf9-468c-7e03-93f3-7f65979152a6` - Clarified that
+  `allowed_markets: { scope: "hyperliquid_supported" }` covers the live
+  Hyperliquid public perps and spot metadata universe. Agents should fetch
+  public Hyperliquid metadata for concrete symbols, perps max leverage, spot
+  book symbols, marks, and books instead of requiring a prompt-provided market
+  list or user Hyperliquid API keys.

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { defaultKeyMarketContractId } from "../../api/key-market/constants";
+import { getPublicKeyMarketContractConfig, publicContractsPayload } from "../../api/key-market/contracts";
 import { firstEnv } from "../../lib/env";
 
 export const dynamic = "force-dynamic";
@@ -74,6 +74,30 @@ const localSkillInstall = localSkills.map((skill) => ({
 
 const paperEnvironments = {
   staging: "https://staging-clawhouse.lucis.finance",
+};
+
+const hyperliquidMarketScope = {
+  scope: "hyperliquid_supported",
+  meaning:
+    "Supports every Hyperliquid perps and spot market returned by public Hyperliquid metadata, subject to ClawHouse paper account, freshness, margin, depth, and risk checks.",
+  userProvidesMarketList: false,
+  userProvidesHyperliquidApiKey: false,
+  publicInfoUrl: "https://api.hyperliquid.xyz/info",
+  discovery: {
+    perpsMetadataRequest: { type: "metaAndAssetCtxs" },
+    spotMetadataRequest: { type: "spotMetaAndAssetCtxs" },
+    bookRequest: { type: "l2Book", coin: "<coin_or_spot_book_symbol>" },
+  },
+  perps: {
+    coinSource: "metaAndAssetCtxs[0].universe[].name",
+    maxLeverageSource: "metaAndAssetCtxs[0].universe[].maxLeverage",
+  },
+  spot: {
+    coinSource: "spotMetaAndAssetCtxs[0].universe[].name",
+    bookSymbolSource: "spotMetaAndAssetCtxs[0].universe[].index or known spot name",
+    requiredMarginMode: "spot",
+    requiredLeverage: 1,
+  },
 };
 
 const walletUnavailableMessage =
@@ -268,14 +292,20 @@ function completionTemplate(creatorPublicAccount: string) {
 }
 
 function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: boolean) {
-  const contractId =
-    firstEnv(["CLAWHOUSE_KEY_MARKET_CONTRACT_ID", "KEY_MARKET_CONTRACT_ID", "CONTRACT_ID"]) ??
-    defaultKeyMarketContractId;
+  const contractConfig = getPublicKeyMarketContractConfig();
 
   return {
     fundingAmountNear: "0.02",
     fundingNetwork: "NEAR testnet",
-    contractId,
+    environment: contractConfig.environment,
+    networkId: contractConfig.networkId,
+    rpcUrl: contractConfig.nodeUrl,
+    contractId: contractConfig.contractId,
+    createMethod: contractConfig.createMethod,
+    preflightMethod: contractConfig.preflightMethod,
+    stateReadMethod: contractConfig.stateReadMethod,
+    gasTgas: contractConfig.gasTgas,
+    gas: contractConfig.gas,
     fundTo: creatorPublicAccount,
     fundingAddressRequired: true,
     fundingAddressProvided: hasCreatorPublicAccount,
@@ -297,14 +327,15 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
       runner: "agent-key-market create",
       cwd: "agent-key-market",
       script: "scripts/create-agent-key.ts",
-      storageDepositNear: "0.02",
+      storageDepositNear: contractConfig.storageDepositNear,
       env: {
-        STORAGE_DEPOSIT: "0.02",
+        STORAGE_DEPOSIT: contractConfig.storageDepositNear,
         ACCOUNT_ID: creatorPublicAccount,
-        CONTRACT_ID: contractId,
-        NEAR_NETWORK_ID: "testnet",
-        CLAWHOUSE_OPERATION_KEY_FILE:
-          "~/.clawhouse/agents/<agent_id>/operation-key.json",
+        CONTRACT_ID: contractConfig.contractId,
+        NEAR_NETWORK_ID: contractConfig.networkId,
+        NEAR_NODE_URL: contractConfig.nodeUrl,
+        NEAR_TGAS: contractConfig.gasTgas,
+        [contractConfig.signer.keyFileEnv]: "~/.clawhouse/agents/<agent_id>/operation-key.json",
       },
       signerAccount: creatorPublicAccount,
       args: ["<agent_id>", "<agent_name>", "<metadata_uri>"],
@@ -436,6 +467,7 @@ function payloadFor(request: Request) {
       hashVerification:
         "Require manifest sha256 metadata. If the runtime has no built-in hash utility, continue after URL/name/version/permission/forbidden-behavior/secret-safety checks and report hash_not_recomputed_no_builtin_hasher.",
     },
+    marketScope: hyperliquidMarketScope,
     install: [...entryInstall, ...localSkillInstall, ...requiredInstall, ...tradingInstall],
     installEntry: entryInstall,
     installLocal: localSkillInstall,
@@ -463,6 +495,12 @@ function payloadFor(request: Request) {
       traderStatus: "active",
     },
     keyMarketSetup: keyMarketSetup(account, hasAccount),
+    contracts: {
+      source: "apps/clawhouse-app/config/public-onboarding-contracts.json",
+      publicKitUrl:
+        "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/contracts.json",
+      config: publicContractsPayload(),
+    },
     completion: {
       useAfterOnboardingCompletion: true,
       useAfterActivationApproval: false,
