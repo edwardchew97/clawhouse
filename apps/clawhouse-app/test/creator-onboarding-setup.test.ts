@@ -1,9 +1,48 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import contracts from "../config/public-onboarding-contracts.json";
+import { GET as keyMarketConfigGET } from "../app/api/key-market/config/route";
 import { GET } from "../app/creator-onboarding/setup/route";
 
+const contractEnvNames = [
+  "CLAWHOUSE_KEY_MARKET_ENVIRONMENT",
+  "CLAWHOUSE_KEY_NEAR_NETWORK_ID",
+  "KEY_NEAR_NETWORK_ID",
+  "NEAR_NETWORK_ID",
+  "CLAWHOUSE_KEY_NEAR_RPC_URL",
+  "KEY_NEAR_RPC_URL",
+  "NEAR_NODE_URL",
+  "CLAWHOUSE_KEY_MARKET_CONTRACT_ID",
+  "KEY_MARKET_CONTRACT_ID",
+  "CONTRACT_ID",
+  "CLAWHOUSE_KEY_STORAGE_DEPOSIT_NEAR",
+  "STORAGE_DEPOSIT",
+  "CLAWHOUSE_KEY_MARKET_GAS",
+  "NEAR_TGAS_YOCTO",
+];
+const previousContractEnv = new Map<string, string | undefined>();
+
 describe("creator onboarding setup route", () => {
+  beforeEach(() => {
+    previousContractEnv.clear();
+    for (const name of contractEnvNames) {
+      previousContractEnv.set(name, process.env[name]);
+      delete process.env[name];
+    }
+  });
+
+  afterEach(() => {
+    for (const name of contractEnvNames) {
+      const value = previousContractEnv.get(name);
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
+  });
+
   test("defaults to staging without asking the creator to choose an environment", async () => {
     const response = GET(new Request("http://clawhouse.test/creator-onboarding/setup"));
     const payload = await response.json() as {
@@ -101,6 +140,87 @@ describe("creator onboarding setup route", () => {
         requiredLeverage: 1,
       },
     });
+  });
+
+  test("returns public key-market contract config from the shared source", async () => {
+    const account = "alice.testnet";
+    const response = GET(new Request(`http://clawhouse.test/creator-onboarding/setup?creatorPublicAccount=${account}`));
+    const payload = await response.json() as {
+      contracts: { source: string; publicKitUrl: string; config: typeof contracts };
+      keyMarketSetup: {
+        environment: string;
+        networkId: string;
+        rpcUrl: string;
+        contractId: string;
+        createMethod: string;
+        preflightMethod: string;
+        stateReadMethod: string;
+        gasTgas: string;
+        gas: string;
+        localAction: {
+          storageDepositNear: string;
+          env: Record<string, string>;
+        };
+      };
+    };
+    const testnet = contracts.environments.testnet;
+    const keyMarket = testnet.key_market;
+
+    expect(payload.contracts.source).toBe("apps/clawhouse-app/config/public-onboarding-contracts.json");
+    expect(payload.contracts.publicKitUrl).toBe("https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/contracts.json");
+    expect(payload.contracts.config).toEqual(contracts);
+    expect(payload.keyMarketSetup).toMatchObject({
+      environment: "testnet",
+      networkId: testnet.network_id,
+      rpcUrl: testnet.rpc_url,
+      contractId: keyMarket.contract_id,
+      createMethod: keyMarket.create_method,
+      preflightMethod: keyMarket.preflight_method,
+      stateReadMethod: keyMarket.state_read_method,
+      gasTgas: keyMarket.gas_tgas,
+      gas: "100000000000000",
+    });
+    expect(payload.keyMarketSetup.localAction).toMatchObject({
+      storageDepositNear: keyMarket.storage_deposit_near,
+      env: {
+        STORAGE_DEPOSIT: keyMarket.storage_deposit_near,
+        ACCOUNT_ID: account,
+        CONTRACT_ID: keyMarket.contract_id,
+        NEAR_NETWORK_ID: testnet.network_id,
+        NEAR_NODE_URL: testnet.rpc_url,
+        NEAR_TGAS: keyMarket.gas_tgas,
+        CLAWHOUSE_OPERATION_KEY_FILE: "~/.clawhouse/agents/<agent_id>/operation-key.json",
+      },
+    });
+  });
+
+  test("key-market config route derives defaults from the shared contract config", async () => {
+    const response = keyMarketConfigGET();
+    const payload = await response.json() as {
+      config: {
+        networkId: string;
+        nodeUrl: string;
+        contractId: string;
+        gas: string;
+        storageDepositYocto: string;
+      };
+    };
+
+    expect(payload.config).toMatchObject({
+      networkId: contracts.environments.testnet.network_id,
+      nodeUrl: contracts.environments.testnet.rpc_url,
+      contractId: contracts.environments.testnet.key_market.contract_id,
+      gas: "100000000000000",
+      storageDepositYocto: "20000000000000000000000",
+    });
+  });
+
+  test("blocks disabled contract environments selected by env", () => {
+    process.env.CLAWHOUSE_KEY_MARKET_ENVIRONMENT = "mainnet";
+
+    expect(() => GET(new Request("http://clawhouse.test/creator-onboarding/setup"))).toThrow(
+      "Key-market contract environment is disabled: mainnet",
+    );
   });
 });
 

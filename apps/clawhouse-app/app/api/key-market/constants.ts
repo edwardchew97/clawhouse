@@ -1,5 +1,3 @@
-export const defaultKeyMarketContractId = "clawhouse-key-20260619125948.testnet";
-
 export const keyMarketEnv = {
   networkId: ["CLAWHOUSE_KEY_NEAR_NETWORK_ID", "KEY_NEAR_NETWORK_ID", "NEAR_NETWORK_ID"],
   rpcUrl: ["CLAWHOUSE_KEY_NEAR_RPC_URL", "KEY_NEAR_RPC_URL", "NEAR_NODE_URL"],

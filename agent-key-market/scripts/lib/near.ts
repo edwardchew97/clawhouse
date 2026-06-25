@@ -12,6 +12,10 @@ import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 
 const DEFAULT_TGAS = "100";
+const DEFAULT_RPC_URLS: Record<string, string> = {
+  mainnet: "https://rpc.mainnet.fastnear.com",
+  testnet: "https://rpc.testnet.fastnear.com",
+};
 
 export type Env = {
   networkId: string;
@@ -22,9 +26,10 @@ export type Env = {
 
 export function readEnv(): Env {
   const networkId = firstEnv(["NEAR_NETWORK_ID", "nearNetworkId"]) ?? "testnet";
-  const nodeUrl =
-    firstEnv(["NEAR_NODE_URL", "nearRpcUrl"]) ??
-    `https://rpc.${networkId}.near.org`;
+  const nodeUrl = firstEnv(["NEAR_NODE_URL", "nearRpcUrl"]) ?? DEFAULT_RPC_URLS[networkId];
+  if (!nodeUrl) {
+    throw new Error(`Unsupported NEAR_NETWORK_ID ${networkId}; set NEAR_NODE_URL explicitly`);
+  }
   const contractId = requiredEnv(["CONTRACT_ID", "contractId"]);
   const accountId = requiredEnv([
     "ACCOUNT_ID",
