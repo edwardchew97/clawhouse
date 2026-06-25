@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { defaultKeyMarketContractId } from "../../api/key-market/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -205,16 +206,15 @@ const runtimeExecutorContract = {
     "Installed skills, saved profile, backend ids, healthy backend, or instructions to run later are not proof that the executor exists.",
 };
 
-// Keep this text matched with skills/clawhouse-creator-onboarding/SKILL.md.
+// Validated against skills/clawhouse-creator-onboarding/SKILL.md by the creator-onboarding setup test.
 function completionTemplate(creatorPublicAccount: string) {
   return [
     "Paper agent is active.",
-    "The selected runtime has scheduled or started this paper strategy.",
+    "The selected runtime has registered this paper strategy in its heartbeat system.",
     "",
     "Agent:",
     "- name: <agent_name>",
     "- environment: <environment>",
-    "- paper_active: true",
     "- backend_registered: true",
     "- backend_base_url: <backend_base_url>",
     "- agent_id: <agent_id>",
@@ -222,8 +222,9 @@ function completionTemplate(creatorPublicAccount: string) {
     "- paper_account_id: <paper_account_id>",
     `- creator_public_account: ${creatorPublicAccount}`,
     "- public_key: <public_key>",
+    "- paper_active: true",
     "- key_market_active: false",
-    "- execution_driver: <execution_driver>",
+    "- execution_driver: <heartbeat_system | codex_automation | claude_scheduled_task>",
     "- schedule_active: true",
     "- executor_id: clawhouse-<agent_id>-paper-loop",
     "- last_result_status: <ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED>",
@@ -240,7 +241,7 @@ function completionTemplate(creatorPublicAccount: string) {
 function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: boolean) {
   const contractId =
     firstEnv(["CLAWHOUSE_KEY_MARKET_CONTRACT_ID", "KEY_MARKET_CONTRACT_ID", "CONTRACT_ID"]) ??
-    "clawhouse-key-20260619125948.testnet";
+    defaultKeyMarketContractId;
 
   return {
     fundingAmountNear: "0.02",

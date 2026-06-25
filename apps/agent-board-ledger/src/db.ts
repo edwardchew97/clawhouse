@@ -9,6 +9,7 @@ import type {
   Board,
   EventRow,
   HoldingSnapshot,
+  JsonObject,
   ObservationRow,
   PnlSnapshot,
 } from "./types.js";
@@ -491,7 +492,10 @@ export function migrate(db: Database) {
       agent_id TEXT NOT NULL,
       agent_public_key TEXT NOT NULL,
       base_currency TEXT NOT NULL DEFAULT 'USD',
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      starting_balance_raw TEXT,
       starting_balance_usd REAL NOT NULL,
+      cash_balance_raw TEXT,
       cash_balance_usd REAL NOT NULL,
       status TEXT NOT NULL DEFAULT 'active',
       allowed_markets_json TEXT,
@@ -520,7 +524,10 @@ export function migrate(db: Database) {
       market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       source TEXT NOT NULL,
+      price_decimals INTEGER NOT NULL DEFAULT 8,
+      mark_px_raw TEXT,
       mark_px REAL NOT NULL,
+      oracle_px_raw TEXT,
       oracle_px REAL,
       funding_rate REAL,
       max_leverage REAL,
@@ -543,13 +550,20 @@ export function migrate(db: Database) {
       coin TEXT NOT NULL,
       side TEXT NOT NULL,
       tif TEXT NOT NULL,
+      price_decimals INTEGER NOT NULL DEFAULT 8,
+      size_decimals INTEGER NOT NULL DEFAULT 8,
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      limit_px_raw TEXT,
       limit_px REAL,
+      size_raw TEXT,
       size REAL NOT NULL,
+      remaining_size_raw TEXT,
       remaining_size REAL NOT NULL,
       reduce_only INTEGER NOT NULL DEFAULT 0,
       margin_mode TEXT NOT NULL,
       leverage REAL NOT NULL,
       max_slippage_bps REAL NOT NULL,
+      reference_px_raw TEXT,
       reference_px REAL,
       max_reference_deviation_bps REAL,
       reference_deviation_bps REAL,
@@ -558,8 +572,11 @@ export function migrate(db: Database) {
       reason TEXT,
       strategy_hash TEXT,
       market_snapshot_id TEXT REFERENCES paper_market_snapshots(id),
+      avg_fill_px_raw TEXT,
       avg_fill_px REAL,
+      notional_raw TEXT,
       notional_usd REAL NOT NULL DEFAULT 0,
+      fee_raw TEXT,
       fee_usd REAL NOT NULL DEFAULT 0,
       body_hash TEXT,
       created_at TEXT NOT NULL,
@@ -579,9 +596,16 @@ export function migrate(db: Database) {
       market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       side TEXT NOT NULL,
+      price_decimals INTEGER NOT NULL DEFAULT 8,
+      size_decimals INTEGER NOT NULL DEFAULT 8,
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      px_raw TEXT,
       px REAL NOT NULL,
+      size_raw TEXT,
       size REAL NOT NULL,
+      notional_raw TEXT,
       notional_usd REAL NOT NULL,
+      fee_raw TEXT,
       fee_usd REAL NOT NULL,
       liquidity TEXT NOT NULL,
       market_snapshot_id TEXT NOT NULL REFERENCES paper_market_snapshots(id),
@@ -597,12 +621,21 @@ export function migrate(db: Database) {
       market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       margin_mode TEXT NOT NULL,
+      price_decimals INTEGER NOT NULL DEFAULT 8,
+      size_decimals INTEGER NOT NULL DEFAULT 8,
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      signed_size_raw TEXT,
       signed_size REAL NOT NULL,
+      entry_px_raw TEXT,
       entry_px REAL NOT NULL,
       leverage REAL NOT NULL,
+      isolated_margin_raw TEXT,
       isolated_margin_usd REAL NOT NULL DEFAULT 0,
+      realized_pnl_raw TEXT,
       realized_pnl_usd REAL NOT NULL DEFAULT 0,
+      funding_raw TEXT,
       funding_usd REAL NOT NULL DEFAULT 0,
+      fee_raw TEXT,
       fee_usd REAL NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'open',
       updated_at TEXT NOT NULL,
@@ -614,10 +647,16 @@ export function migrate(db: Database) {
       id TEXT PRIMARY KEY,
       ingest_sequence INTEGER,
       paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      equity_raw TEXT,
       equity_usd REAL NOT NULL,
+      cash_balance_raw TEXT,
       cash_balance_usd REAL NOT NULL,
+      total_notional_raw TEXT,
       total_notional_usd REAL NOT NULL,
+      maintenance_margin_raw TEXT,
       maintenance_margin_usd REAL NOT NULL,
+      unrealized_pnl_raw TEXT,
       unrealized_pnl_usd REAL NOT NULL,
       staleness_status TEXT NOT NULL,
       source_market_snapshot_id TEXT REFERENCES paper_market_snapshots(id),
@@ -632,9 +671,15 @@ export function migrate(db: Database) {
       paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
       position_id TEXT REFERENCES paper_positions(id),
       coin TEXT,
+      price_decimals INTEGER NOT NULL DEFAULT 8,
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      trigger_px_raw TEXT,
       trigger_px REAL,
+      liquidation_px_raw TEXT,
       liquidation_px REAL,
+      equity_raw TEXT,
       equity_usd REAL NOT NULL,
+      maintenance_margin_raw TEXT,
       maintenance_margin_usd REAL NOT NULL,
       reason TEXT NOT NULL,
       market_snapshot_id TEXT REFERENCES paper_market_snapshots(id),
@@ -645,7 +690,10 @@ export function migrate(db: Database) {
       id TEXT PRIMARY KEY,
       paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
       agent_id TEXT NOT NULL,
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      equity_raw TEXT,
       equity_usd REAL NOT NULL,
+      paper_pnl_raw TEXT,
       paper_pnl_usd REAL NOT NULL,
       paper_pnl_pct REAL NOT NULL,
       max_drawdown_pct REAL NOT NULL,
@@ -760,14 +808,61 @@ export function migrate(db: Database) {
   ensureColumn(db, "paper_market_snapshots", "ingest_sequence", "INTEGER");
   ensureColumn(db, "paper_market_snapshots", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
   ensureColumn(db, "paper_market_snapshots", "max_leverage", "REAL");
+  ensureColumn(db, "paper_accounts", "quote_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_accounts", "starting_balance_raw", "TEXT");
+  ensureColumn(db, "paper_accounts", "cash_balance_raw", "TEXT");
+  ensureColumn(db, "paper_market_snapshots", "price_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_market_snapshots", "mark_px_raw", "TEXT");
+  ensureColumn(db, "paper_market_snapshots", "oracle_px_raw", "TEXT");
   ensureColumn(db, "paper_risk_snapshots", "ingest_sequence", "INTEGER");
   ensureColumn(db, "paper_audit_events", "ingest_sequence", "INTEGER");
   ensureColumn(db, "paper_orders", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
+  ensureColumn(db, "paper_orders", "price_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_orders", "size_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_orders", "quote_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_orders", "limit_px_raw", "TEXT");
+  ensureColumn(db, "paper_orders", "size_raw", "TEXT");
+  ensureColumn(db, "paper_orders", "remaining_size_raw", "TEXT");
+  ensureColumn(db, "paper_orders", "reference_px_raw", "TEXT");
   ensureColumn(db, "paper_orders", "reference_px", "REAL");
   ensureColumn(db, "paper_orders", "max_reference_deviation_bps", "REAL");
   ensureColumn(db, "paper_orders", "reference_deviation_bps", "REAL");
+  ensureColumn(db, "paper_orders", "avg_fill_px_raw", "TEXT");
+  ensureColumn(db, "paper_orders", "notional_raw", "TEXT");
+  ensureColumn(db, "paper_orders", "fee_raw", "TEXT");
   ensureColumn(db, "paper_fills", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
+  ensureColumn(db, "paper_fills", "price_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_fills", "size_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_fills", "quote_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_fills", "px_raw", "TEXT");
+  ensureColumn(db, "paper_fills", "size_raw", "TEXT");
+  ensureColumn(db, "paper_fills", "notional_raw", "TEXT");
+  ensureColumn(db, "paper_fills", "fee_raw", "TEXT");
 	  ensureColumn(db, "paper_positions", "market_type", "TEXT NOT NULL DEFAULT 'perp'");
+  ensureColumn(db, "paper_positions", "price_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_positions", "size_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_positions", "quote_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_positions", "signed_size_raw", "TEXT");
+  ensureColumn(db, "paper_positions", "entry_px_raw", "TEXT");
+  ensureColumn(db, "paper_positions", "isolated_margin_raw", "TEXT");
+  ensureColumn(db, "paper_positions", "realized_pnl_raw", "TEXT");
+  ensureColumn(db, "paper_positions", "funding_raw", "TEXT");
+  ensureColumn(db, "paper_positions", "fee_raw", "TEXT");
+  ensureColumn(db, "paper_risk_snapshots", "quote_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_risk_snapshots", "equity_raw", "TEXT");
+  ensureColumn(db, "paper_risk_snapshots", "cash_balance_raw", "TEXT");
+  ensureColumn(db, "paper_risk_snapshots", "total_notional_raw", "TEXT");
+  ensureColumn(db, "paper_risk_snapshots", "maintenance_margin_raw", "TEXT");
+  ensureColumn(db, "paper_risk_snapshots", "unrealized_pnl_raw", "TEXT");
+  ensureColumn(db, "paper_liquidation_events", "price_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_liquidation_events", "quote_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_liquidation_events", "trigger_px_raw", "TEXT");
+  ensureColumn(db, "paper_liquidation_events", "liquidation_px_raw", "TEXT");
+  ensureColumn(db, "paper_liquidation_events", "equity_raw", "TEXT");
+  ensureColumn(db, "paper_liquidation_events", "maintenance_margin_raw", "TEXT");
+  ensureColumn(db, "paper_leaderboard_snapshots", "quote_decimals", "INTEGER NOT NULL DEFAULT 8");
+  ensureColumn(db, "paper_leaderboard_snapshots", "equity_raw", "TEXT");
+  ensureColumn(db, "paper_leaderboard_snapshots", "paper_pnl_raw", "TEXT");
 
 	  db.exec(`
 	    UPDATE boards
@@ -789,15 +884,19 @@ export function migrate(db: Database) {
   if (hasColumn(db, "boards", "starting_value_usd")) {
     db.exec(`
       INSERT OR IGNORE INTO paper_accounts
-        (id, board_id, agent_id, agent_public_key, base_currency, starting_balance_usd,
-         cash_balance_usd, status, allowed_markets_json, metadata_json, created_at, updated_at)
+        (id, board_id, agent_id, agent_public_key, base_currency, quote_decimals,
+         starting_balance_raw, starting_balance_usd, cash_balance_raw, cash_balance_usd,
+         status, allowed_markets_json, metadata_json, created_at, updated_at)
         SELECT
           'paper_legacy_' || id,
 	          id,
 	          agent_id,
 	          COALESCE(NULLIF(agent_public_key, ''), public_key),
           COALESCE(NULLIF(base_currency, ''), 'USD'),
+          8,
+          printf('%.0f', starting_value_usd * 100000000),
           starting_value_usd,
+          printf('%.0f', starting_value_usd * 100000000),
           starting_value_usd,
           'active',
           NULL,
@@ -814,6 +913,8 @@ export function migrate(db: Database) {
 
   dropColumnIfExists(db, "pnl_snapshots", "starting_value_usd");
   dropColumnIfExists(db, "boards", "starting_value_usd");
+
+  backfillPaperAtomColumns(db);
 
   db.exec(`
     UPDATE boards
@@ -872,6 +973,91 @@ export function migrate(db: Database) {
     UPDATE pnl_snapshots
       SET completeness_status = 'unknown'
       WHERE completeness_status IS NULL OR completeness_status = '';
+  `);
+}
+
+function backfillPaperAtomColumns(db: Database) {
+  db.exec(`
+    UPDATE paper_accounts
+      SET starting_balance_raw = COALESCE(starting_balance_raw, printf('%.0f', starting_balance_usd * 100000000)),
+          cash_balance_raw = COALESCE(cash_balance_raw, printf('%.0f', cash_balance_usd * 100000000)),
+          quote_decimals = COALESCE(quote_decimals, 8);
+
+    UPDATE paper_market_snapshots
+      SET mark_px_raw = COALESCE(mark_px_raw, printf('%.0f', mark_px * 100000000)),
+          oracle_px_raw = CASE
+            WHEN oracle_px IS NULL THEN oracle_px_raw
+            ELSE COALESCE(oracle_px_raw, printf('%.0f', oracle_px * 100000000))
+          END,
+          price_decimals = COALESCE(price_decimals, 8);
+
+    UPDATE paper_orders
+      SET limit_px_raw = CASE
+            WHEN limit_px IS NULL THEN limit_px_raw
+            ELSE COALESCE(limit_px_raw, printf('%.0f', limit_px * 100000000))
+          END,
+          size_raw = COALESCE(size_raw, printf('%.0f', size * 100000000)),
+          remaining_size_raw = COALESCE(remaining_size_raw, printf('%.0f', remaining_size * 100000000)),
+          reference_px_raw = CASE
+            WHEN reference_px IS NULL THEN reference_px_raw
+            ELSE COALESCE(reference_px_raw, printf('%.0f', reference_px * 100000000))
+          END,
+          avg_fill_px_raw = CASE
+            WHEN avg_fill_px IS NULL THEN avg_fill_px_raw
+            ELSE COALESCE(avg_fill_px_raw, printf('%.0f', avg_fill_px * 100000000))
+          END,
+          notional_raw = COALESCE(notional_raw, printf('%.0f', notional_usd * 100000000)),
+          fee_raw = COALESCE(fee_raw, printf('%.0f', fee_usd * 100000000)),
+          price_decimals = COALESCE(price_decimals, 8),
+          size_decimals = COALESCE(size_decimals, 8),
+          quote_decimals = COALESCE(quote_decimals, 8);
+
+    UPDATE paper_fills
+      SET px_raw = COALESCE(px_raw, printf('%.0f', px * 100000000)),
+          size_raw = COALESCE(size_raw, printf('%.0f', size * 100000000)),
+          notional_raw = COALESCE(notional_raw, printf('%.0f', notional_usd * 100000000)),
+          fee_raw = COALESCE(fee_raw, printf('%.0f', fee_usd * 100000000)),
+          price_decimals = COALESCE(price_decimals, 8),
+          size_decimals = COALESCE(size_decimals, 8),
+          quote_decimals = COALESCE(quote_decimals, 8);
+
+    UPDATE paper_positions
+      SET signed_size_raw = COALESCE(signed_size_raw, printf('%.0f', signed_size * 100000000)),
+          entry_px_raw = COALESCE(entry_px_raw, printf('%.0f', entry_px * 100000000)),
+          isolated_margin_raw = COALESCE(isolated_margin_raw, printf('%.0f', isolated_margin_usd * 100000000)),
+          realized_pnl_raw = COALESCE(realized_pnl_raw, printf('%.0f', realized_pnl_usd * 100000000)),
+          funding_raw = COALESCE(funding_raw, printf('%.0f', funding_usd * 100000000)),
+          fee_raw = COALESCE(fee_raw, printf('%.0f', fee_usd * 100000000)),
+          price_decimals = COALESCE(price_decimals, 8),
+          size_decimals = COALESCE(size_decimals, 8),
+          quote_decimals = COALESCE(quote_decimals, 8);
+
+    UPDATE paper_risk_snapshots
+      SET equity_raw = COALESCE(equity_raw, printf('%.0f', equity_usd * 100000000)),
+          cash_balance_raw = COALESCE(cash_balance_raw, printf('%.0f', cash_balance_usd * 100000000)),
+          total_notional_raw = COALESCE(total_notional_raw, printf('%.0f', total_notional_usd * 100000000)),
+          maintenance_margin_raw = COALESCE(maintenance_margin_raw, printf('%.0f', maintenance_margin_usd * 100000000)),
+          unrealized_pnl_raw = COALESCE(unrealized_pnl_raw, printf('%.0f', unrealized_pnl_usd * 100000000)),
+          quote_decimals = COALESCE(quote_decimals, 8);
+
+    UPDATE paper_liquidation_events
+      SET trigger_px_raw = CASE
+            WHEN trigger_px IS NULL THEN trigger_px_raw
+            ELSE COALESCE(trigger_px_raw, printf('%.0f', trigger_px * 100000000))
+          END,
+          liquidation_px_raw = CASE
+            WHEN liquidation_px IS NULL THEN liquidation_px_raw
+            ELSE COALESCE(liquidation_px_raw, printf('%.0f', liquidation_px * 100000000))
+          END,
+          equity_raw = COALESCE(equity_raw, printf('%.0f', equity_usd * 100000000)),
+          maintenance_margin_raw = COALESCE(maintenance_margin_raw, printf('%.0f', maintenance_margin_usd * 100000000)),
+          price_decimals = COALESCE(price_decimals, 8),
+          quote_decimals = COALESCE(quote_decimals, 8);
+
+    UPDATE paper_leaderboard_snapshots
+      SET equity_raw = COALESCE(equity_raw, printf('%.0f', equity_usd * 100000000)),
+          paper_pnl_raw = COALESCE(paper_pnl_raw, printf('%.0f', paper_pnl_usd * 100000000)),
+          quote_decimals = COALESCE(quote_decimals, 8);
   `);
 }
 
@@ -971,6 +1157,23 @@ export function requiredNumber(value: unknown, name: string) {
   const parsed = optionalNumber(value, name);
   if (parsed === null) throw new RequestError(`Missing ${name}`, 400);
   return parsed;
+}
+
+export function requiredPositiveNumber(value: unknown, name: string) {
+  const parsed = requiredNumber(value, name);
+  if (parsed <= 0) throw new RequestError(`${name} must be greater than 0`, 400);
+  return parsed;
+}
+
+export function asObject(value: unknown): JsonObject {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new RequestError("Request body must be a JSON object", 400);
+  }
+  return value as JsonObject;
+}
+
+export function stringifyOptional(value: unknown) {
+  return value === undefined ? null : JSON.stringify(value);
 }
 
 export function nowIso() {

@@ -55,7 +55,7 @@ export async function reportKeyMarketTrade(
   const signerId = requiredString(data.signerId ?? data.signer_id ?? data.accountId ?? data.account_id, "signer_id");
   const expected = {
     agentId: cleanString(data.agentId ?? data.agent_id),
-    side: normalizeSide(data.side),
+    side: optionalTradeSide(data.side),
     amount: integerString(data.amount, "amount", false),
   };
   const config = keyMarketConfig(env);
@@ -245,7 +245,7 @@ function verifyKeyMarketTx(
   const agentId = stringField(tradeData, "agent_id") ?? stringField(args, "agent_id");
   const amount = integerString(tradeData.amount ?? args.amount, "amount", true);
   const traderId = stringField(tradeData, "trader_id") ?? signerId;
-  const tradeSide = normalizeSide(tradeData.side) ?? side;
+  const tradeSide = optionalTradeSide(tradeData.side) ?? side;
 
   if (!agentId) throw new RequestError("Verified key trade is missing agent_id", 502);
   if (tradeSide !== side) throw new RequestError("Verified key trade side does not match function call", 502);
@@ -397,7 +397,7 @@ function sideFromMethod(methodName: string): "buy" | "sell" {
   throw new RequestError("Unsupported key-market method", 400);
 }
 
-function normalizeSide(value: unknown): "buy" | "sell" | null {
+function optionalTradeSide(value: unknown): "buy" | "sell" | null {
   const cleaned = cleanString(value);
   if (!cleaned) return null;
   if (cleaned !== "buy" && cleaned !== "sell") throw new RequestError("side must be buy or sell", 400);

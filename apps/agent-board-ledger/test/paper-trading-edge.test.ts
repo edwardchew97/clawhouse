@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openSqliteLedgerDb, type SqliteLedgerDb } from "../src/db";
 import { canonicalAgentAuthPayload, sha256Hex } from "../src/auth";
-import { canonicalPaperAuthPayload } from "../src/paper-trading";
+import { canonicalPaperAuthPayload, createPaperMarketSnapshot as insertPaperMarketSnapshot } from "../src/paper-trading";
 import { createApp } from "../src/server";
 
 const adminToken = "ledger-admin-token";
@@ -187,13 +187,12 @@ describe("paper-trading input validation", () => {
     expect(res.status).toBe(400);
   });
 
-  test("market snapshot requires bids and asks", async () => {
+  test("manual market snapshot write route is removed", async () => {
     const res = await postJson("/paper/market-snapshots", {
       coin: "BTC", mark_px: 100, source: "test", maintenance_margin_rate: 0.005,
       observed_at: currentNow.toISOString(), asks: [{ px: 100, sz: 1 }],
     });
-    expect(res.status).toBe(400);
-    expect((await json<{ error: string }>(res)).error).toBe("Missing bids");
+    expect(res.status).toBe(404);
   });
 });
 
@@ -793,6 +792,31 @@ describe("paper-trading liquidation", () => {
 // GROUP J: Idempotency & precision
 // ============================================================================
 describe("paper-trading idempotency & precision", () => {
+  test("persists raw atom fields while keeping numeric report fields derived", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({ coin: "BTC", mark_px: 100, bids: [{ px: 100, sz: 50 }], asks: [{ px: 100, sz: 50 }] });
+    const response = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "raw-atoms", coin: "BTC",
+      side: "buy", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 10,
+    });
+    expect(response.status).toBe(201);
+
+    const rawRows = rawAtomRows();
+    expect(rawRows.account.starting_balance_raw).toBe("100000000000");
+    expect(rawRows.account.cash_balance_raw).toBe("99996500000");
+    expect(rawRows.market.mark_px_raw).toBe("10000000000");
+    expect(rawRows.order.size_raw).toBe("100000000");
+    expect(rawRows.order.notional_raw).toBe("10000000000");
+    expect(rawRows.order.fee_raw).toBe("3500000");
+    expect(rawRows.fill.px_raw).toBe("10000000000");
+    expect(rawRows.fill.size_raw).toBe("100000000");
+    expect(rawRows.position.signed_size_raw).toBe("100000000");
+    expect(rawRows.position.entry_px_raw).toBe("10000000000");
+    expect(rawRows.position.fee_raw).toBe("3500000");
+    expect(rawRows.risk.equity_raw).toBe("99996500000");
+    expect(rawRows.leaderboard.paper_pnl_raw).toBe("-3500000");
+  });
+
   test("duplicate client_order_id returns idempotent result, no double fill", async () => {
     await registerPaperAccount();
     await createPaperMarketSnapshot({ coin: "BTC", mark_px: 100, bids: [{ px: 100, sz: 50 }], asks: [{ px: 100, sz: 50 }] });
@@ -928,11 +952,17 @@ async function registerAgent() {
 
 async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
   rememberHyperliquidFixture(overrides);
-  const res = await postJson("/paper/market-snapshots", {
-    source: "test-fixture", maintenance_margin_rate: 0.005, observed_at: currentNow.toISOString(), ...overrides,
-  });
-  expect(res.status).toBe(201);
-  return (await json<{ snapshot: Record<string, any> }>(res)).snapshot;
+  const body = {
+    source: "test-fixture",
+    maintenance_margin_rate: 0.005,
+    observed_at: currentNow.toISOString(),
+    ...overrides,
+  };
+  const result = await insertPaperMarketSnapshot(sqliteDb, {
+    raw: JSON.stringify(body),
+    json: body,
+  }, currentNow.toISOString());
+  return result.snapshot;
 }
 
 function rememberHyperliquidFixture(overrides: Record<string, unknown>) {
@@ -1172,6 +1202,32 @@ function countFills() {
 }
 function countOrders() {
   return sqliteDb.raw.query<{ c: number }, []>("SELECT COUNT(*) AS c FROM paper_orders").get()?.c ?? 0;
+}
+
+function rawAtomRows() {
+  return {
+    account: sqliteDb.raw.query<{ starting_balance_raw: string; cash_balance_raw: string }, []>(
+      "SELECT starting_balance_raw, cash_balance_raw FROM paper_accounts WHERE id = 'paper-1'",
+    ).get()!,
+    market: sqliteDb.raw.query<{ mark_px_raw: string }, []>(
+      "SELECT mark_px_raw FROM paper_market_snapshots WHERE coin = 'BTC' ORDER BY created_at DESC LIMIT 1",
+    ).get()!,
+    order: sqliteDb.raw.query<{ size_raw: string; notional_raw: string; fee_raw: string }, []>(
+      "SELECT size_raw, notional_raw, fee_raw FROM paper_orders WHERE client_order_id = 'raw-atoms'",
+    ).get()!,
+    fill: sqliteDb.raw.query<{ px_raw: string; size_raw: string }, []>(
+      "SELECT px_raw, size_raw FROM paper_fills WHERE paper_account_id = 'paper-1' ORDER BY created_at DESC LIMIT 1",
+    ).get()!,
+    position: sqliteDb.raw.query<{ signed_size_raw: string; entry_px_raw: string; fee_raw: string }, []>(
+      "SELECT signed_size_raw, entry_px_raw, fee_raw FROM paper_positions WHERE paper_account_id = 'paper-1'",
+    ).get()!,
+    risk: sqliteDb.raw.query<{ equity_raw: string }, []>(
+      "SELECT equity_raw FROM paper_risk_snapshots WHERE paper_account_id = 'paper-1' ORDER BY created_at DESC LIMIT 1",
+    ).get()!,
+    leaderboard: sqliteDb.raw.query<{ paper_pnl_raw: string }, []>(
+      "SELECT paper_pnl_raw FROM paper_leaderboard_snapshots WHERE paper_account_id = 'paper-1' ORDER BY created_at DESC LIMIT 1",
+    ).get()!,
+  };
 }
 
 function createWallet() {

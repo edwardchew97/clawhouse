@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { NextResponse } from "next/server";
 import { baseDecode } from "near-api-js";
+import { boardIdPattern } from "../board-id";
 
 const challengeMaxAgeMs = 5 * 60 * 1000;
 const readTokenTtlMs = 12 * 60 * 60 * 1000;
@@ -158,7 +159,7 @@ export function normalizeSignedMessage(value: unknown): SignedNearMessage {
 }
 
 export function requireBoardIdValue(value: unknown) {
-  if (typeof value !== "string" || !/^[a-zA-Z0-9_.:-]{3,96}$/.test(value)) {
+  if (typeof value !== "string" || !boardIdPattern.test(value)) {
     throw new ReadTokenInputError("Invalid boardId");
   }
   return value;

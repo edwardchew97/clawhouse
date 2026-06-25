@@ -1,8 +1,8 @@
 import { JsonRpcProvider, nearToYocto, yoctoToNear } from "near-api-js";
 import { NextResponse } from "next/server";
+import { defaultKeyMarketContractId } from "./constants";
 
 const defaultNetworkId = "testnet";
-const defaultContractId = "clawhouse-key-20260619125948.testnet";
 const defaultGas = "100000000000000";
 const defaultStorageDepositNear = "0.02";
 const defaultBuyMaxReserveNear = "0.05";
@@ -60,7 +60,7 @@ export function getKeyMarketConfig() {
     "CLAWHOUSE_KEY_MARKET_CONTRACT_ID",
     "KEY_MARKET_CONTRACT_ID",
     "CONTRACT_ID",
-  ]) ?? defaultContractId;
+  ]) ?? defaultKeyMarketContractId;
   const storageDepositYocto = parseNearAmount(
     firstEnv(["CLAWHOUSE_KEY_STORAGE_DEPOSIT_NEAR", "STORAGE_DEPOSIT"]) ?? defaultStorageDepositNear,
   );

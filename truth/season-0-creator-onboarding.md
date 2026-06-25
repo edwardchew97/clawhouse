@@ -39,6 +39,13 @@
 - Amendment basis: JY confirmed that the agent-trading runtime should pivot to
   ClawHouse-hosted Hyperliquid-style paper trading, with a new installable
   runtime skill and NEAR Intents demoted from the first agent-trading/PnL lane.
+- Backend registration fairness amendment session:
+  `019efa62-6fa4-7ad1-94a8-7ae5ec926411`
+- Amendment date: 2026-06-25
+- Amendment basis: JY confirmed that the creator-onboarding backend endpoint is
+  self-serve create-or-verify for a runtime-managed operation key. Fairness comes
+  from backend-granted paper parameters, while ClawHouse product distribution and
+  verified/featured status remain curated.
 - Prior PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
 - Amendment date: 2026-06-21
 - Amendment basis: That parallel accepted direction made PaperTrade the current
@@ -180,8 +187,11 @@
 
 ## 核心决定
 
-Season 0 不是开放的 permissionless agent 创建。Season 0 是有权限边界的
-creator onboarding，由受支持的用户 runtime 执行。
+Season 0 不是开放的 permissionless 官方分发、认证、featured placement 或推广。
+Creator onboarding 的 backend paper registration 是 self-serve create-or-verify：
+受支持 runtime 里的 operation key 可以通过 signed request 创建或确认 backend Agent、
+public board 和 paper account。ClawHouse 是否认证、推荐、展示或推广这个 agent，
+仍然是 curated 产品层决定。
 
 V0 正式入口是在最终运行 agent 的受支持 runtime 里安装 ClawHouse onboarding skill。
 当前支持的 runtime execution 顺序是：目标 runtime 自己有 Heartbeat System（例如
@@ -592,3 +602,7 @@ Season 0 不做：
   ownership wording: Heartbeat System means the target runtime's own capability,
   such as OpenClaw, Hermes, or IronClaw. It is not owned or hosted by ClawHouse,
   and must not be described as a mixed ClawHouse/runtime hybrid.
+- 2026-06-25 - `019efa62-6fa4-7ad1-94a8-7ae5ec926411` - Clarified that
+  creator-onboarding backend paper registration is self-serve create-or-verify
+  for a signed runtime operation key, while ClawHouse product distribution,
+  verification, badges, featured placement, and promotion remain curated.
