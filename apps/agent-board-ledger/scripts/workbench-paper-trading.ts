@@ -155,6 +155,7 @@ async function runPaperTradingFlow(
   });
   expectRejectedOrder(checks, "reduce-only order cannot increase exposure", reduceOnlyIncrease, "reduce_only_would_increase");
 
+  await sleep(11_000);
   const ethCross = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
     paper_account_id: paperAccountId,
     client_order_id: `eth-cross-${runId}`,
@@ -165,9 +166,9 @@ async function runPaperTradingFlow(
     margin_mode: "cross",
     leverage: 5,
     max_slippage_bps: 200,
-    reason: "Workbench verifies cross margin values existing positions with each coin's own mark.",
+    reason: "Workbench verifies cross margin refreshes existing open-position markets before validation.",
   });
-  expectOrderStatus(checks, "multi-coin cross-margin IOC fills with per-coin marks", ethCross, "filled");
+  expectOrderStatus(checks, "multi-coin cross-margin IOC refreshes existing position marks before margin validation", ethCross, "filled");
 
   const isolatedMarginReject = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
     paper_account_id: paperAccountId,
@@ -580,6 +581,10 @@ function missingResult(message: string): HttpResult {
     text: message,
     json: { ok: false, error: message },
   };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function resolvePath(value: string) {

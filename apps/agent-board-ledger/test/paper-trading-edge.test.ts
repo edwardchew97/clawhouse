@@ -344,6 +344,35 @@ describe("paper-trading market data", () => {
     expect(body.order.reject_reason).toBeNull();
   });
 
+  test("refreshes existing cross position markets before cross margin validation", async () => {
+    await registerPaperAccount({ allowed_markets: { scope: "hyperliquid_supported" } });
+    await createPaperMarketSnapshot({
+      coin: "SKY", mark_px: 0.05, bids: [{ px: 0.049, sz: 50_000 }], asks: [{ px: 0.05, sz: 50_000 }],
+    });
+    const sky = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "open-sky", coin: "SKY",
+      side: "sell", tif: "Ioc", size: 1_000, margin_mode: "cross", leverage: 3,
+    });
+    expect((await json<{ order: { status: string } }>(sky)).order.status).toBe("filled");
+
+    currentNow = new Date(currentNow.getTime() + 20_000);
+    rememberHyperliquidFixture({
+      coin: "SKY", mark_px: 0.051, bids: [{ px: 0.0509, sz: 50_000 }], asks: [{ px: 0.051, sz: 50_000 }],
+      observed_at: currentNow.toISOString(),
+    });
+    await createPaperMarketSnapshot({
+      coin: "RUNE", mark_px: 0.41209, bids: [{ px: 0.4118, sz: 10_000 }], asks: [{ px: 0.41209, sz: 10_000 }],
+    });
+
+    const rune = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "open-rune", coin: "RUNE",
+      side: "sell", tif: "Ioc", size: 100, margin_mode: "cross", leverage: 5,
+    });
+    const body = await json<{ order: { status: string; reject_reason: string | null } }>(rune);
+    expect(body.order.status).toBe("filled");
+    expect(body.order.reject_reason).toBeNull();
+  });
+
   test("market_not_allowed when coin not in allowlist", async () => {
     await registerPaperAccount({ allowed_markets: ["ETH"] });
     await createPaperMarketSnapshot({ coin: "BTC", mark_px: 100, bids: [{ px: 99, sz: 5 }], asks: [{ px: 100, sz: 5 }] });
