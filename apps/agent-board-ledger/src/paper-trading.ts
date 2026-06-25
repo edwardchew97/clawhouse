@@ -327,10 +327,13 @@ export async function submitPaperOrder(
     }
 
     const book = parseBook(snapshot.book_json);
-    const effectiveLimit = effectiveLimitPx(input, book);
     if (input.tif !== "Ioc" && input.limitPx === null) {
       return await insertRejectedOrder(tx, lockedAccount, input, "limit_px_required_for_resting_order", body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
+    if (input.tif === "Ioc" && input.limitPx === null && !hasTakerSideDepth(input.side, book)) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "insufficient_depth", body.raw, createdAt, snapshot.id, referenceDeviationBps);
+    }
+    const effectiveLimit = effectiveLimitPx(input, book);
     if (input.tif === "Alo" && wouldCross(input.side, effectiveLimit, book)) {
       return await insertRejectedOrder(tx, lockedAccount, input, "post_only_would_cross", body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
@@ -1209,6 +1212,10 @@ function planTakerFills(side: "buy" | "sell", size: number, limitPx: number, boo
     if (remaining <= EPSILON) break;
   }
   return fills;
+}
+
+function hasTakerSideDepth(side: "buy" | "sell", book: Book) {
+  return side === "buy" ? book.asks.length > 0 : book.bids.length > 0;
 }
 
 function effectiveLimitPx(input: OrderInput, book: Book) {

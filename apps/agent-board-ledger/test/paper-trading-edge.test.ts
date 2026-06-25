@@ -412,6 +412,35 @@ describe("paper-trading fills", () => {
     expect((await json<{ order: { reject_reason: string } }>(res)).order.reject_reason).toBe("insufficient_depth");
   });
 
+  test("market-like IOC with empty taker-side depth is rejected insufficient_depth", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({
+      coin: "BTC", mark_px: 100, bids: [{ px: 99, sz: 5 }], asks: [],
+    });
+    const buy = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "ioc-empty-asks", coin: "BTC",
+      side: "buy", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 5, max_slippage_bps: 100,
+    });
+    expect(buy.status).toBe(201);
+    expect((await json<{ order: { status: string; reject_reason: string } }>(buy)).order).toMatchObject({
+      status: "rejected",
+      reject_reason: "insufficient_depth",
+    });
+
+    await createPaperMarketSnapshot({
+      coin: "ETH", mark_px: 2000, bids: [], asks: [{ px: 2001, sz: 5 }],
+    });
+    const sell = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "ioc-empty-bids", coin: "ETH",
+      side: "sell", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 5, max_slippage_bps: 100,
+    });
+    expect(sell.status).toBe(201);
+    expect((await json<{ order: { status: string; reject_reason: string } }>(sell)).order).toMatchObject({
+      status: "rejected",
+      reject_reason: "insufficient_depth",
+    });
+  });
+
   test("GTC resting order with no fill requires limit_px", async () => {
     await registerPaperAccount();
     await createPaperMarketSnapshot({ coin: "BTC", mark_px: 100, bids: [{ px: 99, sz: 5 }], asks: [{ px: 100, sz: 5 }] });
