@@ -549,6 +549,12 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function flushAsyncUi() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 const context = {
   console,
   URLSearchParams,
@@ -749,7 +755,12 @@ context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("empty_boa
 const emptyRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "empty_agent");
 emptyRow.click();
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("empty_board", 0.56, null, []) });
-const emptyPaperChart = context.window.ClawHouseDemo.getChartModel();
+let emptyPaperChart = context.window.ClawHouseDemo.getChartModel();
+assert(emptyPaperChart.title === "Room data loading", "Room switches should show a loading state while key ownership is being checked.");
+assert(element("roomFeed").innerHTML.includes("chat-empty-loading"), "Room switches should render a skeleton instead of a guessed empty-state message.");
+await flushAsyncUi();
+context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("empty_board", 0.56, null, []) });
+emptyPaperChart = context.window.ClawHouseDemo.getChartModel();
 assert(emptyPaperChart.title === "Agent has not started trading yet", "Paper agents without public paper activity should say the agent has not started trading.");
 assert(emptyPaperChart.message.includes("No paper trades"), "Missing paper activity should explain that no paper trades have been recorded.");
 assert(element("chartEmptyKicker").textContent === "Paper trading inactive", "Missing paper activity should use the inactive chart kicker.");
@@ -824,7 +835,7 @@ ticketTab("buy").click();
 amountButton("max").click();
 assert(element("keyAmount").value === "7", "Buy Max should fill the computed maximum buy amount.");
 assert(!pageSource.includes("positionTitle"), "The position panel should not be present in the page markup.");
-assert(element("chartSub").textContent.includes("paper net worth"), "Paper chart subtitle should identify the paper net worth source.");
+assert(element("marketMeta").textContent.includes("paper net worth"), "Paper chart subtitle should identify the paper net worth source.");
 const paperChart = context.window.ClawHouseDemo.getChartModel();
 assert(paperChart.valueKind === "usd", "Paper chart should use USD net worth values instead of percent values.");
 assert(paperChart.values[0] === 1000, "Paper chart should begin at the account starting balance.");
