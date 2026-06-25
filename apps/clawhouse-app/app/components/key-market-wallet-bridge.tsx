@@ -793,15 +793,17 @@ export function KeyMarketWalletBridge() {
 
     async function ensureReadAccess(agent: DemoAgent, state: Record<string, unknown> | null, refreshId: number) {
       const account = accountRef.current;
-      if (!account || !state) {
+      if (!account) {
         readAccessRef.current = null;
         return null;
       }
 
-      const balance = Number(state.holder_balance);
-      if (!Number.isFinite(balance) || balance <= 0) {
-        readAccessRef.current = null;
-        return null;
+      if (state) {
+        const balance = Number(state.holder_balance);
+        if (!Number.isFinite(balance) || balance <= 0) {
+          readAccessRef.current = null;
+          return null;
+        }
       }
 
       const boardId = agent.boardId ?? agent.id;

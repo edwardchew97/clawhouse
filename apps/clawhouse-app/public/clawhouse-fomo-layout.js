@@ -102,16 +102,17 @@ const readAccessApplies = (agent) => {
 const isUnlocked = (agent) => {
   if (!agent) return false;
   const balance = holderBalance(agent);
-  return Boolean(chainState.accountId && balance !== null && balance > 0 && readAccessApplies(agent));
+  return Boolean(chainState.accountId && readAccessApplies(agent) && (balance === null || balance > 0));
 };
 const roomAccessLoading = (agent) => {
   if (!agent || !chainState.accountId) return false;
+  if (readAccessApplies(agent)) return false;
   const balance = holderBalance(agent);
   return Boolean(
     chainState.readAccessLoading
     || chainState.backendLoading
     || keyStateInitialLoading(agent)
-    || keyStateUnavailable(agent)
+    || (keyStateUnavailable(agent) && !readAccessApplies(agent))
     || (chainState.backend && !backendApplies(agent))
     || !chainState.backend
     ||
@@ -483,7 +484,7 @@ function paperActivityLoading(agent) {
   return Boolean(
     chainState.backendLoading
     || keyStateInitialLoading(agent)
-    || keyStateUnavailable(agent)
+    || (keyStateUnavailable(agent) && !readAccessApplies(agent))
     || chainState.readAccessLoading
     || !chainState.backend
     || (chainState.backend && !backendApplies(agent))
