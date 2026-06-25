@@ -735,7 +735,7 @@ export function KeyMarketWalletBridge() {
         });
 
       const activeAccessPromise = statePromise
-        .then((state) => ensureReadAccess(agent, state))
+        .then((state) => ensureReadAccess(agent, state, refreshId))
         .then((activeAccess) => {
           renderRefreshState({
             accountId: account?.accountId ?? null,
@@ -791,7 +791,7 @@ export function KeyMarketWalletBridge() {
       });
     }
 
-    async function ensureReadAccess(agent: DemoAgent, state: Record<string, unknown> | null) {
+    async function ensureReadAccess(agent: DemoAgent, state: Record<string, unknown> | null, refreshId: number) {
       const account = accountRef.current;
       if (!account || !state) {
         readAccessRef.current = null;
@@ -815,7 +815,7 @@ export function KeyMarketWalletBridge() {
         return cached;
       }
 
-      const requestKey = `${boardId}:${account.accountId}`;
+      const requestKey = `${boardId}:${account.accountId}:${refreshId}`;
       if (readAccessRequestRef.current?.key === requestKey) {
         return readAccessRequestRef.current.promise;
       }
