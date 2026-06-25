@@ -121,7 +121,7 @@ export function KeyMarketWalletBridge() {
   const busyRef = useRef(false);
   const walletSessionRef = useRef<WalletSessionState | null>(null);
   const walletSessionRequestRef = useRef<{ accountId: string; promise: Promise<WalletSessionState | null> } | null>(null);
-  const readAccessRef = useRef<ReadAccessState | null>(null);
+  const readAccessRef = useRef<Map<string, ReadAccessState>>(new Map());
   const readAccessRequestRef = useRef<{ key: string; promise: Promise<ReadAccessState | null> } | null>(null);
   const clearSessionRef = useRef<Promise<void> | null>(null);
   const walletReadRefreshRef = useRef(0);
@@ -181,7 +181,7 @@ export function KeyMarketWalletBridge() {
           accountRef.current = null;
           walletSessionRef.current = null;
           walletSessionRequestRef.current = null;
-          readAccessRef.current = null;
+          readAccessRef.current.clear();
           readAccessRequestRef.current = null;
           walletReadRefreshRef.current += 1;
           void clearReadSession();
@@ -353,7 +353,7 @@ export function KeyMarketWalletBridge() {
         accountRef.current = null;
         walletSessionRef.current = null;
         walletSessionRequestRef.current = null;
-        readAccessRef.current = null;
+        readAccessRef.current.clear();
         readAccessRequestRef.current = null;
         walletReadRefreshRef.current += 1;
         renderChainState({
@@ -808,20 +808,21 @@ export function KeyMarketWalletBridge() {
     async function ensureReadAccess(agent: DemoAgent, state: Record<string, unknown> | null, refreshId: number) {
       const account = accountRef.current;
       if (!account) {
-        readAccessRef.current = null;
+        readAccessRef.current.clear();
         return null;
       }
 
+      const boardId = agent.boardId ?? agent.id;
+      const accessKey = readAccessCacheKey(boardId, account.accountId);
       if (state) {
         const balance = Number(state.holder_balance);
         if (!Number.isFinite(balance) || balance <= 0) {
-          readAccessRef.current = null;
+          readAccessRef.current.delete(accessKey);
           return null;
         }
       }
 
-      const boardId = agent.boardId ?? agent.id;
-      const cached = readAccessRef.current;
+      const cached = readAccessRef.current.get(accessKey) ?? null;
       if (
         cached
         && cached.boardId === boardId
@@ -839,7 +840,7 @@ export function KeyMarketWalletBridge() {
       const requestPromise = (async () => {
         const sessionAccess = await restoreReadSession(boardId, account.accountId);
         if (sessionAccess) return sessionAccess;
-        readAccessRef.current = null;
+        readAccessRef.current.delete(accessKey);
         return null;
       })();
       readAccessRequestRef.current = { key: requestKey, promise: requestPromise };
@@ -854,11 +855,12 @@ export function KeyMarketWalletBridge() {
     }
 
     async function restoreReadSession(boardId: string, holderAccountId: string) {
+      const accessKey = readAccessCacheKey(boardId, holderAccountId);
       const session = await fetchJson<ReadSessionResponse>(
         `/api/backend/read-token/session?boardId=${encodeURIComponent(boardId)}&holderAccountId=${encodeURIComponent(holderAccountId)}`,
       );
       if (!session.valid || !session.boardId || !session.holderAccountId || !session.expiresAt) {
-        readAccessRef.current = null;
+        readAccessRef.current.delete(accessKey);
         return null;
       }
       const restored = {
@@ -871,10 +873,10 @@ export function KeyMarketWalletBridge() {
         || restored.holderAccountId !== holderAccountId
         || Date.parse(restored.expiresAt) <= Date.now() + 30_000
       ) {
-        readAccessRef.current = null;
+        readAccessRef.current.delete(accessKey);
         return null;
       }
-      readAccessRef.current = restored;
+      readAccessRef.current.set(accessKey, restored);
       return restored;
     }
 
@@ -1042,6 +1044,10 @@ function agentSelectionKey(agent: DemoAgent) {
 function readAccessRetryAttempt(reason: string) {
   const match = reason.match(/^read-access-retry:(\d+)$/);
   return match ? Number(match[1]) || 0 : 0;
+}
+
+function readAccessCacheKey(boardId: string, holderAccountId: string) {
+  return `${boardId}:${holderAccountId}`;
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
