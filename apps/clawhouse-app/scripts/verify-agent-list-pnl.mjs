@@ -801,6 +801,11 @@ codexRow.click();
 context.window.ClawHouseDemo.setChainState({
   accountId: "buyer.testnet",
   state: keyStateFixture("codex_main_20260620", "3"),
+  readAccess: {
+    boardId: "codex_board",
+    holderAccountId: "buyer.testnet",
+    expiresAt: "2999-01-01T00:00:00.000Z",
+  },
   maxBuy: maxBuyFixture("codex_main_20260620", "buyer.testnet", "7"),
   backend: selectedBackend("codex_board", 0.25, paperActivityFixture()),
   activity: keyActivityFixture(),
