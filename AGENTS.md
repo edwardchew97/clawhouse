@@ -181,5 +181,5 @@ If product direction changes, update the relevant `truth/` file with the require
 `## Source` and `## Change Log` provenance instead of adding product summaries to
 `AGENTS.md`.
 
-Use TypeScript, Bun, Next.js, Vercel, and Rust/near-sdk where they fit this repo.
+Use TypeScript, Bun, Next.js, and Rust/near-sdk where they fit this repo.
 Do not use Python unless JY asks for it.

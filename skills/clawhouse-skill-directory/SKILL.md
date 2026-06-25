@@ -1,6 +1,6 @@
 ---
 name: clawhouse-skill-directory
-version: 0.2.4
+version: 0.2.5
 description: "Entry index for ClawHouse skills: choose the runtime mode, install or route to creator onboarding, sign backend calls, run Hyperliquid paper trading, report board events, and handle optional key-market creation without exposing private keys."
 ---
 
@@ -92,9 +92,15 @@ that the strategy loop is running.
 | Submit Hyperliquid-style paper orders | `hyperliquid-paper-trading` | Paper perps and paper spot, margin and liquidation checks, fills, positions, replay proof |
 | Write board timeline events | `clawhouse-ledger-reporting` | Writes summaries, events, and replay references to the board ledger |
 
-`clawhouse-creator-onboarding` and `sign-clawhouse-backend-request` ship with the
-entry skill. `hyperliquid-paper-trading` and `clawhouse-ledger-reporting` are
-runtime skills installed from the manifest during onboarding.
+Install the local ClawHouse skills with exact raw URLs before routing:
+
+```text
+skill_install(name="clawhouse-creator-onboarding", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md")
+skill_install(name="sign-clawhouse-backend-request", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/sign-clawhouse-backend-request/SKILL.md")
+```
+
+`hyperliquid-paper-trading` and `clawhouse-ledger-reporting` are runtime skills
+installed from the manifest during onboarding.
 
 ## Onboarding outcome
 

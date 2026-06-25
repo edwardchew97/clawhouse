@@ -19,8 +19,8 @@ Keep the repo promotion order as `dev -> staging -> main`.
 - `staging`: branch the VPS staging runtime should run.
 - `main`: reserved for a later production environment.
 
-The old Vercel projects have been removed. Do not point staging or production
-docs, skills, or Workbench flows at old Vercel deployment URLs.
+The old hosted projects have been removed. Do not point staging or production
+docs, skills, or Workbench flows at retired deployment URLs.
 
 ## Runtime Environment Variables
 
@@ -48,8 +48,8 @@ GitHub Actions only runs CI:
 - `.github/workflows/backend-ci.yml`
   - Runs typecheck and tests for PRs and pushes to `dev`, `staging`, and `main`.
 
-GitHub Actions does not deploy this service. Do not add `VERCEL_TOKEN` or Vercel
-project ids for this repo unless JY explicitly reopens a Vercel deployment
+GitHub Actions does not deploy this service. Do not add hosted deploy tokens or
+project ids for this repo unless JY explicitly reopens a hosted deployment
 track.
 
 ## Schema Migrations

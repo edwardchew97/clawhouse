@@ -18,8 +18,8 @@ Keep the repo promotion order as `dev -> staging -> main`.
 - `staging`: branch the VPS staging runtime should run.
 - `main`: reserved for a later production environment.
 
-The old Vercel app projects have been removed. Do not point app docs, skills, or
-Workbench flows at old Vercel deployment URLs.
+The old app projects have been removed. Do not point app docs, skills, or
+Workbench flows at retired deployment URLs.
 
 ## Runtime Environment Variables
 

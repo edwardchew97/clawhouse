@@ -7,8 +7,6 @@
     "db:migrate": "bun scripts/migrate-postgres.ts",
     "db:check": "bun scripts/check-postgres.ts",
     "db:fresh": "bun scripts/fresh-postgres.ts",
-    "vercel:build": "bun scripts/vercel-build.ts",
-    "vercel:runtime-check": "bun scripts/check-vercel-runtime.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
