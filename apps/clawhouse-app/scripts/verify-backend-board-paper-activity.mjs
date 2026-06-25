@@ -61,9 +61,9 @@ globalThis.fetch = async (url, options = {}) => {
     });
   }
   if (parsed.pathname === "/paper/accounts/paper_hermes/activity") {
-    assert.equal(headers.get("authorization"), null);
+    assert.equal(headers.get("authorization"), "Bearer test-admin-token");
     assert.equal(headers.get("x-clawhouse-read-token"), null);
-    return jsonResponse({ ok: false, error: "Read access required" }, { status: 403 });
+    return jsonResponse({ ok: true, account: { id: "paper_hermes", agent_id: "jys-hermes" }, orders: [{ id: "paper_order_1" }], fills: [], risk_snapshots: [] });
   }
   return jsonResponse({ error: "Read access required" }, { status: 403 });
 };
@@ -72,9 +72,9 @@ try {
   const response = await GET(new Request("http://app.test/api/backend/board?boardId=board_hermes"));
   const body = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(body.paperActivity, null);
-  assert.equal(body.errors.paperActivity, "Read access required");
-  assert(fetchCalls.some((call) => call.path === "/paper/accounts/paper_hermes/activity?limit=240" && call.authorization === null));
+  assert.equal(body.paperActivity?.orders?.[0]?.id, "paper_order_1");
+  assert.equal(body.errors.paperActivity, null);
+  assert(fetchCalls.some((call) => call.path === "/paper/accounts/paper_hermes/activity?limit=240" && call.authorization === "Bearer test-admin-token"));
 } finally {
   globalThis.fetch = originalFetch;
 }
