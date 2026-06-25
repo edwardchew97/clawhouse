@@ -20,6 +20,10 @@ let visibleLogicalRangeListener = null;
 const ticketTabs = new Map();
 const amountButtons = new Map();
 const filterCheckboxes = new Map();
+let resolveAgentDiscovery;
+const agentDiscoveryResponse = new Promise((resolve) => {
+  resolveAgentDiscovery = () => resolve(jsonResponse({ ok: true, agents }));
+});
 
 class FakeClassList {
   constructor() {
@@ -711,7 +715,7 @@ context.fetch = async (path) => {
     return jsonResponse(maxBuyFixture(url.searchParams.get("agentId"), url.searchParams.get("accountId"), "7"));
   }
   if (url.pathname !== "/api/agents") throw new Error(`Unexpected fetch: ${path}`);
-  return jsonResponse({ ok: true, agents });
+  return agentDiscoveryResponse;
 };
 
 function jsonResponse(body) {
@@ -728,6 +732,10 @@ const agentChange = new Promise((resolve) => {
   context.window.addEventListener("clawhouse:agent-change", resolve);
 });
 vm.runInContext(script, context, { filename: "clawhouse-fomo-layout.js" });
+assert(element("agentList").attributes.get("aria-busy") === "true", "Agent Discovery should stay busy while /api/agents is loading.");
+assert(element("agentList").innerHTML.includes("agent-row-skeleton"), "Agent Discovery should render skeleton rows while /api/agents is loading.");
+assert(element("agentList").querySelectorAll("[data-agent]").length === 0, "Agent Discovery should not render real agent rows while /api/agents is loading.");
+resolveAgentDiscovery();
 await agentChange;
 
 context.window.ClawHouseDemo.setChainState({ backend: null });

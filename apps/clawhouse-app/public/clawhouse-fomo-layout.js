@@ -1386,6 +1386,9 @@ async function refreshKeyMarketRead(_reason) {
 }
 
 async function loadDiscoveryAgents() {
+  discoveryLoading = true;
+  renderAgentList();
+
   try {
     const response = await fetch("/api/agents", { cache: "no-store" });
     const data = await response.json();
