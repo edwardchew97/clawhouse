@@ -304,6 +304,8 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
     createMethod: contractConfig.createMethod,
     preflightMethod: contractConfig.preflightMethod,
     stateReadMethod: contractConfig.stateReadMethod,
+    methodArgs: contractConfig.methodArgs,
+    methodNotes: contractConfig.methodNotes,
     gasTgas: contractConfig.gasTgas,
     gas: contractConfig.gas,
     fundTo: creatorPublicAccount,
@@ -339,6 +341,21 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
       },
       signerAccount: creatorPublicAccount,
       args: ["<agent_id>", "<agent_name>", "<metadata_uri>"],
+      functionCall: {
+        methodName: contractConfig.createMethod,
+        argsJson: contractConfig.methodArgs.createAgentKey,
+        attachedDepositNear: contractConfig.storageDepositNear,
+        gasTgas: contractConfig.gasTgas,
+      },
+      preflightCall: {
+        methodName: contractConfig.preflightMethod,
+        argsJson: contractConfig.methodArgs.getAgent,
+        expectedMissingResult: null,
+      },
+      stateReadCall: {
+        methodName: contractConfig.stateReadMethod,
+        argsJson: contractConfig.methodArgs.getState,
+      },
     },
     userFacingSteps: [
       `Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,

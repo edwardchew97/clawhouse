@@ -305,6 +305,10 @@ async function validateContractsConfig(kitRepo: string) {
   const keyMarket = asRecord(testnet.key_market);
   const chainVerification = asRecord(keyMarket.chain_verification);
   const signer = asRecord(keyMarket.signer);
+  const methodArgs = asRecord(keyMarket.method_args);
+  const createArgs = asRecord(methodArgs.create_agent_key);
+  const preflightArgs = asRecord(methodArgs.get_agent);
+  const stateArgs = asRecord(methodArgs.get_state);
   const expected = {
     networkId: stringField(testnet, "network_id"),
     rpcUrl: stringField(testnet, "rpc_url"),
@@ -324,6 +328,15 @@ async function validateContractsConfig(kitRepo: string) {
   if (!expected.createMethod) errors.push("contracts.json create_method missing");
   if (!expected.preflightMethod) errors.push("contracts.json preflight_method missing");
   if (!expected.stateReadMethod) errors.push("contracts.json state_read_method missing");
+  if (createArgs.agent_id !== "<agent_id>" || createArgs.name !== "<agent_name>" || createArgs.metadata_uri !== "<metadata_uri>") {
+    errors.push("contracts.json create_agent_key method_args must include agent_id, name, and metadata_uri placeholders");
+  }
+  if (preflightArgs.agent_id !== "<agent_id>") {
+    errors.push("contracts.json get_agent method_args must include agent_id placeholder");
+  }
+  if (stateArgs.agent_id !== "<agent_id>" || stateArgs.holder_id !== "<optional_account_id_or_null>") {
+    errors.push("contracts.json get_state method_args must include agent_id and holder_id placeholders");
+  }
   if (!/^\d+(?:\.\d+)?$/.test(expected.storageDepositNear)) errors.push("contracts.json storage_deposit_near must be numeric");
   if (!/^\d+$/.test(expected.gasTgas)) errors.push("contracts.json gas_tgas must be integer TGas");
   if (Object.prototype.hasOwnProperty.call(keyMarket, "gas_units")) {
