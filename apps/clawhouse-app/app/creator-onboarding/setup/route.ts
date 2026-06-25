@@ -167,7 +167,10 @@ const runtimeExecution = {
     description:
       "Use the target agent runtime's own Heartbeat System when that runtime provides one.",
     requiredWhenAvailable: true,
-    owns: ["paper_strategy_loop", "health_check"],
+    owns: ["paper_strategy_loop", "runtime_scheduler_or_cron", "health_check"],
+    mustStartSchedulerOrCron: true,
+    proofRule:
+      "Registration is not enough. The target runtime must start the scheduler, cron, or loop and read back one first-run result before onboarding may claim active.",
   },
   codexAutomation: {
     driver: "codex_automation",
@@ -223,6 +226,7 @@ const runtimeExecutorContract = {
   ],
   requiredCapabilities: [
     "durable_schedule",
+    "active_scheduler_or_cron",
     "private_operation_key_access",
     "outbound_https_to_clawhouse_backend",
     "installed_skill:hyperliquid-paper-trading",
@@ -232,6 +236,7 @@ const runtimeExecutorContract = {
     "executor_id",
     "execution_driver",
     "schedule_active",
+    "scheduler_or_cron_active",
     "agent_id",
     "paper_account_id",
     "last_run_at",
@@ -256,7 +261,7 @@ const runtimeExecutorContract = {
   ],
   stopIfUnavailable: "SETUP_BLOCKED: RUNTIME_EXECUTOR_UNAVAILABLE",
   proofRule:
-    "Installed skills, saved profile, backend ids, healthy backend, or instructions to run later are not proof that the executor exists.",
+    "Installed skills, heartbeat registration, saved profile, backend ids, healthy backend, or instructions to run later are not proof that the executor exists or that the scheduler/cron is running.",
 };
 
 // Validated against skills/clawhouse-creator-onboarding/SKILL.md by the creator-onboarding setup test.
@@ -266,7 +271,7 @@ function completionTemplate(creatorPublicAccount: string) {
 
   return [
     "Paper agent is active.",
-    "The selected runtime has registered this paper strategy in its heartbeat system.",
+    "The selected runtime has registered this paper strategy and started its scheduler/cron loop.",
     "",
     "Agent:",
     "- name: <agent_name>",
@@ -280,8 +285,9 @@ function completionTemplate(creatorPublicAccount: string) {
     "- public_key: <public_key>",
     "- paper_active: true",
     "- key_market_active: false",
-    "- execution_driver: <heartbeat_system | codex_automation | claude_scheduled_task>",
+    "- execution_driver: <ironclaw_automation | heartbeat_system | codex_automation | claude_scheduled_task>",
     "- schedule_active: true",
+    "- scheduler_or_cron_active: true",
     "- executor_id: clawhouse-<agent_id>-paper-loop",
     "- last_result_status: <ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED>",
     "",
