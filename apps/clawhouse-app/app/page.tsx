@@ -12,16 +12,25 @@ export default function Page() {
               <strong>ClawHouse</strong>
             </div>
           </div>
+          <div className="top-market-strip" aria-label="Current agent market context">
+            <div className="top-market-primary">
+              <span className="top-market-kicker">Paper P&amp;L</span>
+              <strong id="topAgentName">Loading agent</strong>
+              <b id="topAgentPnl">--</b>
+            </div>
+            <div className="top-market-items">
+              <span><b id="topKeyPrice">--</b> key</span>
+              <span><b id="topEquity">--</b> equity</span>
+              <span><b id="topPositions">--</b> pos</span>
+              <span><b id="topFills">--</b> fills</span>
+            </div>
+          </div>
           <div className="top-actions">
             <a className="launch-agent-button" href="#launch-agent">Launch my Agent</a>
             <div className="net-pill"><span className="dot" /> Key Market: NEAR testnet</div>
             <button className="wallet" id="walletButton" type="button">Connect Wallet</button>
           </div>
         </header>
-
-        <section className="ticker" aria-label="Live market ticker">
-          <div className="ticker-track" id="tickerTrack" />
-        </section>
 
         <section className="main">
           <aside className="panel left">
@@ -42,7 +51,104 @@ export default function Page() {
           </aside>
 
           <section className="center">
-            <section className="panel hero">
+            <section className="panel chart-panel" id="chartPanel">
+              <div className="chart-top">
+                <div className="fomo-agent-bar">
+                  <div className="fomo-agent-identity">
+                    <div className="fomo-agent-avatar" id="marketAvatar">--</div>
+                    <div className="fomo-agent-copy">
+                      <div className="fomo-agent-title-row">
+                        <strong id="marketName">Loading agent</strong>
+                        <span className="fomo-agent-status"><span className="dot" /> running</span>
+                      </div>
+                      <div className="fomo-agent-meta" id="marketMeta">Backend agent network series</div>
+                    </div>
+                  </div>
+                  <div className="fomo-stat-strip" aria-label="Agent market stats">
+                    <div className="fomo-stat-chip">
+                      <span>Equity</span>
+                      <strong id="marketEquity">--</strong>
+                    </div>
+                    <div className="fomo-stat-chip">
+                      <span>Key price</span>
+                      <strong id="marketKeyPrice">--</strong>
+                    </div>
+                    <div className="fomo-stat-chip">
+                      <span>24H P&amp;L</span>
+                      <strong id="marketPnl">--</strong>
+                    </div>
+                    <div className="fomo-stat-chip">
+                      <span>Positions</span>
+                      <strong id="marketPositions">--</strong>
+                    </div>
+                    <div className="fomo-stat-chip">
+                      <span>Filled</span>
+                      <strong id="marketFilled">--</strong>
+                    </div>
+                    <div className="fomo-stat-chip">
+                      <span>Holders</span>
+                      <strong id="marketHolders">--</strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="range">
+                  <button data-chart-range="1h" type="button" aria-pressed="false">1H</button>
+                  <button className="active" data-chart-range="24h" type="button" aria-pressed="true">24H</button>
+                  <button data-chart-range="7d" type="button" aria-pressed="false">7D</button>
+                  <button data-chart-range="all" type="button" aria-pressed="false">ALL</button>
+                </div>
+              </div>
+              <div id="pnlChart" aria-label="Paper net worth chart" />
+              <div className="chart-events" id="chartEvents" />
+              <div className="price-reference-line" id="priceReferenceLine" hidden />
+              <div className="price-marker" id="priceMarker">backend</div>
+              <div className="chart-empty-overlay" id="chartEmptyOverlay" hidden>
+                <div className="chart-loading-skeleton" aria-hidden="true">
+                  <span className="chart-skeleton-axis y-a" />
+                  <span className="chart-skeleton-axis y-b" />
+                  <span className="chart-skeleton-axis x-a" />
+                  <svg className="chart-skeleton-line" viewBox="0 0 100 64" preserveAspectRatio="none">
+                    <polyline points="0,50 12,44 22,47 34,28 46,34 58,18 72,24 86,8 100,14" />
+                  </svg>
+                  <svg className="chart-skeleton-line shadow" viewBox="0 0 100 64" preserveAspectRatio="none">
+                    <polyline points="0,18 15,22 30,17 46,31 60,28 76,42 90,47 100,44" />
+                  </svg>
+                  <span className="chart-skeleton-price" />
+                  <span className="chart-skeleton-tick tick-a" />
+                  <span className="chart-skeleton-tick tick-b" />
+                  <span className="chart-skeleton-tick tick-c" />
+                </div>
+                <div className="chart-empty-kicker" id="chartEmptyKicker">Paper trading inactive</div>
+                <strong id="chartEmptyTitle">Connect Wallet</strong>
+                <span id="chartEmptyDetail">Connect Wallet to load holder-gated chart data.</span>
+              </div>
+            </section>
+
+            <section className="center-bottom">
+              <section className="panel room chat-room">
+                <div className="panel-head">
+                  <div>
+                    <div className="panel-title">Agent Base View</div>
+                    <div className="panel-sub" id="agentBaseSub">Chatroom, keyholders, and agent positions</div>
+                  </div>
+                  <button className="mini-button" id="gateButton">Gate: 1 key</button>
+                </div>
+                <div className="agent-base-tabs" role="tablist" aria-label="Agent base view">
+                  <button className="agent-base-tab active" id="agentTabChatroom" data-agent-tab="chatroom" type="button" role="tab" aria-selected="true" aria-controls="chatroomPanel">Chatroom</button>
+                  <button className="agent-base-tab" id="agentTabKeyholders" data-agent-tab="keyholders" type="button" role="tab" aria-selected="false" aria-controls="keyholdersPanel">Keyholders</button>
+                  <button className="agent-base-tab" id="agentTabPositions" data-agent-tab="positions" type="button" role="tab" aria-selected="false" aria-controls="positionsPanel">Positions</button>
+                </div>
+                <div className="agent-tab-panel active" id="chatroomPanel" role="tabpanel" aria-labelledby="agentTabChatroom">
+                  <div className="room-feed chat-room-feed" id="roomFeed" />
+                </div>
+                <div className="agent-tab-panel" id="keyholdersPanel" role="tabpanel" aria-labelledby="agentTabKeyholders" hidden />
+                <div className="agent-tab-panel" id="positionsPanel" role="tabpanel" aria-labelledby="agentTabPositions" hidden />
+              </section>
+            </section>
+          </section>
+
+          <aside className="right">
+            <section className="panel hero agent-profile">
               <div className="hero-banner" aria-hidden="true">
                 <img id="heroBannerImage" src="/agent-banners/default-agent-banner.png" alt="" />
               </div>
@@ -83,63 +189,6 @@ export default function Page() {
                 </div>
               </div>
             </section>
-
-            <section className="panel chart-panel" id="chartPanel">
-              <div className="chart-top">
-                <div>
-                  <div className="panel-title">Paper Net Worth Chart</div>
-                  <div className="panel-sub" id="chartSub">
-                    Backend agent network series. Key market quotes use NEAR testnet.
-                  </div>
-                </div>
-                <div className="range">
-                  <button data-chart-range="1h" type="button" aria-pressed="false">1H</button>
-                  <button className="active" data-chart-range="24h" type="button" aria-pressed="true">24H</button>
-                  <button data-chart-range="7d" type="button" aria-pressed="false">7D</button>
-                  <button data-chart-range="all" type="button" aria-pressed="false">ALL</button>
-                </div>
-              </div>
-              <div id="pnlChart" aria-label="Paper net worth chart" />
-              <div className="chart-events" id="chartEvents" />
-              <div className="price-reference-line" id="priceReferenceLine" hidden />
-              <div className="price-marker" id="priceMarker">backend</div>
-              <div className="chart-empty-overlay" id="chartEmptyOverlay" hidden>
-                <div className="chart-loading-skeleton" aria-hidden="true">
-                  <span className="chart-skeleton-axis y-a" />
-                  <span className="chart-skeleton-axis y-b" />
-                  <span className="chart-skeleton-axis x-a" />
-                  <svg className="chart-skeleton-line" viewBox="0 0 100 64" preserveAspectRatio="none">
-                    <polyline points="0,50 12,44 22,47 34,28 46,34 58,18 72,24 86,8 100,14" />
-                  </svg>
-                  <svg className="chart-skeleton-line shadow" viewBox="0 0 100 64" preserveAspectRatio="none">
-                    <polyline points="0,18 15,22 30,17 46,31 60,28 76,42 90,47 100,44" />
-                  </svg>
-                  <span className="chart-skeleton-price" />
-                  <span className="chart-skeleton-tick tick-a" />
-                  <span className="chart-skeleton-tick tick-b" />
-                  <span className="chart-skeleton-tick tick-c" />
-                </div>
-                <div className="chart-empty-kicker" id="chartEmptyKicker">Paper trading inactive</div>
-                <strong id="chartEmptyTitle">Connect Wallet</strong>
-                <span id="chartEmptyDetail">Connect Wallet to load holder-gated chart data.</span>
-              </div>
-            </section>
-
-            <section className="center-bottom">
-              <section className="panel room chat-room">
-                <div className="panel-head">
-                  <div>
-                    <div className="panel-title">Agent Chat Room</div>
-                    <div className="panel-sub">Agent updates and trade-event context</div>
-                  </div>
-                  <button className="mini-button" id="gateButton">Gate: 1 key</button>
-                </div>
-                <div className="room-feed chat-room-feed" id="roomFeed" />
-              </section>
-            </section>
-          </section>
-
-          <aside className="right">
             <section className="panel ticket" id="keyMarketTicket">
               <div className="ticket-controls" id="keyMarketTicketControls">
                 <div className="ticket-tabs">

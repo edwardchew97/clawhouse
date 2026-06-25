@@ -1268,7 +1268,7 @@
         {
           "id": "clawhouseApp.backend.board",
           "name": "Read App Staging Backend Board",
-          "description": "Reads the selected Agent Board through the ClawHouse App server proxy, including events, portfolio, PnL, balance changes, price snapshots, labeled Paper leaderboard data, and public Paper activity used by the app chart.",
+          "description": "Reads the selected Agent Board through the ClawHouse App server proxy, including events, portfolio, PnL, balance changes, price snapshots, labeled Paper leaderboard data, and public Paper activity used by the app chart and Agent Base View tabs.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -1276,6 +1276,7 @@
           "runningNotes": [
             "Calling the local ClawHouse App server proxy.",
             "The proxy calls the staging Agent Board Ledger /boards/:id, /events, /portfolio, /pnl, /balance-changes, /prices, /paper/leaderboard, and matching /paper/accounts/:id/activity read paths.",
+            "The Chatroom tab uses the paper orders/events from this response, and the Positions tab uses the response paperActivity.positions open-position rows.",
             "If the VPS staging app cannot reach the backend, the response should expose ok:false instead of hiding the backend state."
           ],
           "inputs": {
@@ -1293,7 +1294,9 @@
             "backendPaperLeaderboardError": "response.json.json.errors.paperLeaderboard",
             "backendPaperActivityError": "response.json.json.errors.paperActivity",
             "backendPaperActivityFilledOrders": "response.json.json.paperActivity.summary.filled_orders",
-            "backendPaperActivityLatestRiskAt": "response.json.json.paperActivity.summary.latest_risk_at"
+            "backendPaperActivityLatestRiskAt": "response.json.json.paperActivity.summary.latest_risk_at",
+            "backendPaperFirstPositionCoin": "response.json.json.paperActivity.positions.0.coin",
+            "backendPaperFirstPositionStatus": "response.json.json.paperActivity.positions.0.status"
           },
           "clearInputs": {
             "userBrowsesAgent.ledger.getBoard": [
@@ -1543,7 +1546,7 @@
         {
           "id": "userBuysKey.app.walletReadToken",
           "name": "Unlock Reasoning With Wallet Proof",
-          "description": "Uses the same App proof route as the browser flow: request a read-access challenge, sign it with the test user's NEAR key, and exchange it for holder-gated access. Browser requests receive HttpOnly cookies; this script opts into the raw Ledger read token for Workbench follow-up API calls.",
+          "description": "Workbench-only holder read-token helper: request a read-access challenge, sign it with the test user's NEAR key, and exchange it for holder-gated access. The browser flow signs a ClawHouse wallet session once at login, then refreshes holder access server-side without another message signature.",
           "type": "script",
           "access": "protected",
           "command": "bun",
@@ -1568,11 +1571,11 @@
             "mnemonic"
           ],
           "runningNotes": [
-            "Calling POST /api/backend/read-token/nonce on the ClawHouse App.",
+            "Calling the Workbench-compatible POST /api/backend/read-token/nonce route on the ClawHouse App.",
             "Signing the returned NEP-413 challenge with the configured test user account.",
             "Calling POST /api/backend/read-token; the App verifies the wallet signature before it asks Ledger to issue the holder read token.",
-            "The browser path stores access in HttpOnly cookies. This script sends an explicit client header so Workbench can capture the raw read token for later Ledger API calls.",
-            "This is the wallet-proof unlock path, not a direct service-token bypass."
+            "The browser path stores the login session and holder access in HttpOnly cookies. This script sends an explicit client header so Workbench can capture the raw read token for later Ledger API calls.",
+            "This is a Workbench wallet-proof path, not the repeated-signature browser path and not a direct service-token bypass."
           ],
           "inputs": {
             "clawhouseAppBaseUrl": "",

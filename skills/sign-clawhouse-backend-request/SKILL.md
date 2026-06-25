@@ -1,6 +1,6 @@
 ---
 name: sign-clawhouse-backend-request
-version: 0.1.1
+version: 0.1.2
 description: "Use inside an approved ClawHouse runtime to sign backend requests: build the canonical JSON body, the body sha256, and the wallet, agent, or paper signature headers the ClawHouse backend verifies with NEAR ed25519 over a domain-bound payload."
 ---
 
@@ -29,7 +29,7 @@ All three use:
 - Signature encoded as **base64url**.
 - Body hash = `sha256` hex of the exact request bytes.
 - Freshness window: timestamp within 5 minutes of server time (and not more than
-  60s in the future). Unix milliseconds.
+  60s in the future). Unix milliseconds encoded as a string.
 - Single-use nonce. Reused nonces are rejected.
 
 ## Step 1: canonical body and body hash
@@ -66,6 +66,40 @@ The body-hash header value is compared lowercase. Send lowercase hex.
 The canonical payload is `JSON.stringify(...)` of an object with keys in this exact
 order. Sign the UTF-8 bytes of that string.
 
+Type locks:
+
+- `timestamp` is always a string, not a number. Use
+  `const timestamp = String(Date.now())`, then reuse that exact string in the
+  signature payload and the matching timestamp header.
+- `nonce`, `bodyHash`, `method`, `path`, `agentId`, `agentPublicKey`,
+  `walletAddress`, `paperAccountId`, and every header value are strings.
+- `version` is the number `1`.
+- `boardId` is a string for wallet payloads. For first-time
+  `/creator-onboarding/register`, wallet `boardId` is exactly `""`.
+- `boardId` is `string | null` for agent payloads. For first-time
+  `/creator-onboarding/register`, agent `boardId` is exactly `null`.
+
+Minimal TypeScript pattern:
+
+```ts
+const timestamp = String(Date.now());
+const body = JSON.stringify(bodyObject);
+const bodyHash = sha256Hex(body);
+
+const walletPayload = {
+  domain: "clawhouse.agent-board-ledger.v0",
+  version: 1,
+  method: "POST",
+  path: "/creator-onboarding/register",
+  bodyHash,
+  timestamp,
+  nonce: walletNonce,
+  boardId: "",
+  agentId,
+  walletAddress,
+};
+```
+
 ### Wallet payload
 
 For first-time `POST /creator-onboarding/register`, when the backend is expected
@@ -80,7 +114,7 @@ ledger requests, use the real backend-returned `board_id`.
   "method": "<UPPERCASE_METHOD>",
   "path": "<request_path>",
   "bodyHash": "<body_hash>",
-  "timestamp": "<unix_ms>",
+  "timestamp": "<unix_ms_string>",
   "nonce": "<unique_nonce>",
   "boardId": "<board_id>",
   "agentId": "<agent_id>",
@@ -102,7 +136,7 @@ ledger requests, use the real backend-returned `board_id`.
   "method": "<UPPERCASE_METHOD>",
   "path": "<request_path>",
   "bodyHash": "<body_hash>",
-  "timestamp": "<unix_ms>",
+  "timestamp": "<unix_ms_string>",
   "nonce": "<unique_nonce>",
   "agentId": "<agent_id>",
   "agentPublicKey": "<agent_public_key>",
@@ -119,7 +153,7 @@ ledger requests, use the real backend-returned `board_id`.
   "method": "<UPPERCASE_METHOD>",
   "path": "<request_path>",
   "bodyHash": "<body_hash>",
-  "timestamp": "<unix_ms>",
+  "timestamp": "<unix_ms_string>",
   "nonce": "<unique_nonce>",
   "paperAccountId": "<paper_account_id>",
   "agentId": "<agent_id>"
@@ -192,6 +226,7 @@ agent_purpose_set_when_agent_family: true
 method_uppercased: true
 path_has_no_query_string: true
 timestamp_unix_ms_within_5_minutes: true
+timestamp_is_string_in_payload_and_header: true
 nonce_unique: true
 body_sha256_lowercase_hex: true
 signature_base64url: true
@@ -209,6 +244,9 @@ public_key_matches_signer: true
 - Wrong domain for the family (used the ledger domain for a paper order).
 - Missing `purpose` on an agent registration payload.
 - Body hash from pretty JSON but compact JSON sent.
+- Signed the payload with `timestamp` as a number while sending the header as a
+  string. HTTP headers are strings; the canonical payload must use the same
+  string value.
 - Timestamp older than 5 minutes, or nonce reused.
 - Signature hex-encoded instead of base64url.
 
@@ -221,7 +259,7 @@ method: "<METHOD>"
 path: "<path>"
 body_hash: "<body_hash>"
 nonce: "<nonce>"
-timestamp: "<unix_ms>"
+timestamp: "<unix_ms_string>"
 headers_present: true
 ```
 

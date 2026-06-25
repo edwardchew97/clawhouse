@@ -22,6 +22,18 @@ export type ReadAccessChallengePayload = {
   walletSessionExpiresAt: string;
 };
 
+export type WalletSessionChallengePayload = {
+  v: 1;
+  purpose: "wallet_session_challenge";
+  accountId: string;
+  recipient: string;
+  message: string;
+  nonce: string;
+  issuedAt: string;
+  expiresAt: string;
+  walletSessionExpiresAt: string;
+};
+
 export type SignedNearMessage = {
   accountId: string;
   publicKey: string;
@@ -48,6 +60,65 @@ export type WalletSessionPayload = {
 };
 
 export class ReadTokenInputError extends Error {}
+
+export function createWalletSessionChallenge(input: {
+  accountId: string;
+  recipient: string;
+  secret: string;
+  now?: Date;
+}) {
+  const now = input.now ?? new Date();
+  const issuedAt = now.toISOString();
+  const expiresAt = new Date(now.getTime() + challengeMaxAgeMs).toISOString();
+  const walletSessionExpiresAt = new Date(now.getTime() + walletSessionTtlMs).toISOString();
+  const nonce = randomBytes(32).toString("base64url");
+  const message = JSON.stringify({
+    domain: "clawhouse.app",
+    version: "1",
+    purpose: "wallet_session",
+    account_id: input.accountId,
+    issued_at: issuedAt,
+    expires_at: expiresAt,
+    wallet_session_expires_at: walletSessionExpiresAt,
+  });
+  const payload: WalletSessionChallengePayload = {
+    v: 1,
+    purpose: "wallet_session_challenge",
+    accountId: input.accountId,
+    recipient: input.recipient,
+    message,
+    nonce,
+    issuedAt,
+    expiresAt,
+    walletSessionExpiresAt,
+  };
+
+  return {
+    ...payload,
+    challenge: signPayload(payload, input.secret),
+  };
+}
+
+export function verifyWalletSessionChallenge(token: string, secret: string, now = new Date()) {
+  const payload = verifySignedPayload<WalletSessionChallengePayload>(token, secret);
+  if (payload.v !== 1 || payload.purpose !== "wallet_session_challenge") {
+    throw new ReadTokenInputError("Invalid wallet session challenge");
+  }
+  if (Date.parse(payload.expiresAt) <= now.getTime()) {
+    throw new ReadTokenInputError("Wallet session challenge expired");
+  }
+  if (now.getTime() - Date.parse(payload.issuedAt) > challengeMaxAgeMs) {
+    throw new ReadTokenInputError("Wallet session challenge expired");
+  }
+  requireAccountIdValue(payload.accountId);
+  requireNonEmpty(payload.recipient, "recipient");
+  requireNonEmpty(payload.message, "message");
+  if (!Number.isFinite(Date.parse(payload.walletSessionExpiresAt))) {
+    throw new ReadTokenInputError("Invalid wallet session challenge");
+  }
+  decodeNonce(payload.nonce);
+  return payload;
+}
 
 export function createReadAccessChallenge(input: {
   boardId: string;

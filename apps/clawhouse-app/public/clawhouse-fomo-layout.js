@@ -9,6 +9,7 @@ document.body.classList.add("motion-prep");
 let selectedId = requestedAgentId || "";
 let tradeSide = "buy";
 let activeChartRange = "24h";
+let activeAgentTab = "chatroom";
 let activeEventId = null;
 const activeDiscoveryFilters = new Set();
 let chainState = {
@@ -25,6 +26,10 @@ let chainState = {
   protection: null,
   maxBuy: null,
   maxBuyError: null,
+  stateLoading: false,
+  quoteLoading: false,
+  maxBuyLoading: false,
+  activityLoading: false,
   activity: null,
   activityError: null,
   backend: null,
@@ -68,6 +73,13 @@ const chainBalance = (agent) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 const holderBalance = (agent) => chainBalance(agent);
+const keyStateLoading = (agent) => Boolean(agent && chainState.stateLoading);
+const quoteLoading = () => Boolean(chainState.quoteLoading || chainState.phase === "quoting");
+const keyActivityLoading = (agent) => Boolean(agent && chainState.activityLoading);
+const keyStateInitialLoading = (agent) => keyStateLoading(agent) && !chainApplies(agent);
+const quoteApplies = (agent) => Boolean(agent && chainApplies(agent) && chainState.quoteSide === tradeSide && chainState.quote);
+const quoteInitialLoading = (agent) => quoteLoading() && !quoteApplies(agent);
+const keyActivityInitialLoading = (agent) => keyActivityLoading(agent) && !keyActivityTrades(agent).length;
 const maxBuyApplies = (agent) => {
   if (!agent) return false;
   const maxBuy = chainState.maxBuy;
@@ -88,6 +100,14 @@ const isUnlocked = (agent) => {
   if (!agent) return false;
   const balance = holderBalance(agent);
   return Boolean(chainState.accountId && balance !== null && balance > 0 && readAccessApplies(agent));
+};
+const roomAccessLoading = (agent) => {
+  if (!agent || !chainState.accountId) return false;
+  const balance = holderBalance(agent);
+  return Boolean(
+    chainState.pending && (chainState.phase === "authenticating" || chainState.phase === "refreshing")
+    || (balance !== null && balance > 0 && !readAccessApplies(agent) && !chainState.readAccessError)
+  );
 };
 
 function keyMarketUnavailable(agent) {
@@ -193,7 +213,12 @@ function agentTitle(agent) {
 }
 
 function setChainState(nextState) {
-  chainState = { ...chainState, ...nextState };
+  const loadingClears = {};
+  if (Object.prototype.hasOwnProperty.call(nextState, "state")) loadingClears.stateLoading = false;
+  if (Object.prototype.hasOwnProperty.call(nextState, "quote")) loadingClears.quoteLoading = false;
+  if (Object.prototype.hasOwnProperty.call(nextState, "maxBuy")) loadingClears.maxBuyLoading = false;
+  if (Object.prototype.hasOwnProperty.call(nextState, "activity")) loadingClears.activityLoading = false;
+  chainState = { ...chainState, ...loadingClears, ...nextState };
   render();
 }
 
@@ -332,6 +357,11 @@ function asNumber(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function asNullableNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  return asNumber(value);
+}
+
 function normalizePct(value) {
   if (value === null || value === undefined || value === "") return null;
   const numeric = asNumber(value);
@@ -452,6 +482,36 @@ function paperOpenPositions(agent) {
   return Array.isArray(positions)
     ? positions.filter((position) => String(position?.status || "open").toLowerCase() === "open" && Math.abs(asNumber(position?.signed_size) ?? 0) > 0)
     : [];
+}
+
+function hyperliquidPriceRows() {
+  const prices = chainState.backend?.hyperliquidPrices?.prices;
+  return Array.isArray(prices) ? prices : [];
+}
+
+function positionMarkPx(position) {
+  const direct = asNullableNumber(position?.mark_px ?? position?.markPx ?? position?.current_px ?? position?.currentPx);
+  if (direct !== null) return direct;
+  const coin = String(position?.coin || "").toUpperCase();
+  const row = hyperliquidPriceRows().find((price) => String(price?.coin || "").toUpperCase() === coin);
+  return asNullableNumber(row?.mark_px ?? row?.markPx);
+}
+
+function positionPnlUsd(position) {
+  const direct = [
+    position?.unrealized_pnl_usd,
+    position?.unrealizedPnlUsd,
+    position?.current_pnl_usd,
+    position?.currentPnlUsd,
+    position?.pnl_usd,
+    position?.pnlUsd,
+  ].map(asNullableNumber).find((value) => value !== null);
+  if (direct !== undefined) return direct;
+  const mark = positionMarkPx(position);
+  const entry = asNullableNumber(position?.entry_px);
+  const size = asNullableNumber(position?.signed_size);
+  if (mark === null || entry === null || size === null) return null;
+  return (mark - entry) * size;
 }
 
 function latestPaperActivityTimestamp(agent) {
@@ -613,6 +673,22 @@ function formatUsd(value) {
   return `$${numeric.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function formatCompactUsd(value) {
+  const numeric = asNumber(value);
+  if (numeric === null) return "--";
+  const absolute = Math.abs(numeric);
+  if (absolute >= 1_000_000) return `$${(numeric / 1_000_000).toFixed(2).replace(/\.?0+$/, "")}M`;
+  if (absolute >= 1_000) return `$${(numeric / 1_000).toFixed(2).replace(/\.?0+$/, "")}K`;
+  return formatUsd(numeric);
+}
+
+function formatSignedUsd(value) {
+  const numeric = asNullableNumber(value);
+  if (numeric === null) return "--";
+  const sign = numeric > 0 ? "+" : numeric < 0 ? "-" : "";
+  return `${sign}${formatUsd(Math.abs(numeric))}`;
+}
+
 function formatUtcTime(value) {
   if (!value) return "--";
   const parsed = Date.parse(value);
@@ -626,6 +702,14 @@ function compactNumber(value, digits = 4) {
   if (Math.abs(numeric) >= 100) return numeric.toFixed(0);
   if (Math.abs(numeric) >= 1) return numeric.toFixed(2);
   return numeric.toFixed(digits).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function formatPrice(value) {
+  const numeric = asNumber(value);
+  if (numeric === null) return "--";
+  if (Math.abs(numeric) >= 100) return formatUsd(numeric);
+  if (Math.abs(numeric) >= 1) return `$${numeric.toFixed(2)}`;
+  return `$${numeric.toFixed(5).replace(/0+$/, "").replace(/\.$/, "")}`;
 }
 
 function formatBackendAction(event) {
@@ -1191,10 +1275,17 @@ async function refreshBackendRead(_reason) {
   const refreshId = ++backendRefreshId;
   try {
     const backend = await fetchJson(`/api/backend/board?boardId=${encodeURIComponent(agent.boardId || agent.id)}`);
+    const openPositions = Array.isArray(backend?.paperActivity?.positions)
+      ? backend.paperActivity.positions.filter((position) => String(position?.status || "open").toLowerCase() === "open" && Math.abs(asNumber(position?.signed_size) ?? 0) > 0)
+      : [];
+    const coins = [...new Set(openPositions.map((position) => String(position?.coin || "").toUpperCase()).filter(Boolean))];
+    const hyperliquidPrices = coins.length
+      ? await fetchJson(`/api/backend/hyperliquid-prices?coins=${encodeURIComponent(coins.join(","))}`).catch((error) => ({ ok: false, error: errorMessage(error, "Price read failed.") }))
+      : { ok: true, prices: [] };
     if (refreshId !== backendRefreshId) return;
     chainState = {
       ...chainState,
-      backend,
+      backend: { ...backend, hyperliquidPrices },
     };
   } catch (error) {
     if (refreshId !== backendRefreshId) return;
@@ -1228,27 +1319,70 @@ async function refreshKeyMarketRead(_reason) {
     && _reason !== "amount-change"
     && _reason !== "side-change";
   const maxBuyPath = `/api/key-market/max-buy?agentId=${encodeURIComponent(agent.id)}&accountId=${encodeURIComponent(chainState.accountId || "")}`;
-  const [stateResult, quoteResult, activityResult, maxBuyResult] = await Promise.allSettled([
-    fetchJson(statePath),
-    fetchJson(quotePath),
-    fetchJson(activityPath),
-    shouldRefreshMaxBuy ? fetchJson(maxBuyPath) : Promise.resolve(chainState.maxBuy),
-  ]);
-  if (refreshId !== keyMarketRefreshId) return;
-
   chainState = {
     ...chainState,
-    state: stateResult.status === "fulfilled" ? stateResult.value.state : null,
-    quote: quoteResult.status === "fulfilled" ? quoteResult.value.quote : null,
-    quoteSide: quoteResult.status === "fulfilled" ? side : null,
-    protection: quoteResult.status === "fulfilled" ? quoteResult.value.protection : null,
-    maxBuy: maxBuyResult.status === "fulfilled" ? maxBuyResult.value : chainState.maxBuy,
-    maxBuyError: maxBuyResult.status === "rejected" ? errorMessage(maxBuyResult.reason, "Max buy read failed.") : null,
-    activity: activityResult.status === "fulfilled" ? activityResult.value : null,
-    activityError: firstRejectedMessage([activityResult]),
-    error: firstRejectedMessage([stateResult, quoteResult]),
+    stateLoading: true,
+    quoteLoading: true,
+    activityLoading: true,
+    maxBuyLoading: Boolean(shouldRefreshMaxBuy),
   };
   render();
+
+  const statePromise = fetchJson(statePath)
+    .then((data) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, state: data.state, stateLoading: false, error: null };
+      render();
+    })
+    .catch((error) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, stateLoading: false, error: errorMessage(error, "Key market state read failed.") };
+      render();
+    });
+
+  const quotePromise = fetchJson(quotePath)
+    .then((data) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, quote: data.quote, quoteSide: side, protection: data.protection, quoteLoading: false, error: null };
+      render();
+    })
+    .catch((error) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, quoteLoading: false, error: errorMessage(error, "Key market quote read failed.") };
+      render();
+    });
+
+  const activityPromise = fetchJson(activityPath)
+    .then((data) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, activity: data, activityLoading: false, activityError: null };
+      render();
+    })
+    .catch((error) => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, activityLoading: false, activityError: errorMessage(error, "Key activity read failed.") };
+      render();
+    });
+
+  const maxBuyPromise = shouldRefreshMaxBuy
+    ? fetchJson(maxBuyPath)
+      .then((data) => {
+        if (refreshId !== keyMarketRefreshId) return;
+        chainState = { ...chainState, maxBuy: data, maxBuyLoading: false, maxBuyError: null };
+        render();
+      })
+      .catch((error) => {
+        if (refreshId !== keyMarketRefreshId) return;
+        chainState = { ...chainState, maxBuyLoading: false, maxBuyError: errorMessage(error, "Max buy read failed.") };
+        render();
+      })
+    : Promise.resolve().then(() => {
+      if (refreshId !== keyMarketRefreshId) return;
+      chainState = { ...chainState, maxBuyLoading: false };
+      render();
+    });
+
+  await Promise.allSettled([statePromise, quotePromise, activityPromise, maxBuyPromise]);
 }
 
 async function loadDiscoveryAgents() {
@@ -1316,6 +1450,8 @@ function buyOneForUnlock() {
 }
 
 function renderTicker() {
+  const track = byId("tickerTrack");
+  if (!track) return;
   const items = agents.flatMap((agent) => {
     const pnl = backendPnl(agent);
     const pnlSource = backendPnlSource(agent);
@@ -1328,13 +1464,13 @@ function renderTicker() {
       `<span class="ticker-item"><b>${holders === null ? "--" : holders}</b><span>keys in ${escapeHtml(title)}</span><span>${events} ledger events</span></span>`
     ];
   });
-  const track = byId("tickerTrack");
   track.innerHTML = items.concat(items).join("");
   window.requestAnimationFrame(syncTickerSpeed);
 }
 
 function syncTickerSpeed() {
   const track = byId("tickerTrack");
+  if (!track) return;
   const loopWidth = track.scrollWidth / 2;
   if (!Number.isFinite(loopWidth) || loopWidth <= 0) {
     track.style.removeProperty("--ticker-duration");
@@ -1461,6 +1597,30 @@ function renderHero(agent) {
   const activity = paperActivity(agent);
   const summary = paperSummary(agent);
   const latestRiskAt = summary.latest_risk_at || activity?.latest_risk?.created_at;
+  const holders = holderCount(agent);
+  const openPositions = paperOpenPositions(agent).length;
+  const filledOrders = summary.filled_orders ?? paperFills(agent).length;
+  const equity = activity?.latest_risk?.equity_usd ?? paperLeaderboardRow(agent)?.equity_usd;
+  const marketMeta = activity
+    ? `${agent.desc} · ${backendNetwork(agent)} paper · ${summary.total_orders ?? 0} orders`
+    : `${agent.desc} · ${backendNetwork(agent)} · ${pnlSource}`;
+  byId("topAgentName").textContent = title;
+  byId("topAgentPnl").textContent = pnl === null ? "--" : signedPct(pnl);
+  byId("topAgentPnl").className = pnl === null ? "" : pnl >= 0 ? "green" : "red";
+  byId("topKeyPrice").textContent = keyPriceLabel(agent).replace(" tNEAR", "");
+  byId("topEquity").textContent = formatCompactUsd(equity);
+  byId("topPositions").textContent = openPositions.toLocaleString();
+  byId("topFills").textContent = filledOrders.toLocaleString();
+  byId("marketAvatar").innerHTML = agentIcon(agent);
+  byId("marketName").textContent = title;
+  byId("marketMeta").textContent = marketMeta;
+  byId("marketEquity").textContent = formatCompactUsd(equity);
+  byId("marketKeyPrice").textContent = keyPriceLabel(agent).replace(" tNEAR", "");
+  byId("marketPnl").textContent = pnl === null ? "--" : signedPct(pnl);
+  byId("marketPnl").className = pnl === null ? "" : pnl >= 0 ? "green" : "red";
+  byId("marketPositions").textContent = openPositions.toLocaleString();
+  byId("marketFilled").textContent = filledOrders.toLocaleString();
+  byId("marketHolders").textContent = holders === null ? "--" : holders.toLocaleString();
   byId("heroAvatar").innerHTML = agentIcon(agent);
   byId("heroBannerImage").src = agent.bannerUrl || DEFAULT_AGENT_BANNER_URL;
   byId("heroName").textContent = title;
@@ -1468,20 +1628,36 @@ function renderHero(agent) {
   byId("statPnl").textContent = pnl === null ? "--" : signedPct(pnl);
   byId("statPnl").className = pnl === null ? "" : pnl >= 0 ? "green" : "red";
   byId("statKey").textContent = keyPriceLabel(agent).replace(" tNEAR", "");
-  const holders = holderCount(agent);
   byId("statHolders").textContent = holders === null ? "--" : holders.toLocaleString();
   byId("statUpdate").textContent = latestRiskAt
     ? formatUtcTime(latestRiskAt)
     : chainApplies(agent) ? "testnet live" : backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
-  byId("statGate").textContent = isUnlocked(agent) ? "Unlocked" : holderBalance(agent) > 0 ? "Sign proof" : "1 key";
+  setInlineState("statGate", gateLabel(agent, { compact: true }));
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
-  byId("chartSub").textContent = activity
-    ? `${chart.message} / ${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled orders / ${backendNetwork(agent)}`
-    : `${chart.message} / ${backendNetwork(agent)} / ${pnlSource} / key market ${chainApplies(agent) ? "live" : "checking"}`;
+  byId("marketMeta").textContent = activity
+    ? `${chart.message} · ${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled · ${backendNetwork(agent)}`
+    : `${chart.message} · ${backendNetwork(agent)} · key market ${chainApplies(agent) ? "live" : "checking"}`;
 }
 
 function renderFreshStartEmpty() {
+  byId("topAgentName").textContent = "No agents";
+  byId("topAgentPnl").textContent = "--";
+  byId("topAgentPnl").className = "";
+  byId("topKeyPrice").textContent = "--";
+  byId("topEquity").textContent = "--";
+  byId("topPositions").textContent = "--";
+  byId("topFills").textContent = "--";
+  byId("marketAvatar").textContent = "--";
+  byId("marketName").textContent = "No agents yet";
+  byId("marketMeta").textContent = "Fresh staging is ready.";
+  byId("marketEquity").textContent = "--";
+  byId("marketKeyPrice").textContent = "--";
+  byId("marketPnl").textContent = "--";
+  byId("marketPnl").className = "";
+  byId("marketPositions").textContent = "--";
+  byId("marketFilled").textContent = "--";
+  byId("marketHolders").textContent = "--";
   byId("heroAvatar").textContent = "--";
   byId("heroBannerImage").src = DEFAULT_AGENT_BANNER_URL;
   byId("heroName").textContent = "No agents yet";
@@ -1494,8 +1670,10 @@ function renderFreshStartEmpty() {
   byId("statGate").textContent = "--";
   byId("priceMarker").textContent = "backend";
   byId("priceMarker").style.background = "var(--gray)";
-  byId("chartSub").textContent = "No public agent board has been registered yet.";
+  byId("marketMeta").textContent = "No public agent board has been registered yet.";
   renderBackendEmpty("roomFeed", "No agent room yet", "Onboard the first paper-trading agent to create the first board.");
+  renderBackendEmpty("keyholdersPanel", "No keyholders yet", "Select a key-enabled agent to read keyholder state.");
+  renderBackendEmpty("positionsPanel", "No positions yet", "Select a paper-trading agent to read open positions.");
   setActivityHeader("Key Trading Activity", "No agent selected");
   renderBackendEmpty("keyActivityList", "No verified key trades yet", "Key trades will appear after an agent creates a key market.");
   byId("quotePay").textContent = "--";
@@ -1522,6 +1700,26 @@ function renderFreshStartEmpty() {
   hidePriceMarker();
   renderWalletButton();
   renderBackendStatus();
+}
+
+function syncAgentBaseTabs() {
+  const tabs = document.querySelectorAll("[data-agent-tab]");
+  const panels = {
+    chatroom: byId("chatroomPanel"),
+    keyholders: byId("keyholdersPanel"),
+    positions: byId("positionsPanel"),
+  };
+  tabs.forEach((tab) => {
+    const selected = tab.dataset.agentTab === activeAgentTab;
+    tab.classList.toggle("active", selected);
+    tab.setAttribute("aria-selected", selected ? "true" : "false");
+  });
+  Object.entries(panels).forEach(([name, panel]) => {
+    if (!panel) return;
+    const selected = name === activeAgentTab;
+    panel.hidden = !selected;
+    panel.classList.toggle("active", selected);
+  });
 }
 
 function publicEventText(event) {
@@ -1551,6 +1749,58 @@ function renderBackendEmpty(targetId, title, detail) {
   `;
 }
 
+function skeleton(width = "44px", className = "") {
+  return `<span class="ui-skeleton ${className}" style="--skeleton-width:${escapeHtml(width)}"></span>`;
+}
+
+function setInlineState(id, value) {
+  const node = byId(id);
+  if (!node) return;
+  if (String(value).includes("<")) {
+    node.innerHTML = value;
+  } else {
+    node.textContent = value;
+  }
+}
+
+function loadingRows(count = 3) {
+  return Array.from({ length: count }, () => `
+    <div class="activity-row activity-row-skeleton" aria-hidden="true">
+      ${skeleton("38px", "activity-action-skeleton")}
+      <span class="activity-main">${skeleton("132px")}</span>
+      ${skeleton("86px", "activity-value-skeleton")}
+    </div>
+  `).join("");
+}
+
+function balanceLabel(agent, balance) {
+  if (!chainState.accountId) return "Connect wallet";
+  if (keyStateInitialLoading(agent)) return skeleton("38px", "inline-skeleton");
+  if (chainState.error && !chainApplies(agent)) return "Unable to load";
+  return balance === null ? "--" : keyAmountLabel(balance);
+}
+
+function maxBuyLabel(agent, balance) {
+  if (!chainState.accountId) return "Connect wallet";
+  if (chainState.maxBuyError) return "Max buy unavailable";
+  if (tradeSide === "sell") {
+    return keyStateInitialLoading(agent) ? `Sellable ${skeleton("38px", "inline-skeleton")}` : `Sellable ${balance === null ? "--" : keyAmountLabel(balance)}`;
+  }
+  const maxBuy = buyMaxAmount(agent);
+  if (chainState.maxBuyLoading && maxBuy === null) return `Max buy ${skeleton("34px", "inline-skeleton")}`;
+  return `Max buy ${maxBuy === null ? "--" : keyAmountLabel(maxBuy)}`;
+}
+
+function gateLabel(agent, options = {}) {
+  const balance = holderBalance(agent);
+  if (isUnlocked(agent)) return "Room open";
+  if (!chainState.accountId) return options.compact ? "1 key" : "Gate: 1 key";
+  if (keyStateInitialLoading(agent)) return options.compact ? "Checking" : `Checking ${skeleton("34px", "inline-skeleton")}`;
+  if (roomAccessLoading(agent)) return options.compact ? "Opening" : "Opening room...";
+  if (chainState.readAccessError) return options.compact ? "Access error" : "Access unavailable";
+  return balance && balance > 0 ? "Opening room..." : options.compact ? "1 key" : "Gate: 1 key";
+}
+
 function renderRoom(agent) {
   const activity = paperActivity(agent);
   const events = activity
@@ -1558,15 +1808,13 @@ function renderRoom(agent) {
     : chartModel(agent).events;
   if (!events.length) {
     byId("roomFeed").innerHTML = `
-      <div class="blur-status feed-unavailable" aria-label="Agent chat room unavailable">
-        <div class="blur-status-content" aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
+      <div class="chat-empty" aria-label="Agent chat room has no readable events">
+        <div class="chat-empty-copy">
+          <span>Chatroom</span>
+          <strong>No readable room events yet</strong>
+          <p>Orders and agent updates will appear here when this board reports activity.</p>
         </div>
-        <div class="blur-status-label">Unavailable</div>
+        <div class="chat-empty-badge">Idle</div>
       </div>
     `;
     return;
@@ -1595,8 +1843,161 @@ function renderRoom(agent) {
   });
 }
 
+function keyholderRows(agent) {
+  const rows = [];
+  const liveAgent = chainApplies(agent) ? chainState.state?.agent : null;
+  if (liveAgent?.creator_id) {
+    rows.push({
+      title: liveAgent.creator_id,
+      meta: "Creator / key-market owner",
+      value: "creator",
+    });
+  }
+  if (chainState.accountId) {
+    rows.push({
+      title: chainState.accountId,
+      meta: isUnlocked(agent) ? "Connected wallet / room access active" : roomAccessLoading(agent) ? "Connected wallet / opening room" : "Connected wallet",
+      value: keyStateInitialLoading(agent) ? skeleton("48px", "inline-skeleton align-right") : holderBalance(agent) === null ? "--" : keyAmountLabel(holderBalance(agent)),
+    });
+  }
+
+  const seen = new Set(rows.map((row) => row.title));
+  keyActivityTrades(agent).forEach((trade) => {
+    if (!trade.trader_id || seen.has(trade.trader_id)) return;
+    seen.add(trade.trader_id);
+    rows.push({
+      title: trade.trader_id,
+      meta: `Recent ${trade.side || "key"} trade`,
+      value: `${trade.amount} key${trade.amount === "1" ? "" : "s"}`,
+      url: keyTradeAccountUrl(trade),
+    });
+  });
+
+  return rows;
+}
+
+function renderKeyholders(agent) {
+  const panel = byId("keyholdersPanel");
+  if (!panel) return;
+  const holders = holderCount(agent);
+  const balance = holderBalance(agent);
+  const rows = keyholderRows(agent);
+  panel.className = "agent-tab-panel keyholders-panel";
+  panel.innerHTML = `
+    <div class="agent-summary-grid">
+      <div class="agent-summary-card">
+        <span>Total keys</span>
+        <strong>${holders === null && keyStateInitialLoading(agent) ? skeleton("42px") : escapeHtml(holders === null ? "--" : holders.toLocaleString())}</strong>
+      </div>
+      <div class="agent-summary-card">
+        <span>Your keys</span>
+        <strong>${balanceLabel(agent, balance)}</strong>
+      </div>
+      <div class="agent-summary-card">
+        <span>Gate</span>
+        <strong>${gateLabel(agent, { compact: true })}</strong>
+      </div>
+    </div>
+    ${rows.length ? rows.slice(0, 8).map((row) => `
+      <div class="keyholder-row">
+        <div class="keyholder-main">
+          <strong>${row.url ? `<a href="${escapeHtml(row.url)}" target="_blank" rel="noreferrer">${escapeHtml(shortAccount(row.title))}</a>` : escapeHtml(shortAccount(row.title))}</strong>
+          <span class="keyholder-meta">${escapeHtml(row.meta)}</span>
+        </div>
+        <div class="keyholder-value">${String(row.value).includes("<") ? row.value : escapeHtml(row.value)}</div>
+      </div>
+    `).join("") : `
+      <div class="backend-empty">
+        <span>No keyholders yet</span>
+        <strong>Staging reports ${escapeHtml(holders === null ? "--" : holders.toLocaleString())} keys for this agent.</strong>
+      </div>
+    `}
+  `;
+}
+
+function renderPositions(agent) {
+  const panel = byId("positionsPanel");
+  if (!panel) return;
+  const activity = paperActivity(agent);
+  const positions = paperOpenPositions(agent);
+  if (!activity) {
+    renderBackendEmpty("positionsPanel", "No paper activity yet", "This agent has no readable paper account activity.");
+    return;
+  }
+  if (!positions.length) {
+    renderBackendEmpty("positionsPanel", "No open positions", "This agent has no open paper positions right now.");
+    return;
+  }
+
+  panel.className = "agent-tab-panel positions-panel";
+  const hasPositionPnl = positions.some((position) => positionPnlUsd(position) !== null);
+  const totalPositionPnl = positions.reduce((sum, position) => {
+    const value = positionPnlUsd(position);
+    return value === null ? sum : sum + value;
+  }, 0);
+  panel.innerHTML = `
+    <div class="agent-summary-grid">
+      <div class="agent-summary-card">
+        <span>Open positions</span>
+        <strong>${positions.length.toLocaleString()}</strong>
+      </div>
+      <div class="agent-summary-card">
+        <span>Equity</span>
+        <strong>${escapeHtml(formatUsd(activity.latest_risk?.equity_usd ?? paperLeaderboardRow(agent)?.equity_usd))}</strong>
+      </div>
+      <div class="agent-summary-card">
+        <span>Cash</span>
+        <strong>${escapeHtml(formatUsd(activity.account?.cash_balance_usd))}</strong>
+      </div>
+    </div>
+    <div class="position-table" role="table" aria-label="Open paper positions">
+      <div class="position-table-head" role="row">
+        <span>Market</span>
+        <span>Size</span>
+        <span>Entry</span>
+        <span>P&L</span>
+      </div>
+      ${positions.map((position) => {
+      const size = asNumber(position.signed_size) ?? 0;
+      const side = size < 0 ? "Short" : "Long";
+      const leverage = asNumber(position.leverage);
+      const coin = String(position.coin || "").toUpperCase();
+      const pnl = positionPnlUsd(position);
+      const pnlTone = pnl === null ? "empty" : pnl >= 0 ? "up" : "down";
+      return `
+        <div class="position-row" role="row">
+          <div class="position-main">
+            <strong>${escapeHtml(coin || "PAPER")} <span class="${size < 0 ? "down" : "up"}">${side}</span></strong>
+            <span class="position-meta">${escapeHtml(position.market_type || "paper")} / ${escapeHtml(position.margin_mode || "margin")} / ${leverage === null ? "--" : `${leverage}x`}</span>
+          </div>
+          <div class="position-value">${escapeHtml(compactNumber(Math.abs(size)))} ${escapeHtml(coin)}</div>
+          <div class="position-entry">${escapeHtml(formatPrice(position.entry_px))}</div>
+          <div class="position-pnl ${pnlTone}">${escapeHtml(formatSignedUsd(pnl))}</div>
+        </div>
+      `;
+      }).join("")}
+    </div>
+    <div class="positions-footnote">
+      ${hasPositionPnl
+        ? `Visible position P&L total <strong class="${totalPositionPnl >= 0 ? "up" : "down"}">${escapeHtml(formatSignedUsd(totalPositionPnl))}</strong>`
+        : "Per-position P&L needs mark price or unrealized P&L from the backend."}
+    </div>
+  `;
+}
+
+function renderAgentBase(agent) {
+  renderRoom(agent);
+  renderKeyholders(agent);
+  renderPositions(agent);
+  syncAgentBaseTabs();
+}
+
 function renderKeyActivity(agent) {
-  setActivityHeader("Key Trading Activity", "NEAR testnet key market");
+  setActivityHeader("Key Trading Activity", "NEAR testnet key market", keyActivityLoading(agent));
+  if (keyActivityInitialLoading(agent)) {
+    byId("keyActivityList").innerHTML = loadingRows(3);
+    return;
+  }
   const rows = keyActivityRows(agent);
   if (!rows.length) {
     renderBackendEmpty(
@@ -1619,8 +2020,10 @@ function renderKeyActivity(agent) {
   `).join("");
 }
 
-function setActivityHeader(title, subtitle) {
-  byId("activityPanelTitle").textContent = title;
+function setActivityHeader(title, subtitle, loading = false) {
+  const titleNode = byId("activityPanelTitle");
+  titleNode.textContent = title;
+  titleNode.classList.toggle("is-refreshing", loading);
   byId("activityPanelSub").textContent = subtitle;
 }
 
@@ -1679,7 +2082,7 @@ function renderTicket(agent) {
   const maxAmount = maxAmountForSide(agent);
   const busy = Boolean(chainState.pending);
   const marketUnavailable = keyMarketUnavailable(agent);
-  const quote = chainApplies(agent) && chainState.quoteSide === tradeSide ? chainState.quote : null;
+  const quote = quoteApplies(agent) ? chainState.quote : null;
   const chainTotal = tradeSide === "sell" ? quote?.payout_near : quote?.total_cost_near;
   renderTicketBalance(agent, balance);
   const ticket = byId("keyMarketTicket");
@@ -1693,16 +2096,21 @@ function renderTicket(agent) {
     ticketControls.setAttribute("aria-hidden", marketUnavailable ? "true" : "false");
   }
   if (ticketEmpty) ticketEmpty.hidden = !marketUnavailable;
-  if (tradeSide === "sell") {
-    byId("quotePay").textContent = keyAmountLabel(amount);
-    byId("quoteReceive").textContent = chainTotal ? nearLabel(chainTotal) : "--";
+  if (quoteInitialLoading(agent)) {
+    setInlineState("quotePay", skeleton("88px", "inline-skeleton align-right"));
+    setInlineState("quoteReceive", skeleton("54px", "inline-skeleton align-right"));
+    setInlineState("quoteAverage", skeleton("88px", "inline-skeleton align-right"));
+  } else if (tradeSide === "sell") {
+    setInlineState("quotePay", keyAmountLabel(amount));
+    setInlineState("quoteReceive", chainTotal ? nearLabel(chainTotal) : "--");
+    setInlineState("quoteAverage", chainTotal ? averageKeyPriceLabel(chainTotal, amount) : "--");
   } else {
-    byId("quotePay").textContent = chainTotal ? nearLabel(chainTotal) : keyPriceLabel(agent);
-    byId("quoteReceive").textContent = keyAmountLabel(amount);
+    setInlineState("quotePay", chainTotal ? nearLabel(chainTotal) : keyPriceLabel(agent));
+    setInlineState("quoteReceive", keyAmountLabel(amount));
+    setInlineState("quoteAverage", chainTotal
+      ? averageKeyPriceLabel(chainTotal, amount)
+      : (amount === 1 ? keyPriceLabel(agent) : "--"));
   }
-  byId("quoteAverage").textContent = chainTotal
-    ? averageKeyPriceLabel(chainTotal, amount)
-    : (tradeSide === "buy" && amount === 1 ? keyPriceLabel(agent) : "--");
   const tradeButton = byId("tradeButton");
   if (tradeButton) {
     tradeButton.textContent = busy
@@ -1722,17 +2130,15 @@ function renderTicket(agent) {
     if (isMax) {
       button.title = marketUnavailable
         ? "Key trading is not enabled for this agent."
+        : chainState.maxBuyLoading
+        ? "Loading max buy."
         : maxAmount === null
         ? (tradeSide === "buy" ? "Connect Wallet to read max buy." : "No key balance to sell.")
         : `Use ${keyAmountLabel(maxAmount)}`;
     }
   });
   if (keyAmount) keyAmount.disabled = marketUnavailable || busy;
-  byId("gateButton").textContent = isUnlocked(agent)
-    ? "Room open"
-    : balance && balance > 0
-      ? "Sign proof"
-      : "Gate: 1 key";
+  setInlineState("gateButton", gateLabel(agent));
   renderWalletButton();
   renderBackendStatus();
 }
@@ -1747,19 +2153,15 @@ function renderWalletButton() {
 }
 
 function renderTicketBalance(agent, balance) {
-  const owned = balance === null ? "--" : keyAmountLabel(balance);
-  const maxBuy = buyMaxAmount(agent);
-  byId("ticketOwnedKeys").textContent = owned;
-  byId("ticketMaxBuy").textContent = tradeSide === "sell"
-    ? `Sellable ${owned}`
-    : `Max buy ${maxBuy === null ? "--" : keyAmountLabel(maxBuy)}`;
+  setInlineState("ticketOwnedKeys", balanceLabel(agent, balance));
+  setInlineState("ticketMaxBuy", maxBuyLabel(agent, balance));
 }
 
 function statusButtonText() {
   if (chainState.phase === "connecting") return "Opening wallet...";
+  if (chainState.phase === "authenticating") return "Confirm session...";
   if (chainState.phase === "quoting") return "Refreshing quote...";
   if (chainState.phase === "signing") return "Confirm in wallet...";
-  if (chainState.phase === "unlocking") return "Confirm access...";
   if (chainState.phase === "refreshing") return "Refreshing balance...";
   return "Working...";
 }
@@ -2331,12 +2733,19 @@ function render() {
   }
   renderGateState(agent);
   renderHero(agent);
-  renderRoom(agent);
+  renderAgentBase(agent);
   renderKeyActivity(agent);
   renderTicket(agent);
   bindUnlockButtons();
   syncContentColumns();
 }
+
+document.querySelectorAll("[data-agent-tab]").forEach((button) => {
+  button.addEventListener("click", () => {
+    activeAgentTab = button.dataset.agentTab || "chatroom";
+    syncAgentBaseTabs();
+  });
+});
 
 document.querySelectorAll(".ticket-tab").forEach((button) => {
   button.addEventListener("click", () => {
