@@ -1,3 +1,4 @@
+import { PublicKey, keyToImplicitAddress } from "@near-js/crypto";
 import { asObject, cleanString, findEventByAssociations, getBoard, latestHoldingSnapshot, latestObservation, latestPnlSnapshot, listAttachments, listEvents, newId, normalizeBodyFields, openMigratedRuntimeLedgerDb, requiredNumber, requiredString, RequestError, stringifyOptional, type LedgerDb } from "./db.js";
 import { ADMIN_TOKEN_ENV, AuthError, ServiceAuthError, assertServiceBearer, canonicalAgentAuthPayload, canonicalAuthPayload, readAgentSignedHeaders, readSignedHeaders, sha256Hex, timestampIsFresh, tokensMatch, verifySignature } from "./auth.js";
 import { refreshHyperliquidPaperMarketSnapshot, refreshHyperliquidPaperMarketSnapshots, runPaperLiquidationMonitor } from "./hyperliquid.js";
@@ -318,6 +319,9 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
   const publicProfileMetadata = creatorOnboardingPublicMetadata(data, metadata);
   const agentId = requiredString(data.agentId, "agent_id");
   const agentPublicKey = requiredString(data.agentPublicKey, "agent_public_key");
+  const walletAddress = requiredString(data.walletAddress, "wallet_address");
+  const publicKey = requiredString(data.publicKey, "public_key");
+  assertNearImplicitWalletMatchesPublicKey(walletAddress, publicKey);
   const requestedBoardId = cleanString(data.boardId);
   const existingBoard = requestedBoardId
     ? null
@@ -328,8 +332,8 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
     id: boardId,
     agent_id: agentId,
     agent_public_key: agentPublicKey,
-    wallet_address: requiredString(data.walletAddress, "wallet_address"),
-    public_key: requiredString(data.publicKey, "public_key"),
+    wallet_address: walletAddress,
+    public_key: publicKey,
     chain: cleanString(data.chain) ?? "near",
     venue_namespace: cleanString(data.venueNamespace) ?? "hyperliquid-paper",
     tracking_started_at: normalizedTimestampField(data.trackingStartedAt, createdAt, "tracking_started_at"),
@@ -390,12 +394,15 @@ async function registerCreatorOnboarding(db: LedgerDb, request: Request, body: B
 async function createBoard(db: LedgerDb, request: Request, body: BodyResult, createdAt: string) {
   const data = normalizeBodyFields(body.json);
   const id = cleanString(data.boardId) ?? newId("board");
+  const walletAddress = requiredString(data.walletAddress, "wallet_address");
+  const publicKey = requiredString(data.publicKey, "public_key");
+  assertNearImplicitWalletMatchesPublicKey(walletAddress, publicKey);
   const board: Board = {
     id,
     agent_id: requiredString(data.agentId, "agent_id"),
     agent_public_key: requiredString(data.agentPublicKey, "agent_public_key"),
-    wallet_address: requiredString(data.walletAddress, "wallet_address"),
-    public_key: requiredString(data.publicKey, "public_key"),
+    wallet_address: walletAddress,
+    public_key: publicKey,
     chain: cleanString(data.chain) ?? "near",
     venue_namespace: cleanString(data.venueNamespace) ?? "near-intents",
     tracking_started_at: normalizedTimestampField(data.trackingStartedAt, createdAt, "tracking_started_at"),
@@ -588,6 +595,21 @@ async function readPaperAccountForBoard(db: LedgerDb, boardId: string) {
 
 function assertSameRegisteredField(actual: string | null, expected: string | null, name: string) {
   if (actual !== expected) throw new RequestError(`Existing ${name} does not match registration`, 409);
+}
+
+function assertNearImplicitWalletMatchesPublicKey(walletAddress: string, publicKey: string) {
+  if (!/^[0-9a-f]{64}$/.test(walletAddress)) {
+    throw new RequestError("wallet_address must be a 64-character lowercase NEAR implicit account", 400);
+  }
+  let derived: string;
+  try {
+    derived = keyToImplicitAddress(PublicKey.fromString(publicKey));
+  } catch {
+    throw new RequestError("Invalid public_key", 400);
+  }
+  if (walletAddress !== derived) {
+    throw new RequestError("wallet_address must match public_key NEAR implicit account", 400);
+  }
 }
 
 function creatorOnboardingPublicMetadata(data: JsonObject, metadata: JsonObject) {
