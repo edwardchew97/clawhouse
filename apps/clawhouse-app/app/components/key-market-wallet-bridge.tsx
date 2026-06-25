@@ -772,7 +772,12 @@ export function KeyMarketWalletBridge() {
         });
 
       const backendPromise = activeAccessPromise
-        .then((activeAccess) => refreshStillApplies() ? fetchBackendBoard(agent).then((backend) => ({ activeAccess, backend })) : null)
+        .then(async (activeAccess) => {
+          if (!refreshStillApplies()) return null;
+          if (activeAccess) await sleep(75);
+          const backend = await fetchBackendBoard(agent);
+          return { activeAccess, backend };
+        })
         .then((result) => {
           if (!result) return;
           if (result.activeAccess && !backendHasReadablePaperActivity(result.backend)) {
@@ -1067,6 +1072,10 @@ function readAccessCacheKey(boardId: string, holderAccountId: string) {
 function backendHasReadablePaperActivity(backend: Record<string, unknown>) {
   const paperActivity = backend.paperActivity as { ok?: unknown; account?: unknown } | undefined;
   return Boolean(paperActivity?.ok && paperActivity.account);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
