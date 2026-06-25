@@ -79,6 +79,7 @@ const keyStateLoading = (agent) => Boolean(agent && chainState.stateLoading);
 const quoteLoading = () => Boolean(chainState.quoteLoading || chainState.phase === "quoting");
 const keyActivityLoading = (agent) => Boolean(agent && chainState.activityLoading);
 const keyStateInitialLoading = (agent) => keyStateLoading(agent) && !chainApplies(agent);
+const keyStateUnavailable = (agent) => Boolean(agent && chainState.error && !chainApplies(agent));
 const quoteApplies = (agent) => Boolean(agent && chainApplies(agent) && chainState.quoteSide === tradeSide && chainState.quote);
 const quoteInitialLoading = (agent) => quoteLoading() && !quoteApplies(agent);
 const keyActivityInitialLoading = (agent) => keyActivityLoading(agent) && !keyActivityTrades(agent).length;
@@ -110,6 +111,7 @@ const roomAccessLoading = (agent) => {
     chainState.readAccessLoading
     || chainState.backendLoading
     || keyStateInitialLoading(agent)
+    || keyStateUnavailable(agent)
     || (chainState.backend && !backendApplies(agent))
     || !chainState.backend
     ||
@@ -481,6 +483,7 @@ function paperActivityLoading(agent) {
   return Boolean(
     chainState.backendLoading
     || keyStateInitialLoading(agent)
+    || keyStateUnavailable(agent)
     || chainState.readAccessLoading
     || !chainState.backend
     || (chainState.backend && !backendApplies(agent))
