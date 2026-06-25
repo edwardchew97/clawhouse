@@ -108,6 +108,14 @@ replace Scope V0 key trading.
   trading supports the full Hyperliquid market universe exposed by that public
   metadata, subject to ClawHouse paper account, freshness, margin, and risk
   checks.
+- Key-market funding buffer amendment session:
+  `019efd64-f1cd-7f93-affd-a1f5458be258`
+- Amendment date: 2026-06-25
+- Amendment basis: A clean runtime key-market creation attempt showed that
+  `0.02` testnet NEAR did not cover the required create transaction balance.
+  JY instructed raising the optional key-market funding guidance to `0.05`
+  testnet NEAR and confirming that mainnet key-market onboarding remains
+  disabled until explicitly configured.
 - Active onboarding / key market amendment session:
   `019ee960-7098-7f10-9400-0d3c379f6af6`
 - Amendment date: 2026-06-21
@@ -352,7 +360,7 @@ should:
   safety checks pass;
 - optionally create the NEAR testnet key market through the agent-side
   skill/local runner when the creator says `create keymarket` and the public
-  account has at least `0.02` testnet NEAR;
+  account has at least `0.05` testnet NEAR;
 - use the same runtime-managed NEAR operation key/account for ClawHouse
   wallet-signed backend requests and the key-market create transaction when
   that signer is already available, unless the runtime intentionally separates
@@ -851,7 +859,7 @@ The first Agent Trading slice is done only when:
 - 2026-06-21 - `019ee960-7098-7f10-9400-0d3c379f6af6` - Updated creator
   onboarding's Agent Trading boundary: the IronClaw agent is saved as active and
   can submit paper orders and reasoning; the remaining blocker is key-market
-  creation, which the agent-side skill runs after `0.02` testnet NEAR is funded
+  creation, which the agent-side skill runs after `0.05` testnet NEAR is funded
   to the creator public account and the creator says `create keymarket`.
 - 2026-06-21 - `019ee9a0-b374-7c82-b537-015faf89b2b6` - Clarified that the same
   IronClaw-managed NEAR key/account can be reused for ClawHouse wallet-signed
@@ -901,3 +909,8 @@ The first Agent Trading slice is done only when:
   public Hyperliquid metadata for concrete symbols, perps max leverage, spot
   book symbols, marks, and books instead of requiring a prompt-provided market
   list or user Hyperliquid API keys.
+- 2026-06-25 - `019efd64-f1cd-7f93-affd-a1f5458be258` - Raised optional
+  key-market funding guidance from `0.02` to `0.05` testnet NEAR after a clean
+  runtime create attempt proved the lower balance was insufficient for the
+  transaction requirement. Mainnet key-market onboarding remains disabled until
+  explicitly configured.

@@ -307,7 +307,7 @@ export async function submitPaperOrder(
 
     if (options.refreshMarketData) {
       try {
-        await options.refreshMarketData(tx, input.marketType, input.coin, createdAt);
+        await refreshOrderPathMarketData(tx, lockedAccount.id, input, createdAt, options.refreshMarketData);
       } catch (error) {
         if (!(error instanceof RequestError)) throw error;
         return await insertRejectedOrder(tx, lockedAccount, input, "market_data_unavailable", body.raw, createdAt);
@@ -327,10 +327,13 @@ export async function submitPaperOrder(
     }
 
     const book = parseBook(snapshot.book_json);
-    const effectiveLimit = effectiveLimitPx(input, book);
     if (input.tif !== "Ioc" && input.limitPx === null) {
       return await insertRejectedOrder(tx, lockedAccount, input, "limit_px_required_for_resting_order", body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
+    if (input.tif === "Ioc" && input.limitPx === null && !hasTakerSideDepth(input.side, book)) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "insufficient_depth", body.raw, createdAt, snapshot.id, referenceDeviationBps);
+    }
+    const effectiveLimit = effectiveLimitPx(input, book);
     if (input.tif === "Alo" && wouldCross(input.side, effectiveLimit, book)) {
       return await insertRejectedOrder(tx, lockedAccount, input, "post_only_would_cross", body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
@@ -453,6 +456,24 @@ export async function submitPaperOrder(
       risk,
     };
   });
+}
+
+async function refreshOrderPathMarketData(
+  db: LedgerDb,
+  paperAccountId: string,
+  input: OrderInput,
+  createdAt: string,
+  refreshMarketData: NonNullable<SubmitPaperOrderOptions["refreshMarketData"]>,
+) {
+  const targets = new Map<string, { marketType: MarketType; coin: string }>();
+  targets.set(marketKey(input.marketType, input.coin), { marketType: input.marketType, coin: input.coin });
+  for (const position of await listOpenPositions(db, paperAccountId)) {
+    if (position.market_type !== "perp" && position.market_type !== "spot") continue;
+    targets.set(positionKey(position), { marketType: position.market_type, coin: position.coin });
+  }
+  for (const target of targets.values()) {
+    await refreshMarketData(db, target.marketType, target.coin, createdAt);
+  }
 }
 
 export async function runPaperRiskCheck(db: LedgerDb, paperAccountId: string, createdAt: string) {
@@ -1211,6 +1232,10 @@ function planTakerFills(side: "buy" | "sell", size: number, limitPx: number, boo
   return fills;
 }
 
+function hasTakerSideDepth(side: "buy" | "sell", book: Book) {
+  return side === "buy" ? book.asks.length > 0 : book.bids.length > 0;
+}
+
 function effectiveLimitPx(input: OrderInput, book: Book) {
   if (input.limitPx !== null) return input.limitPx;
   if (input.side === "buy") {
@@ -1283,7 +1308,11 @@ async function latestSnapshotsForPositions(db: LedgerDb, positions: PaperPositio
 }
 
 function positionKey(position: Pick<PaperPositionRow, "market_type" | "coin">) {
-  return `${position.market_type}:${position.coin}`;
+  return marketKey(position.market_type, position.coin);
+}
+
+function marketKey(marketType: string, coin: string) {
+  return `${marketType}:${coin}`;
 }
 
 function latestSnapshotId(snapshots: Map<string, PaperMarketSnapshotRow>) {

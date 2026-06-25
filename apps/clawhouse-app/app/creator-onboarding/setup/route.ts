@@ -261,6 +261,9 @@ const runtimeExecutorContract = {
 
 // Validated against skills/clawhouse-creator-onboarding/SKILL.md by the creator-onboarding setup test.
 function completionTemplate(creatorPublicAccount: string) {
+  const contractConfig = getPublicKeyMarketContractConfig();
+  const fundingNetwork = keyMarketFundingNetwork(contractConfig.networkId);
+
   return [
     "Paper agent is active.",
     "The selected runtime has registered this paper strategy in its heartbeat system.",
@@ -283,7 +286,7 @@ function completionTemplate(creatorPublicAccount: string) {
     "- last_result_status: <ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED>",
     "",
     "Optional key market:",
-    `1. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
+    `1. Send ${contractConfig.storageDepositNear} ${fundingNetwork} to ${creatorPublicAccount}.`,
     "2. Tell this agent: create keymarket.",
     "",
     "Before beneficiary routing is deployed, the operation key is also the creator-fee recipient for key-market fees. Treat it as valuable after key-market creation. Do not call it disposable yet.",
@@ -293,10 +296,11 @@ function completionTemplate(creatorPublicAccount: string) {
 
 function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: boolean) {
   const contractConfig = getPublicKeyMarketContractConfig();
+  const fundingNetwork = keyMarketFundingNetwork(contractConfig.networkId);
 
   return {
-    fundingAmountNear: "0.02",
-    fundingNetwork: "NEAR testnet",
+    fundingAmountNear: contractConfig.storageDepositNear,
+    fundingNetwork,
     environment: contractConfig.environment,
     networkId: contractConfig.networkId,
     rpcUrl: contractConfig.nodeUrl,
@@ -304,6 +308,8 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
     createMethod: contractConfig.createMethod,
     preflightMethod: contractConfig.preflightMethod,
     stateReadMethod: contractConfig.stateReadMethod,
+    methodArgs: contractConfig.methodArgs,
+    methodNotes: contractConfig.methodNotes,
     gasTgas: contractConfig.gasTgas,
     gas: contractConfig.gas,
     fundTo: creatorPublicAccount,
@@ -339,18 +345,41 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
       },
       signerAccount: creatorPublicAccount,
       args: ["<agent_id>", "<agent_name>", "<metadata_uri>"],
+      functionCall: {
+        methodName: contractConfig.createMethod,
+        argsJson: contractConfig.methodArgs.createAgentKey,
+        attachedDepositNear: contractConfig.storageDepositNear,
+        gasTgas: contractConfig.gasTgas,
+      },
+      preflightCall: {
+        methodName: contractConfig.preflightMethod,
+        argsJson: contractConfig.methodArgs.getAgent,
+        expectedMissingResult: null,
+      },
+      stateReadCall: {
+        methodName: contractConfig.stateReadMethod,
+        argsJson: contractConfig.methodArgs.getState,
+      },
     },
     userFacingSteps: [
-      `Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
+      `Send ${contractConfig.storageDepositNear} ${fundingNetwork} to ${creatorPublicAccount}.`,
       "Tell this agent: create keymarket.",
     ],
     forbidden: [
       "Do not show the creator a bun run command as the normal path.",
       "Do not paste NEAR private keys or seed phrases into chat.",
       "Do not paste NEAR private keys or seed phrases into Workbench, tool output, or logs.",
-      "Do not send mainnet NEAR for this testnet key market.",
+      contractConfig.networkId === "testnet"
+        ? "Do not send mainnet NEAR for this testnet key market."
+        : `Use only ${fundingNetwork} for this configured key market.`,
     ],
   };
+}
+
+function keyMarketFundingNetwork(networkId: string) {
+  if (networkId === "testnet") return "testnet NEAR";
+  if (networkId === "mainnet") return "mainnet NEAR";
+  return `${networkId} NEAR`;
 }
 
 function payloadFor(request: Request) {

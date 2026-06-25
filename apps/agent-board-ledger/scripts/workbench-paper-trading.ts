@@ -155,6 +155,7 @@ async function runPaperTradingFlow(
   });
   expectRejectedOrder(checks, "reduce-only order cannot increase exposure", reduceOnlyIncrease, "reduce_only_would_increase");
 
+  await sleep(11_000);
   const ethCross = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
     paper_account_id: paperAccountId,
     client_order_id: `eth-cross-${runId}`,
@@ -165,9 +166,38 @@ async function runPaperTradingFlow(
     margin_mode: "cross",
     leverage: 5,
     max_slippage_bps: 200,
-    reason: "Workbench verifies cross margin values existing positions with each coin's own mark.",
+    reason: "Workbench verifies cross margin refreshes existing open-position markets before validation.",
   });
-  expectOrderStatus(checks, "multi-coin cross-margin IOC fills with per-coin marks", ethCross, "filled");
+  expectOrderStatus(checks, "multi-coin cross-margin IOC refreshes existing position marks before margin validation", ethCross, "filled");
+
+  const reduceOnlyClose = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
+    paper_account_id: paperAccountId,
+    client_order_id: `reduce-only-close-${runId}`,
+    coin: "BTC",
+    side: "sell",
+    tif: "Ioc",
+    size: 0.01,
+    reduce_only: true,
+    margin_mode: "cross",
+    leverage: 10,
+    max_slippage_bps: 200,
+    reason: "Workbench closes the open cross BTC paper long with reduce-only.",
+  });
+  expectOrderStatus(checks, "reduce-only order closes the open long", reduceOnlyClose, "filled");
+
+  const afterCloseAccount = await getJson(options.baseUrl, `/paper/accounts/${paperAccountId}`);
+  checks.push({
+    name: "paper account readback shows the cross BTC long is closed",
+    ok: isSuccess(afterCloseAccount)
+      && !arrayAt(afterCloseAccount.json, ["positions"]).some((position) => (
+        stringAt(position, ["coin"]) === "BTC"
+          && stringAt(position, ["margin_mode"]) === "cross"
+          && stringAt(position, ["status"]) === "open"
+          && Math.abs(numberAt(position, ["signed_size"]) ?? 0) > 0
+      )),
+    status: afterCloseAccount.status,
+    expected: "no open cross BTC position after reduce-only close",
+  });
 
   const isolatedMarginReject = await paperPostJson(options, wallet, keyPair, "/paper/orders", paperAccountId, agentId, {
     paper_account_id: paperAccountId,
@@ -580,6 +610,10 @@ function missingResult(message: string): HttpResult {
     text: message,
     json: { ok: false, error: message },
   };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function resolvePath(value: string) {

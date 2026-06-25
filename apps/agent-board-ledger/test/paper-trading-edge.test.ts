@@ -344,6 +344,35 @@ describe("paper-trading market data", () => {
     expect(body.order.reject_reason).toBeNull();
   });
 
+  test("refreshes existing cross position markets before cross margin validation", async () => {
+    await registerPaperAccount({ allowed_markets: { scope: "hyperliquid_supported" } });
+    await createPaperMarketSnapshot({
+      coin: "SKY", mark_px: 0.05, bids: [{ px: 0.049, sz: 50_000 }], asks: [{ px: 0.05, sz: 50_000 }],
+    });
+    const sky = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "open-sky", coin: "SKY",
+      side: "sell", tif: "Ioc", size: 1_000, margin_mode: "cross", leverage: 3,
+    });
+    expect((await json<{ order: { status: string } }>(sky)).order.status).toBe("filled");
+
+    currentNow = new Date(currentNow.getTime() + 20_000);
+    rememberHyperliquidFixture({
+      coin: "SKY", mark_px: 0.051, bids: [{ px: 0.0509, sz: 50_000 }], asks: [{ px: 0.051, sz: 50_000 }],
+      observed_at: currentNow.toISOString(),
+    });
+    await createPaperMarketSnapshot({
+      coin: "RUNE", mark_px: 0.41209, bids: [{ px: 0.4118, sz: 10_000 }], asks: [{ px: 0.41209, sz: 10_000 }],
+    });
+
+    const rune = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "open-rune", coin: "RUNE",
+      side: "sell", tif: "Ioc", size: 100, margin_mode: "cross", leverage: 5,
+    });
+    const body = await json<{ order: { status: string; reject_reason: string | null } }>(rune);
+    expect(body.order.status).toBe("filled");
+    expect(body.order.reject_reason).toBeNull();
+  });
+
   test("market_not_allowed when coin not in allowlist", async () => {
     await registerPaperAccount({ allowed_markets: ["ETH"] });
     await createPaperMarketSnapshot({ coin: "BTC", mark_px: 100, bids: [{ px: 99, sz: 5 }], asks: [{ px: 100, sz: 5 }] });
@@ -410,6 +439,35 @@ describe("paper-trading fills", () => {
       side: "buy", tif: "Ioc", size: 1, limit_px: 100, margin_mode: "cross", leverage: 5,
     });
     expect((await json<{ order: { reject_reason: string } }>(res)).order.reject_reason).toBe("insufficient_depth");
+  });
+
+  test("market-like IOC with empty taker-side depth is rejected insufficient_depth", async () => {
+    await registerPaperAccount();
+    await createPaperMarketSnapshot({
+      coin: "BTC", mark_px: 100, bids: [{ px: 99, sz: 5 }], asks: [],
+    });
+    const buy = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "ioc-empty-asks", coin: "BTC",
+      side: "buy", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 5, max_slippage_bps: 100,
+    });
+    expect(buy.status).toBe(201);
+    expect((await json<{ order: { status: string; reject_reason: string } }>(buy)).order).toMatchObject({
+      status: "rejected",
+      reject_reason: "insufficient_depth",
+    });
+
+    await createPaperMarketSnapshot({
+      coin: "ETH", mark_px: 2000, bids: [], asks: [{ px: 2001, sz: 5 }],
+    });
+    const sell = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1", client_order_id: "ioc-empty-bids", coin: "ETH",
+      side: "sell", tif: "Ioc", size: 1, margin_mode: "cross", leverage: 5, max_slippage_bps: 100,
+    });
+    expect(sell.status).toBe(201);
+    expect((await json<{ order: { status: string; reject_reason: string } }>(sell)).order).toMatchObject({
+      status: "rejected",
+      reject_reason: "insufficient_depth",
+    });
   });
 
   test("GTC resting order with no fill requires limit_px", async () => {

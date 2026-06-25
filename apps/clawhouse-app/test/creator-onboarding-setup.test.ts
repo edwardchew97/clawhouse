@@ -152,14 +152,36 @@ describe("creator onboarding setup route", () => {
         networkId: string;
         rpcUrl: string;
         contractId: string;
+        fundingAmountNear: string;
+        fundingNetwork: string;
         createMethod: string;
         preflightMethod: string;
         stateReadMethod: string;
         gasTgas: string;
         gas: string;
+        methodArgs: {
+          createAgentKey: Record<string, string>;
+          getAgent: Record<string, string>;
+          getState: Record<string, string>;
+        };
         localAction: {
           storageDepositNear: string;
           env: Record<string, string>;
+          functionCall: {
+            methodName: string;
+            argsJson: Record<string, string>;
+            attachedDepositNear: string;
+            gasTgas: string;
+          };
+          preflightCall: {
+            methodName: string;
+            argsJson: Record<string, string>;
+            expectedMissingResult: null;
+          };
+          stateReadCall: {
+            methodName: string;
+            argsJson: Record<string, string>;
+          };
         };
       };
     };
@@ -174,9 +196,16 @@ describe("creator onboarding setup route", () => {
       networkId: testnet.network_id,
       rpcUrl: testnet.rpc_url,
       contractId: keyMarket.contract_id,
+      fundingAmountNear: keyMarket.storage_deposit_near,
+      fundingNetwork: "testnet NEAR",
       createMethod: keyMarket.create_method,
       preflightMethod: keyMarket.preflight_method,
       stateReadMethod: keyMarket.state_read_method,
+      methodArgs: {
+        createAgentKey: keyMarket.method_args.create_agent_key,
+        getAgent: keyMarket.method_args.get_agent,
+        getState: keyMarket.method_args.get_state,
+      },
       gasTgas: keyMarket.gas_tgas,
       gas: "100000000000000",
     });
@@ -191,6 +220,21 @@ describe("creator onboarding setup route", () => {
         NEAR_TGAS: keyMarket.gas_tgas,
         CLAWHOUSE_OPERATION_KEY_FILE: "~/.clawhouse/agents/<agent_id>/operation-key.json",
       },
+      functionCall: {
+        methodName: keyMarket.create_method,
+        argsJson: keyMarket.method_args.create_agent_key,
+        attachedDepositNear: keyMarket.storage_deposit_near,
+        gasTgas: keyMarket.gas_tgas,
+      },
+      preflightCall: {
+        methodName: keyMarket.preflight_method,
+        argsJson: keyMarket.method_args.get_agent,
+        expectedMissingResult: null,
+      },
+      stateReadCall: {
+        methodName: keyMarket.state_read_method,
+        argsJson: keyMarket.method_args.get_state,
+      },
     });
   });
 
@@ -202,6 +246,12 @@ describe("creator onboarding setup route", () => {
         nodeUrl: string;
         contractId: string;
         gas: string;
+        createMethod: string;
+        methodArgs: {
+          createAgentKey: Record<string, string>;
+          getAgent: Record<string, string>;
+          getState: Record<string, string>;
+        };
         storageDepositYocto: string;
       };
     };
@@ -211,7 +261,13 @@ describe("creator onboarding setup route", () => {
       nodeUrl: contracts.environments.testnet.rpc_url,
       contractId: contracts.environments.testnet.key_market.contract_id,
       gas: "100000000000000",
-      storageDepositYocto: "20000000000000000000000",
+      createMethod: contracts.environments.testnet.key_market.create_method,
+      methodArgs: {
+        createAgentKey: contracts.environments.testnet.key_market.method_args.create_agent_key,
+        getAgent: contracts.environments.testnet.key_market.method_args.get_agent,
+        getState: contracts.environments.testnet.key_market.method_args.get_state,
+      },
+      storageDepositYocto: "50000000000000000000000",
     });
   });
 
@@ -221,6 +277,14 @@ describe("creator onboarding setup route", () => {
     expect(() => GET(new Request("http://clawhouse.test/creator-onboarding/setup"))).toThrow(
       "Key-market contract environment is disabled: mainnet",
     );
+  });
+
+  test("keeps mainnet key-market onboarding disabled until configured", () => {
+    const mainnet = contracts.environments.mainnet;
+
+    expect(mainnet.status).toBe("disabled");
+    expect(mainnet.key_market.contract_id).toBeNull();
+    expect(mainnet.key_market.storage_deposit_near).toBeNull();
   });
 });
 

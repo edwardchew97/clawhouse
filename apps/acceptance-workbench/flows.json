@@ -453,7 +453,7 @@
             "agentId": "",
             "agentName": "NEAR Dip Scout",
             "metadataUri": "ipfs://near-dip-scout",
-            "STORAGE_DEPOSIT": "0.02"
+            "STORAGE_DEPOSIT": "0.05"
           },
           "setVars": {
             "agentId": "response.json.agentId",
@@ -674,20 +674,20 @@
           "optional": true,
           "id": "agentRegistration.key.fundCreator",
           "name": "Fund Creator Account",
-          "description": "Manual funding gate before optional key-market creation. Send 0.02 testnet NEAR to the resolved operation public account only if the creator wants a key market; never paste private keys into Workbench or chat.",
+          "description": "Manual funding gate before optional key-market creation. Send 0.05 testnet NEAR to the resolved operation public account only if the creator wants a key market; never paste private keys into Workbench or chat.",
           "type": "pending",
           "status": "manual",
           "access": "protected",
           "pendingReason": "Funding must happen outside Workbench. Workbench records the instruction; it does not custody funds or secrets. Before beneficiary routing, creating a key market makes the operation key valuable because it receives creator fees.",
           "inputs": {
-            "keyMarketFundingAmountNear": "0.02",
+            "keyMarketFundingAmountNear": "0.05",
             "creatorPublicAccount": "{{testUserAccountId}}"
           },
           "fillDefaultsWhenEmpty": [
             "keyMarketFundingAmountNear"
           ],
           "responseLines": [
-            "Send 0.02 testnet NEAR to the resolved operation public account only if you want a key market.",
+            "Send 0.05 testnet NEAR to the resolved operation public account only if you want a key market.",
             "Use the same runtime-managed operation account that signs ClawHouse backend requests when it is available.",
             "Before beneficiary routing, creating a key market makes this operation key valuable because it receives creator fees.",
             "Do not paste a NEAR private key or seed phrase into chat."
@@ -1425,7 +1425,7 @@
             "agentId": "",
             "keyAmount": "1",
             "buyMaxPriceNear": "",
-            "STORAGE_DEPOSIT": "0.02"
+            "STORAGE_DEPOSIT": "0.05"
           },
           "fillDefaultsWhenEmpty": [
             "keyAmount"
@@ -3727,6 +3727,7 @@
             "Creating or reusing a local Workbench signing wallet and sending only public key metadata plus paper-order signatures.",
             "Creating a service-authorized and Agent-signed paper account plus service-authorized Hyperliquid-style market snapshots.",
             "Submitting agent-signed IOC, GTC, ALO, reduce-only, and isolated-margin paper orders.",
+            "Waiting briefly before a multi-coin cross-margin order so the script verifies the backend refreshes existing open-position markets before margin validation.",
             "Running a service-authorized risk check after an adverse mark and verifying isolated liquidation.",
             "Reading the paper-labeled leaderboard and replay proof through the public HTTP APIs."
           ],
