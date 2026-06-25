@@ -50,6 +50,10 @@ type DemoChainState = {
   protection?: Record<string, unknown> | null;
   maxBuy?: Record<string, unknown> | null;
   maxBuyError?: string | null;
+  stateLoading?: boolean;
+  quoteLoading?: boolean;
+  maxBuyLoading?: boolean;
+  activityLoading?: boolean;
   activity?: Record<string, unknown> | null;
   activityError?: string | null;
   backend?: Record<string, unknown> | null;
@@ -605,6 +609,15 @@ export function KeyMarketWalletBridge() {
       const maxBuyPath = account?.accountId
         ? `/api/key-market/max-buy?agentId=${encodeURIComponent(agent.id)}&accountId=${encodeURIComponent(account.accountId)}`
         : "";
+      renderChainState({
+        accountId: account?.accountId ?? null,
+        contractId: config.contractId,
+        networkId: config.networkId,
+        stateLoading: true,
+        quoteLoading: true,
+        activityLoading: true,
+        maxBuyLoading: Boolean(maxBuyPath),
+      });
       const [stateResult, quoteResult, activityResult, maxBuyResult] = await Promise.allSettled([
         fetchJson<{ state: Record<string, unknown> }>(statePath),
         fetchJson<QuoteResponse>(quotePath),
@@ -630,6 +643,10 @@ export function KeyMarketWalletBridge() {
         protection: quoteResult.status === "fulfilled" ? quoteResult.value.protection : null,
         maxBuy: maxBuyResult.status === "fulfilled" ? maxBuyResult.value : null,
         maxBuyError: maxBuyResult.status === "rejected" ? errorMessage(maxBuyResult.reason, "Max buy read failed.") : null,
+        stateLoading: false,
+        quoteLoading: false,
+        activityLoading: false,
+        maxBuyLoading: false,
         activity: activityResult.status === "fulfilled" ? activityResult.value : null,
         activityError: firstRejectedMessage([activityResult]),
         backend: backendResult.status === "fulfilled" ? backendResult.value : { ok: false, error: firstRejectedMessage([backendResult]) },

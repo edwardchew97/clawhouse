@@ -26,6 +26,10 @@ let chainState = {
   protection: null,
   maxBuy: null,
   maxBuyError: null,
+  stateLoading: false,
+  quoteLoading: false,
+  maxBuyLoading: false,
+  activityLoading: false,
   activity: null,
   activityError: null,
   backend: null,
@@ -69,6 +73,9 @@ const chainBalance = (agent) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 const holderBalance = (agent) => chainBalance(agent);
+const keyStateLoading = (agent) => Boolean(agent && chainState.stateLoading);
+const quoteLoading = () => Boolean(chainState.quoteLoading || chainState.phase === "quoting");
+const keyActivityLoading = (agent) => Boolean(agent && chainState.activityLoading);
 const maxBuyApplies = (agent) => {
   if (!agent) return false;
   const maxBuy = chainState.maxBuy;
@@ -89,6 +96,14 @@ const isUnlocked = (agent) => {
   if (!agent) return false;
   const balance = holderBalance(agent);
   return Boolean(chainState.accountId && balance !== null && balance > 0 && readAccessApplies(agent));
+};
+const roomAccessLoading = (agent) => {
+  if (!agent || !chainState.accountId) return false;
+  const balance = holderBalance(agent);
+  return Boolean(
+    chainState.pending && (chainState.phase === "authenticating" || chainState.phase === "refreshing")
+    || (balance !== null && balance > 0 && !readAccessApplies(agent) && !chainState.readAccessError)
+  );
 };
 
 function keyMarketUnavailable(agent) {
@@ -194,7 +209,12 @@ function agentTitle(agent) {
 }
 
 function setChainState(nextState) {
-  chainState = { ...chainState, ...nextState };
+  const loadingClears = {};
+  if (Object.prototype.hasOwnProperty.call(nextState, "state")) loadingClears.stateLoading = false;
+  if (Object.prototype.hasOwnProperty.call(nextState, "quote")) loadingClears.quoteLoading = false;
+  if (Object.prototype.hasOwnProperty.call(nextState, "maxBuy")) loadingClears.maxBuyLoading = false;
+  if (Object.prototype.hasOwnProperty.call(nextState, "activity")) loadingClears.activityLoading = false;
+  chainState = { ...chainState, ...loadingClears, ...nextState };
   render();
 }
 
@@ -1237,6 +1257,14 @@ async function refreshKeyMarketRead(_reason) {
     && _reason !== "amount-change"
     && _reason !== "side-change";
   const maxBuyPath = `/api/key-market/max-buy?agentId=${encodeURIComponent(agent.id)}&accountId=${encodeURIComponent(chainState.accountId || "")}`;
+  chainState = {
+    ...chainState,
+    stateLoading: true,
+    quoteLoading: true,
+    activityLoading: true,
+    maxBuyLoading: Boolean(shouldRefreshMaxBuy),
+  };
+  render();
   const [stateResult, quoteResult, activityResult, maxBuyResult] = await Promise.allSettled([
     fetchJson(statePath),
     fetchJson(quotePath),
@@ -1253,6 +1281,10 @@ async function refreshKeyMarketRead(_reason) {
     protection: quoteResult.status === "fulfilled" ? quoteResult.value.protection : null,
     maxBuy: maxBuyResult.status === "fulfilled" ? maxBuyResult.value : chainState.maxBuy,
     maxBuyError: maxBuyResult.status === "rejected" ? errorMessage(maxBuyResult.reason, "Max buy read failed.") : null,
+    stateLoading: false,
+    quoteLoading: false,
+    activityLoading: false,
+    maxBuyLoading: false,
     activity: activityResult.status === "fulfilled" ? activityResult.value : null,
     activityError: firstRejectedMessage([activityResult]),
     error: firstRejectedMessage([stateResult, quoteResult]),
@@ -1482,7 +1514,7 @@ function renderHero(agent) {
   byId("statUpdate").textContent = latestRiskAt
     ? formatUtcTime(latestRiskAt)
     : chainApplies(agent) ? "testnet live" : backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
-  byId("statGate").textContent = isUnlocked(agent) ? "Unlocked" : holderBalance(agent) > 0 ? "Session pending" : "1 key";
+  setInlineState("statGate", gateLabel(agent, { compact: true }));
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
   byId("chartSub").textContent = activity
@@ -1582,6 +1614,58 @@ function renderBackendEmpty(targetId, title, detail) {
   `;
 }
 
+function skeleton(width = "44px", className = "") {
+  return `<span class="ui-skeleton ${className}" style="--skeleton-width:${escapeHtml(width)}"></span>`;
+}
+
+function setInlineState(id, value) {
+  const node = byId(id);
+  if (!node) return;
+  if (String(value).includes("<")) {
+    node.innerHTML = value;
+  } else {
+    node.textContent = value;
+  }
+}
+
+function loadingRows(count = 3) {
+  return Array.from({ length: count }, () => `
+    <div class="activity-row activity-row-skeleton" aria-hidden="true">
+      ${skeleton("38px", "activity-action-skeleton")}
+      <span class="activity-main">${skeleton("132px")}</span>
+      ${skeleton("86px", "activity-value-skeleton")}
+    </div>
+  `).join("");
+}
+
+function balanceLabel(agent, balance) {
+  if (!chainState.accountId) return "Connect wallet";
+  if (keyStateLoading(agent)) return skeleton("38px", "inline-skeleton");
+  if (chainState.error && !chainApplies(agent)) return "Unable to load";
+  return balance === null ? "--" : keyAmountLabel(balance);
+}
+
+function maxBuyLabel(agent, balance) {
+  if (!chainState.accountId) return "Connect wallet";
+  if (chainState.maxBuyLoading) return `Max buy ${skeleton("34px", "inline-skeleton")}`;
+  if (chainState.maxBuyError) return "Max buy unavailable";
+  if (tradeSide === "sell") {
+    return keyStateLoading(agent) ? `Sellable ${skeleton("38px", "inline-skeleton")}` : `Sellable ${balance === null ? "--" : keyAmountLabel(balance)}`;
+  }
+  const maxBuy = buyMaxAmount(agent);
+  return `Max buy ${maxBuy === null ? "--" : keyAmountLabel(maxBuy)}`;
+}
+
+function gateLabel(agent, options = {}) {
+  const balance = holderBalance(agent);
+  if (isUnlocked(agent)) return "Room open";
+  if (!chainState.accountId) return options.compact ? "1 key" : "Gate: 1 key";
+  if (keyStateLoading(agent)) return options.compact ? "Checking" : `Checking ${skeleton("34px", "inline-skeleton")}`;
+  if (roomAccessLoading(agent)) return options.compact ? "Opening" : "Opening room...";
+  if (chainState.readAccessError) return options.compact ? "Access error" : "Access unavailable";
+  return balance && balance > 0 ? "Opening room..." : options.compact ? "1 key" : "Gate: 1 key";
+}
+
 function renderRoom(agent) {
   const activity = paperActivity(agent);
   const events = activity
@@ -1639,8 +1723,8 @@ function keyholderRows(agent) {
   if (chainState.accountId) {
     rows.push({
       title: chainState.accountId,
-      meta: isUnlocked(agent) ? "Connected wallet / room access active" : "Connected wallet",
-      value: holderBalance(agent) === null ? "--" : keyAmountLabel(holderBalance(agent)),
+      meta: isUnlocked(agent) ? "Connected wallet / room access active" : roomAccessLoading(agent) ? "Connected wallet / opening room" : "Connected wallet",
+      value: keyStateLoading(agent) ? skeleton("48px", "inline-skeleton align-right") : holderBalance(agent) === null ? "--" : keyAmountLabel(holderBalance(agent)),
     });
   }
 
@@ -1670,15 +1754,15 @@ function renderKeyholders(agent) {
     <div class="agent-summary-grid">
       <div class="agent-summary-card">
         <span>Total keys</span>
-        <strong>${escapeHtml(holders === null ? "--" : holders.toLocaleString())}</strong>
+        <strong>${holders === null && keyStateLoading(agent) ? skeleton("42px") : escapeHtml(holders === null ? "--" : holders.toLocaleString())}</strong>
       </div>
       <div class="agent-summary-card">
         <span>Your keys</span>
-        <strong>${escapeHtml(balance === null ? "--" : keyAmountLabel(balance))}</strong>
+        <strong>${balanceLabel(agent, balance)}</strong>
       </div>
       <div class="agent-summary-card">
         <span>Gate</span>
-        <strong>${escapeHtml(isUnlocked(agent) ? "Unlocked" : balance && balance > 0 ? "Session pending" : "1 key")}</strong>
+        <strong>${gateLabel(agent, { compact: true })}</strong>
       </div>
     </div>
     ${rows.length ? rows.slice(0, 8).map((row) => `
@@ -1754,6 +1838,10 @@ function renderAgentBase(agent) {
 
 function renderKeyActivity(agent) {
   setActivityHeader("Key Trading Activity", "NEAR testnet key market");
+  if (keyActivityLoading(agent)) {
+    byId("keyActivityList").innerHTML = loadingRows(3);
+    return;
+  }
   const rows = keyActivityRows(agent);
   if (!rows.length) {
     renderBackendEmpty(
@@ -1850,16 +1938,21 @@ function renderTicket(agent) {
     ticketControls.setAttribute("aria-hidden", marketUnavailable ? "true" : "false");
   }
   if (ticketEmpty) ticketEmpty.hidden = !marketUnavailable;
-  if (tradeSide === "sell") {
-    byId("quotePay").textContent = keyAmountLabel(amount);
-    byId("quoteReceive").textContent = chainTotal ? nearLabel(chainTotal) : "--";
+  if (quoteLoading()) {
+    setInlineState("quotePay", skeleton("88px", "inline-skeleton align-right"));
+    setInlineState("quoteReceive", skeleton("54px", "inline-skeleton align-right"));
+    setInlineState("quoteAverage", skeleton("88px", "inline-skeleton align-right"));
+  } else if (tradeSide === "sell") {
+    setInlineState("quotePay", keyAmountLabel(amount));
+    setInlineState("quoteReceive", chainTotal ? nearLabel(chainTotal) : "--");
+    setInlineState("quoteAverage", chainTotal ? averageKeyPriceLabel(chainTotal, amount) : "--");
   } else {
-    byId("quotePay").textContent = chainTotal ? nearLabel(chainTotal) : keyPriceLabel(agent);
-    byId("quoteReceive").textContent = keyAmountLabel(amount);
+    setInlineState("quotePay", chainTotal ? nearLabel(chainTotal) : keyPriceLabel(agent));
+    setInlineState("quoteReceive", keyAmountLabel(amount));
+    setInlineState("quoteAverage", chainTotal
+      ? averageKeyPriceLabel(chainTotal, amount)
+      : (amount === 1 ? keyPriceLabel(agent) : "--"));
   }
-  byId("quoteAverage").textContent = chainTotal
-    ? averageKeyPriceLabel(chainTotal, amount)
-    : (tradeSide === "buy" && amount === 1 ? keyPriceLabel(agent) : "--");
   const tradeButton = byId("tradeButton");
   if (tradeButton) {
     tradeButton.textContent = busy
@@ -1879,17 +1972,15 @@ function renderTicket(agent) {
     if (isMax) {
       button.title = marketUnavailable
         ? "Key trading is not enabled for this agent."
+        : chainState.maxBuyLoading
+        ? "Loading max buy."
         : maxAmount === null
         ? (tradeSide === "buy" ? "Connect Wallet to read max buy." : "No key balance to sell.")
         : `Use ${keyAmountLabel(maxAmount)}`;
     }
   });
   if (keyAmount) keyAmount.disabled = marketUnavailable || busy;
-  byId("gateButton").textContent = isUnlocked(agent)
-    ? "Room open"
-    : balance && balance > 0
-      ? "Session pending"
-      : "Gate: 1 key";
+  setInlineState("gateButton", gateLabel(agent));
   renderWalletButton();
   renderBackendStatus();
 }
@@ -1904,12 +1995,8 @@ function renderWalletButton() {
 }
 
 function renderTicketBalance(agent, balance) {
-  const owned = balance === null ? "--" : keyAmountLabel(balance);
-  const maxBuy = buyMaxAmount(agent);
-  byId("ticketOwnedKeys").textContent = owned;
-  byId("ticketMaxBuy").textContent = tradeSide === "sell"
-    ? `Sellable ${owned}`
-    : `Max buy ${maxBuy === null ? "--" : keyAmountLabel(maxBuy)}`;
+  setInlineState("ticketOwnedKeys", balanceLabel(agent, balance));
+  setInlineState("ticketMaxBuy", maxBuyLabel(agent, balance));
 }
 
 function statusButtonText() {
