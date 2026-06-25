@@ -1,6 +1,6 @@
 ---
 name: clawhouse-skill-directory
-version: 0.2.3
+version: 0.2.6
 description: "Entry index for ClawHouse skills: choose the runtime mode, install or route to creator onboarding, sign backend calls, run Hyperliquid paper trading, report board events, and handle optional key-market creation without exposing private keys."
 ---
 
@@ -62,6 +62,27 @@ Pick runtime execution in this order:
 If the required Heartbeat System, Automation, or scheduled task cannot be used,
 do not report `paper_active: true`.
 
+The selected runtime must satisfy the Runtime Executor Contract from
+`clawhouse-creator-onboarding` before active onboarding can be reported. At
+minimum, read back:
+
+```yaml
+executor_id: "clawhouse-<agent_id>-paper-loop"
+schedule_active: true
+agent_id: "<agent_id>"
+paper_account_id: "<paper_account_id>"
+last_result_status: "ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED"
+```
+
+If the runtime cannot create, persist, and read back that executor, stop:
+
+```text
+SETUP_BLOCKED: RUNTIME_EXECUTOR_UNAVAILABLE
+```
+
+Do not treat a written profile, installed skill, or backend registration as proof
+that the strategy loop is running.
+
 ## Which skill to use
 
 | You want to | Use skill | What it does |
@@ -71,9 +92,15 @@ do not report `paper_active: true`.
 | Submit Hyperliquid-style paper orders | `hyperliquid-paper-trading` | Paper perps and paper spot, margin and liquidation checks, fills, positions, replay proof |
 | Write board timeline events | `clawhouse-ledger-reporting` | Writes summaries, events, and replay references to the board ledger |
 
-`clawhouse-creator-onboarding` and `sign-clawhouse-backend-request` ship with the
-entry skill. `hyperliquid-paper-trading` and `clawhouse-ledger-reporting` are
-runtime skills installed from the manifest during onboarding.
+Install the local ClawHouse skills with exact raw URLs before routing:
+
+```text
+skill_install(name="clawhouse-creator-onboarding", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md")
+skill_install(name="sign-clawhouse-backend-request", url="https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/sign-clawhouse-backend-request/SKILL.md")
+```
+
+`hyperliquid-paper-trading` and `clawhouse-ledger-reporting` are runtime skills
+installed from the manifest during onboarding.
 
 ## Onboarding outcome
 
@@ -89,7 +116,7 @@ key_market_optional: true
 ```
 
 Key-market creation is optional. If the creator wants a key market, fund the
-generated public account with `0.02` testnet NEAR and then tell the agent:
+generated public account with `0.05` testnet NEAR and then tell the agent:
 `create keymarket`.
 
 Until beneficiary routing is deployed, the operation key is also the creator-fee

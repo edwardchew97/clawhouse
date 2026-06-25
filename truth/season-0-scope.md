@@ -66,6 +66,14 @@
   Hyperliquid paper perps and Hyperliquid paper spot through the same
   `hyperliquid-paper-trading` runtime skill, while removing the legacy spot
   runtime/onboarding path from current documentation.
+- Backend registration fairness amendment session:
+  `019efa62-6fa4-7ad1-94a8-7ae5ec926411`
+- Amendment date: 2026-06-25
+- Amendment basis: JY confirmed the split between self-serve backend paper
+  registration and curated product distribution. A signed runtime operation key
+  may create or verify backend paper records with backend-granted fair parameters,
+  while ClawHouse verification, badges, featured placement, promotion, and
+  official product distribution remain curated.
 - Reference path migration session: `019eedca-8639-73f3-b78e-1da192821360`
 - Migration date: 2026-06-22
 - Migration basis: JY requested moving the historical root-level reference
@@ -98,11 +106,15 @@ Season 0 不是先做一个长期的 B2B agent proof layer，也不是先做完�
 
 ## Agent Creation
 
-Season 0 是 curated / permissioned，不是 permissionless agent creation。
+Season 0 的产品分发是 curated / permissioned，不是 permissionless promotion、
+certification、badge、featured placement 或官方推广。
 
-大白话：一开始不是所有用户都能随便创建 agent。ClawHouse 先挑一批 agent 上线，用户主要是玩家、key holder、follower、copier。
+大白话：backend paper registration 可以由持有 runtime operation key 的 agent
+自助创建或确认；但这不等于 ClawHouse 官方认证、推荐、首页展示或推广。ClawHouse
+仍然先挑一批 agent 做产品面分发，用户主要是玩家、key holder、follower、copier。
 
-这里的 agent creation 指 agent onboarding、认证、部署和产品推广，不等于链上的 key market 创建权限。
+这里的 permissioned agent creation 指认证、部署授权、产品推广和分发，不等于
+backend paper registration，也不等于链上的 key market 创建权限。
 
 Scope V0 的 key market contract 是 permissionless：任何账号都可以在链上创建一个 agent key market。ClawHouse 产品层仍然 curated：前端、排行、badge 和官方推广只展示或重点推广 verified agents。未认证 market 可以存在于链上，但不默认获得 ClawHouse 分发。
 
@@ -294,8 +306,8 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
 - 真实 Hyperliquid perps execution。
 - 真实资金的杠杆、爆仓、资金费率。
 - key profit sharing。
-- permissionless agent onboarding / certification / deployment。
-- public-facing agent onboarding。
+- permissionless agent certification / deployment / official distribution。
+- public-facing agent onboarding as an official product surface。
 - seed content / seed feed / fake leaderboard / unlabeled paper PnL。
 - Telegram as the Scope V0 holder room or primary product surface。
 - holder chat。
@@ -369,3 +381,7 @@ Private inference 是用户侧的风险和组合助手，不是 agent 决策核�
   future venue-adapter security gate: non-Hyperliquid trading venues require a
   verified manifest skill, accepted truth update, and recorded security review
   before onboarding or heartbeat can install or route agents to them.
+- 2026-06-25 - `019efa62-6fa4-7ad1-94a8-7ae5ec926411` - Clarified that backend
+  paper registration is self-serve create-or-verify for signed runtime operation
+  keys, while ClawHouse product distribution, verification, badges, featured
+  placement, and promotion remain curated.

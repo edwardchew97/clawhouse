@@ -19,6 +19,7 @@ let chartTimeCoordinateOffset = 0;
 let visibleLogicalRangeListener = null;
 const ticketTabs = new Map();
 const amountButtons = new Map();
+const filterCheckboxes = new Map();
 
 class FakeClassList {
   constructor() {
@@ -67,6 +68,7 @@ class FakeElement {
     this.attributes = new Map();
     this.listeners = new Map();
     this.value = id === "keyAmount" ? "1" : "";
+    this.checked = false;
     this.textContent = "";
     this.className = "";
     this.src = "";
@@ -129,6 +131,11 @@ class FakeElement {
   }
 
   click() {
+    if (this.dataset.agentFilter) {
+      this.checked = !this.checked;
+      this.listeners.get("change")?.({ target: this });
+      return;
+    }
     this.listeners.get("click")?.({ target: this });
   }
 
@@ -164,7 +171,8 @@ class FakeElement {
   }
 }
 
-function agent(id, boardId, totalPnlPct, holders) {
+function agent(id, boardId, totalPnlPct, holders, keyMarketStatus = "unavailable") {
+  const keyMarketAvailable = keyMarketStatus === "available";
   return {
     id,
     boardId,
@@ -175,8 +183,8 @@ function agent(id, boardId, totalPnlPct, holders) {
     gate: "1 key",
     status: "available",
     keyMarket: {
-      status: "available",
-      data: { agent: { agent_id: id, name: id, supply: holders } },
+      status: keyMarketStatus,
+      data: keyMarketAvailable ? { agent: { agent_id: id, name: id, supply: holders } } : undefined,
     },
     board: {
       status: "available",
@@ -226,6 +234,15 @@ function amountButton(amount) {
     amountButtons.set(amount, button);
   }
   return amountButtons.get(amount);
+}
+
+function filterCheckbox(filter) {
+  if (!filterCheckboxes.has(filter)) {
+    const input = new FakeElement(`filter-${filter}`);
+    input.dataset.agentFilter = filter;
+    filterCheckboxes.set(filter, input);
+  }
+  return filterCheckboxes.get(filter);
 }
 
 function paperActivityFixture() {
@@ -499,7 +516,10 @@ function selectedBackend(boardId, totalPnlPct, paperActivity = null, leaderboard
         {
           paper_account_id: "codex_board",
           agent_id: "codex_main_20260620",
+          equity_usd: 1250,
           paper_pnl_pct: 0.25,
+          stale_data_status: "fresh",
+          created_at: "2026-06-24T01:23:45.000Z",
         },
         {
           agent_id: "ledger-lane-agent-edge-20260620-0936-a13c",
@@ -531,7 +551,11 @@ const context = {
   Intl,
   Math,
   Number,
-  Date,
+  Date: class FixedDate extends Date {
+    static now() {
+      return Date.parse("2026-06-24T02:00:00.000Z");
+    }
+  },
   setTimeout: (callback, delayMs = 0) => {
     if (delayMs >= 1000) return 1;
     callback();
@@ -654,6 +678,9 @@ context.document = {
     if (selector === "[data-amount]") {
       return ["1", "2", "5", "10", "max"].map(amountButton);
     }
+    if (selector === "[data-agent-filter]") {
+      return ["last24h", "keyEnabled", "openPosition", "positivePnl"].map(filterCheckbox);
+    }
     return [];
   },
 };
@@ -731,6 +758,20 @@ assert(!element("agentList").innerHTML.includes("empty_agent"), "Inactive paper 
 assert(!element("agentList").innerHTML.includes("terminal_chad6"), "Rows without public paper activity should not remain visible after backend readback.");
 assert(rendered[0]?.selected === "true", "The selected row should move to the first visible active paper agent.");
 assert(!element("agentList").innerHTML.includes("agent-row active"), "Agent rows should not use the old active class.");
+assert(!pageSource.includes("agentSort"), "Agent Discovery sort control should not be present.");
+assert(!pageSource.includes("Leaderboard P&L"), "The redundant leaderboard summary should not be present.");
+assert(pageSource.includes('data-agent-filter="last24h"'), "Agent Discovery should expose a Last 24h active filter.");
+assert(pageSource.includes('data-agent-filter="keyEnabled"'), "Agent Discovery should expose a key trading enabled filter.");
+assert(element("agentList").innerHTML.includes("Equity $1,250.00"), "Agent rows should show paper equity instead of key counts.");
+assert(!element("agentList").innerHTML.includes("0 keys"), "Agent rows should not show unhelpful zero key counts.");
+filterCheckbox("keyEnabled").click();
+rendered = rows();
+assert(rendered.length === 0, "Key trading filter should hide agents without a real key-market readback.");
+assert(element("agentList").innerHTML.includes("No agents found"), "Empty filtered Agent Discovery should render a clear empty state.");
+assert(element("agentList").innerHTML.includes("Clear filters"), "Empty filtered Agent Discovery should offer a filter reset action.");
+filterCheckbox("keyEnabled").click();
+rendered = rows();
+assert(rendered.length === 1, "Clearing key trading filter should restore paper-active rows.");
 
 const codexRow = element("agentList").querySelectorAll("[data-agent]").find((row) => row.dataset.agentId === "codex_main_20260620");
 codexRow.click();
@@ -741,6 +782,17 @@ context.window.ClawHouseDemo.setChainState({
   backend: selectedBackend("codex_board", 0.25, paperActivityFixture()),
   activity: keyActivityFixture(),
 });
+filterCheckbox("last24h").click();
+filterCheckbox("keyEnabled").click();
+filterCheckbox("openPosition").click();
+filterCheckbox("positivePnl").click();
+rendered = rows();
+assert(rendered.length === 1, "Agent Discovery filters should work as a multi-select AND filter.");
+assert(rendered[0]?.id === "codex_main_20260620", "The active key-enabled open-position positive-P&L filter set should keep the matching agent.");
+filterCheckbox("last24h").click();
+filterCheckbox("keyEnabled").click();
+filterCheckbox("openPosition").click();
+filterCheckbox("positivePnl").click();
 assert(element("activityPanelTitle").textContent === "Key Trading Activity", "Paper agents should keep the key trading activity header.");
 assert(element("activityPanelSub").textContent === "NEAR testnet key market", "Key activity header should stay on the NEAR key market source.");
 assert(element("keyActivityList").innerHTML.includes("2 keys"), "Key activity list should render the bought key amount.");

@@ -64,7 +64,7 @@ pub struct PriceQuote {
     pub payout: U128,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct TradeResult {
     pub agent_id: String,
@@ -83,18 +83,9 @@ pub struct TradeResult {
 #[derive(Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct KeyTradeEventData {
-    pub agent_id: String,
     pub side: String,
-    pub trader_id: AccountId,
-    pub amount: U64,
-    pub supply_after: U64,
-    pub trader_balance_after: U64,
-    pub reserve_after: U128,
-    pub price: U128,
-    pub protocol_fee: U128,
-    pub creator_fee: U128,
-    pub total_cost: U128,
-    pub payout: U128,
+    #[serde(flatten)]
+    pub result: TradeResult,
 }
 
 #[near(event_json(standard = "clawhouse-key-market"))]
@@ -195,7 +186,6 @@ impl Contract {
             quote.total_cost.0 <= max_price.0,
             "Total cost exceeds max_price"
         );
-        assert_attached_deposit(quote.total_cost.0);
 
         let balance_key = BalanceKey {
             agent_id: agent_id.clone(),
@@ -386,18 +376,8 @@ fn validate_agent_id(agent_id: &str) {
 
 fn emit_key_trade(side: &str, result: &TradeResult) {
     KeyMarketEvent::KeyTrade(vec![KeyTradeEventData {
-        agent_id: result.agent_id.clone(),
         side: side.to_string(),
-        trader_id: result.trader_id.clone(),
-        amount: result.amount,
-        supply_after: result.supply_after,
-        trader_balance_after: result.trader_balance_after,
-        reserve_after: result.reserve_after,
-        price: result.price,
-        protocol_fee: result.protocol_fee,
-        creator_fee: result.creator_fee,
-        total_cost: result.total_cost,
-        payout: result.payout,
+        result: result.clone(),
     }])
     .emit();
 }

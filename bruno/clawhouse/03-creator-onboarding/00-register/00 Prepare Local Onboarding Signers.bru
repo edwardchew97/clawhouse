@@ -35,13 +35,11 @@ script:pre-request {
   const agentPublicKey = agentKeyPair.getPublicKey();
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const agentPrefix = String(value("onboarding_agent_prefix", "bruno-onboarding-agent"));
-  const boardPrefix = String(value("onboarding_board_prefix", "bruno-onboarding-board"));
-  const paperAccountPrefix = String(value("onboarding_paper_account_prefix", "bruno-onboarding-paper"));
 
   bru.setVar("onboarding_run_id", runId);
   bru.setVar("onboarding_agent_id", `${agentPrefix}-${runId}`);
-  bru.setVar("onboarding_board_id", `${boardPrefix}-${runId}`);
-  bru.setVar("onboarding_paper_account_id", `${paperAccountPrefix}-${runId}`);
+  bru.setVar("onboarding_board_id", "");
+  bru.setVar("onboarding_paper_account_id", "");
   bru.setVar("onboarding_wallet_address", keyToImplicitAddress(boardPublicKey));
   bru.setVar("onboarding_wallet_secret_key", boardKeyPair.toString());
   bru.setVar("onboarding_wallet_public_key", boardPublicKey.toString());
@@ -55,8 +53,8 @@ tests {
     const body = res.getBody();
     expect(body.ok).to.equal(true);
     expect(bru.getVar("onboarding_agent_id")).to.be.a("string");
-    expect(bru.getVar("onboarding_board_id")).to.be.a("string");
-    expect(bru.getVar("onboarding_paper_account_id")).to.be.a("string");
+    expect(bru.getVar("onboarding_board_id")).to.equal("");
+    expect(bru.getVar("onboarding_paper_account_id")).to.equal("");
     expect(bru.getVar("onboarding_wallet_address")).to.match(/^[a-f0-9]{64}$/);
     expect(bru.getVar("onboarding_wallet_secret_key")).to.match(/^ed25519:/);
     expect(bru.getVar("onboarding_wallet_public_key")).to.match(/^ed25519:/);

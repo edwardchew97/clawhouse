@@ -1,4 +1,4 @@
-export const neonSchemaStatements = [
+export const postgresSchemaStatements = [
   `
 	    CREATE TABLE IF NOT EXISTS boards (
 	      id TEXT PRIMARY KEY,
@@ -245,7 +245,10 @@ export const neonSchemaStatements = [
       agent_id TEXT NOT NULL,
       agent_public_key TEXT NOT NULL,
       base_currency TEXT NOT NULL DEFAULT 'USD',
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      starting_balance_raw TEXT,
       starting_balance_usd DOUBLE PRECISION NOT NULL,
+      cash_balance_raw TEXT,
       cash_balance_usd DOUBLE PRECISION NOT NULL,
       status TEXT NOT NULL DEFAULT 'active',
       allowed_markets_json TEXT,
@@ -273,7 +276,10 @@ export const neonSchemaStatements = [
       market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       source TEXT NOT NULL,
+      price_decimals INTEGER NOT NULL DEFAULT 8,
+      mark_px_raw TEXT,
       mark_px DOUBLE PRECISION NOT NULL,
+      oracle_px_raw TEXT,
       oracle_px DOUBLE PRECISION,
       funding_rate DOUBLE PRECISION,
       max_leverage DOUBLE PRECISION,
@@ -287,6 +293,12 @@ export const neonSchemaStatements = [
   "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS ingest_sequence INTEGER",
   "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
   "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS max_leverage DOUBLE PRECISION",
+  "ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS quote_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS starting_balance_raw TEXT",
+  "ALTER TABLE paper_accounts ADD COLUMN IF NOT EXISTS cash_balance_raw TEXT",
+  "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS price_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS mark_px_raw TEXT",
+  "ALTER TABLE paper_market_snapshots ADD COLUMN IF NOT EXISTS oracle_px_raw TEXT",
   "CREATE INDEX IF NOT EXISTS paper_market_snapshots_coin_observed_idx ON paper_market_snapshots(market_type, coin, observed_at)",
   `
     CREATE TABLE IF NOT EXISTS paper_orders (
@@ -298,13 +310,20 @@ export const neonSchemaStatements = [
       coin TEXT NOT NULL,
       side TEXT NOT NULL,
       tif TEXT NOT NULL,
+      price_decimals INTEGER NOT NULL DEFAULT 8,
+      size_decimals INTEGER NOT NULL DEFAULT 8,
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      limit_px_raw TEXT,
       limit_px DOUBLE PRECISION,
+      size_raw TEXT,
       size DOUBLE PRECISION NOT NULL,
+      remaining_size_raw TEXT,
       remaining_size DOUBLE PRECISION NOT NULL,
       reduce_only INTEGER NOT NULL DEFAULT 0,
       margin_mode TEXT NOT NULL,
       leverage DOUBLE PRECISION NOT NULL,
       max_slippage_bps DOUBLE PRECISION NOT NULL,
+      reference_px_raw TEXT,
       reference_px DOUBLE PRECISION,
       max_reference_deviation_bps DOUBLE PRECISION,
       reference_deviation_bps DOUBLE PRECISION,
@@ -313,8 +332,11 @@ export const neonSchemaStatements = [
       reason TEXT,
       strategy_hash TEXT,
       market_snapshot_id TEXT REFERENCES paper_market_snapshots(id),
+      avg_fill_px_raw TEXT,
       avg_fill_px DOUBLE PRECISION,
+      notional_raw TEXT,
       notional_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
+      fee_raw TEXT,
       fee_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
       body_hash TEXT,
       created_at TEXT NOT NULL,
@@ -323,9 +345,19 @@ export const neonSchemaStatements = [
     )
   `,
   "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS price_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS size_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS quote_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS limit_px_raw TEXT",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS size_raw TEXT",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS remaining_size_raw TEXT",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS reference_px_raw TEXT",
   "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS reference_px DOUBLE PRECISION",
   "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS max_reference_deviation_bps DOUBLE PRECISION",
   "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS reference_deviation_bps DOUBLE PRECISION",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS avg_fill_px_raw TEXT",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS notional_raw TEXT",
+  "ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS fee_raw TEXT",
   "CREATE INDEX IF NOT EXISTS paper_orders_account_created_idx ON paper_orders(paper_account_id, created_at)",
   "CREATE INDEX IF NOT EXISTS paper_orders_status_idx ON paper_orders(status, market_type, coin)",
   `
@@ -336,9 +368,16 @@ export const neonSchemaStatements = [
       market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       side TEXT NOT NULL,
+      price_decimals INTEGER NOT NULL DEFAULT 8,
+      size_decimals INTEGER NOT NULL DEFAULT 8,
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      px_raw TEXT,
       px DOUBLE PRECISION NOT NULL,
+      size_raw TEXT,
       size DOUBLE PRECISION NOT NULL,
+      notional_raw TEXT,
       notional_usd DOUBLE PRECISION NOT NULL,
+      fee_raw TEXT,
       fee_usd DOUBLE PRECISION NOT NULL,
       liquidity TEXT NOT NULL,
       market_snapshot_id TEXT NOT NULL REFERENCES paper_market_snapshots(id),
@@ -346,6 +385,13 @@ export const neonSchemaStatements = [
     )
   `,
   "ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
+  "ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS price_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS size_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS quote_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS px_raw TEXT",
+  "ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS size_raw TEXT",
+  "ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS notional_raw TEXT",
+  "ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS fee_raw TEXT",
   "CREATE INDEX IF NOT EXISTS paper_fills_account_created_idx ON paper_fills(paper_account_id, created_at)",
   `
     CREATE TABLE IF NOT EXISTS paper_positions (
@@ -354,12 +400,21 @@ export const neonSchemaStatements = [
       market_type TEXT NOT NULL DEFAULT 'perp',
       coin TEXT NOT NULL,
       margin_mode TEXT NOT NULL,
+      price_decimals INTEGER NOT NULL DEFAULT 8,
+      size_decimals INTEGER NOT NULL DEFAULT 8,
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      signed_size_raw TEXT,
       signed_size DOUBLE PRECISION NOT NULL,
+      entry_px_raw TEXT,
       entry_px DOUBLE PRECISION NOT NULL,
       leverage DOUBLE PRECISION NOT NULL,
+      isolated_margin_raw TEXT,
       isolated_margin_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
+      realized_pnl_raw TEXT,
       realized_pnl_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
+      funding_raw TEXT,
       funding_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
+      fee_raw TEXT,
       fee_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'open',
       updated_at TEXT NOT NULL,
@@ -368,15 +423,30 @@ export const neonSchemaStatements = [
     )
   `,
   "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS market_type TEXT NOT NULL DEFAULT 'perp'",
+  "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS price_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS size_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS quote_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS signed_size_raw TEXT",
+  "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS entry_px_raw TEXT",
+  "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS isolated_margin_raw TEXT",
+  "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS realized_pnl_raw TEXT",
+  "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS funding_raw TEXT",
+  "ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS fee_raw TEXT",
   `
     CREATE TABLE IF NOT EXISTS paper_risk_snapshots (
       id TEXT PRIMARY KEY,
       ingest_sequence INTEGER,
       paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      equity_raw TEXT,
       equity_usd DOUBLE PRECISION NOT NULL,
+      cash_balance_raw TEXT,
       cash_balance_usd DOUBLE PRECISION NOT NULL,
+      total_notional_raw TEXT,
       total_notional_usd DOUBLE PRECISION NOT NULL,
+      maintenance_margin_raw TEXT,
       maintenance_margin_usd DOUBLE PRECISION NOT NULL,
+      unrealized_pnl_raw TEXT,
       unrealized_pnl_usd DOUBLE PRECISION NOT NULL,
       staleness_status TEXT NOT NULL,
       source_market_snapshot_id TEXT REFERENCES paper_market_snapshots(id),
@@ -384,6 +454,12 @@ export const neonSchemaStatements = [
     )
   `,
   "ALTER TABLE paper_risk_snapshots ADD COLUMN IF NOT EXISTS ingest_sequence INTEGER",
+  "ALTER TABLE paper_risk_snapshots ADD COLUMN IF NOT EXISTS quote_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_risk_snapshots ADD COLUMN IF NOT EXISTS equity_raw TEXT",
+  "ALTER TABLE paper_risk_snapshots ADD COLUMN IF NOT EXISTS cash_balance_raw TEXT",
+  "ALTER TABLE paper_risk_snapshots ADD COLUMN IF NOT EXISTS total_notional_raw TEXT",
+  "ALTER TABLE paper_risk_snapshots ADD COLUMN IF NOT EXISTS maintenance_margin_raw TEXT",
+  "ALTER TABLE paper_risk_snapshots ADD COLUMN IF NOT EXISTS unrealized_pnl_raw TEXT",
   "CREATE INDEX IF NOT EXISTS paper_risk_snapshots_account_created_idx ON paper_risk_snapshots(paper_account_id, created_at)",
   `
     CREATE TABLE IF NOT EXISTS paper_liquidation_events (
@@ -391,21 +467,36 @@ export const neonSchemaStatements = [
       paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
       position_id TEXT REFERENCES paper_positions(id),
       coin TEXT,
+      price_decimals INTEGER NOT NULL DEFAULT 8,
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      trigger_px_raw TEXT,
       trigger_px DOUBLE PRECISION,
+      liquidation_px_raw TEXT,
       liquidation_px DOUBLE PRECISION,
+      equity_raw TEXT,
       equity_usd DOUBLE PRECISION NOT NULL,
+      maintenance_margin_raw TEXT,
       maintenance_margin_usd DOUBLE PRECISION NOT NULL,
       reason TEXT NOT NULL,
       market_snapshot_id TEXT REFERENCES paper_market_snapshots(id),
       created_at TEXT NOT NULL
     )
   `,
+  "ALTER TABLE paper_liquidation_events ADD COLUMN IF NOT EXISTS price_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_liquidation_events ADD COLUMN IF NOT EXISTS quote_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_liquidation_events ADD COLUMN IF NOT EXISTS trigger_px_raw TEXT",
+  "ALTER TABLE paper_liquidation_events ADD COLUMN IF NOT EXISTS liquidation_px_raw TEXT",
+  "ALTER TABLE paper_liquidation_events ADD COLUMN IF NOT EXISTS equity_raw TEXT",
+  "ALTER TABLE paper_liquidation_events ADD COLUMN IF NOT EXISTS maintenance_margin_raw TEXT",
   `
     CREATE TABLE IF NOT EXISTS paper_leaderboard_snapshots (
       id TEXT PRIMARY KEY,
       paper_account_id TEXT NOT NULL REFERENCES paper_accounts(id),
       agent_id TEXT NOT NULL,
+      quote_decimals INTEGER NOT NULL DEFAULT 8,
+      equity_raw TEXT,
       equity_usd DOUBLE PRECISION NOT NULL,
+      paper_pnl_raw TEXT,
       paper_pnl_usd DOUBLE PRECISION NOT NULL,
       paper_pnl_pct DOUBLE PRECISION NOT NULL,
       max_drawdown_pct DOUBLE PRECISION NOT NULL,
@@ -415,6 +506,9 @@ export const neonSchemaStatements = [
       created_at TEXT NOT NULL
     )
   `,
+  "ALTER TABLE paper_leaderboard_snapshots ADD COLUMN IF NOT EXISTS quote_decimals INTEGER NOT NULL DEFAULT 8",
+  "ALTER TABLE paper_leaderboard_snapshots ADD COLUMN IF NOT EXISTS equity_raw TEXT",
+  "ALTER TABLE paper_leaderboard_snapshots ADD COLUMN IF NOT EXISTS paper_pnl_raw TEXT",
   "CREATE INDEX IF NOT EXISTS paper_leaderboard_snapshots_rank_idx ON paper_leaderboard_snapshots(created_at, paper_pnl_pct)",
   `
     CREATE TABLE IF NOT EXISTS paper_audit_events (
@@ -511,15 +605,19 @@ export const neonSchemaStatements = [
           AND column_name = 'starting_value_usd'
       ) THEN
         EXECUTE 'INSERT INTO paper_accounts
-          (id, board_id, agent_id, agent_public_key, base_currency, starting_balance_usd,
-           cash_balance_usd, status, allowed_markets_json, metadata_json, created_at, updated_at)
+          (id, board_id, agent_id, agent_public_key, base_currency, quote_decimals,
+           starting_balance_raw, starting_balance_usd, cash_balance_raw, cash_balance_usd,
+           status, allowed_markets_json, metadata_json, created_at, updated_at)
           SELECT
 	            ''paper_legacy_'' || id,
 	            id,
 	            agent_id,
 	            COALESCE(NULLIF(agent_public_key, ''''), public_key),
             COALESCE(NULLIF(base_currency, ''''), ''USD''),
+            8,
+            CAST(ROUND(starting_value_usd * 100000000) AS TEXT),
             starting_value_usd,
+            CAST(ROUND(starting_value_usd * 100000000) AS TEXT),
             starting_value_usd,
             ''active'',
             NULL,
@@ -534,6 +632,95 @@ export const neonSchemaStatements = [
           ON CONFLICT DO NOTHING';
       END IF;
     END $$;
+  `,
+  `
+    UPDATE paper_accounts
+      SET starting_balance_raw = COALESCE(starting_balance_raw, CAST(ROUND(starting_balance_usd * 100000000) AS TEXT)),
+          cash_balance_raw = COALESCE(cash_balance_raw, CAST(ROUND(cash_balance_usd * 100000000) AS TEXT)),
+          quote_decimals = COALESCE(quote_decimals, 8)
+  `,
+  `
+    UPDATE paper_market_snapshots
+      SET mark_px_raw = COALESCE(mark_px_raw, CAST(ROUND(mark_px * 100000000) AS TEXT)),
+          oracle_px_raw = CASE
+            WHEN oracle_px IS NULL THEN oracle_px_raw
+            ELSE COALESCE(oracle_px_raw, CAST(ROUND(oracle_px * 100000000) AS TEXT))
+          END,
+          price_decimals = COALESCE(price_decimals, 8)
+  `,
+  `
+    UPDATE paper_orders
+      SET limit_px_raw = CASE
+            WHEN limit_px IS NULL THEN limit_px_raw
+            ELSE COALESCE(limit_px_raw, CAST(ROUND(limit_px * 100000000) AS TEXT))
+          END,
+          size_raw = COALESCE(size_raw, CAST(ROUND(size * 100000000) AS TEXT)),
+          remaining_size_raw = COALESCE(remaining_size_raw, CAST(ROUND(remaining_size * 100000000) AS TEXT)),
+          reference_px_raw = CASE
+            WHEN reference_px IS NULL THEN reference_px_raw
+            ELSE COALESCE(reference_px_raw, CAST(ROUND(reference_px * 100000000) AS TEXT))
+          END,
+          avg_fill_px_raw = CASE
+            WHEN avg_fill_px IS NULL THEN avg_fill_px_raw
+            ELSE COALESCE(avg_fill_px_raw, CAST(ROUND(avg_fill_px * 100000000) AS TEXT))
+          END,
+          notional_raw = COALESCE(notional_raw, CAST(ROUND(notional_usd * 100000000) AS TEXT)),
+          fee_raw = COALESCE(fee_raw, CAST(ROUND(fee_usd * 100000000) AS TEXT)),
+          price_decimals = COALESCE(price_decimals, 8),
+          size_decimals = COALESCE(size_decimals, 8),
+          quote_decimals = COALESCE(quote_decimals, 8)
+  `,
+  `
+    UPDATE paper_fills
+      SET px_raw = COALESCE(px_raw, CAST(ROUND(px * 100000000) AS TEXT)),
+          size_raw = COALESCE(size_raw, CAST(ROUND(size * 100000000) AS TEXT)),
+          notional_raw = COALESCE(notional_raw, CAST(ROUND(notional_usd * 100000000) AS TEXT)),
+          fee_raw = COALESCE(fee_raw, CAST(ROUND(fee_usd * 100000000) AS TEXT)),
+          price_decimals = COALESCE(price_decimals, 8),
+          size_decimals = COALESCE(size_decimals, 8),
+          quote_decimals = COALESCE(quote_decimals, 8)
+  `,
+  `
+    UPDATE paper_positions
+      SET signed_size_raw = COALESCE(signed_size_raw, CAST(ROUND(signed_size * 100000000) AS TEXT)),
+          entry_px_raw = COALESCE(entry_px_raw, CAST(ROUND(entry_px * 100000000) AS TEXT)),
+          isolated_margin_raw = COALESCE(isolated_margin_raw, CAST(ROUND(isolated_margin_usd * 100000000) AS TEXT)),
+          realized_pnl_raw = COALESCE(realized_pnl_raw, CAST(ROUND(realized_pnl_usd * 100000000) AS TEXT)),
+          funding_raw = COALESCE(funding_raw, CAST(ROUND(funding_usd * 100000000) AS TEXT)),
+          fee_raw = COALESCE(fee_raw, CAST(ROUND(fee_usd * 100000000) AS TEXT)),
+          price_decimals = COALESCE(price_decimals, 8),
+          size_decimals = COALESCE(size_decimals, 8),
+          quote_decimals = COALESCE(quote_decimals, 8)
+  `,
+  `
+    UPDATE paper_risk_snapshots
+      SET equity_raw = COALESCE(equity_raw, CAST(ROUND(equity_usd * 100000000) AS TEXT)),
+          cash_balance_raw = COALESCE(cash_balance_raw, CAST(ROUND(cash_balance_usd * 100000000) AS TEXT)),
+          total_notional_raw = COALESCE(total_notional_raw, CAST(ROUND(total_notional_usd * 100000000) AS TEXT)),
+          maintenance_margin_raw = COALESCE(maintenance_margin_raw, CAST(ROUND(maintenance_margin_usd * 100000000) AS TEXT)),
+          unrealized_pnl_raw = COALESCE(unrealized_pnl_raw, CAST(ROUND(unrealized_pnl_usd * 100000000) AS TEXT)),
+          quote_decimals = COALESCE(quote_decimals, 8)
+  `,
+  `
+    UPDATE paper_liquidation_events
+      SET trigger_px_raw = CASE
+            WHEN trigger_px IS NULL THEN trigger_px_raw
+            ELSE COALESCE(trigger_px_raw, CAST(ROUND(trigger_px * 100000000) AS TEXT))
+          END,
+          liquidation_px_raw = CASE
+            WHEN liquidation_px IS NULL THEN liquidation_px_raw
+            ELSE COALESCE(liquidation_px_raw, CAST(ROUND(liquidation_px * 100000000) AS TEXT))
+          END,
+          equity_raw = COALESCE(equity_raw, CAST(ROUND(equity_usd * 100000000) AS TEXT)),
+          maintenance_margin_raw = COALESCE(maintenance_margin_raw, CAST(ROUND(maintenance_margin_usd * 100000000) AS TEXT)),
+          price_decimals = COALESCE(price_decimals, 8),
+          quote_decimals = COALESCE(quote_decimals, 8)
+  `,
+  `
+    UPDATE paper_leaderboard_snapshots
+      SET equity_raw = COALESCE(equity_raw, CAST(ROUND(equity_usd * 100000000) AS TEXT)),
+          paper_pnl_raw = COALESCE(paper_pnl_raw, CAST(ROUND(paper_pnl_usd * 100000000) AS TEXT)),
+          quote_decimals = COALESCE(quote_decimals, 8)
   `,
   "ALTER TABLE pnl_snapshots DROP COLUMN IF EXISTS starting_value_usd",
   "ALTER TABLE boards DROP COLUMN IF EXISTS starting_value_usd",
@@ -595,7 +782,7 @@ export const neonSchemaStatements = [
   "UPDATE pnl_snapshots SET completeness_status = 'unknown' WHERE completeness_status IS NULL OR completeness_status = ''",
 ] as const;
 
-export const neonRequiredTables = [
+export const postgresRequiredTables = [
   "boards",
   "auth_nonces",
   "events",

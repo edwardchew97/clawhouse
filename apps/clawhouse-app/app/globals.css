@@ -327,52 +327,103 @@
       font-size: 11px;
     }
 
-    .agent-sort-control {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: center;
-      gap: 8px;
-      padding: 8px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .agent-sort-control span {
-      color: var(--faint);
-      font-size: 11px;
-    }
-
-    .agent-sort-control select {
-      width: 100%;
-      height: 28px;
-      padding: 0 28px 0 9px;
-      border-radius: 4px;
-      border: 1px solid var(--line);
-      background:
-        linear-gradient(45deg, transparent 50%, var(--muted) 50%) calc(100% - 13px) 11px / 5px 5px no-repeat,
-        linear-gradient(135deg, var(--muted) 50%, transparent 50%) calc(100% - 8px) 11px / 5px 5px no-repeat,
-        #131518;
-      color: #ededed;
-      font: inherit;
-      font-size: 11px;
-      outline: none;
-      appearance: none;
-      cursor: pointer;
-    }
-
-    .agent-sort-control select:focus {
-      border-color: rgba(145, 151, 157, 0.28);
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035);
-    }
-
     .agent-list {
       min-height: 0;
-      padding: 6px;
+      padding: 7px 6px 10px;
       display: grid;
       grid-auto-rows: max-content;
       align-content: start;
       gap: 6px;
       overflow: hidden;
       background: transparent;
+    }
+
+    .agent-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 10px 2px;
+      border-top: 1px solid rgba(255, 255, 255, 0.035);
+    }
+
+    .agent-filters label {
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0 7px;
+      border: 1px solid rgba(255, 255, 255, 0.055);
+      border-radius: 4px;
+      color: #8f959b;
+      background: rgba(255, 255, 255, 0.018);
+      font-size: 10px;
+      line-height: 1;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .agent-filters label:has(input:checked) {
+      color: #d7d9db;
+      border-color: rgba(99, 216, 189, 0.28);
+      background: rgba(99, 216, 189, 0.08);
+    }
+
+    .agent-filters input {
+      width: 11px;
+      height: 11px;
+      margin: 0;
+      accent-color: #63d8bd;
+    }
+
+    .agent-list-empty {
+      min-height: 156px;
+      display: grid;
+      align-content: center;
+      justify-items: start;
+      gap: 8px;
+      margin: 6px;
+      padding: 18px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.055);
+      border-radius: 6px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.012));
+      color: #81878d;
+      font-size: 11px;
+      line-height: 14px;
+    }
+
+    .agent-list-empty-kicker {
+      color: #9db6ae;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .agent-list-empty strong {
+      color: #f4f4f4;
+      font-size: 16px;
+      line-height: 18px;
+    }
+
+    .agent-list-empty p {
+      max-width: 250px;
+      margin: 0;
+      color: #8f959b;
+      font-size: 12px;
+      line-height: 16px;
+    }
+
+    .agent-clear-filters {
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid rgba(99, 216, 189, 0.26);
+      border-radius: 4px;
+      background: rgba(99, 216, 189, 0.08);
+      color: #d7d9db;
+      font-size: 11px;
+      font-weight: 650;
+      cursor: pointer;
     }
 
     .agent-row {
@@ -553,7 +604,8 @@
 
     .agent-stats {
       margin-top: 4px;
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) auto;
       align-items: center;
       gap: 6px;
       color: #8f959b;
@@ -568,15 +620,28 @@
       text-overflow: ellipsis;
     }
 
-    .agent-stats span:first-child {
+    .agent-row-metric {
       color: #d7d9db;
       font-weight: 650;
     }
 
+    .agent-row-status {
+      color: #81878d;
+      text-transform: capitalize;
+    }
+
+    .agent-row-status.fresh {
+      color: #9db6ae;
+    }
+
+    .agent-row-status.warn {
+      color: #c7a17a;
+    }
+
     .agent-change {
-      margin-left: auto;
       font-size: 10px;
       font-weight: 700;
+      text-align: right;
     }
 
     .agent-change.up {
@@ -589,26 +654,6 @@
 
     .agent-change.empty {
       color: var(--faint);
-    }
-
-    .leader-mini {
-      border-top: 1px solid var(--line);
-      padding: 9px 10px 10px;
-      background: rgba(255, 255, 255, 0.02);
-    }
-
-    .leader-mini .line {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 10px;
-      color: var(--muted);
-      font-size: 11px;
-    }
-
-    .leader-mini b {
-      color: #fff;
-      font-weight: 650;
     }
 
     .center {

@@ -39,6 +39,32 @@
 - Amendment basis: JY confirmed that the agent-trading runtime should pivot to
   ClawHouse-hosted Hyperliquid-style paper trading, with a new installable
   runtime skill and NEAR Intents demoted from the first agent-trading/PnL lane.
+- Backend registration fairness amendment session:
+  `019efa62-6fa4-7ad1-94a8-7ae5ec926411`
+- Amendment date: 2026-06-25
+- Amendment basis: JY confirmed that the creator-onboarding backend endpoint is
+  self-serve create-or-verify for a runtime-managed operation key. Fairness comes
+  from backend-granted paper parameters, while ClawHouse product distribution and
+  verified/featured status remain curated.
+- Public contract config amendment session: current Codex session id unavailable
+  in runtime.
+- Amendment date: 2026-06-25
+- Amendment basis: JY accepted the cross-review decision that optional
+  key-market creation must use a committed public contract config as source of
+  truth, with testnet enabled, mainnet disabled, FastNEAR as the canonical
+  testnet RPC, `gas_tgas` as the only stored gas source, and explicit
+  `create_agent_key`, `get_agent`, and `get_state` method fields. The public
+  config is repo/publication truth, not chain verification; it remains
+  chain-unverified until a testnet `create_agent_key` transaction hash and
+  `get_agent` readback are recorded.
+- Key-market funding buffer amendment session:
+  `019efd64-f1cd-7f93-affd-a1f5458be258`
+- Amendment date: 2026-06-25
+- Amendment basis: A clean runtime key-market creation attempt showed that
+  `0.02` testnet NEAR was below the required balance for create transaction
+  execution. JY instructed raising the optional key-market funding guidance to
+  at least `0.05` testnet NEAR and confirming that mainnet key-market onboarding
+  remains disabled until explicitly configured.
 - Prior PaperTrade amendment session: `019ee646-2993-7b50-b6e3-bb7f9445131f`
 - Amendment date: 2026-06-21
 - Amendment basis: That parallel accepted direction made PaperTrade the current
@@ -94,7 +120,7 @@
 - Amendment basis: JY confirmed that creator onboarding must leave the
   IronClaw agent actually `active`, able to submit paper orders and reasoning.
   The remaining blocker is only the NEAR testnet key market. The creator should
-  fund the IronClaw-managed public account with `0.02` testnet NEAR and tell the
+  fund the IronClaw-managed public account with `0.05` testnet NEAR and tell the
   agent `create keymarket`; the agent-side skill runs the local key-market
   creation action. The ClawHouse backend must not run that creation on the
   creator's behalf, and the creator should not be shown shell commands as the
@@ -180,8 +206,11 @@
 
 ## 核心决定
 
-Season 0 不是开放的 permissionless agent 创建。Season 0 是有权限边界的
-creator onboarding，由受支持的用户 runtime 执行。
+Season 0 不是开放的 permissionless 官方分发、认证、featured placement 或推广。
+Creator onboarding 的 backend paper registration 是 self-serve create-or-verify：
+受支持 runtime 里的 operation key 可以通过 signed request 创建或确认 backend Agent、
+public board 和 paper account。ClawHouse 是否认证、推荐、展示或推广这个 agent，
+仍然是 curated 产品层决定。
 
 V0 正式入口是在最终运行 agent 的受支持 runtime 里安装 ClawHouse onboarding skill。
 当前支持的 runtime execution 顺序是：目标 runtime 自己有 Heartbeat System（例如
@@ -335,7 +364,7 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
 - 创作者：在受支持 runtime 里安装 ClawHouse onboarding skill，提供 agent
   name、description、avatar reference、banner reference 和 trading strategy，检查
   runtime skills、public account resolution 和 dry-run。agent active 后，key market
-  仍是 optional；creator 只有在想开放 buy/sell agent key 时，才把 `0.02` testnet
+  仍是 optional；creator 只有在想开放 buy/sell agent key 时，才把 `0.05` testnet
   NEAR 放到这个 public account，并对 agent 说 `create keymarket`。
 - ClawHouse onboarding skill：运行在受支持 runtime 内部，负责 guided intake、backend
   registration、runtime manifest 校验、required skills 安装、strategy profile 写入、
@@ -401,7 +430,7 @@ sandbox proof。缺少 security review 时，heartbeat 只能提示有新 venue�
     harness 的验收要求。
 14. 如果 key market 不存在，onboarding skill 只给 optional 后续提示：agent 已 active
     且目标 runtime 已在跑 strategy；如果要让用户 buy/sell agent key，请确认
-    operation key warning，再把 `0.02` testnet NEAR 放到
+    operation key warning，再把 `0.05` testnet NEAR 放到
     `<creator_public_account>`，然后对 agent 说 `create keymarket`。不创建 key market
     也算 onboarding 成功。
 15. 用户说 `create keymarket` 后，onboarding skill 检查 public account 余额，并用
@@ -526,7 +555,7 @@ Season 0 不做：
   draft/inactive activation gate with an actually active IronClaw agent state:
   active agents can submit paper orders and reasoning, while the only remaining
   creator blocker is key-market creation. Creators fund the IronClaw-managed
-  public account with `0.02` testnet NEAR and tell the agent `create keymarket`;
+  public account with `0.05` testnet NEAR and tell the agent `create keymarket`;
   the agent-side skill runs the local key-market creation action without
   ClawHouse backend execution or creator-facing shell commands.
 - 2026-06-21 - `019ee9a0-b374-7c82-b537-015faf89b2b6` - Clarified that the same
@@ -592,3 +621,20 @@ Season 0 不做：
   ownership wording: Heartbeat System means the target runtime's own capability,
   such as OpenClaw, Hermes, or IronClaw. It is not owned or hosted by ClawHouse,
   and must not be described as a mixed ClawHouse/runtime hybrid.
+- 2026-06-25 - `019efa62-6fa4-7ad1-94a8-7ae5ec926411` - Clarified that
+  creator-onboarding backend paper registration is self-serve create-or-verify
+  for a signed runtime operation key, while ClawHouse product distribution,
+  verification, badges, featured placement, and promotion remain curated.
+- 2026-06-25 - current Codex session id unavailable in runtime - Added the
+  public contract-config source-of-truth decision for optional key-market
+  creation: `apps/clawhouse-app/config/public-onboarding-contracts.json` owns
+  network/RPC/contract/method/deposit/gas/signing field names, public kit
+  publishes it as `contracts.json`, mainnet remains disabled, and runtime
+  preflight must distinguish missing contract/code/method from a missing agent.
+  The config is explicitly chain-unverified until a testnet `create_agent_key`
+  transaction hash and `get_agent` readback proof are recorded.
+- 2026-06-25 - `019efd64-f1cd-7f93-affd-a1f5458be258` - Raised optional
+  key-market funding guidance from `0.02` to `0.05` testnet NEAR after a clean
+  runtime create attempt proved the lower balance was insufficient for the
+  transaction requirement. Mainnet key-market onboarding remains disabled until
+  explicitly configured.

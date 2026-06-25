@@ -156,7 +156,7 @@
         {
           "id": "agentRegistration.ledger.createBoard",
           "name": "Register Agent Board",
-          "description": "Registers the approved Agent, public board, and paper account through one creator-onboarding backend request with both wallet and Agent-signed proofs.",
+          "description": "Registers or verifies the backend Agent, public board, and paper account through one creator-onboarding backend request with both wallet and Agent-signed proofs.",
           "type": "script",
           "access": "protected",
           "command": "bun",
@@ -186,7 +186,7 @@
           ],
           "runningNotes": [
             "Calling the real POST /creator-onboarding/register backend API with wallet signature headers and Agent signature headers.",
-            "The backend creates or verifies the Agent registration, public board, and paper account in one provisioning request.",
+            "The backend creates or verifies the Agent registration, then creates or verifies the public board and paper account with backend-granted policy fields.",
             "Reusing the local Workbench wallet artifact from Generate Agent Ledger Key Pair; if that step was skipped, this script creates one locally.",
             "Leave ledgerBoardId empty if you want the registration script to generate a local board id before signing.",
             "Run Generate Agent Ledger Key Pair first to auto-fill a fresh test ledgerAgentId, or edit ledgerAgentId to intentionally reuse an agent id.",
@@ -317,13 +317,7 @@
               "ledgerBoardId",
               "ledgerAgentId"
             ],
-            "agentReportsTrade.ledger.createObservation": [
-              "ledgerBoardId"
-            ],
             "agentReportsTrade.ledger.createPrice": [
-              "ledgerBoardId"
-            ],
-            "agentReportsTrade.ledger.createBalanceChange": [
               "ledgerBoardId"
             ],
             "agentReportsTrade.ledger.nearAccountWatch": [
@@ -413,9 +407,30 @@
           }
         },
         {
+          "id": "agentRegistration.ledger.getBoardPaperAccount",
+          "name": "Read Board Paper Account",
+          "description": "Reads the backend-derived paper account for the registered board so Workbench verifies board id to real paper account id readback instead of relying on a guessed id.",
+          "type": "http",
+          "access": "public",
+          "method": "GET",
+          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/paper-account",
+          "runningNotes": [
+            "Reading the real GET /boards/:id/paper-account endpoint.",
+            "The backend returns the true paper_account_id bound to this board.",
+            "This step fails if onboarding only guessed a paper account id instead of persisting the backend account."
+          ],
+          "inputs": {
+            "ledgerBoardId": ""
+          },
+          "setVars": {
+            "paperTradingAccountId": "response.json.json.paper_account_id",
+            "paperTradingAccountStatus": "response.json.json.account.status"
+          }
+        },
+        {
           "id": "agentRegistration.key.create",
           "name": "Create Agent Key Market",
-          "description": "Creates a real NEAR testnet key market for the approved agent. Change agentId before sending if the market already exists.",
+          "description": "Creates a real NEAR testnet key market for the registered agent. Change agentId before sending if the market already exists.",
           "type": "script",
           "access": "protected",
           "command": "bun",
@@ -438,7 +453,7 @@
             "agentId": "",
             "agentName": "NEAR Dip Scout",
             "metadataUri": "ipfs://near-dip-scout",
-            "STORAGE_DEPOSIT": "0.02"
+            "STORAGE_DEPOSIT": "0.05"
           },
           "setVars": {
             "agentId": "response.json.agentId",
@@ -613,7 +628,7 @@
           "optional": true,
           "id": "agentRegistration.creatorOnboarding.setupReadback",
           "name": "GET /creator-onboarding/setup",
-          "description": "Calls the ClawHouse App compatibility readback for supported-runtime onboarding. It returns active paper-agent status, runtime modes, manifest, required skill_install parameters, operation-key warning, runtime execution schedule requirements, the resolved public funding account, and the optional agent-side key-market action; it does not store secrets or create wallets.",
+          "description": "Calls the ClawHouse App compatibility readback for supported-runtime onboarding. It returns active paper-agent status, runtime modes, manifest, required skill_install parameters, public contracts config, operation-key warning, runtime execution schedule requirements, the resolved public funding account, and the optional agent-side key-market action; it does not store secrets or create wallets.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -621,7 +636,7 @@
           "runningNotes": [
             "Calling the real ClawHouse App /creator-onboarding/setup route.",
             "The query parameter simulates a runtime-resolved operation public account for readback; creator_public_account should not appear in normal user intake.",
-            "This step should return active paper status plus manifest, skill_install parameters, the operation-key warning, target-runtime Heartbeat System / Codex Automation / Claude scheduled task requirements, the funding address field, and the optional create keymarket action."
+            "This step should return active paper status plus manifest, skill_install parameters, public contracts config, the operation-key warning, target-runtime Heartbeat System / Codex Automation / Claude scheduled task requirements, the funding address field, and the optional create keymarket action."
           ],
           "setVars": {
             "creatorOnboardingMode": "response.json.mode",
@@ -645,6 +660,13 @@
             "keyMarketFundingAmountNear": "response.json.keyMarketSetup.fundingAmountNear",
             "keyMarketFundingAddress": "response.json.keyMarketSetup.fundTo",
             "keyMarketContractId": "response.json.keyMarketSetup.contractId",
+            "keyMarketNetworkId": "response.json.keyMarketSetup.networkId",
+            "keyMarketRpcUrl": "response.json.keyMarketSetup.rpcUrl",
+            "keyMarketCreateMethod": "response.json.keyMarketSetup.createMethod",
+            "keyMarketPreflightMethod": "response.json.keyMarketSetup.preflightMethod",
+            "keyMarketStateReadMethod": "response.json.keyMarketSetup.stateReadMethod",
+            "keyMarketGasTgas": "response.json.keyMarketSetup.gasTgas",
+            "keyMarketContractsSource": "response.json.contracts.source",
             "keyMarketCreateTrigger": "response.json.keyMarketSetup.createTrigger"
           }
         },
@@ -652,20 +674,20 @@
           "optional": true,
           "id": "agentRegistration.key.fundCreator",
           "name": "Fund Creator Account",
-          "description": "Manual funding gate before optional key-market creation. Send 0.02 testnet NEAR to the resolved operation public account only if the creator wants a key market; never paste private keys into Workbench or chat.",
+          "description": "Manual funding gate before optional key-market creation. Send 0.05 testnet NEAR to the resolved operation public account only if the creator wants a key market; never paste private keys into Workbench or chat.",
           "type": "pending",
           "status": "manual",
           "access": "protected",
           "pendingReason": "Funding must happen outside Workbench. Workbench records the instruction; it does not custody funds or secrets. Before beneficiary routing, creating a key market makes the operation key valuable because it receives creator fees.",
           "inputs": {
-            "keyMarketFundingAmountNear": "0.02",
+            "keyMarketFundingAmountNear": "0.05",
             "creatorPublicAccount": "{{testUserAccountId}}"
           },
           "fillDefaultsWhenEmpty": [
             "keyMarketFundingAmountNear"
           ],
           "responseLines": [
-            "Send 0.02 testnet NEAR to the resolved operation public account only if you want a key market.",
+            "Send 0.05 testnet NEAR to the resolved operation public account only if you want a key market.",
             "Use the same runtime-managed operation account that signs ClawHouse backend requests when it is available.",
             "Before beneficiary routing, creating a key market makes this operation key valuable because it receives creator fees.",
             "Do not paste a NEAR private key or seed phrase into chat."
@@ -686,7 +708,7 @@
           "url": "{{ledgerBaseUrl}}/health",
           "runningNotes": [
             "Calling the real Agent Board Ledger /health endpoint.",
-            "Use this first to confirm the local backend is running and connected to Neon/Postgres."
+            "Use this first to confirm the local backend is running and connected to Postgres."
           ],
           "setVars": {
             "ledgerHealthDb": "response.json.json.db"
@@ -1095,7 +1117,7 @@
             "The backend calls the real NEAR get_state view method and formats NEAR values for the UI."
           ],
           "inputs": {
-            "agentId": "terminal_chad6",
+            "agentId": "",
             "holderId": ""
           },
           "fillDefaultsWhenEmpty": [
@@ -1119,7 +1141,7 @@
             "The response includes UI-ready NEAR amounts plus max_price and attached_deposit protection values."
           ],
           "inputs": {
-            "agentId": "terminal_chad6",
+            "agentId": "",
             "keyAmount": "1"
           },
           "fillDefaultsWhenEmpty": [
@@ -1145,7 +1167,7 @@
             "The route reads account balance and key-market buy quotes, then keeps a reserve for gas and storage before returning the max key amount."
           ],
           "inputs": {
-            "agentId": "terminal_chad6",
+            "agentId": "",
             "holderId": ""
           },
           "fillDefaultsWhenEmpty": [
@@ -1170,7 +1192,7 @@
             "The response includes UI-ready NEAR payout plus min_payout protection values."
           ],
           "inputs": {
-            "agentId": "terminal_chad6",
+            "agentId": "",
             "keyAmount": "1"
           },
           "fillDefaultsWhenEmpty": [
@@ -1254,10 +1276,10 @@
           "runningNotes": [
             "Calling the local ClawHouse App server proxy.",
             "The proxy calls the staging Agent Board Ledger /boards/:id, /events, /portfolio, /pnl, /balance-changes, /prices, /paper/leaderboard, and matching /paper/accounts/:id/activity read paths.",
-            "If the Vercel staging project has no live deployment yet, the response should expose ok:false instead of hiding the backend state."
+            "If the VPS staging app cannot reach the backend, the response should expose ok:false instead of hiding the backend state."
           ],
           "inputs": {
-            "ledgerBoardId": "terminal_chad6"
+            "ledgerBoardId": ""
           },
           "fillDefaultsWhenEmpty": [
             "ledgerBoardId"
@@ -1403,7 +1425,7 @@
             "agentId": "",
             "keyAmount": "1",
             "buyMaxPriceNear": "",
-            "STORAGE_DEPOSIT": "0.02"
+            "STORAGE_DEPOSIT": "0.05"
           },
           "fillDefaultsWhenEmpty": [
             "keyAmount"
@@ -1963,20 +1985,8 @@
             "ledgerPnlUsd": "response.json.summary.pnlUsd"
           },
           "clearInputs": {
-            "agentReportsTrade.ledger.createObservation": [
-              "ledgerBoardId",
-              "ledgerWalletAddress",
-              "ledgerClientEventId",
-              "ledgerTxHash",
-              "ledgerIntentId"
-            ],
             "agentReportsTrade.ledger.createPrice": [
               "ledgerBoardId"
-            ],
-            "agentReportsTrade.ledger.createBalanceChange": [
-              "ledgerBoardId",
-              "ledgerTxHash",
-              "ledgerIntentId"
             ],
             "agentReportsTrade.ledger.nearAccountWatch": [
               "ledgerBoardId",
@@ -2036,95 +2046,6 @@
           }
         },
         {
-          "id": "agentReportsTrade.ledger.createObservation",
-          "name": "Write Wallet Observation",
-          "description": "Writes service-authorized wallet observation evidence for a board through the real Ledger API.",
-          "type": "http",
-          "access": "protected",
-          "method": "POST",
-          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/observations",
-          "headers": {
-            "content-type": "application/json",
-            "authorization": "{{ledgerAuthorizationHeader}}"
-          },
-          "body": {
-            "wallet_address": "{{ledgerWalletAddress}}",
-            "current_value_usd": "{{ledgerCurrentValueUsd}}",
-            "topup_usd": "{{ledgerTopupUsd}}",
-            "withdrawal_usd": "{{ledgerWithdrawalUsd}}",
-            "client_event_id": "{{ledgerClientEventId}}",
-            "tx_hash": "{{ledgerTxHash}}",
-            "intent_id": "{{ledgerIntentId}}",
-            "status_claim": "observed_on_wallet",
-            "asset_in": "{{ledgerAssetIn}}",
-            "amount_in": "{{ledgerAmountIn}}",
-            "asset_out": "{{ledgerAssetOut}}",
-            "amount_out": "{{ledgerAmountOut}}",
-            "metadata": {
-              "source": "acceptance-workbench-api"
-            }
-          },
-          "runningNotes": [
-            "Calling the real service-authorized observation API.",
-            "This is how the backend records an observed wallet/portfolio state before cron calculates PnL.",
-            "ledgerAuthorizationHeader must be formatted as Bearer <AGENT_BOARD_LEDGER_ADMIN_TOKEN>."
-          ],
-          "inputs": {
-            "ledgerAuthorizationHeader": "",
-            "ledgerBoardId": "",
-            "ledgerWalletAddress": "",
-            "ledgerCurrentValueUsd": "10012",
-            "ledgerTopupUsd": "0",
-            "ledgerWithdrawalUsd": "0",
-            "ledgerClientEventId": "",
-            "ledgerTxHash": "",
-            "ledgerIntentId": "",
-            "ledgerAssetIn": "USDC",
-            "ledgerAmountIn": "25",
-            "ledgerAssetOut": "NEAR",
-            "ledgerAmountOut": "10"
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerCurrentValueUsd",
-            "ledgerTopupUsd",
-            "ledgerWithdrawalUsd",
-            "ledgerAssetIn",
-            "ledgerAmountIn",
-            "ledgerAssetOut",
-            "ledgerAmountOut"
-          ],
-          "setVars": {
-            "ledgerObservationId": "response.json.json.observation.id",
-            "ledgerObservedAt": "response.json.json.observation.observed_at",
-            "ledgerClientEventId": "response.json.json.observation.client_event_id",
-            "ledgerTxHash": "response.json.json.observation.tx_hash",
-            "ledgerIntentId": "response.json.json.observation.intent_id"
-          },
-          "clearInputs": {
-            "agentReportsTrade.ledger.createPrice": [
-              "ledgerObservedAt"
-            ],
-            "agentReportsTrade.ledger.createBalanceChange": [
-              "ledgerObservationId",
-              "ledgerTxHash",
-              "ledgerIntentId"
-            ],
-            "agentReportsTrade.ledger.nearAccountWatch": [
-              "ledgerTxHash",
-              "ledgerIntentId"
-            ],
-            "agentReportsTrade.ledger.nearFtWatch": [
-              "ledgerTxHash",
-              "ledgerIntentId"
-            ],
-            "developerSetup.ledger.signedEventTemplate": [
-              "ledgerClientEventId",
-              "ledgerTxHash",
-              "ledgerIntentId"
-            ]
-          }
-        },
-        {
           "id": "agentReportsTrade.ledger.createPrice",
           "name": "Write Price Evidence",
           "description": "Writes explicit price evidence that later PnL snapshots can reference.",
@@ -2164,66 +2085,6 @@
           ],
           "setVars": {
             "ledgerPriceSnapshotId": "response.json.json.prices.0.id"
-          }
-        },
-        {
-          "id": "agentReportsTrade.ledger.createBalanceChange",
-          "name": "Write Balance Change",
-          "description": "Writes service-authorized balance-change evidence for a trade or accounting event.",
-          "type": "http",
-          "access": "protected",
-          "method": "POST",
-          "url": "{{ledgerBaseUrl}}/boards/{{ledgerBoardId}}/balance-changes",
-          "headers": {
-            "content-type": "application/json",
-            "authorization": "{{ledgerAuthorizationHeader}}"
-          },
-          "body": {
-            "asset_id": "{{ledgerBalanceAssetId}}",
-            "asset_symbol": "{{ledgerBalanceAssetSymbol}}",
-            "normalized_amount": "{{ledgerNormalizedAmount}}",
-            "delta_amount": "{{ledgerDeltaAmount}}",
-            "delta_value_usd": "{{ledgerDeltaValueUsd}}",
-            "change_type": "{{ledgerChangeType}}",
-            "source_observation_id": "{{ledgerObservationId}}",
-            "tx_hash": "{{ledgerTxHash}}",
-            "intent_id": "{{ledgerIntentId}}",
-            "metadata": {
-              "source": "acceptance-workbench-api"
-            }
-          },
-          "runningNotes": [
-            "Calling the real balance-change API.",
-            "This records accounting evidence for the wallet and can link back to an observation, tx hash, or intent id."
-          ],
-          "inputs": {
-            "ledgerAuthorizationHeader": "",
-            "ledgerBoardId": "",
-            "ledgerBalanceAssetId": "native:near",
-            "ledgerBalanceAssetSymbol": "NEAR",
-            "ledgerNormalizedAmount": "56",
-            "ledgerDeltaAmount": "6",
-            "ledgerDeltaValueUsd": "12",
-            "ledgerChangeType": "trade",
-            "ledgerObservationId": "",
-            "ledgerTxHash": "",
-            "ledgerIntentId": ""
-          },
-          "fillDefaultsWhenEmpty": [
-            "ledgerBalanceAssetId",
-            "ledgerBalanceAssetSymbol",
-            "ledgerNormalizedAmount",
-            "ledgerDeltaAmount",
-            "ledgerDeltaValueUsd",
-            "ledgerChangeType"
-          ],
-          "setVars": {
-            "ledgerBalanceChangeId": "response.json.json.balance_changes.0.id"
-          },
-          "clearInputs": {
-            "agentReportsTrade.ledger.listBalanceChanges": [
-              "ledgerBoardId"
-            ]
           }
         },
         {
@@ -2328,7 +2189,7 @@
         {
           "id": "agentReportsTrade.ledger.cronTick",
           "name": "Reconcile Ledger",
-          "description": "Runs the real cron reconciliation endpoint so observations and accounting evidence become events, snapshots, and PnL.",
+          "description": "Runs the real cron reconciliation endpoint so watcher-produced observations and accounting evidence become events, snapshots, and PnL.",
           "type": "http",
           "access": "protected",
           "method": "POST",
@@ -2963,16 +2824,16 @@
           "url": "{{ledgerBaseUrl}}/health",
           "runningNotes": [
             "Calling the real Agent Board Ledger /health endpoint.",
-            "Use this first to confirm the local backend is running and connected to Neon/Postgres."
+            "Use this first to confirm the local backend is running and connected to Postgres."
           ],
           "setVars": {
             "ledgerHealthDb": "response.json.json.db"
           }
         },
         {
-          "id": "developerSetup.ledger.vercelCronTick",
-          "name": "Check Vercel Cron Adapter",
-          "description": "Calls the Vercel cron GET path that production cron uses, then expects the backend to run real cron reconciliation.",
+          "id": "developerSetup.ledger.cronTick",
+          "name": "Check Ledger Cron Tick",
+          "description": "Calls the deployed ledger cron GET path, then expects the backend to run real cron reconciliation.",
           "type": "http",
           "access": "protected",
           "method": "GET",
@@ -2982,8 +2843,8 @@
           },
           "runningNotes": [
             "Set ledgerBaseUrl to the deployed ClawHouse backend URL before running this step.",
-            "This calls the real Vercel cron adapter path.",
-            "The adapter verifies CRON_SECRET and then runs the existing service-authorized cron reconciliation."
+            "This calls the real deployed cron path.",
+            "The route verifies CRON_SECRET and then runs the existing service-authorized cron reconciliation."
           ],
           "inputs": {
             "ledgerCronSecret": ""
@@ -2994,14 +2855,14 @@
           }
         },
         {
-          "id": "developerSetup.ledger.neonMigrate",
+          "id": "developerSetup.ledger.postgresMigrate",
           "name": "Migrate Ledger Schema",
-          "description": "Runs the real Neon migration script for Agent Board Ledger schema setup.",
+          "description": "Runs the real Postgres migration script for Agent Board Ledger schema setup.",
           "type": "script",
           "access": "protected",
           "command": "bun",
           "args": [
-            "scripts/migrate-neon.ts"
+            "scripts/migrate-postgres.ts"
           ],
           "cwd": "{{repoRoot}}/apps/agent-board-ledger",
           "redactPrivateKeyOutput": true,
@@ -3014,26 +2875,26 @@
           ],
           "runningNotes": [
             "Uses the editable ledgerDatabaseUrl input as an environment variable; the database URL is not placed in command-line arguments.",
-            "Creates or updates the Neon Postgres schema for boards, events, observations, accounting snapshots, read access checks, and audit events.",
+            "Creates or updates the Postgres schema for boards, events, observations, accounting snapshots, read access checks, and audit events.",
             "Returns a redacted connection string, table list, and small row-count health check."
           ],
           "inputs": {
             "ledgerDatabaseUrl": ""
           },
           "setVars": {
-            "ledgerNeonProvider": "response.json.provider",
-            "ledgerNeonMissingTables": "response.json.missing"
+            "ledgerPostgresProvider": "response.json.provider",
+            "ledgerPostgresMissingTables": "response.json.missing"
           }
         },
         {
-          "id": "developerSetup.ledger.neonCheck",
-          "name": "Check Neon Schema",
-          "description": "Runs the real Neon schema check script without applying migrations. Use this to verify the configured database has the required Agent Board Ledger tables.",
+          "id": "developerSetup.ledger.postgresCheck",
+          "name": "Check Postgres Schema",
+          "description": "Runs the real Postgres schema check script without applying migrations. Use this to verify the configured database has the required Agent Board Ledger tables.",
           "type": "script",
           "access": "protected",
           "command": "bun",
           "args": [
-            "scripts/check-neon.ts"
+            "scripts/check-postgres.ts"
           ],
           "cwd": "{{repoRoot}}/apps/agent-board-ledger",
           "redactPrivateKeyOutput": true,
@@ -3046,14 +2907,46 @@
           ],
           "runningNotes": [
             "Uses ledgerDatabaseUrl as an environment variable; the database URL is not placed in command-line arguments.",
-            "Reads the Neon/Postgres schema and reports missing required tables without applying migrations."
+            "Reads the Postgres schema and reports missing required tables without applying migrations."
           ],
           "inputs": {
             "ledgerDatabaseUrl": ""
           },
           "setVars": {
-            "ledgerNeonProvider": "response.json.provider",
-            "ledgerNeonMissingTables": "response.json.missing"
+            "ledgerPostgresProvider": "response.json.provider",
+            "ledgerPostgresMissingTables": "response.json.missing"
+          }
+        },
+        {
+          "id": "developerSetup.ledger.postgresFresh",
+          "name": "Fresh Postgres Migration",
+          "description": "Drops and recreates the public schema, then runs the real Postgres migration and schema check.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "scripts/fresh-postgres.ts"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Destructive staging/dev operation: drops public schema before recreating it.",
+            "Uses ledgerDatabaseUrl as an environment variable; the database URL is not placed in command-line arguments.",
+            "Returns a redacted connection string, table list, and zeroed row-count health check."
+          ],
+          "inputs": {
+            "ledgerDatabaseUrl": ""
+          },
+          "setVars": {
+            "ledgerPostgresProvider": "response.json.provider",
+            "ledgerPostgresMissingTables": "response.json.missing"
           }
         },
         {
@@ -3731,14 +3624,14 @@
             "Calling the real local Agent Board Ledger service; the step fails if the service is not running.",
             "The Ledger service must be started with AGENT_BOARD_LEDGER_ADMIN_TOKEN matching ledgerAdminToken.",
             "Using the editable ledgerAdminToken input through the script environment, not through command-line arguments.",
-            "Verifying unauthenticated observations and future observed_at values are rejected through HTTP.",
+            "Verifying the retired manual observation write route is no longer available through HTTP.",
             "Verifying holder-gated board reads reject missing read tokens and accept a read token only after the Ledger checks a NEAR key-market holder balance through RPC.",
             "Starting a local mock NEAR RPC inside the script to exercise Ledger's real NEAR call_function paths without external credentials.",
             "Verifying the NEAR FT watcher reads ft_metadata and ft_balance_of through RPC, writes price/balance evidence, and links the resulting PnL snapshot.",
-            "Writing price snapshots and balance changes through service-authorized API calls.",
-            "Verifying signed event creation, signed attachments, service-authorized observations, cron reconciliation, and PnL readback still work.",
+            "Writing price snapshots and balance changes through service-authorized watcher paths.",
+            "Verifying signed event creation, signed attachments, watcher-produced observations, cron reconciliation, and PnL readback still work.",
             "Verifying PnL links to the accepted price snapshot.",
-            "Running cron twice and failing if the second tick creates duplicate snapshots or advances freshness without new observations."
+            "Running cron twice and failing if the second tick creates duplicate snapshots or advances freshness without new watcher observations."
           ],
           "inputs": {
             "ledgerAdminToken": "local-ledger-admin-token",
@@ -3834,6 +3727,7 @@
             "Creating or reusing a local Workbench signing wallet and sending only public key metadata plus paper-order signatures.",
             "Creating a service-authorized and Agent-signed paper account plus service-authorized Hyperliquid-style market snapshots.",
             "Submitting agent-signed IOC, GTC, ALO, reduce-only, and isolated-margin paper orders.",
+            "Waiting briefly before a multi-coin cross-margin order so the script verifies the backend refreshes existing open-position markets before margin validation.",
             "Running a service-authorized risk check after an adverse mark and verifying isolated liquidation.",
             "Reading the paper-labeled leaderboard and replay proof through the public HTTP APIs."
           ],

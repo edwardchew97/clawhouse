@@ -100,49 +100,6 @@ async function runLedgerFlow(options: Options, wallet: NearWalletPublicInfo, run
     },
   );
 
-  const observation = await servicePostJson(scopedOptions, `/boards/${boardId}/observations`, {
-    wallet_address: wallet.walletAddress,
-    current_value_usd: options.currentValueUsd,
-    client_event_id: clientEventId,
-    tx_hash: txHash,
-    intent_id: intentId,
-    status_claim: "observed_on_wallet",
-    asset_in: "USDC",
-    amount_in: 25,
-    asset_out: "NEAR",
-    amount_out: 10,
-    metadata: {
-      source: "acceptance-workbench",
-    },
-  });
-  const observedAt = stringAt(observation, ["observation", "observed_at"]);
-  const observationId = stringAt(observation, ["observation", "id"]);
-
-  const nearPriceUsd = 2;
-  const reconciledNearAmount = options.currentValueUsd / nearPriceUsd;
-  const price = await servicePostJson(scopedOptions, `/boards/${boardId}/prices`, {
-    asset_id: "native:near",
-    asset_symbol: "NEAR",
-    price_usd: nearPriceUsd,
-    price_source: "acceptance-workbench",
-    observed_at: observedAt,
-  });
-
-  const balanceChange = await servicePostJson(scopedOptions, `/boards/${boardId}/balance-changes`, {
-    asset_id: "native:near",
-    asset_symbol: "NEAR",
-    normalized_amount: reconciledNearAmount,
-    delta_amount: 10,
-    delta_value_usd: 10 * nearPriceUsd,
-    change_type: "trade",
-    source_observation_id: observationId,
-    tx_hash: txHash,
-    intent_id: intentId,
-    metadata: {
-      source: "acceptance-workbench",
-    },
-  });
-
   const cron = await servicePostJson(scopedOptions, "/cron/tick", {});
   const events = await getJson(options.baseUrl, `/boards/${boardId}/events`);
   const portfolio = await getJson(options.baseUrl, `/boards/${boardId}/portfolio`);
@@ -166,9 +123,6 @@ async function runLedgerFlow(options: Options, wallet: NearWalletPublicInfo, run
     paperAccount: paperAccount.account,
     event: event.event,
     attachment: attachment.attachment,
-    observation: observation.observation,
-    price: valueAt(price, ["prices", "0"]),
-    balanceChange: valueAt(balanceChange, ["balance_changes", "0"]),
     cron,
     events,
     portfolio,

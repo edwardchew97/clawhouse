@@ -1,46 +1,36 @@
 # ClawHouse App Deployment
 
-Vercel should deploy this app from GitHub through two frontend projects:
+The ClawHouse app now runs on the ClawHouse VPS for staging.
 
-- `clawhouse-app-staging`
-- `clawhouse-app-prod`
+Current staging URL:
 
-Keep the repo promotion order as `dev -> staging -> main`.
+```text
+https://staging-clawhouse.lucis.finance
+```
+
+There is no active production app environment in the current VPS-only phase.
 
 ## Branches
 
-- `clawhouse-app-staging`
-  - Git repository: `edwardchew97/clawhouse`
-  - Root directory: `apps/clawhouse-app`
-  - Framework preset: Next.js
-  - Install command: `bun install`
-  - Build command: `bun run build`
-  - Production branch: `staging`
-  - Backend: `https://clawhouse-backend-staging.vercel.app`
-- `clawhouse-app-prod`
-  - Git repository: `edwardchew97/clawhouse`
-  - Root directory: `apps/clawhouse-app`
-  - Framework preset: Next.js
-  - Install command: `bun install`
-  - Build command: `bun run build`
-  - Production branch: `main`
-  - Backend: `https://clawhouse-backend-prod.vercel.app`
+Keep the repo promotion order as `dev -> staging -> main`.
 
-Use Vercel native Git deployments. GitHub Actions should only test this app
-unless we intentionally switch back to a token-based deployment model.
+- `dev`: integration branch for completed work.
+- `staging`: branch the VPS staging runtime should run.
+- `main`: reserved for a later production environment.
+
+The old app projects have been removed. Do not point app docs, skills, or
+Workbench flows at retired deployment URLs.
 
 ## Runtime Environment Variables
 
-Set these in the Vercel project Production environment for each project:
+Set these in the VPS runtime environment when the app needs them:
 
 - `CLAWHOUSE_KEY_NEAR_NETWORK_ID`
 - `CLAWHOUSE_KEY_NEAR_RPC_URL`
 - `CLAWHOUSE_KEY_MARKET_CONTRACT_ID`
-- `CLAWHOUSE_DEFAULT_AGENT_ID`
 - `CLAWHOUSE_KEY_MARKET_GAS`
 - `CLAWHOUSE_KEY_STORAGE_DEPOSIT_NEAR`
 - `CLAWHOUSE_AGENT_API_BASE_URL`
-- `CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID`
 - `CLAWHOUSE_LEDGER_ADMIN_TOKEN` or `AGENT_BOARD_LEDGER_ADMIN_TOKEN` as a
   server-only secret for wallet-proof read-token exchange
 - `CLAWHOUSE_READ_ACCESS_SIGNING_RECIPIENT` if the NEP-413 recipient should be
@@ -53,21 +43,14 @@ Optional app runtime variables:
 - `CLAWHOUSE_DISCOVERY_READBACK_TIMEOUT_MS` for backend discovery and readback
   requests. It defaults to `5000`.
 
-Use `apps/clawhouse-app/.env.staging.example` for staging values and
-`apps/clawhouse-app/.env.production.example` for production values.
+Use `apps/clawhouse-app/.env.staging.example` for staging values. Production
+values are not active until JY reopens a production runtime.
 
-Hosted Vercel projects should use the server-only
-`CLAWHOUSE_AGENT_API_BASE_URL`. Do not set
-`NEXT_PUBLIC_CLAWHOUSE_AGENT_API_BASE_URL` in hosted environments unless a
-legacy deployment is being migrated.
-
-The staging app project's Production Branch must be `staging`; the production
-app project's Production Branch must be `main`.
-
-`CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID` must point at a board that exists in the
-selected backend database. If the board does not exist, the app should still
-build and boot, but `/api/backend/board` will return the backend 404 and the UI
-will show backend data as unavailable.
+`CLAWHOUSE_DEFAULT_AGENT_ID` and `CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID` are
+optional. Fresh environments should leave them unset; the app will show an empty
+agent state until onboarding registers a public board and paper account. If they
+are set, `CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID` must point at a board that exists
+in the selected backend database.
 
 Rotating `CLAWHOUSE_LEDGER_ADMIN_TOKEN` / `AGENT_BOARD_LEDGER_ADMIN_TOKEN`
 invalidates active wallet session and holder read cookies because the App uses
@@ -82,14 +65,15 @@ App may refresh the holder read cookie server-side without asking the user to
 sign another message; Ledger still rechecks live key-holder balance before
 serving holder-detail reads.
 
-Do not commit `.vercel/project.json`, `.env.local`, or real token values.
+Do not commit `.env.local` or real token values.
 
 ## Smoke Checks
 
-After each Vercel deployment, verify:
+After a VPS staging deploy or restart, verify:
 
 - `GET /api/key-market/config` returns `ok: true` and `networkId: testnet`.
-- `GET /api/key-market/state?agentId=<agent-id>` reads the deployed testnet key market.
+- `GET /api/key-market/state?agentId=<agent-id>` reads the deployed testnet key
+  market.
 - `GET /api/backend/config` returns the intended backend URL and board id.
 - `GET /api/backend/health` returns the selected backend health response.
 - `GET /api/backend/board?boardId=<board-id>` returns the selected backend board

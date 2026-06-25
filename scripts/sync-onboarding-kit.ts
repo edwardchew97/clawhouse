@@ -34,6 +34,7 @@ const rootCopiedFiles = [
   { source: "public/onboarding-kit/skill.md", target: "skill.md" },
   { source: "public/onboarding-kit/skill.json", target: "skill.json" },
   { source: "public/onboarding-kit/INSTALL.md", target: "INSTALL.md" },
+  { source: "apps/clawhouse-app/config/public-onboarding-contracts.json", target: "contracts.json" },
 ];
 
 const retiredPaths = [
@@ -99,9 +100,13 @@ async function syncOnboardingKit(options: Options) {
   await validateKit(options.kitRepo);
 
   const status = await git(["status", "--short"], options.kitRepo);
+  const ignoredAllowlistStatus = await git(["status", "--short", "--ignored", "--", ...publicKitPaths], options.kitRepo);
+  const ignoredAllowlistPaths = statusEntries(ignoredAllowlistStatus.stdout)
+    .filter((entry) => entry.status === "!!")
+    .map((entry) => entry.path);
   const diff = await git(["diff", "--", ...publicKitPaths], options.kitRepo);
-  const changed = status.stdout.trim() !== "";
-  const changedPaths = statusPaths(status.stdout);
+  const changed = status.stdout.trim() !== "" || ignoredAllowlistPaths.length > 0;
+  const changedPaths = [...new Set([...statusPaths(status.stdout), ...ignoredAllowlistPaths])];
 
   printJson({
     ok: true,
@@ -119,7 +124,10 @@ async function syncOnboardingKit(options: Options) {
       changed: previousDirectory !== sourceDirectory,
     },
     changed,
-    status: status.stdout.trim().split("\n").filter(Boolean),
+    status: [
+      ...status.stdout.trim().split("\n").filter(Boolean),
+      ...ignoredAllowlistPaths.map((path) => `!! ${path}`),
+    ],
     publicRootFiles: rootCopiedFiles.map((file) => file.target),
   });
 
@@ -140,7 +148,7 @@ async function syncOnboardingKit(options: Options) {
     return;
   }
 
-  await git(["add", "--", ...changedPaths], options.kitRepo);
+  await git(["add", "--force", "--", ...changedPaths], options.kitRepo);
   await git(["commit", "-m", options.commitMessage], options.kitRepo);
   await git(["push", "origin", "main"], options.kitRepo);
 
@@ -274,24 +282,125 @@ async function validateKit(kitRepo: string) {
     errors.push("manifest install_policy.allowed_url_prefixes missing public kit raw prefix");
   }
 
+  errors.push(...await validateContractsConfig(kitRepo));
+
   if (errors.length) {
     throw new Error(`Public kit validation failed:\n${errors.map((item) => `- ${item}`).join("\n")}`);
   }
 }
 
+async function validateContractsConfig(kitRepo: string) {
+  const errors: string[] = [];
+  const text = await readFile(join(kitRepo, "contracts.json"), "utf8");
+  const config = JSON.parse(text) as JsonRecord;
+  if (config.schema_version !== "1.0.0") errors.push("contracts.json schema_version must be 1.0.0");
+  if (config.default_environment !== "testnet") errors.push("contracts.json default_environment must be testnet");
+  if (config.environment_env !== "CLAWHOUSE_KEY_MARKET_ENVIRONMENT") {
+    errors.push("contracts.json environment_env must be CLAWHOUSE_KEY_MARKET_ENVIRONMENT");
+  }
+
+  const environments = asRecord(config.environments);
+  const testnet = asRecord(environments.testnet);
+  const mainnet = asRecord(environments.mainnet);
+  const keyMarket = asRecord(testnet.key_market);
+  const chainVerification = asRecord(keyMarket.chain_verification);
+  const signer = asRecord(keyMarket.signer);
+  const methodArgs = asRecord(keyMarket.method_args);
+  const createArgs = asRecord(methodArgs.create_agent_key);
+  const preflightArgs = asRecord(methodArgs.get_agent);
+  const stateArgs = asRecord(methodArgs.get_state);
+  const expected = {
+    networkId: stringField(testnet, "network_id"),
+    rpcUrl: stringField(testnet, "rpc_url"),
+    contractId: stringField(keyMarket, "contract_id"),
+    createMethod: stringField(keyMarket, "create_method"),
+    preflightMethod: stringField(keyMarket, "preflight_method"),
+    stateReadMethod: stringField(keyMarket, "state_read_method"),
+    storageDepositNear: stringField(keyMarket, "storage_deposit_near"),
+    gasTgas: stringField(keyMarket, "gas_tgas"),
+  };
+  const gasUnits = /^\d+$/.test(expected.gasTgas) ? teraToGasString(expected.gasTgas) : "";
+
+  if (testnet.status !== "enabled") errors.push("contracts.json testnet must be enabled");
+  if (expected.networkId !== "testnet") errors.push("contracts.json testnet network_id must be testnet");
+  if (!expected.rpcUrl.startsWith("https://")) errors.push("contracts.json testnet rpc_url must be https");
+  if (!expected.contractId.endsWith(".testnet")) errors.push("contracts.json testnet contract_id must be a testnet account");
+  if (!expected.createMethod) errors.push("contracts.json create_method missing");
+  if (!expected.preflightMethod) errors.push("contracts.json preflight_method missing");
+  if (!expected.stateReadMethod) errors.push("contracts.json state_read_method missing");
+  if (createArgs.agent_id !== "<agent_id>" || createArgs.name !== "<agent_name>" || createArgs.metadata_uri !== "<metadata_uri>") {
+    errors.push("contracts.json create_agent_key method_args must include agent_id, name, and metadata_uri placeholders");
+  }
+  if (preflightArgs.agent_id !== "<agent_id>") {
+    errors.push("contracts.json get_agent method_args must include agent_id placeholder");
+  }
+  if (stateArgs.agent_id !== "<agent_id>" || stateArgs.holder_id !== "<optional_account_id_or_null>") {
+    errors.push("contracts.json get_state method_args must include agent_id and holder_id placeholders");
+  }
+  if (expected.storageDepositNear !== "0.05") {
+    errors.push("contracts.json storage_deposit_near must be 0.05 for creator key-market funding buffer");
+  }
+  if (!/^\d+(?:\.\d+)?$/.test(expected.storageDepositNear)) errors.push("contracts.json storage_deposit_near must be numeric");
+  if (!/^\d+$/.test(expected.gasTgas)) errors.push("contracts.json gas_tgas must be integer TGas");
+  if (Object.prototype.hasOwnProperty.call(keyMarket, "gas_units")) {
+    errors.push("contracts.json must not store gas_units; derive it from gas_tgas");
+  }
+  if (chainVerification.status !== "unverified") {
+    errors.push("contracts.json testnet chain_verification.status must be unverified until smoke proof is recorded");
+  }
+  if (!stringField(chainVerification, "required_proof").includes("create_agent_key")) {
+    errors.push("contracts.json testnet chain_verification.required_proof must mention create_agent_key");
+  }
+  if (signer.source !== "runtime_managed_operation_key") errors.push("contracts.json signer.source mismatch");
+  if (!Array.isArray(signer.account_id_env) || !signer.account_id_env.includes("ACCOUNT_ID") || !signer.account_id_env.includes("NEAR_ACCOUNT_ID")) {
+    errors.push("contracts.json signer.account_id_env must include ACCOUNT_ID and NEAR_ACCOUNT_ID");
+  }
+  if (signer.key_file_env !== "CLAWHOUSE_OPERATION_KEY_FILE") {
+    errors.push("contracts.json signer.key_file_env mismatch");
+  }
+  if (mainnet.status !== "disabled") errors.push("contracts.json mainnet must stay disabled");
+
+  const mirrors: Array<[string, string | undefined, string]> = [
+    ["CLAWHOUSE_KEY_MARKET_ENVIRONMENT", process.env.CLAWHOUSE_KEY_MARKET_ENVIRONMENT, "testnet"],
+    ["CLAWHOUSE_KEY_NEAR_NETWORK_ID", process.env.CLAWHOUSE_KEY_NEAR_NETWORK_ID, expected.networkId],
+    ["KEY_NEAR_NETWORK_ID", process.env.KEY_NEAR_NETWORK_ID, expected.networkId],
+    ["NEAR_NETWORK_ID", process.env.NEAR_NETWORK_ID, expected.networkId],
+    ["CLAWHOUSE_KEY_NEAR_RPC_URL", normalizeRpcMirror(process.env.CLAWHOUSE_KEY_NEAR_RPC_URL, expected.networkId), expected.rpcUrl],
+    ["KEY_NEAR_RPC_URL", normalizeRpcMirror(process.env.KEY_NEAR_RPC_URL, expected.networkId), expected.rpcUrl],
+    ["NEAR_NODE_URL", normalizeRpcMirror(process.env.NEAR_NODE_URL, expected.networkId), expected.rpcUrl],
+    ["CLAWHOUSE_KEY_MARKET_CONTRACT_ID", process.env.CLAWHOUSE_KEY_MARKET_CONTRACT_ID, expected.contractId],
+    ["KEY_MARKET_CONTRACT_ID", process.env.KEY_MARKET_CONTRACT_ID, expected.contractId],
+    ["CONTRACT_ID", process.env.CONTRACT_ID, expected.contractId],
+    ["CLAWHOUSE_KEY_STORAGE_DEPOSIT_NEAR", process.env.CLAWHOUSE_KEY_STORAGE_DEPOSIT_NEAR, expected.storageDepositNear],
+    ["STORAGE_DEPOSIT", process.env.STORAGE_DEPOSIT, expected.storageDepositNear],
+    ["CLAWHOUSE_KEY_MARKET_GAS", process.env.CLAWHOUSE_KEY_MARKET_GAS, gasUnits],
+    ["NEAR_TGAS", process.env.NEAR_TGAS, expected.gasTgas],
+  ];
+  for (const [name, actual, expectedValue] of mirrors) {
+    if (actual && actual !== expectedValue) {
+      errors.push(`${name}=${actual} does not match contracts.json expected ${expectedValue}`);
+    }
+  }
+
+  return errors;
+}
+
 async function restoreDryRunChanges(kitRepo: string) {
   const status = await git(["status", "--short"], kitRepo);
+  const ignoredStatus = await git(["status", "--short", "--ignored", "--", ...publicKitPaths], kitRepo);
   const entries = statusEntries(status.stdout);
+  const ignoredEntries = statusEntries(ignoredStatus.stdout).filter((entry) => entry.status === "!!");
   const trackedPaths = entries.filter((entry) => entry.status !== "??").map((entry) => entry.path);
   const untrackedPaths = entries.filter((entry) => entry.status === "??").map((entry) => entry.path);
   if (trackedPaths.length) {
     await git(["restore", "--staged", "--worktree", "--", ...trackedPaths], kitRepo);
   }
-  for (const path of untrackedPaths) {
+  for (const path of [...untrackedPaths, ...ignoredEntries.map((entry) => entry.path)]) {
     await rm(join(kitRepo, path), { recursive: true, force: true });
   }
-  const remainingStatus = await git(["status", "--short"], kitRepo);
-  if (remainingStatus.stdout.trim()) {
+  const remainingStatus = await git(["status", "--short", "--ignored", "--", ...publicKitPaths], kitRepo);
+  const remaining = statusEntries(remainingStatus.stdout).filter((entry) => entry.status !== "!!" || publicKitPaths.includes(entry.path));
+  if (remaining.length) {
     throw new Error(`Dry-run cleanup left public kit dirty:\n${remainingStatus.stdout}`);
   }
 }
@@ -403,6 +512,18 @@ function parseSkillVersion(raw: string) {
   const match = raw.match(/^version:\s*([^\s]+)\s*$/m);
   if (!match) throw new Error("SKILL.md is missing frontmatter version");
   return match[1];
+}
+
+function teraToGasString(value: string) {
+  if (!/^\d+$/.test(value)) throw new Error(`Invalid TGas value: ${value}`);
+  return (BigInt(value) * BigInt(1_000_000_000_000)).toString();
+}
+
+function normalizeRpcMirror(value: string | undefined, networkId: string) {
+  if (value === `https://rpc.${networkId}.near.org`) {
+    return `https://rpc.${networkId}.fastnear.com`;
+  }
+  return value;
 }
 
 function secretScan(file: string, raw: string) {

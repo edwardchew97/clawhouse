@@ -6,9 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrate, openMigratedRuntimeLedgerDb, openRuntimeLedgerDb, openSqliteLedgerDb, type LedgerDb, type SqliteLedgerDb } from "../src/db";
 import { ADMIN_TOKEN_ENV, canonicalAgentAuthPayload, canonicalAuthPayload, sha256Hex } from "../src/auth";
-import { canonicalPaperAuthPayload } from "../src/paper-trading";
+import { canonicalPaperAuthPayload, createPaperMarketSnapshot as insertPaperMarketSnapshot } from "../src/paper-trading";
 import { createApp } from "../src/server";
-import { CRON_SECRET_ENV, handleVercelLedgerRequest } from "../src/vercel";
 
 const adminToken = "ledger-admin-token";
 const tempRoots: string[] = [];
@@ -389,13 +388,13 @@ describe("Agent Board Ledger local backend", () => {
     expect("dbPath" in body).toBe(false);
   });
 
-  test("runtime DB requires a Neon/Postgres URL instead of falling back to SQLite", async () => {
+  test("runtime DB requires a Postgres URL instead of falling back to SQLite", async () => {
     await expect(openRuntimeLedgerDb({})).rejects.toThrow(
-      "Missing AGENT_BOARD_LEDGER_DATABASE_URL, DATABASE_URL, or ledgerDatabaseUrl; runtime storage must use Neon/Postgres",
+      "Missing AGENT_BOARD_LEDGER_DATABASE_URL, DATABASE_URL, or ledgerDatabaseUrl; runtime storage must use Postgres",
     );
   });
 
-  test("runtime DB open does not run Neon migrations", async () => {
+  test("runtime DB open does not run Postgres migrations", async () => {
     const fake = createFakeLedgerDb();
     const db = await openRuntimeLedgerDb(
       { AGENT_BOARD_LEDGER_DATABASE_URL: "postgres://runtime.test/db" },
@@ -406,7 +405,7 @@ describe("Agent Board Ledger local backend", () => {
     expect(fake.runs).toEqual([]);
   });
 
-  test("explicit migrated runtime DB open runs Neon migrations", async () => {
+  test("explicit migrated runtime DB open runs Postgres migrations", async () => {
     const fake = createFakeLedgerDb();
     const db = await openMigratedRuntimeLedgerDb(
       { AGENT_BOARD_LEDGER_DATABASE_URL: "postgres://runtime.test/db" },
@@ -509,9 +508,18 @@ describe("Agent Board Ledger local backend", () => {
       agent_public_key: agentWallet.publicKey,
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
-      starting_balance_usd: 10000,
-      allowed_markets: ["BTC", "ETH"],
-      metadata: { source: "creator-onboarding-test" },
+      starting_balance_usd: 1000000,
+      allowed_markets: ["DOGE"],
+      status: "paused",
+      public_status: "draft",
+      visibility_mode: "private",
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+        untrusted_extra: "must-not-persist",
+      },
     }, { admin: false, signed: true, agentSigned: true });
     const body = await jsonOf<{
       backend_registered: boolean;
@@ -520,9 +528,13 @@ describe("Agent Board Ledger local backend", () => {
       paper_account_id: string;
     }>(response);
     const discoverable = await jsonOf<{ count: number }>(await app.fetch(new Request("http://ledger.test/boards")));
-    const paper = await jsonOf<{ account: { id: string; starting_balance_usd: number } }>(
+    const paper = await jsonOf<{ account: { id: string; status: string; starting_balance_usd: number; allowed_markets: unknown; metadata: Record<string, unknown> } }>(
       await app.fetch(new Request("http://ledger.test/paper/accounts/paper-board-1")),
     );
+    const storedBoard = sqliteDb.raw.query<{ public_status: string; visibility_mode: string; metadata_json: string | null }, []>(
+      "SELECT public_status, visibility_mode, metadata_json FROM boards WHERE id = 'board-1'",
+    ).get();
+    const boardMetadata = JSON.parse(storedBoard?.metadata_json ?? "{}");
 
     expect(response.status).toBe(201);
     expect(body.backend_registered).toBe(true);
@@ -530,8 +542,58 @@ describe("Agent Board Ledger local backend", () => {
     expect(body.board_id).toBe("board-1");
     expect(body.paper_account_id).toBe("paper-board-1");
     expect(discoverable.count).toBe(1);
+    expect(storedBoard?.public_status).toBe("active");
+    expect(storedBoard?.visibility_mode).toBe("public");
     expect(paper.account.id).toBe("paper-board-1");
+    expect(paper.account.status).toBe("active");
     expect(paper.account.starting_balance_usd).toBe(10000);
+    expect(paper.account.allowed_markets).toEqual({ scope: "hyperliquid_supported" });
+    expect(paper.account.metadata).toEqual({
+      agent_name: "IronClaw",
+      agent_description: "Public paper agent.",
+      avatar_reference: "avatar-ref",
+      trading_strategy: "Trade Hyperliquid paper markets.",
+    });
+    expect(boardMetadata).toEqual(paper.account.metadata);
+  });
+
+  test("creator onboarding rejects an existing agent id registered under a different public key", async () => {
+    const first = await postJson("/creator-onboarding/register", {
+      board_id: "board-1",
+      paper_account_id: "paper-board-1",
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+      },
+    }, { admin: false, signed: true, agentSigned: true });
+    const otherWallet = createWallet();
+    const response = await postJson("/creator-onboarding/register", {
+      board_id: "board-2",
+      paper_account_id: "paper-board-2",
+      agent_id: "ironclaw",
+      agent_public_key: otherWallet.publicKey,
+      wallet_address: otherWallet.walletAddress,
+      public_key: otherWallet.publicKey,
+      metadata: {
+        agent_name: "IronClaw Copy",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+      },
+    }, { admin: false, signed: true, signer: otherWallet, agentSigned: true, agentSigner: otherWallet });
+
+    expect(first.status).toBe(201);
+    expect(response.status).toBe(409);
+    expect((await jsonOf<{ error: string }>(response)).error).toBe("Agent ID is already registered to a different public key");
+    expect(countRows("agent_registrations")).toBe(1);
+    expect(countRows("boards")).toBe(1);
+    expect(countRows("paper_accounts")).toBe(1);
   });
 
   test("creator onboarding is idempotent for matching backend records", async () => {
@@ -542,8 +604,12 @@ describe("Agent Board Ledger local backend", () => {
       agent_public_key: agentWallet.publicKey,
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
-      starting_balance_usd: 10000,
-      allowed_markets: ["BTC", "ETH"],
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+      },
     };
     const first = await postJson("/creator-onboarding/register", body, { admin: false, signed: true, agentSigned: true });
     const second = await postJson("/creator-onboarding/register", body, { admin: false, signed: true, agentSigned: true });
@@ -552,6 +618,59 @@ describe("Agent Board Ledger local backend", () => {
     expect(second.status).toBe(201);
     expect(countRows("agent_registrations")).toBe(1);
     expect(countRows("boards")).toBe(1);
+    expect(countRows("paper_accounts")).toBe(1);
+  });
+
+  test("creator onboarding assigns and reads back board and paper account ids when omitted", async () => {
+    const response = await postJson("/creator-onboarding/register", {
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+      },
+    }, { admin: false, signed: true, agentSigned: true });
+    const body = await jsonOf<{ board_id: string; paper_account_id: string }>(response);
+    const byBoard = await jsonOf<{ paper_account_id: string; account: { id: string; board_id: string } }>(
+      await app.fetch(new Request(`http://ledger.test/boards/${body.board_id}/paper-account`)),
+    );
+
+    expect(response.status).toBe(201);
+    expect(body.board_id).toMatch(/^board_/);
+    expect(body.paper_account_id).toMatch(/^paper_/);
+    expect(byBoard.paper_account_id).toBe(body.paper_account_id);
+    expect(byBoard.account.id).toBe(body.paper_account_id);
+    expect(byBoard.account.board_id).toBe(body.board_id);
+  });
+
+  test("creator onboarding reuses existing board paper account instead of guessing requested id", async () => {
+    await registerBoard({ board_id: "board-1", paper_starting_balance_usd: 10000 });
+    const response = await postJson("/creator-onboarding/register", {
+      agent_id: "ironclaw",
+      agent_public_key: agentWallet.publicKey,
+      wallet_address: wallet.walletAddress,
+      public_key: wallet.publicKey,
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade any Hyperliquid paper market.",
+      },
+    }, { admin: false, signed: true, agentSigned: true });
+    const body = await jsonOf<{ paper_account_id: string; paperAccount: { allowed_markets: unknown; metadata: Record<string, unknown> } }>(response);
+    const byBoard = await jsonOf<{ paper_account_id: string }>(
+      await app.fetch(new Request("http://ledger.test/boards/board-1/paper-account")),
+    );
+
+    expect(response.status).toBe(201);
+    expect(body.paper_account_id).toBe("paper-board-1");
+    expect(byBoard.paper_account_id).toBe("paper-board-1");
+    expect(body.paperAccount.allowed_markets).toEqual({ scope: "hyperliquid_supported" });
+    expect(body.paperAccount.metadata.trading_strategy).toBe("Trade any Hyperliquid paper market.");
     expect(countRows("paper_accounts")).toBe(1);
   });
 
@@ -573,8 +692,12 @@ describe("Agent Board Ledger local backend", () => {
       agent_public_key: agentWallet.publicKey,
       wallet_address: wallet.walletAddress,
       public_key: wallet.publicKey,
-      starting_balance_usd: 10000,
-      allowed_markets: ["BTC", "ETH"],
+      metadata: {
+        agent_name: "IronClaw",
+        agent_description: "Public paper agent.",
+        avatar_reference: "avatar-ref",
+        trading_strategy: "Trade Hyperliquid paper markets.",
+      },
     }, { admin: false, signed: true, agentSigned: true });
 
     expect(existingBoard.status).toBe(201);
@@ -938,7 +1061,7 @@ describe("Agent Board Ledger local backend", () => {
 
   test("cron discovers unreported observations and creates a reasonless timeline event", async () => {
     await registerBoard();
-    await postJson("/boards/board-1/observations", {
+    await insertObservationFixture("board-1", {
       wallet_address: wallet.walletAddress,
       current_value_usd: 110,
       tx_hash: "tx-observed",
@@ -975,7 +1098,7 @@ describe("Agent Board Ledger local backend", () => {
       tx_hash: "tx-observed",
       reason: "Agent already reported this trade.",
     });
-    await postJson("/boards/board-1/observations", {
+    await insertObservationFixture("board-1", {
       wallet_address: wallet.walletAddress,
       current_value_usd: 112,
       client_event_id: "client-observed",
@@ -997,13 +1120,13 @@ describe("Agent Board Ledger local backend", () => {
 
   test("pnl excludes topups and adds withdrawals back", async () => {
     await registerBoard();
-    await postJson("/boards/board-1/observations", {
+    await insertObservationFixture("board-1", {
       wallet_address: wallet.walletAddress,
       observed_at: "2026-06-19T00:00:00.000Z",
       current_value_usd: 120,
       topup_usd: 20,
     });
-    await postJson("/boards/board-1/observations", {
+    await insertObservationFixture("board-1", {
       wallet_address: wallet.walletAddress,
       observed_at: "2026-06-19T00:01:00.000Z",
       current_value_usd: 130,
@@ -1038,14 +1161,14 @@ describe("Agent Board Ledger local backend", () => {
       }),
     );
     const observationBody = await jsonOf<{ observation: Record<string, any> }>(
-      await postJson("/boards/board-1/observations", {
+      await insertObservationFixture("board-1", {
         wallet_address: wallet.walletAddress,
         observed_at: "2026-06-19T00:00:00.000Z",
         current_value_usd: 110,
         tx_hash: "tx-priced",
       }),
     );
-    await postJson("/boards/board-1/balance-changes", {
+    await insertBalanceChangeFixture("board-1", {
       asset_id: "native:near",
       asset_symbol: "NEAR",
       normalized_amount: 55,
@@ -1079,14 +1202,14 @@ describe("Agent Board Ledger local backend", () => {
       observed_at: "2026-06-19T00:00:00.000Z",
     });
     const observationBody = await jsonOf<{ observation: Record<string, any> }>(
-      await postJson("/boards/board-1/observations", {
+      await insertObservationFixture("board-1", {
         wallet_address: wallet.walletAddress,
         observed_at: "2026-06-19T00:00:00.000Z",
         current_value_usd: 999,
         tx_hash: "tx-reconciled",
       }),
     );
-    await postJson("/boards/board-1/balance-changes", {
+    await insertBalanceChangeFixture("board-1", {
       asset_id: "native:near",
       asset_symbol: "NEAR",
       normalized_amount: 55,
@@ -1386,7 +1509,7 @@ describe("Agent Board Ledger local backend", () => {
   test("marks fully priced periodic balance snapshots complete without a transaction id", async () => {
     await registerBoard();
     const observationBody = await jsonOf<{ observation: Record<string, any> }>(
-      await postJson("/boards/board-1/observations", {
+      await insertObservationFixture("board-1", {
         wallet_address: wallet.walletAddress,
         observed_at: "2026-06-19T00:00:00.000Z",
         current_value_usd: 100,
@@ -1402,7 +1525,7 @@ describe("Agent Board Ledger local backend", () => {
         observed_at: observationBody.observation.observed_at,
       }),
     );
-    await postJson("/boards/board-1/balance-changes", {
+    await insertBalanceChangeFixture("board-1", {
       asset_id: "native:near",
       asset_symbol: "NEAR",
       normalized_amount: 100,
@@ -1427,7 +1550,7 @@ describe("Agent Board Ledger local backend", () => {
       reason: "Agent claimed the swap filled.",
     });
     const observationBody = await jsonOf<{ observation: Record<string, any> }>(
-      await postJson("/boards/board-1/observations", {
+      await insertObservationFixture("board-1", {
         wallet_address: wallet.walletAddress,
         observed_at: "2026-06-19T00:00:00.000Z",
         current_value_usd: 100,
@@ -1435,7 +1558,7 @@ describe("Agent Board Ledger local backend", () => {
         status_claim: "filled",
       }),
     );
-    await postJson("/boards/board-1/balance-changes", {
+    await insertBalanceChangeFixture("board-1", {
       asset_id: "native:near",
       asset_symbol: "NEAR",
       normalized_amount: 100,
@@ -1462,14 +1585,14 @@ describe("Agent Board Ledger local backend", () => {
       reason: "Agent claimed the swap failed.",
     });
     const observationBody = await jsonOf<{ observation: Record<string, any> }>(
-      await postJson("/boards/board-1/observations", {
+      await insertObservationFixture("board-1", {
         wallet_address: wallet.walletAddress,
         observed_at: "2026-06-19T00:00:00.000Z",
         current_value_usd: 105,
         tx_hash: "tx-failed-conflict",
       }),
     );
-    await postJson("/boards/board-1/balance-changes", {
+    await insertBalanceChangeFixture("board-1", {
       asset_id: "native:near",
       asset_symbol: "NEAR",
       normalized_amount: 52.5,
@@ -1493,7 +1616,7 @@ describe("Agent Board Ledger local backend", () => {
 
   test("cron does not duplicate snapshots when the latest observation was already snapshotted", async () => {
     await registerBoard();
-    await postJson("/boards/board-1/observations", {
+    await insertObservationFixture("board-1", {
       wallet_address: wallet.walletAddress,
       observed_at: "2026-06-19T00:00:00.000Z",
       current_value_usd: 108,
@@ -1535,13 +1658,13 @@ describe("Agent Board Ledger local backend", () => {
 
   test("cron links duplicate observed transaction rows to one discovered event", async () => {
     await registerBoard();
-    await postJson("/boards/board-1/observations", {
+    await insertObservationFixture("board-1", {
       wallet_address: wallet.walletAddress,
       observed_at: "2026-06-19T00:00:00.000Z",
       current_value_usd: 104,
       tx_hash: "tx-duplicate-observed",
     });
-    await postJson("/boards/board-1/observations", {
+    await insertObservationFixture("board-1", {
       wallet_address: wallet.walletAddress,
       observed_at: "2026-06-19T00:01:00.000Z",
       current_value_usd: 109,
@@ -1569,7 +1692,7 @@ describe("Agent Board Ledger local backend", () => {
 
   test("cron carries high-water mark and drawdown across multiple snapshots", async () => {
     await registerBoard();
-    await postJson("/boards/board-1/observations", {
+    await insertObservationFixture("board-1", {
       wallet_address: wallet.walletAddress,
       observed_at: "2026-06-19T00:00:00.000Z",
       current_value_usd: 130,
@@ -1578,7 +1701,7 @@ describe("Agent Board Ledger local backend", () => {
     await postJson("/cron/tick", {});
 
     currentNow = new Date("2026-06-19T00:02:00.000Z");
-    await postJson("/boards/board-1/observations", {
+    await insertObservationFixture("board-1", {
       wallet_address: wallet.walletAddress,
       observed_at: "2026-06-19T00:02:00.000Z",
       current_value_usd: 110,
@@ -1619,265 +1742,40 @@ describe("Agent Board Ledger local backend", () => {
     expect(countRows("pnl_snapshots")).toBe(0);
   });
 
-  test("requires service authorization for observations and cron", async () => {
+  test("removes manual observation and balance-change write routes", async () => {
     await registerBoard();
 
     const observation = await postJson("/boards/board-1/observations", {
       wallet_address: wallet.walletAddress,
       current_value_usd: 110,
-    }, { admin: false });
+    });
+    const balanceChange = await postJson("/boards/board-1/balance-changes", {
+      asset_id: "native:near",
+      normalized_amount: 1,
+    });
+
+    expect(observation.status).toBe(404);
+    expect(balanceChange.status).toBe(404);
+  });
+
+  test("requires service authorization for cron", async () => {
     const cron = await postJson("/cron/tick", {}, { admin: false });
 
-    expect(observation.status).toBe(401);
-    expect((await jsonOf<{ error: string }>(observation)).error).toBe("Missing service authorization");
     expect(cron.status).toBe(401);
     expect((await jsonOf<{ error: string }>(cron)).error).toBe("Missing service authorization");
   });
 
-  test("normalizes Vercel /api routes before calling the ledger app", async () => {
-    const response = await handleVercelLedgerRequest(
-      new Request("http://ledger.test/api/ledger?ledgerPath=/health"),
-      { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
-    );
-
-    expect(response.status).toBe(200);
-    expect(await jsonOf<{ ok: true; service: string; db: string }>(response)).toEqual({ ok: true, service: "agent-board-ledger", db: "ready" });
-  });
-
-  test("normalizes Vercel wildcard rewrites without breaking board registration", async () => {
-    await registerAgent("ironclaw", agentWallet.publicKey);
-    const body = {
-      board_id: "board-1",
-      agent_id: "ironclaw",
-      agent_public_key: agentWallet.publicKey,
-      wallet_address: wallet.walletAddress,
-      public_key: wallet.publicKey,
-      base_currency: "USD",
-      public_status: "active",
-      visibility_mode: "public",
-    };
-    const timestamp = Date.now().toString();
-    const signed = signRequest("POST", "/boards", body, wallet, { timestamp });
-    const agentSigned = signAgentRequest("POST", "/boards", body, agentWallet, {
-      purpose: "board_registration",
-      boardId: "board-1",
-      agentId: "ironclaw",
-      agentPublicKey: agentWallet.publicKey,
-      timestamp,
-    });
-    const response = await handleVercelLedgerRequest(
-      new Request("http://ledger.test/api/ledger?ledgerPath=/boards/", {
-        method: "POST",
-        headers: {
-          ...signed.headers,
-          ...agentSigned.headers,
-          authorization: `Bearer ${adminToken}`,
-        },
-        body: signed.rawBody,
-      }),
-      { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
-    );
-
-    expect(response.status).toBe(201);
-  });
-
-  test("normalizes Vercel paper trading rewrites", async () => {
-    await registerAgent("ironclaw", agentWallet.publicKey);
-    const paperBody = {
-      paper_account_id: "paper-vercel",
-      agent_id: "ironclaw",
-      agent_public_key: agentWallet.publicKey,
-      starting_balance_usd: 1000,
-    };
-    const signed = signAgentRequest("POST", "/paper/accounts", paperBody, agentWallet, {
-      purpose: "paper_account_registration",
-      boardId: null,
-      agentId: "ironclaw",
-      agentPublicKey: agentWallet.publicKey,
-      timestamp: Date.now().toString(),
-    });
-    const response = await handleVercelLedgerRequest(
-      new Request("http://ledger.test/api/ledger?ledgerPath=/paper/accounts/", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${adminToken}`,
-          ...signed.headers,
-        },
-        body: signed.rawBody,
-      }),
-      { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
-    );
-    expect(response.status).toBe(201);
-
-    const read = await handleVercelLedgerRequest(
-      new Request("http://ledger.test/api/ledger?ledgerPath=/paper/accounts/paper-vercel/"),
-      { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
-    );
-    const body = await jsonOf<{ account: { id: string } }>(read);
-
-    expect(read.status).toBe(200);
-    expect(body.account.id).toBe("paper-vercel");
-  });
-
-  test("normalizes Vercel key-market activity rewrites", async () => {
-    currentRpcFetch = mockNearKeyMarketTx({
-      txHash: "key-vercel-tx",
-      signerId: "buyer.testnet",
-      methodName: "buy_key",
-      side: "buy",
-      agentId: "terminal_chad6",
-      amount: "1",
-      totalCost: "55550000000000000000000",
-      payout: "0",
-    });
-    const report = await handleVercelLedgerRequest(
-      new Request("http://ledger.test/api/ledger?ledgerPath=/key-market/trades/report/", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          txHash: "key-vercel-tx",
-          signerId: "buyer.testnet",
-          agentId: "terminal_chad6",
-          side: "buy",
-          amount: "1",
-        }),
-      }),
-      {
-        db: sqliteDb,
-        env: { [ADMIN_TOKEN_ENV]: adminToken },
-        rpcFetch: (...args) => currentRpcFetch(...args),
-      },
-    );
-    expect(report.status).toBe(201);
-
-    const read = await handleVercelLedgerRequest(
-      new Request("http://ledger.test/api/ledger?ledgerPath=/key-market/trades/&agentId=terminal_chad6"),
-      { db: sqliteDb, env: { [ADMIN_TOKEN_ENV]: adminToken } },
-    );
-    const body = await jsonOf<{ count: number; trades: Array<{ tx_hash: string }> }>(read);
-
-    expect(read.status).toBe(200);
-    expect(body.count).toBe(1);
-    expect(body.trades[0]?.tx_hash).toBe("key-vercel-tx");
-  });
-
-  test("rejects Vercel cron requests without the cron secret", async () => {
-    const response = await handleVercelLedgerRequest(
-      new Request("http://ledger.test/api/cron", {
-        headers: { authorization: "Bearer wrong" },
-      }),
-      {
-        db: sqliteDb,
-        env: {
-          [ADMIN_TOKEN_ENV]: adminToken,
-          [CRON_SECRET_ENV]: "cron-secret",
-        },
-      },
-    );
-
-    expect(response.status).toBe(401);
-    expect((await jsonOf<{ error: string }>(response)).error).toBe("Unauthorized cron request");
-  });
-
-  test("lets Vercel cron GET trigger the existing service-authorized cron tick", async () => {
-    await registerBoard();
-    await postJson("/boards/board-1/observations", {
-      wallet_address: wallet.walletAddress,
-      current_value_usd: 110,
-      tx_hash: "tx-vercel-cron",
-      status_claim: "observed_on_wallet",
-    });
-
-    const response = await handleVercelLedgerRequest(
-      new Request("http://ledger.test/api/cron", {
-        headers: { authorization: "Bearer cron-secret" },
-      }),
-      {
-        db: sqliteDb,
-        env: {
-          [ADMIN_TOKEN_ENV]: adminToken,
-          [CRON_SECRET_ENV]: "cron-secret",
-        },
-      },
-    );
-    const body = await jsonOf<{ discoveredEvents: number }>(response);
-
-    expect(response.status).toBe(200);
-    expect(body.discoveredEvents).toBe(1);
-    expect(countRows("events")).toBe(1);
-  });
-
-  test("passes Vercel env into the cron NEAR account watcher", async () => {
-    const seenRpcBodies: Array<Record<string, any>> = [];
+  test("removes manual paper market snapshot write route", async () => {
     await registerBoard();
 
-    const response = await handleVercelLedgerRequest(
-      new Request("http://ledger.test/api/cron", {
-        headers: { authorization: "Bearer cron-secret" },
-      }),
-      {
-        db: sqliteDb,
-        env: {
-          [ADMIN_TOKEN_ENV]: adminToken,
-          [CRON_SECRET_ENV]: "cron-secret",
-          AGENT_BOARD_LEDGER_NEAR_RPC_URL: "https://rpc.testnet.near.org",
-        },
-        rpcFetch: async (_input, init) => {
-          const rpcBody = JSON.parse(String(init?.body));
-          seenRpcBodies.push(rpcBody);
-          return new Response(JSON.stringify({
-            jsonrpc: "2.0",
-            id: "clawhouse-agent-board-ledger",
-            result: {
-              amount: "175000000000000000000000000",
-              locked: "0",
-              block_hash: "near-vercel-cron-block",
-              block_height: 789,
-              storage_usage: 101,
-            },
-          }), { status: 200, headers: { "content-type": "application/json" } });
-        },
-      },
-    );
-    const body = await jsonOf<{
-      nearAccountWatch: { status: string; attempted: number; checked: number; failed: number };
-    }>(response);
-
-    expect(response.status).toBe(200);
-    expect(body.nearAccountWatch).toMatchObject({
-      status: "checked",
-      attempted: 1,
-      checked: 1,
-      failed: 0,
-    });
-    expect(seenRpcBodies).toHaveLength(1);
-    expect(seenRpcBodies[0]?.params.account_id).toBe(wallet.walletAddress);
-    expect(countRows("balance_changes")).toBe(1);
-  });
-
-  test("requires an explicit observation wallet address", async () => {
-    await registerBoard();
-
-    const response = await postJson("/boards/board-1/observations", {
-      current_value_usd: 110,
+    const response = await postJson("/paper/market-snapshots", {
+      coin: "BTC",
+      mark_px: 100,
+      bids: [{ px: 99, sz: 1 }],
+      asks: [{ px: 100, sz: 1 }],
     });
 
-    expect(response.status).toBe(400);
-    expect((await jsonOf<{ error: string }>(response)).error).toBe("Missing wallet_address");
-  });
-
-  test("rejects future observations beyond the allowed clock skew", async () => {
-    await registerBoard();
-
-    const response = await postJson("/boards/board-1/observations", {
-      wallet_address: wallet.walletAddress,
-      observed_at: "2026-06-19T00:02:01.000Z",
-      current_value_usd: 110,
-    });
-
-    expect(response.status).toBe(400);
-    expect((await jsonOf<{ error: string }>(response)).error).toBe("observed_at cannot be more than 60 seconds in the future");
+    expect(response.status).toBe(404);
   });
 
   test("rejects invalid production accounting numbers", async () => {
@@ -1891,28 +1789,6 @@ describe("Agent Board Ledger local backend", () => {
     expect(zeroStart.status).toBe(400);
     expect((await jsonOf<{ error: string }>(zeroStart)).error).toBe("starting_balance_usd must be greater than 0");
 
-    await registerBoard();
-    const negativeCurrentValue = await postJson("/boards/board-1/observations", {
-      wallet_address: wallet.walletAddress,
-      current_value_usd: -1,
-    });
-    const negativeTopup = await postJson("/boards/board-1/observations", {
-      wallet_address: wallet.walletAddress,
-      current_value_usd: 110,
-      topup_usd: -1,
-    });
-    const negativeWithdrawal = await postJson("/boards/board-1/observations", {
-      wallet_address: wallet.walletAddress,
-      current_value_usd: 110,
-      withdrawal_usd: -1,
-    });
-
-    expect(negativeCurrentValue.status).toBe(400);
-    expect((await jsonOf<{ error: string }>(negativeCurrentValue)).error).toBe("current_value_usd must be greater than or equal to 0");
-    expect(negativeTopup.status).toBe(400);
-    expect((await jsonOf<{ error: string }>(negativeTopup)).error).toBe("topup_usd must be greater than or equal to 0");
-    expect(negativeWithdrawal.status).toBe(400);
-    expect((await jsonOf<{ error: string }>(negativeWithdrawal)).error).toBe("withdrawal_usd must be greater than or equal to 0");
   });
 
   test("requires paper account creation to be signed by the registered agent", async () => {
@@ -2184,6 +2060,40 @@ describe("Agent Board Ledger local backend", () => {
     expect(body.order.reference_deviation_bps).toBe(0);
     expect(sqliteDb.raw.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM paper_market_snapshots").get()?.count).toBe(1);
     expect(sqliteDb.raw.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM paper_positions").get()?.count).toBe(1);
+  });
+
+  test("allows any Hyperliquid market when a paper account has explicit Hyperliquid-supported scope", async () => {
+    await registerPaperAccount({ allowed_markets: { scope: "hyperliquid_supported" } });
+    currentRpcFetch = mockHyperliquidFetch({
+      meta: [{ name: "SOL", maxLeverage: 20 }],
+      contexts: [{ markPx: "150", oraclePx: "150", funding: "0.00001" }],
+      books: {
+        SOL: {
+          bids: [{ px: "149", sz: "100", n: 2 }],
+          asks: [{ px: "150", sz: "100", n: 4 }],
+        },
+      },
+    });
+
+    const order = await paperSignedPost("/paper/orders", {
+      paper_account_id: "paper-1",
+      client_order_id: "unrestricted-sol",
+      coin: "SOL",
+      side: "buy",
+      tif: "Ioc",
+      size: 1,
+      margin_mode: "cross",
+      leverage: 5,
+      max_slippage_bps: 200,
+      reference_px: 150,
+      max_reference_deviation_bps: 10,
+      reason: "Open unrestricted SOL paper position.",
+    });
+    const body = await jsonOf<{ order: { status: string; reject_reason: string | null } }>(order);
+
+    expect(order.status).toBe(201);
+    expect(body.order.status).toBe("filled");
+    expect(body.order.reject_reason).toBeNull();
   });
 
   test("fills a signed Hyperliquid spot paper order and rejects selling more than held", async () => {
@@ -2907,14 +2817,150 @@ async function registerAgent(agentId = "ironclaw", agentPublicKey = agentWallet.
 
 async function createPaperMarketSnapshot(overrides: Record<string, unknown>) {
   rememberHyperliquidFixture(overrides);
-  const response = await postJson("/paper/market-snapshots", {
+  const result = await insertPaperMarketSnapshot(sqliteDb, {
+    raw: JSON.stringify({
+      source: "hyperliquid-test-fixture",
+      maintenance_margin_rate: 0.005,
+      observed_at: currentNow.toISOString(),
+      ...overrides,
+    }),
+    json: {
     source: "hyperliquid-test-fixture",
     maintenance_margin_rate: 0.005,
     observed_at: currentNow.toISOString(),
     ...overrides,
+    },
+  }, currentNow.toISOString());
+  return result.snapshot;
+}
+
+async function insertObservationFixture(boardId: string, data: Record<string, unknown>) {
+  const board = await requireTestBoard(boardId);
+  const observedAt = cleanOptionalBodyString(data.observed_at ?? data.observedAt) ?? currentNow.toISOString();
+  const observation = {
+    id: `obs-test-${crypto.randomUUID()}`,
+    board_id: boardId,
+    wallet_address: cleanOptionalBodyString(data.wallet_address ?? data.walletAddress) ?? board.wallet_address,
+    observed_at: observedAt,
+    current_value_usd: Number(data.current_value_usd ?? data.currentValueUsd ?? 0),
+    topup_usd: Number(data.topup_usd ?? data.topupUsd ?? 0),
+    withdrawal_usd: Number(data.withdrawal_usd ?? data.withdrawalUsd ?? 0),
+    client_event_id: cleanOptionalBodyString(data.client_event_id ?? data.clientEventId),
+    tx_hash: cleanOptionalBodyString(data.tx_hash ?? data.txHash),
+    intent_id: cleanOptionalBodyString(data.intent_id ?? data.intentId),
+    status_claim: cleanOptionalBodyString(data.status_claim ?? data.statusClaim),
+    asset_in: cleanOptionalBodyString(data.asset_in ?? data.assetIn),
+    amount_in: optionalFixtureNumber(data.amount_in ?? data.amountIn),
+    asset_out: cleanOptionalBodyString(data.asset_out ?? data.assetOut),
+    amount_out: optionalFixtureNumber(data.amount_out ?? data.amountOut),
+    metadata_json: data.metadata === undefined ? null : JSON.stringify(data.metadata),
+    event_id: null,
+    created_at: currentNow.toISOString(),
+  };
+  await sqliteDb.run(
+    `INSERT INTO observations
+      (id, board_id, wallet_address, observed_at, current_value_usd, topup_usd, withdrawal_usd,
+       client_event_id, tx_hash, intent_id, status_claim, asset_in, amount_in, asset_out,
+       amount_out, metadata_json, event_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      observation.id,
+      observation.board_id,
+      observation.wallet_address,
+      observation.observed_at,
+      observation.current_value_usd,
+      observation.topup_usd,
+      observation.withdrawal_usd,
+      observation.client_event_id,
+      observation.tx_hash,
+      observation.intent_id,
+      observation.status_claim,
+      observation.asset_in,
+      observation.amount_in,
+      observation.asset_out,
+      observation.amount_out,
+      observation.metadata_json,
+      observation.event_id,
+      observation.created_at,
+    ],
+  );
+  return jsonResponse({ ok: true, observation: { ...observation, metadata: data.metadata ?? null } }, 201);
+}
+
+async function insertBalanceChangeFixture(boardId: string, data: Record<string, unknown>) {
+  const board = await requireTestBoard(boardId);
+  const walletAddress = cleanOptionalBodyString(data.wallet_address ?? data.walletAddress) ?? board.wallet_address;
+  const trackedWallet = sqliteDb.raw.query<{ id: string }, [string, string]>(
+    "SELECT id FROM tracked_wallets WHERE board_id = ? AND wallet_address = ?",
+  ).get(boardId, walletAddress);
+  const change = {
+    id: `bal-test-${crypto.randomUUID()}`,
+    board_id: boardId,
+    tracked_wallet_id: trackedWallet?.id ?? null,
+    wallet_address: walletAddress,
+    observed_at: cleanOptionalBodyString(data.observed_at ?? data.observedAt) ?? currentNow.toISOString(),
+    asset_id: cleanBodyString(data.asset_id ?? data.assetId, "asset_id"),
+    asset_symbol: cleanOptionalBodyString(data.asset_symbol ?? data.assetSymbol),
+    raw_amount: cleanOptionalBodyString(data.raw_amount ?? data.rawAmount),
+    normalized_amount: optionalFixtureNumber(data.normalized_amount ?? data.normalizedAmount),
+    decimals: data.decimals === undefined ? null : Number(data.decimals),
+    delta_amount: optionalFixtureNumber(data.delta_amount ?? data.deltaAmount),
+    delta_value_usd: optionalFixtureNumber(data.delta_value_usd ?? data.deltaValueUsd),
+    change_type: cleanOptionalBodyString(data.change_type ?? data.changeType) ?? "unknown_change",
+    source_observation_id: cleanOptionalBodyString(data.source_observation_id ?? data.sourceObservationId),
+    source_event_id: cleanOptionalBodyString(data.source_event_id ?? data.sourceEventId),
+    tx_hash: cleanOptionalBodyString(data.tx_hash ?? data.txHash),
+    intent_id: cleanOptionalBodyString(data.intent_id ?? data.intentId),
+    visibility_status: cleanOptionalBodyString(data.visibility_status ?? data.visibilityStatus) ?? "complete",
+    metadata_json: data.metadata === undefined ? null : JSON.stringify(data.metadata),
+    created_at: currentNow.toISOString(),
+  };
+  await sqliteDb.run(
+    `INSERT INTO balance_changes
+      (id, board_id, tracked_wallet_id, wallet_address, observed_at, asset_id, asset_symbol,
+       raw_amount, normalized_amount, decimals, delta_amount, delta_value_usd, change_type,
+       source_observation_id, source_event_id, tx_hash, intent_id, visibility_status,
+       metadata_json, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      change.id,
+      change.board_id,
+      change.tracked_wallet_id,
+      change.wallet_address,
+      change.observed_at,
+      change.asset_id,
+      change.asset_symbol,
+      change.raw_amount,
+      change.normalized_amount,
+      change.decimals,
+      change.delta_amount,
+      change.delta_value_usd,
+      change.change_type,
+      change.source_observation_id,
+      change.source_event_id,
+      change.tx_hash,
+      change.intent_id,
+      change.visibility_status,
+      change.metadata_json,
+      change.created_at,
+    ],
+  );
+  return jsonResponse({ ok: true, board_id: boardId, balance_changes: [{ ...change, metadata: data.metadata ?? null }] }, 201);
+}
+
+async function requireTestBoard(boardId: string) {
+  const board = sqliteDb.raw.query<{ wallet_address: string }, [string]>(
+    "SELECT wallet_address FROM boards WHERE id = ?",
+  ).get(boardId);
+  if (!board) throw new Error(`Missing test board ${boardId}`);
+  return board;
+}
+
+function jsonResponse(value: unknown, status = 200) {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { "content-type": "application/json" },
   });
-  expect(response.status).toBe(201);
-  return (await jsonOf<{ snapshot: Record<string, any> }>(response)).snapshot;
 }
 
 function rememberHyperliquidFixture(overrides: Record<string, unknown>) {
@@ -3009,7 +3055,9 @@ async function postJson(
   }
   if (options.signed) {
     Object.assign(headers, signRequest("POST", path, body, options.signer ?? wallet, {
-      boardId: cleanBodyString(body.board_id ?? body.boardId, "board_id"),
+      boardId: path === "/creator-onboarding/register"
+        ? cleanOptionalBodyString(body.board_id ?? body.boardId) ?? ""
+        : cleanBodyString(body.board_id ?? body.boardId, "board_id"),
       agentId: cleanBodyString(body.agent_id ?? body.agentId, "agent_id"),
     }).headers);
   }
@@ -3025,7 +3073,9 @@ async function postJson(
       ? null
       : path === "/paper/accounts"
         ? cleanOptionalBodyString(body.board_id ?? body.boardId)
-        : cleanBodyString(body.board_id ?? body.boardId, "board_id");
+        : path === "/creator-onboarding/register"
+          ? cleanOptionalBodyString(body.board_id ?? body.boardId)
+          : cleanBodyString(body.board_id ?? body.boardId, "board_id");
     Object.assign(headers, signAgentRequest("POST", path, body, options.agentSigner ?? agentWallet, {
       purpose,
       boardId,
@@ -3325,7 +3375,7 @@ function createFakeLedgerDb() {
   const runs: string[] = [];
   const state = { closed: false };
   const db: LedgerDb = {
-    provider: "neon-postgres",
+    provider: "postgres",
     async get<T>() {
       return undefined as T | undefined;
     },

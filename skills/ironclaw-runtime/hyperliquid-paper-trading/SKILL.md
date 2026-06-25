@@ -1,6 +1,6 @@
 ---
 name: hyperliquid-paper-trading
-version: 0.3.6
+version: 0.3.10
 description: "Use inside IronClaw when a ClawHouse trading agent needs Hyperliquid paper trading: paper perps with leverage/cross/isolated margin, or paper spot with cash/holding checks, fills, positions, risk, leaderboard, and replay proof. Do not submit real Hyperliquid orders."
 ---
 
@@ -12,6 +12,11 @@ Use this skill for Hyperliquid paper trading, including:
 
 - `market_type: "perp"` for paper perps;
 - `market_type: "spot"` for paper spot.
+
+ClawHouse paper accounts created through creator onboarding use
+`allowed_markets: { scope: "hyperliquid_supported" }`. Treat that as support for
+the live Hyperliquid public perps and spot metadata universe, not as a static
+prompt-provided symbol list.
 
 Submit paper orders to ClawHouse only after required paper account and signing
 configuration is present. Do not submit real orders to Hyperliquid.
@@ -30,6 +35,31 @@ market snapshots from public market-data endpoints and uses those snapshots for
 depth checks, leverage caps, spot cash/holding checks, margin, liquidation,
 leaderboard, and replay proof.
 
+## Hyperliquid Market Discovery
+
+Do not ask the creator for a supported-market list, max leverage table, or
+Hyperliquid API key. Use public Hyperliquid market data:
+
+- perps metadata: `POST https://api.hyperliquid.xyz/info` with
+  `{ "type": "metaAndAssetCtxs" }`;
+- spot metadata: `POST https://api.hyperliquid.xyz/info` with
+  `{ "type": "spotMetaAndAssetCtxs" }`;
+- book data: `POST https://api.hyperliquid.xyz/info` with
+  `{ "type": "l2Book", "coin": "<coin_or_spot_book_symbol>" }`.
+
+For perps, use the returned `universe[].name` as `coin` and
+`universe[].maxLeverage` as the market's max leverage. For spot, use the returned
+spot `universe[].name` or resolved book symbol for `coin`, keep
+`margin_mode: "spot"`, and keep `leverage: 1`.
+
+Before returning `SETUP_BLOCKED` for missing supported markets or max leverage,
+attempt public Hyperliquid metadata discovery. If the target market is present in
+Hyperliquid public metadata, the paper account scope allows it; let ClawHouse
+backend perform the final freshness, market, margin, depth, and risk checks.
+Only return `SETUP_BLOCKED` when public metadata cannot be read, the target
+market is absent from public metadata, or required ClawHouse config/signing is
+missing.
+
 ## Required Configuration
 
 Use IronClaw-managed configuration for:
@@ -42,19 +72,17 @@ Use IronClaw-managed configuration for:
 - active current-run ClawHouse profile
 
 Before the first paper trade, use the ClawHouse environment selected during
-onboarding. Accept `staging`, `production`, `Target environment: staging`,
-`environment: staging`, `Target environment: production`, and
-`environment: production` as environment input:
+onboarding. Accept `staging`, `Target environment: staging`, and
+`environment: staging` as environment input. Production is disabled for the
+current VPS-only phase:
 
 - Staging/testing: set `CLAWHOUSE_PAPER_BASE_URL` to
-  `https://clawhouse-backend-staging.vercel.app`.
-- Production: set `CLAWHOUSE_PAPER_BASE_URL` to
-  `https://clawhouse-backend-prod.vercel.app`.
+  `https://staging-clawhouse.lucis.finance`.
 
 Do not ask the creator to paste or invent a backend URL. Do not use a local
 backend URL in an IronClaw agent. If the environment is missing, output
 `NO_TRADE` and explain that ClawHouse Paper Trading needs `staging` or
-`production` before submitting orders.
+an enabled ClawHouse environment before submitting orders.
 
 Never ask the user to paste private keys, seed phrases, Hyperliquid API keys,
 JWTs, raw signing material, or unrestricted wallet credentials into chat.
@@ -240,6 +268,27 @@ Do not submit a new open-risk order when:
 - the signer is unavailable.
 
 ## Status Handling
+
+Every paper-order attempt must return one structured runtime result to the
+caller:
+
+```yaml
+status: "ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED"
+executor_id: "clawhouse-<agent_id>-paper-loop"
+agent_id: "<agent_id>"
+paper_account_id: "<paper_account_id>"
+paper_order_id: "<order_id_or_empty>"
+order_status: "<filled | partially_filled | resting | rejected | canceled | empty>"
+no_trade_reason: "<reason_or_empty>"
+blocker_code: "<code_or_empty>"
+readback_endpoint: "<endpoint_or_empty>"
+```
+
+Use `ORDER_SUBMITTED` only when ClawHouse returns an order id from
+`POST /paper/orders`. Use `ORDER_REJECTED` only when ClawHouse returns a
+rejected order envelope or replayable rejection. Use `NO_TRADE` only when the
+strategy intentionally chooses not to submit. Use `SETUP_BLOCKED` when config,
+signer, skill, backend read, or order submit prerequisites are missing.
 
 For `filled` or `partially_filled`, save:
 

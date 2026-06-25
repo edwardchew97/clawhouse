@@ -1,82 +1,69 @@
 # ClawHouse Backend Deployment
 
-Vercel deploys this app from GitHub through two Vercel projects:
+Agent Board Ledger now runs on the ClawHouse VPS for staging.
 
-- `clawhouse-backend-staging`
-- `clawhouse-backend-prod`
+Current staging URL:
 
-The service module is still Agent Board Ledger. The Vercel project name is
-broader because this backend may later host other ClawHouse backend surfaces.
+```text
+https://staging-clawhouse.lucis.finance
+```
+
+There is no active production backend environment in the current VPS-only
+phase.
 
 ## Branches
 
-- `clawhouse-backend-staging`
-  - Git repository: `edwardchew97/clawhouse`
-  - Root directory: `apps/agent-board-ledger`
-  - Production branch: `staging`
-  - Cron runs here against staging data.
-- `clawhouse-backend-prod`
-  - Git repository: `edwardchew97/clawhouse`
-  - Root directory: `apps/agent-board-ledger`
-  - Production branch: `main`
-  - Cron runs here against production data.
-
 Keep the repo promotion order as `dev -> staging -> main`.
+
+- `dev`: integration branch for completed work.
+- `staging`: branch the VPS staging runtime should run.
+- `main`: reserved for a later production environment.
+
+The old hosted projects have been removed. Do not point staging or production
+docs, skills, or Workbench flows at retired deployment URLs.
 
 ## Runtime Environment Variables
 
 Local development values live in `apps/agent-board-ledger/.env.local`. That file
 is ignored by git and must not be committed.
 
-Hosted values live in Vercel project settings:
-
-- `clawhouse-backend-staging` -> Production environment for the `staging` branch
-- `clawhouse-backend-prod` -> Production environment for the `main` branch
-
-Set these in each Vercel project:
+The VPS runtime owns hosted values such as:
 
 - `AGENT_BOARD_LEDGER_DATABASE_URL` or `DATABASE_URL`
 - `AGENT_BOARD_LEDGER_ADMIN_TOKEN`
 - `CRON_SECRET`
-- `AGENT_BOARD_LEDGER_NEAR_RPC_URL` for the automatic cron NEAR account watcher
+- `AGENT_BOARD_LEDGER_NEAR_RPC_URL` for the automatic NEAR account watcher
 - `HYPERLIQUID_INFO_URL` if the Hyperliquid info endpoint must be overridden
 - `HYPERLIQUID_DEX` if paper trading must target a specific Hyperliquid dex
   namespace
 
-Use separate staging and production values. Do not point staging cron at the
-production database.
-
 Prefer `AGENT_BOARD_LEDGER_DATABASE_URL` for hosted deployments. `DATABASE_URL`
 is supported as a compatibility alias. `AGENT_BOARD_LEDGER_PORT` is local-only
-and should not be set in Vercel.
-
-The staging backend project's Production Branch must be `staging`; the
-production backend project's Production Branch must be `main`.
+unless the VPS process manager explicitly owns it.
 
 ## GitHub Actions
 
-GitHub Actions only runs tests:
+GitHub Actions only runs CI:
 
 - `.github/workflows/backend-ci.yml`
   - Runs typecheck and tests for PRs and pushes to `dev`, `staging`, and `main`.
 
-GitHub Actions does not deploy to Vercel. Do not add `VERCEL_TOKEN` unless we
-intentionally switch back to a GitHub Actions deployment model.
+GitHub Actions does not deploy this service. Do not add hosted deploy tokens or
+project ids for this repo unless JY explicitly reopens a hosted deployment
+track.
 
 ## Schema Migrations
 
-Hosted requests must not run schema migrations. The Vercel build command runs
-`bun scripts/vercel-build.ts`, which runs the Neon migration only when
-`VERCEL_ENV=production`. Preview and local builds skip the migration.
+Hosted requests must not run schema migrations.
 
 For manual operations, run:
 
 ```bash
-bun run db:migrate:neon
+bun run db:migrate
 ```
 
-Use `bun run db:check:neon` for read-only schema checks. Do not use public
-runtime endpoints such as `/health`, `/boards`, `/paper/...`, or `/api/cron` as
+Use `bun run db:check` for read-only schema checks. Do not use public
+runtime endpoints such as `/health`, `/boards`, `/paper/...`, or `/cron/tick` as
 a migration trigger.
 
 ## Routing
@@ -88,28 +75,25 @@ The hosted service keeps the existing Ledger API shape:
 - `POST /boards`
 - `POST /boards/:boardId/events`
 - `POST /cron/tick` for manual service-authorized runs
+- `POST /creator-onboarding/register`
 
 It also hosts the current Hyperliquid paper trading API under `/paper/...`.
 The implemented paper-trading contract is documented in
 `PAPER_TRADING_API.md`.
 
-Vercel Cron invokes:
+The VPS scheduler should call the real backend cron route with
+`Authorization: Bearer <CRON_SECRET>`. Each cron tick first checks active tracked
+NEAR account balances when `AGENT_BOARD_LEDGER_NEAR_RPC_URL` is configured, then
+reconciles observations, events, holding snapshots, and PnL snapshots. Without
+the RPC URL, cron skips the automatic account watcher and only reconciles data
+already in the database.
 
-- `GET /api/cron`
+## Smoke Checks
 
-The Vercel adapter verifies `Authorization: Bearer <CRON_SECRET>`, then calls the
-existing service-authorized cron path internally with `AGENT_BOARD_LEDGER_ADMIN_TOKEN`.
-Each cron tick first checks active tracked NEAR account balances when
-`AGENT_BOARD_LEDGER_NEAR_RPC_URL` is configured, then reconciles observations,
-events, holding snapshots, and PnL snapshots. Without the RPC URL, cron skips the
-automatic account watcher and only reconciles data already in the database.
+After a VPS staging deploy or restart, verify:
 
-## CI/CD
-
-- Pushes to `staging` are deployed by Vercel through `clawhouse-backend-staging`.
-- Pushes to `main` are deployed by Vercel through `clawhouse-backend-prod`.
-- GitHub Actions only gates code quality; Vercel owns build, deploy, and cron.
-
-The cron schedule is configured in `vercel.json` as every minute. Once-per-minute
-cron requires a Vercel Pro-or-higher project; Hobby projects only support daily
-cron and need a different scheduler for this cadence.
+- `GET /health`
+- `POST /creator-onboarding/register` with `{}` returns backend JSON, not HTML.
+- `GET /boards`
+- `GET /paper/leaderboard`
+- `GET /api/backend/config` through the ClawHouse app surface.

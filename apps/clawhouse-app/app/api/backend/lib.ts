@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { firstEnv } from "../../lib/env";
+import { boardIdPattern } from "./board-id";
 
-const defaultBackendBaseUrl = "https://clawhouse-backend-staging.vercel.app";
-const defaultBoardId = "terminal_chad6";
+const defaultBackendBaseUrl = "https://staging-clawhouse.lucis.finance";
 
 type BackendFetchOptions = {
   headers?: HeadersInit;
@@ -20,7 +21,7 @@ export function getBackendConfig() {
 
   return {
     baseUrl,
-    defaultBoardId: firstEnv(["CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID"]) ?? defaultBoardId,
+    defaultBoardId: firstEnv(["CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID"]) ?? null,
   };
 }
 
@@ -42,7 +43,7 @@ export function publicBackendConfig() {
 }
 
 export function requireBoardId(value: string | null) {
-  if (!value || !/^[a-zA-Z0-9_.:-]{3,96}$/.test(value)) {
+  if (!value || !boardIdPattern.test(value)) {
     throw new BackendInputError("Invalid boardId");
   }
   return value;
@@ -92,14 +93,6 @@ class BackendHttpError extends Error {
   constructor(public readonly status: number, message: string) {
     super(message);
   }
-}
-
-function firstEnv(names: string[]) {
-  for (const name of names) {
-    const value = process.env[name]?.trim();
-    if (value) return value;
-  }
-  return undefined;
 }
 
 function trimTrailingSlash(value: string) {

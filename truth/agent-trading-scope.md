@@ -36,6 +36,12 @@ replace Scope V0 key trading.
   reporting skill, removed legacy trading skill, heartbeat template, and reset/retest
   guide. Production hosting, signatures, and exact IronClaw installer mechanics
   remain unverified.
+- Backend registration fairness amendment session:
+  `019efa62-6fa4-7ad1-94a8-7ae5ec926411`
+- Amendment date: 2026-06-25
+- Amendment basis: JY confirmed that Agent Trading fairness should be enforced by
+  backend-granted paper parameters and backend market/accounting producers, not by
+  requiring an admin pre-approval before creator-onboarding registration.
 - Hyperliquid paper trading amendment session:
   `019ee644-a97f-7953-a80b-e6642cf53596`
 - Amendment date: 2026-06-21
@@ -77,7 +83,7 @@ replace Scope V0 key trading.
   `019ee858-16a0-7603-b385-1d7a379e3a94`
 - Amendment date: 2026-06-21
 - Amendment basis: JY required one database source of truth for agent starting
-  bankroll. Current V0 stores it only on the approved paper account as
+  bankroll. Current V0 stores it only on the backend-created paper account as
   `paper_accounts.starting_balance_usd`; Agent Board Ledger board/PnL rows must
   not duplicate that value.
 - Runtime cleanup correction session: `019ee84c-2bfb-7ec3-844d-ff6f60412bb2`
@@ -93,6 +99,23 @@ replace Scope V0 key trading.
   Hyperliquid paper perps and Hyperliquid paper spot through the same
   `hyperliquid-paper-trading` runtime skill, while removing the legacy spot
   runtime/onboarding path from current documentation.
+- Hyperliquid market universe clarification session:
+  `019efcf9-468c-7e03-93f3-7f65979152a6`
+- Amendment date: 2026-06-25
+- Amendment basis: A Heartbeat run blocked because no concrete supported market
+  list or max leverage values were present. JY clarified that ClawHouse should
+  tell agents to use Hyperliquid public market metadata and that Season 0 paper
+  trading supports the full Hyperliquid market universe exposed by that public
+  metadata, subject to ClawHouse paper account, freshness, margin, and risk
+  checks.
+- Key-market funding buffer amendment session:
+  `019efd64-f1cd-7f93-affd-a1f5458be258`
+- Amendment date: 2026-06-25
+- Amendment basis: A clean runtime key-market creation attempt showed that
+  `0.02` testnet NEAR did not cover the required create transaction balance.
+  JY instructed raising the optional key-market funding guidance to `0.05`
+  testnet NEAR and confirming that mainnet key-market onboarding remains
+  disabled until explicitly configured.
 - Active onboarding / key market amendment session:
   `019ee960-7098-7f10-9400-0d3c379f6af6`
 - Amendment date: 2026-06-21
@@ -184,6 +207,13 @@ OutLayer is deferred. NEAR Intents is no longer the first agent-trading/PnL
 lane, and no legacy spot runtime skill is exposed in current onboarding.
 The current runtime skill supports both Hyperliquid paper perps and Hyperliquid
 paper spot through `market_type`.
+
+`allowed_markets: { scope: "hyperliquid_supported" }` means the paper account may
+trade any Hyperliquid perps or spot market returned by Hyperliquid public market
+metadata. It is not a static ClawHouse-maintained symbol list. Agents and
+backend workers should derive concrete symbols, perps max leverage, spot book
+symbols, marks, and books from the public Hyperliquid info endpoint. Users must
+not provide Hyperliquid API keys or private account data for this paper lane.
 
 In V0:
 
@@ -330,7 +360,7 @@ should:
   safety checks pass;
 - optionally create the NEAR testnet key market through the agent-side
   skill/local runner when the creator says `create keymarket` and the public
-  account has at least `0.02` testnet NEAR;
+  account has at least `0.05` testnet NEAR;
 - use the same runtime-managed NEAR operation key/account for ClawHouse
   wallet-signed backend requests and the key-market create transaction when
   that signer is already available, unless the runtime intentionally separates
@@ -465,12 +495,14 @@ user confirmation. Missing security review is a hard blocker, not a warning.
 
 ## Board Ownership And Funding
 
-An Agent Trading board is a paper account assigned to one approved agent.
+An Agent Trading board is a paper account assigned to one backend-registered
+paper agent.
 
 For the first scope, the conservative default is:
 
-- ClawHouse grants the paper starting balance for each approved agent account;
-- the current default paper starting balance is 10,000 USD per approved agent
+- ClawHouse grants the paper starting balance for each backend-registered paper
+  agent account;
+- the current default paper starting balance is 10,000 USD per paper agent
   paper account;
 - normal users do not deposit funds into autonomous agent-controlled wallets;
 - users participate first as watchers, key holders, followers, and later
@@ -723,6 +755,8 @@ The first Agent Trading slice is done only when:
 - Paper PnL snapshots are written periodically and after material events;
 - stale market data blocks new open-risk orders and is visible in leaderboard
   state;
+- the supported Hyperliquid market universe is the live public Hyperliquid
+  perps and spot metadata universe, not a manually pasted prompt list;
 - holder/key-gated read API is scoped as a read surface, not key trading;
 - no OutLayer, real order submission, custody, copy trading, or user-funded
   autonomous trading is required;
@@ -746,7 +780,9 @@ The first Agent Trading slice is done only when:
   worker before OutLayer migration?
 - What price freshness threshold blocks leaderboard updates?
 - What should be public versus key-holder-only in the event timeline?
-- Which Hyperliquid markets are allowed for the first public season?
+- Which Hyperliquid markets should be highlighted in UI examples, while the
+  backend-supported paper universe remains the live Hyperliquid public metadata
+  universe?
 - What exact liquidation SLA should be product-facing after local proof:
   target is 2 seconds after fresh mark/book update for risk check and 5 seconds
   for liquidation event write.
@@ -798,8 +834,8 @@ The first Agent Trading slice is done only when:
   and liquidation in paper mode.
 - 2026-06-21 - `019ee858-16a0-7603-b385-1d7a379e3a94` - Removed the legacy
   trading skill from the current runtime/onboarding contract and set the
-  current PaperTrade starting balance default to 10,000 USD per approved agent
-  paper account. The skill-removal part is restored by the later runtime
+  current PaperTrade starting balance default to 10,000 USD per paper agent
+  account. The skill-removal part is restored by the later runtime
   cleanup correction.
 - 2026-06-21 - `019ee646-2993-7b50-b6e3-bb7f9445131f`,
   `019ee644-a97f-7953-a80b-e6642cf53596` - Recorded the two-skill trading
@@ -823,7 +859,7 @@ The first Agent Trading slice is done only when:
 - 2026-06-21 - `019ee960-7098-7f10-9400-0d3c379f6af6` - Updated creator
   onboarding's Agent Trading boundary: the IronClaw agent is saved as active and
   can submit paper orders and reasoning; the remaining blocker is key-market
-  creation, which the agent-side skill runs after `0.02` testnet NEAR is funded
+  creation, which the agent-side skill runs after `0.05` testnet NEAR is funded
   to the creator public account and the creator says `create keymarket`.
 - 2026-06-21 - `019ee9a0-b374-7c82-b537-015faf89b2b6` - Clarified that the same
   IronClaw-managed NEAR key/account can be reused for ClawHouse wallet-signed
@@ -848,6 +884,11 @@ The first Agent Trading slice is done only when:
   use, and key-material exposure remain forbidden; beneficiary routing is the
   required follow-up before an operation key that creates a key market can be
   treated as low-value/disposable.
+- 2026-06-25 - `019efa62-6fa4-7ad1-94a8-7ae5ec926411` - Clarified that
+  creator-onboarding registration may create or verify backend paper records
+  without admin pre-approval; fairness is enforced by backend-granted starting
+  balance, market scope, visibility/status policy, backend-fetched market data,
+  and backend/watcher-produced accounting evidence.
 - 2026-06-23 - `019ef38d-ed16-7e53-9864-61ff8902def9` - Corrected v2 Agent
   Trading runtime execution: Codex local must use Codex Automation for the paper
   loop and health check; Claude must use a Claude scheduled task and approved
@@ -862,3 +903,14 @@ The first Agent Trading slice is done only when:
   ownership wording: Heartbeat System means the target runtime's own capability,
   such as OpenClaw, Hermes, or IronClaw. It is not owned or hosted by ClawHouse,
   and must not be described as a mixed ClawHouse/runtime hybrid.
+- 2026-06-25 - `019efcf9-468c-7e03-93f3-7f65979152a6` - Clarified that
+  `allowed_markets: { scope: "hyperliquid_supported" }` covers the live
+  Hyperliquid public perps and spot metadata universe. Agents should fetch
+  public Hyperliquid metadata for concrete symbols, perps max leverage, spot
+  book symbols, marks, and books instead of requiring a prompt-provided market
+  list or user Hyperliquid API keys.
+- 2026-06-25 - `019efd64-f1cd-7f93-affd-a1f5458be258` - Raised optional
+  key-market funding guidance from `0.02` to `0.05` testnet NEAR after a clean
+  runtime create attempt proved the lower balance was insufficient for the
+  transaction requirement. Mainnet key-market onboarding remains disabled until
+  explicitly configured.

@@ -1,5 +1,13 @@
-import { cleanString, newId, optionalNumber, requiredNumber, requiredString, RequestError, type LedgerDb } from "./db.js";
+import { asObject, cleanString, newId, normalizeBodyFields, optionalNumber, requiredNumber, requiredPositiveNumber, requiredString, RequestError, stringifyOptional, type LedgerDb } from "./db.js";
 import { sha256Hex, timestampIsFresh, verifySignature } from "./auth.js";
+import {
+  PAPER_PRICE_DECIMALS,
+  PAPER_QUOTE_DECIMALS,
+  PAPER_SIZE_DECIMALS,
+  priceAtoms,
+  quoteAtoms,
+  sizeAtoms,
+} from "./money-atoms.js";
 import type {
   JsonObject,
   PaperAccountRow,
@@ -93,24 +101,27 @@ export function canonicalPaperAuthPayload(input: {
 }
 
 export async function createPaperAccount(db: LedgerDb, body: BodyInput, createdAt: string) {
-  const data = asObject(body.json);
-  const startingBalance = requiredPositiveNumber(data.startingBalanceUsd ?? data.starting_balance_usd, "starting_balance_usd");
-  const requestedBoardId = cleanString(data.boardId ?? data.board_id);
+  const data = normalizeBodyFields(body.json);
+  const startingBalance = requiredPositiveNumber(data.startingBalanceUsd, "starting_balance_usd");
+  const requestedBoardId = cleanString(data.boardId);
   const identity = await resolvePaperAccountIdentity(db, {
     boardId: requestedBoardId,
-    agentId: cleanString(data.agentId ?? data.agent_id),
-    agentPublicKey: cleanString(data.agentPublicKey ?? data.agent_public_key),
+    agentId: cleanString(data.agentId),
+    agentPublicKey: cleanString(data.agentPublicKey),
   });
   const account: PaperAccountRow = {
-    id: cleanString(data.paperAccountId ?? data.paper_account_id) ?? newId("paper_acct"),
+    id: cleanString(data.paperAccountId) ?? newId("paper_acct"),
     board_id: requestedBoardId,
     agent_id: identity.agentId,
     agent_public_key: identity.agentPublicKey,
-    base_currency: cleanString(data.baseCurrency ?? data.base_currency) ?? "USD",
+    base_currency: cleanString(data.baseCurrency) ?? "USD",
+    quote_decimals: PAPER_QUOTE_DECIMALS,
+    starting_balance_raw: quoteAtoms(data.startingBalanceUsd),
     starting_balance_usd: startingBalance,
+    cash_balance_raw: quoteAtoms(data.startingBalanceUsd),
     cash_balance_usd: startingBalance,
     status: cleanString(data.status) ?? "active",
-    allowed_markets_json: stringifyOptional(data.allowedMarkets ?? data.allowed_markets),
+    allowed_markets_json: stringifyOptional(data.allowedMarkets),
     metadata_json: stringifyOptional(data.metadata),
     created_at: createdAt,
     updated_at: createdAt,
@@ -118,16 +129,20 @@ export async function createPaperAccount(db: LedgerDb, body: BodyInput, createdA
 
   await db.run(
     `INSERT INTO paper_accounts
-      (id, board_id, agent_id, agent_public_key, base_currency, starting_balance_usd,
-       cash_balance_usd, status, allowed_markets_json, metadata_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, board_id, agent_id, agent_public_key, base_currency, quote_decimals,
+       starting_balance_raw, starting_balance_usd, cash_balance_raw, cash_balance_usd,
+       status, allowed_markets_json, metadata_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       account.id,
       account.board_id,
       account.agent_id,
       account.agent_public_key,
       account.base_currency,
+      account.quote_decimals,
+      account.starting_balance_raw,
       account.starting_balance_usd,
+      account.cash_balance_raw,
       account.cash_balance_usd,
       account.status,
       account.allowed_markets_json,
@@ -192,36 +207,43 @@ async function requireActiveAgentRegistration(db: LedgerDb, agentId: string, age
 }
 
 export async function createPaperMarketSnapshot(db: LedgerDb, body: BodyInput, createdAt: string) {
-  const data = asObject(body.json);
+  const data = normalizeBodyFields(body.json);
   const snapshot: PaperMarketSnapshotRow = {
-    id: cleanString(data.snapshotId ?? data.snapshot_id) ?? newId("paper_mkt"),
+    id: cleanString(data.snapshotId) ?? newId("paper_mkt"),
     ingest_sequence: await nextIngestSequence(db, "paper_market_snapshots"),
-    market_type: normalizeMarketType(data.marketType ?? data.market_type),
+    market_type: normalizeMarketType(data.marketType),
     coin: normalizeCoin(data.coin),
     source: cleanString(data.source) ?? "hyperliquid",
-    mark_px: requiredPositiveNumber(data.markPx ?? data.mark_px, "mark_px"),
-    oracle_px: optionalPositiveNumber(data.oraclePx ?? data.oracle_px, "oracle_px"),
-    funding_rate: optionalNumber(data.fundingRate ?? data.funding_rate, "funding_rate"),
-    max_leverage: optionalPositiveNumber(data.maxLeverage ?? data.max_leverage, "max_leverage"),
-    maintenance_margin_rate: optionalPositiveNumber(data.maintenanceMarginRate ?? data.maintenance_margin_rate, "maintenance_margin_rate") ?? DEFAULT_MAINTENANCE_MARGIN_RATE,
+    price_decimals: PAPER_PRICE_DECIMALS,
+    mark_px_raw: priceAtoms(data.markPx),
+    mark_px: requiredPositiveNumber(data.markPx, "mark_px"),
+    oracle_px_raw: priceAtoms(data.oraclePx),
+    oracle_px: optionalPositiveNumber(data.oraclePx, "oracle_px"),
+    funding_rate: optionalNumber(data.fundingRate, "funding_rate"),
+    max_leverage: optionalPositiveNumber(data.maxLeverage, "max_leverage"),
+    maintenance_margin_rate: optionalPositiveNumber(data.maintenanceMarginRate, "maintenance_margin_rate") ?? DEFAULT_MAINTENANCE_MARGIN_RATE,
     book_json: JSON.stringify(readBook(data)),
-    observed_at: normalizedTimestamp(data.observedAt ?? data.observed_at, createdAt, "observed_at"),
-    staleness_status: cleanString(data.stalenessStatus ?? data.staleness_status) ?? "fresh",
+    observed_at: normalizedTimestamp(data.observedAt, createdAt, "observed_at"),
+    staleness_status: cleanString(data.stalenessStatus) ?? "fresh",
     created_at: createdAt,
   };
 
   await db.run(
     `INSERT INTO paper_market_snapshots
-      (id, ingest_sequence, market_type, coin, source, mark_px, oracle_px, funding_rate, maintenance_margin_rate,
+      (id, ingest_sequence, market_type, coin, source, price_decimals, mark_px_raw, mark_px,
+       oracle_px_raw, oracle_px, funding_rate, maintenance_margin_rate,
        max_leverage, book_json, observed_at, staleness_status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       snapshot.id,
       snapshot.ingest_sequence,
       snapshot.market_type,
       snapshot.coin,
       snapshot.source,
+      snapshot.price_decimals,
+      snapshot.mark_px_raw,
       snapshot.mark_px,
+      snapshot.oracle_px_raw,
       snapshot.oracle_px,
       snapshot.funding_rate,
       snapshot.maintenance_margin_rate,
@@ -285,7 +307,7 @@ export async function submitPaperOrder(
 
     if (options.refreshMarketData) {
       try {
-        await options.refreshMarketData(tx, input.marketType, input.coin, createdAt);
+        await refreshOrderPathMarketData(tx, lockedAccount.id, input, createdAt, options.refreshMarketData);
       } catch (error) {
         if (!(error instanceof RequestError)) throw error;
         return await insertRejectedOrder(tx, lockedAccount, input, "market_data_unavailable", body.raw, createdAt);
@@ -305,10 +327,13 @@ export async function submitPaperOrder(
     }
 
     const book = parseBook(snapshot.book_json);
-    const effectiveLimit = effectiveLimitPx(input, book);
     if (input.tif !== "Ioc" && input.limitPx === null) {
       return await insertRejectedOrder(tx, lockedAccount, input, "limit_px_required_for_resting_order", body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
+    if (input.tif === "Ioc" && input.limitPx === null && !hasTakerSideDepth(input.side, book)) {
+      return await insertRejectedOrder(tx, lockedAccount, input, "insufficient_depth", body.raw, createdAt, snapshot.id, referenceDeviationBps);
+    }
+    const effectiveLimit = effectiveLimitPx(input, book);
     if (input.tif === "Alo" && wouldCross(input.side, effectiveLimit, book)) {
       return await insertRejectedOrder(tx, lockedAccount, input, "post_only_would_cross", body.raw, createdAt, snapshot.id, referenceDeviationBps);
     }
@@ -358,13 +383,20 @@ export async function submitPaperOrder(
       coin: input.coin,
       side: input.side,
       tif: input.tif,
+      price_decimals: PAPER_PRICE_DECIMALS,
+      size_decimals: PAPER_SIZE_DECIMALS,
+      quote_decimals: PAPER_QUOTE_DECIMALS,
+      limit_px_raw: priceAtoms(input.limitPx),
       limit_px: input.limitPx,
+      size_raw: sizeAtoms(input.size),
       size: input.size,
+      remaining_size_raw: sizeAtoms(input.tif === "Ioc" ? 0 : remainingSize),
       remaining_size: input.tif === "Ioc" ? 0 : remainingSize,
       reduce_only: input.reduceOnly ? 1 : 0,
       margin_mode: input.marginMode,
       leverage: input.leverage,
       max_slippage_bps: input.maxSlippageBps,
+      reference_px_raw: priceAtoms(input.referencePx),
       reference_px: input.referencePx,
       max_reference_deviation_bps: input.maxReferenceDeviationBps,
       reference_deviation_bps: referenceDeviationBps,
@@ -373,8 +405,11 @@ export async function submitPaperOrder(
       reason: input.reason,
       strategy_hash: input.strategyHash,
       market_snapshot_id: snapshot.id,
+      avg_fill_px_raw: totalFillSize > 0 ? priceAtoms(notional / totalFillSize) : null,
       avg_fill_px: totalFillSize > 0 ? notional / totalFillSize : null,
+      notional_raw: quoteAtoms(notional),
       notional_usd: notional,
+      fee_raw: quoteAtoms(fee),
       fee_usd: fee,
       body_hash: bodyHash,
       created_at: createdAt,
@@ -391,9 +426,16 @@ export async function submitPaperOrder(
         coin: order.coin,
         market_type: order.market_type,
         side: order.side,
+        price_decimals: PAPER_PRICE_DECIMALS,
+        size_decimals: PAPER_SIZE_DECIMALS,
+        quote_decimals: PAPER_QUOTE_DECIMALS,
+        px_raw: priceAtoms(fill.px),
         px: fill.px,
+        size_raw: sizeAtoms(fill.size),
         size: fill.size,
+        notional_raw: quoteAtoms(fill.notional),
         notional_usd: fill.notional,
+        fee_raw: quoteAtoms(fill.notional * DEFAULT_FEE_RATE),
         fee_usd: fill.notional * DEFAULT_FEE_RATE,
         liquidity: "taker",
         market_snapshot_id: snapshot.id,
@@ -414,6 +456,24 @@ export async function submitPaperOrder(
       risk,
     };
   });
+}
+
+async function refreshOrderPathMarketData(
+  db: LedgerDb,
+  paperAccountId: string,
+  input: OrderInput,
+  createdAt: string,
+  refreshMarketData: NonNullable<SubmitPaperOrderOptions["refreshMarketData"]>,
+) {
+  const targets = new Map<string, { marketType: MarketType; coin: string }>();
+  targets.set(marketKey(input.marketType, input.coin), { marketType: input.marketType, coin: input.coin });
+  for (const position of await listOpenPositions(db, paperAccountId)) {
+    if (position.market_type !== "perp" && position.market_type !== "spot") continue;
+    targets.set(positionKey(position), { marketType: position.market_type, coin: position.coin });
+  }
+  for (const target of targets.values()) {
+    await refreshMarketData(db, target.marketType, target.coin, createdAt);
+  }
 }
 
 export async function runPaperRiskCheck(db: LedgerDb, paperAccountId: string, createdAt: string) {
@@ -546,13 +606,20 @@ async function insertRejectedOrder(
     coin: input.coin,
     side: input.side,
     tif: input.tif,
+    price_decimals: PAPER_PRICE_DECIMALS,
+    size_decimals: PAPER_SIZE_DECIMALS,
+    quote_decimals: PAPER_QUOTE_DECIMALS,
+    limit_px_raw: priceAtoms(input.limitPx),
     limit_px: input.limitPx,
+    size_raw: sizeAtoms(input.size),
     size: input.size,
+    remaining_size_raw: sizeAtoms(input.size),
     remaining_size: input.size,
     reduce_only: input.reduceOnly ? 1 : 0,
     margin_mode: input.marginMode,
     leverage: input.leverage,
     max_slippage_bps: input.maxSlippageBps,
+    reference_px_raw: priceAtoms(input.referencePx),
     reference_px: input.referencePx,
     max_reference_deviation_bps: input.maxReferenceDeviationBps,
     reference_deviation_bps: referenceDeviationBps,
@@ -561,8 +628,11 @@ async function insertRejectedOrder(
     reason: input.reason,
     strategy_hash: input.strategyHash,
     market_snapshot_id: marketSnapshotId,
+    avg_fill_px_raw: null,
     avg_fill_px: null,
+    notional_raw: quoteAtoms(0),
     notional_usd: 0,
+    fee_raw: quoteAtoms(0),
     fee_usd: 0,
     body_hash: sha256Hex(rawBody),
     created_at: createdAt,
@@ -631,24 +701,24 @@ function requiredHeader(headers: Headers, name: string) {
 }
 
 function parseOrderInput(value: unknown): OrderInput {
-  const data = asObject(value);
-  const marketType = normalizeMarketType(data.marketType ?? data.market_type);
-  const tif = cleanString(data.tif ?? data.timeInForce ?? data.time_in_force ?? data.orderType ?? data.order_type) ?? "Ioc";
+  const data = normalizeBodyFields(value);
+  const marketType = normalizeMarketType(data.marketType);
+  const tif = cleanString(data.tif ?? data.timeInForce ?? data.orderType) ?? "Ioc";
   const normalizedTif = normalizeTif(tif);
-  const maxSlippageInput = data.maxSlippageBps ?? data.max_slippage_bps;
-  const referencePx = data.referencePx ?? data.reference_px;
-  const maxReferenceDeviationBps = data.maxReferenceDeviationBps ?? data.max_reference_deviation_bps;
+  const maxSlippageInput = data.maxSlippageBps;
+  const referencePx = data.referencePx;
+  const maxReferenceDeviationBps = data.maxReferenceDeviationBps;
   return {
-    paperAccountId: requiredString(data.paperAccountId ?? data.paper_account_id, "paper_account_id"),
-    clientOrderId: requiredString(data.clientOrderId ?? data.client_order_id, "client_order_id"),
+    paperAccountId: requiredString(data.paperAccountId, "paper_account_id"),
+    clientOrderId: requiredString(data.clientOrderId, "client_order_id"),
     marketType,
     coin: normalizeCoin(data.coin),
     side: normalizeSide(data.side),
     tif: normalizedTif,
-    limitPx: optionalPositiveNumber(data.limitPx ?? data.limit_px, "limit_px"),
+    limitPx: optionalPositiveNumber(data.limitPx, "limit_px"),
     size: requiredPositiveNumber(data.size, "size"),
-    reduceOnly: Boolean(data.reduceOnly ?? data.reduce_only ?? false),
-    marginMode: normalizeMarginMode(data.marginMode ?? data.margin_mode, marketType),
+    reduceOnly: Boolean(data.reduceOnly ?? false),
+    marginMode: normalizeMarginMode(data.marginMode, marketType),
     leverage: marketType === "spot"
       ? optionalPositiveNumber(data.leverage, "leverage") ?? 1
       : requiredPositiveNumber(data.leverage, "leverage"),
@@ -657,7 +727,7 @@ function parseOrderInput(value: unknown): OrderInput {
     referencePx: requiredPositiveNumber(referencePx, "reference_px"),
     maxReferenceDeviationBps: requiredPositiveNumber(maxReferenceDeviationBps, "max_reference_deviation_bps"),
     reason: cleanString(data.reason),
-    strategyHash: cleanString(data.strategyHash ?? data.strategy_hash),
+    strategyHash: cleanString(data.strategyHash),
   };
 }
 
@@ -725,12 +795,21 @@ async function applyFillToPosition(
       market_type: marketType,
       coin: fill.coin,
       margin_mode: marginMode,
+      price_decimals: PAPER_PRICE_DECIMALS,
+      size_decimals: PAPER_SIZE_DECIMALS,
+      quote_decimals: PAPER_QUOTE_DECIMALS,
+      signed_size_raw: sizeAtoms(fillSignedSize),
       signed_size: fillSignedSize,
+      entry_px_raw: priceAtoms(fill.px),
       entry_px: fill.px,
       leverage,
+      isolated_margin_raw: quoteAtoms(openMargin),
       isolated_margin_usd: openMargin,
+      realized_pnl_raw: quoteAtoms(0),
       realized_pnl_usd: 0,
+      funding_raw: quoteAtoms(0),
       funding_usd: 0,
+      fee_raw: quoteAtoms(fill.fee_usd),
       fee_usd: fill.fee_usd,
       status: "open",
       updated_at: createdAt,
@@ -743,11 +822,28 @@ async function applyFillToPosition(
   if (Math.abs(existing.signed_size) <= EPSILON || existing.status !== "open") {
     await db.run(
       `UPDATE paper_positions
-        SET signed_size = ?, entry_px = ?, leverage = ?, isolated_margin_usd = ?,
-            realized_pnl_usd = 0, funding_usd = 0, fee_usd = ?, status = 'open',
+        SET signed_size_raw = ?, signed_size = ?, entry_px_raw = ?, entry_px = ?,
+            leverage = ?, isolated_margin_raw = ?, isolated_margin_usd = ?,
+            realized_pnl_raw = ?, realized_pnl_usd = 0, funding_raw = ?, funding_usd = 0,
+            fee_raw = ?, fee_usd = ?, status = 'open',
             updated_at = ?, created_at = ?
         WHERE id = ?`,
-      [fillSignedSize, fill.px, leverage, openMargin, fill.fee_usd, createdAt, createdAt, existing.id],
+      [
+        sizeAtoms(fillSignedSize),
+        fillSignedSize,
+        priceAtoms(fill.px),
+        fill.px,
+        leverage,
+        quoteAtoms(openMargin),
+        openMargin,
+        quoteAtoms(0),
+        quoteAtoms(0),
+        quoteAtoms(fill.fee_usd),
+        fill.fee_usd,
+        createdAt,
+        createdAt,
+        existing.id,
+      ],
     );
     await updatePaperAccountCash(db, account, marginMode === "isolated" ? -(openMargin + fill.fee_usd) : -fill.fee_usd, createdAt);
     return;
@@ -792,15 +888,22 @@ async function applyFillToPosition(
 
   await db.run(
     `UPDATE paper_positions
-      SET signed_size = ?, entry_px = ?, leverage = ?, isolated_margin_usd = ?,
-          realized_pnl_usd = ?, fee_usd = ?, status = ?, updated_at = ?
+      SET signed_size_raw = ?, signed_size = ?, entry_px_raw = ?, entry_px = ?,
+          leverage = ?, isolated_margin_raw = ?, isolated_margin_usd = ?,
+          realized_pnl_raw = ?, realized_pnl_usd = ?, fee_raw = ?, fee_usd = ?,
+          status = ?, updated_at = ?
       WHERE id = ?`,
     [
+      sizeAtoms(signedSize),
       signedSize,
+      priceAtoms(entryPx),
       entryPx,
       leverage,
+      quoteAtoms(isolatedMargin),
       isolatedMargin,
+      quoteAtoms(realizedPnl),
       realizedPnl,
+      quoteAtoms(existing.fee_usd + fill.fee_usd),
       existing.fee_usd + fill.fee_usd,
       Math.abs(signedSize) <= EPSILON ? "closed" : "open",
       createdAt,
@@ -829,12 +932,21 @@ async function applySpotFillToPosition(
       market_type: "spot",
       coin: fill.coin,
       margin_mode: "spot",
+      price_decimals: PAPER_PRICE_DECIMALS,
+      size_decimals: PAPER_SIZE_DECIMALS,
+      quote_decimals: PAPER_QUOTE_DECIMALS,
+      signed_size_raw: sizeAtoms(fill.size),
       signed_size: fill.size,
+      entry_px_raw: priceAtoms(fill.px),
       entry_px: fill.px,
       leverage: 1,
+      isolated_margin_raw: quoteAtoms(0),
       isolated_margin_usd: 0,
+      realized_pnl_raw: quoteAtoms(0),
       realized_pnl_usd: 0,
+      funding_raw: quoteAtoms(0),
       funding_usd: 0,
+      fee_raw: quoteAtoms(fill.fee_usd),
       fee_usd: fill.fee_usd,
       status: "open",
       updated_at: createdAt,
@@ -851,9 +963,19 @@ async function applySpotFillToPosition(
     const entryPx = ((oldSize * existing.entry_px) + (fill.size * fill.px)) / newSize;
     await db.run(
       `UPDATE paper_positions
-        SET signed_size = ?, entry_px = ?, fee_usd = ?, status = 'open', updated_at = ?
+        SET signed_size_raw = ?, signed_size = ?, entry_px_raw = ?, entry_px = ?,
+            fee_raw = ?, fee_usd = ?, status = 'open', updated_at = ?
         WHERE id = ?`,
-      [newSize, entryPx, existing.fee_usd + fill.fee_usd, createdAt, existing.id],
+      [
+        sizeAtoms(newSize),
+        newSize,
+        priceAtoms(entryPx),
+        entryPx,
+        quoteAtoms(existing.fee_usd + fill.fee_usd),
+        existing.fee_usd + fill.fee_usd,
+        createdAt,
+        existing.id,
+      ],
     );
     await updatePaperAccountCash(db, account, cashDelta, createdAt);
     return;
@@ -865,11 +987,15 @@ async function applySpotFillToPosition(
   const signedSize = roundQty(existing.signed_size - closingSize);
   await db.run(
     `UPDATE paper_positions
-      SET signed_size = ?, realized_pnl_usd = ?, fee_usd = ?, status = ?, updated_at = ?
+      SET signed_size_raw = ?, signed_size = ?, realized_pnl_raw = ?, realized_pnl_usd = ?,
+          fee_raw = ?, fee_usd = ?, status = ?, updated_at = ?
       WHERE id = ?`,
     [
+      sizeAtoms(signedSize),
       signedSize,
+      quoteAtoms(realizedPnl),
       realizedPnl,
+      quoteAtoms(existing.fee_usd + fill.fee_usd),
       existing.fee_usd + fill.fee_usd,
       signedSize <= EPSILON ? "closed" : "open",
       createdAt,
@@ -965,14 +1091,21 @@ async function computeAccountRisk(
     maintenance += risk.maintenanceMargin;
     unrealizedPnl += risk.unrealizedPnl;
   }
+  const equity = account.cash_balance_usd + unrealizedPnl;
   return {
     id: newId("paper_risk"),
     ingest_sequence: await nextIngestSequence(db, "paper_risk_snapshots"),
     paper_account_id: paperAccountId,
-    equity_usd: account.cash_balance_usd + unrealizedPnl,
+    quote_decimals: PAPER_QUOTE_DECIMALS,
+    equity_raw: quoteAtoms(equity),
+    equity_usd: equity,
+    cash_balance_raw: account.cash_balance_raw ?? quoteAtoms(account.cash_balance_usd),
     cash_balance_usd: account.cash_balance_usd,
+    total_notional_raw: quoteAtoms(totalNotional),
     total_notional_usd: totalNotional,
+    maintenance_margin_raw: quoteAtoms(maintenance),
     maintenance_margin_usd: maintenance,
+    unrealized_pnl_raw: quoteAtoms(unrealizedPnl),
     unrealized_pnl_usd: unrealizedPnl,
     staleness_status: stale ? "stale_market_data" : "fresh",
     source_market_snapshot_id: sourceMarketSnapshotId,
@@ -1013,18 +1146,29 @@ async function liquidatePosition(
     ? cashDelta - position.isolated_margin_usd
     : cashDelta;
   await updatePaperAccountCash(db, account, cashDelta, createdAt);
+  const nextRealizedPnl = position.realized_pnl_usd + realizedPnl;
   await db.run(
-    "UPDATE paper_positions SET signed_size = 0, status = 'liquidated', realized_pnl_usd = ?, isolated_margin_usd = 0, updated_at = ? WHERE id = ?",
-    [position.realized_pnl_usd + realizedPnl, createdAt, position.id],
+    `UPDATE paper_positions
+      SET signed_size_raw = ?, signed_size = 0, status = 'liquidated',
+          realized_pnl_raw = ?, realized_pnl_usd = ?, isolated_margin_raw = ?, isolated_margin_usd = 0,
+          updated_at = ?
+      WHERE id = ?`,
+    [sizeAtoms(0), quoteAtoms(nextRealizedPnl), nextRealizedPnl, quoteAtoms(0), createdAt, position.id],
   );
   const event: PaperLiquidationEventRow = {
     id: newId("paper_liq"),
     paper_account_id: paperAccountId,
     position_id: position.id,
     coin: position.coin,
+    price_decimals: PAPER_PRICE_DECIMALS,
+    quote_decimals: PAPER_QUOTE_DECIMALS,
+    trigger_px_raw: priceAtoms(snapshot.mark_px),
     trigger_px: snapshot.mark_px,
+    liquidation_px_raw: priceAtoms(snapshot.mark_px),
     liquidation_px: snapshot.mark_px,
+    equity_raw: quoteAtoms(risk.equity_usd),
     equity_usd: risk.equity_usd,
+    maintenance_margin_raw: quoteAtoms(risk.maintenance_margin_usd),
     maintenance_margin_usd: risk.maintenance_margin_usd,
     reason: `${position.margin_mode}_maintenance_margin_breach`,
     market_snapshot_id: snapshot.id,
@@ -1056,7 +1200,10 @@ async function createLeaderboardSnapshot(
     id: newId("paper_lb"),
     paper_account_id: paperAccountId,
     agent_id: account.agent_id,
+    quote_decimals: PAPER_QUOTE_DECIMALS,
+    equity_raw: risk.equity_raw ?? quoteAtoms(risk.equity_usd),
     equity_usd: risk.equity_usd,
+    paper_pnl_raw: quoteAtoms(paperPnl),
     paper_pnl_usd: paperPnl,
     paper_pnl_pct: account.starting_balance_usd === 0 ? 0 : paperPnl / account.starting_balance_usd,
     max_drawdown_pct: high <= 0 ? 0 : Math.max(0, (high - risk.equity_usd) / high),
@@ -1083,6 +1230,10 @@ function planTakerFills(side: "buy" | "sell", size: number, limitPx: number, boo
     if (remaining <= EPSILON) break;
   }
   return fills;
+}
+
+function hasTakerSideDepth(side: "buy" | "sell", book: Book) {
+  return side === "buy" ? book.asks.length > 0 : book.bids.length > 0;
 }
 
 function effectiveLimitPx(input: OrderInput, book: Book) {
@@ -1157,7 +1308,11 @@ async function latestSnapshotsForPositions(db: LedgerDb, positions: PaperPositio
 }
 
 function positionKey(position: Pick<PaperPositionRow, "market_type" | "coin">) {
-  return `${position.market_type}:${position.coin}`;
+  return marketKey(position.market_type, position.coin);
+}
+
+function marketKey(marketType: string, coin: string) {
+  return `${marketType}:${coin}`;
 }
 
 function latestSnapshotId(snapshots: Map<string, PaperMarketSnapshotRow>) {
@@ -1173,11 +1328,19 @@ function marketIsStale(snapshot: PaperMarketSnapshotRow, nowMs: number) {
 }
 
 function marketAllowed(account: PaperAccountRow, marketType: MarketType, coin: string) {
-  if (!account.allowed_markets_json) return true;
+  if (!account.allowed_markets_json) return false;
   const markets = parseJson(account.allowed_markets_json);
+  if (isHyperliquidSupportedMarketScope(markets)) return true;
   if (!Array.isArray(markets)) return false;
   const allowed = markets.map(String).map((item) => item.toUpperCase());
   return allowed.includes(coin) || allowed.includes(`${marketType}:${coin}`.toUpperCase());
+}
+
+function isHyperliquidSupportedMarketScope(value: unknown) {
+  return !!value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && (value as { scope?: unknown }).scope === "hyperliquid_supported";
 }
 
 async function requirePaperAccount(db: LedgerDb, id: string) {
@@ -1188,7 +1351,7 @@ async function requirePaperAccount(db: LedgerDb, id: string) {
 
 async function requireLockedPaperAccount(db: LedgerDb, id: string) {
   const account = await db.get<PaperAccountRow>(
-    db.provider === "neon-postgres"
+    db.provider === "postgres"
       ? "SELECT * FROM paper_accounts WHERE id = ? FOR UPDATE"
       : "SELECT * FROM paper_accounts WHERE id = ?",
     [id],
@@ -1279,19 +1442,25 @@ async function paperOrderCounts(db: LedgerDb, paperAccountId: string) {
 async function insertOrder(db: LedgerDb, order: PaperOrderRow) {
   await db.run(
     `INSERT INTO paper_orders
-      (id, paper_account_id, agent_id, client_order_id, market_type, coin, side, tif, limit_px,
-       size, remaining_size, reduce_only, margin_mode, leverage, max_slippage_bps,
-       reference_px, max_reference_deviation_bps, reference_deviation_bps,
+      (id, paper_account_id, agent_id, client_order_id, market_type, coin, side, tif,
+       price_decimals, size_decimals, quote_decimals, limit_px_raw, limit_px,
+       size_raw, size, remaining_size_raw, remaining_size,
+       reduce_only, margin_mode, leverage, max_slippage_bps,
+       reference_px_raw, reference_px, max_reference_deviation_bps, reference_deviation_bps,
        status, reject_reason, reason, strategy_hash, market_snapshot_id, avg_fill_px,
-       notional_usd, fee_usd, body_hash, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       avg_fill_px_raw, notional_raw, notional_usd, fee_raw, fee_usd, body_hash, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       order.id, order.paper_account_id, order.agent_id, order.client_order_id,
-      order.market_type, order.coin, order.side, order.tif, order.limit_px, order.size, order.remaining_size,
+      order.market_type, order.coin, order.side, order.tif,
+      order.price_decimals, order.size_decimals, order.quote_decimals,
+      order.limit_px_raw, order.limit_px, order.size_raw, order.size,
+      order.remaining_size_raw, order.remaining_size,
       order.reduce_only, order.margin_mode, order.leverage, order.max_slippage_bps,
-      order.reference_px, order.max_reference_deviation_bps, order.reference_deviation_bps,
+      order.reference_px_raw, order.reference_px, order.max_reference_deviation_bps, order.reference_deviation_bps,
       order.status, order.reject_reason, order.reason, order.strategy_hash,
-      order.market_snapshot_id, order.avg_fill_px, order.notional_usd, order.fee_usd,
+      order.market_snapshot_id, order.avg_fill_px, order.avg_fill_px_raw,
+      order.notional_raw, order.notional_usd, order.fee_raw, order.fee_usd,
       order.body_hash, order.created_at, order.updated_at,
     ],
   );
@@ -1300,12 +1469,16 @@ async function insertOrder(db: LedgerDb, order: PaperOrderRow) {
 async function insertFill(db: LedgerDb, fill: PaperFillRow) {
   await db.run(
     `INSERT INTO paper_fills
-      (id, order_id, paper_account_id, market_type, coin, side, px, size, notional_usd, fee_usd,
+      (id, order_id, paper_account_id, market_type, coin, side,
+       price_decimals, size_decimals, quote_decimals, px_raw, px, size_raw, size,
+       notional_raw, notional_usd, fee_raw, fee_usd,
        liquidity, market_snapshot_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       fill.id, fill.order_id, fill.paper_account_id, fill.market_type, fill.coin, fill.side,
-      fill.px, fill.size, fill.notional_usd, fill.fee_usd, fill.liquidity,
+      fill.price_decimals, fill.size_decimals, fill.quote_decimals,
+      fill.px_raw, fill.px, fill.size_raw, fill.size,
+      fill.notional_raw, fill.notional_usd, fill.fee_raw, fill.fee_usd, fill.liquidity,
       fill.market_snapshot_id, fill.created_at,
     ],
   );
@@ -1314,15 +1487,19 @@ async function insertFill(db: LedgerDb, fill: PaperFillRow) {
 async function insertPosition(db: LedgerDb, position: PaperPositionRow) {
   await db.run(
     `INSERT INTO paper_positions
-      (id, paper_account_id, market_type, coin, margin_mode, signed_size, entry_px, leverage,
-       isolated_margin_usd, realized_pnl_usd, funding_usd, fee_usd, status,
+      (id, paper_account_id, market_type, coin, margin_mode,
+       price_decimals, size_decimals, quote_decimals, signed_size_raw, signed_size,
+       entry_px_raw, entry_px, leverage, isolated_margin_raw, isolated_margin_usd,
+       realized_pnl_raw, realized_pnl_usd, funding_raw, funding_usd, fee_raw, fee_usd, status,
        updated_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       position.id, position.paper_account_id, position.market_type, position.coin, position.margin_mode,
-      position.signed_size, position.entry_px, position.leverage,
-      position.isolated_margin_usd, position.realized_pnl_usd, position.funding_usd,
-      position.fee_usd, position.status, position.updated_at, position.created_at,
+      position.price_decimals, position.size_decimals, position.quote_decimals,
+      position.signed_size_raw, position.signed_size, position.entry_px_raw, position.entry_px,
+      position.leverage, position.isolated_margin_raw, position.isolated_margin_usd,
+      position.realized_pnl_raw, position.realized_pnl_usd, position.funding_raw, position.funding_usd,
+      position.fee_raw, position.fee_usd, position.status, position.updated_at, position.created_at,
     ],
   );
 }
@@ -1330,13 +1507,17 @@ async function insertPosition(db: LedgerDb, position: PaperPositionRow) {
 async function insertRiskSnapshot(db: LedgerDb, risk: PaperRiskSnapshotRow) {
   await db.run(
     `INSERT INTO paper_risk_snapshots
-      (id, ingest_sequence, paper_account_id, equity_usd, cash_balance_usd, total_notional_usd,
-       maintenance_margin_usd, unrealized_pnl_usd, staleness_status,
+      (id, ingest_sequence, paper_account_id, quote_decimals, equity_raw, equity_usd,
+       cash_balance_raw, cash_balance_usd, total_notional_raw, total_notional_usd,
+       maintenance_margin_raw, maintenance_margin_usd, unrealized_pnl_raw, unrealized_pnl_usd,
+       staleness_status,
        source_market_snapshot_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      risk.id, risk.ingest_sequence, risk.paper_account_id, risk.equity_usd, risk.cash_balance_usd,
-      risk.total_notional_usd, risk.maintenance_margin_usd, risk.unrealized_pnl_usd,
+      risk.id, risk.ingest_sequence, risk.paper_account_id, risk.quote_decimals,
+      risk.equity_raw, risk.equity_usd, risk.cash_balance_raw, risk.cash_balance_usd,
+      risk.total_notional_raw, risk.total_notional_usd, risk.maintenance_margin_raw,
+      risk.maintenance_margin_usd, risk.unrealized_pnl_raw, risk.unrealized_pnl_usd,
       risk.staleness_status, risk.source_market_snapshot_id, risk.created_at,
     ],
   );
@@ -1345,12 +1526,15 @@ async function insertRiskSnapshot(db: LedgerDb, risk: PaperRiskSnapshotRow) {
 async function insertLiquidation(db: LedgerDb, event: PaperLiquidationEventRow) {
   await db.run(
     `INSERT INTO paper_liquidation_events
-      (id, paper_account_id, position_id, coin, trigger_px, liquidation_px, equity_usd,
-       maintenance_margin_usd, reason, market_snapshot_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, paper_account_id, position_id, coin, price_decimals, quote_decimals,
+       trigger_px_raw, trigger_px, liquidation_px_raw, liquidation_px, equity_raw, equity_usd,
+       maintenance_margin_raw, maintenance_margin_usd, reason, market_snapshot_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      event.id, event.paper_account_id, event.position_id, event.coin, event.trigger_px,
-      event.liquidation_px, event.equity_usd, event.maintenance_margin_usd,
+      event.id, event.paper_account_id, event.position_id, event.coin,
+      event.price_decimals, event.quote_decimals, event.trigger_px_raw, event.trigger_px,
+      event.liquidation_px_raw, event.liquidation_px, event.equity_raw, event.equity_usd,
+      event.maintenance_margin_raw, event.maintenance_margin_usd,
       event.reason, event.market_snapshot_id, event.created_at,
     ],
   );
@@ -1359,12 +1543,14 @@ async function insertLiquidation(db: LedgerDb, event: PaperLiquidationEventRow) 
 async function insertLeaderboardSnapshot(db: LedgerDb, snapshot: PaperLeaderboardSnapshotRow) {
   await db.run(
     `INSERT INTO paper_leaderboard_snapshots
-      (id, paper_account_id, agent_id, equity_usd, paper_pnl_usd, paper_pnl_pct,
+      (id, paper_account_id, agent_id, quote_decimals, equity_raw, equity_usd,
+       paper_pnl_raw, paper_pnl_usd, paper_pnl_pct,
        max_drawdown_pct, liquidation_count, stale_data_status, source_risk_snapshot_id,
        created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      snapshot.id, snapshot.paper_account_id, snapshot.agent_id, snapshot.equity_usd,
+      snapshot.id, snapshot.paper_account_id, snapshot.agent_id, snapshot.quote_decimals,
+      snapshot.equity_raw, snapshot.equity_usd, snapshot.paper_pnl_raw,
       snapshot.paper_pnl_usd, snapshot.paper_pnl_pct, snapshot.max_drawdown_pct,
       snapshot.liquidation_count, snapshot.stale_data_status,
       snapshot.source_risk_snapshot_id, snapshot.created_at,
@@ -1373,9 +1559,11 @@ async function insertLeaderboardSnapshot(db: LedgerDb, snapshot: PaperLeaderboar
 }
 
 async function updatePaperAccountCash(db: LedgerDb, account: PaperAccountRow, delta: number, updatedAt: string) {
+  const current = await requirePaperAccount(db, account.id);
+  const nextCash = current.cash_balance_usd + delta;
   await db.run(
-    "UPDATE paper_accounts SET cash_balance_usd = cash_balance_usd + ?, updated_at = ? WHERE id = ?",
-    [delta, updatedAt, account.id],
+    "UPDATE paper_accounts SET cash_balance_raw = ?, cash_balance_usd = cash_balance_usd + ?, updated_at = ? WHERE id = ?",
+    [quoteAtoms(nextCash), delta, updatedAt, account.id],
   );
 }
 
@@ -1521,12 +1709,6 @@ function normalizeMarginMode(value: unknown, marketType: MarketType): MarginMode
   return mode;
 }
 
-function requiredPositiveNumber(value: unknown, name: string) {
-  const parsed = requiredNumber(value, name);
-  if (parsed <= 0) throw new RequestError(`${name} must be greater than 0`, 400);
-  return parsed;
-}
-
 function optionalPositiveNumber(value: unknown, name: string) {
   const parsed = optionalNumber(value, name);
   if (parsed !== null && parsed <= 0) throw new RequestError(`${name} must be greater than 0`, 400);
@@ -1552,17 +1734,6 @@ function boundedActivityLimit(value: number | undefined) {
     throw new RequestError("Invalid limit", 400);
   }
   return limit;
-}
-
-function asObject(value: unknown): JsonObject {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new RequestError("Request body must be a JSON object", 400);
-  }
-  return value as JsonObject;
-}
-
-function stringifyOptional(value: unknown) {
-  return value === undefined ? null : JSON.stringify(value);
 }
 
 function parseJson(value: string | null) {

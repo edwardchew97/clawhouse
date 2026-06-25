@@ -1,9 +1,29 @@
 import { NextResponse } from "next/server";
+import { getPublicKeyMarketContractConfig, publicContractsPayload } from "../../api/key-market/contracts";
+import { firstEnv } from "../../lib/env";
 
 export const dynamic = "force-dynamic";
 
 const manifestUrl =
   "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/ironclaw-runtime/manifest.json";
+
+const entrySkills = [
+  {
+    name: "clawhouse-skill-directory",
+    url: "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-skill-directory/SKILL.md",
+  },
+];
+
+const localSkills = [
+  {
+    name: "clawhouse-creator-onboarding",
+    url: "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/clawhouse-creator-onboarding/SKILL.md",
+  },
+  {
+    name: "sign-clawhouse-backend-request",
+    url: "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/skills/sign-clawhouse-backend-request/SKILL.md",
+  },
+];
 
 const requiredSkills = [
   {
@@ -42,9 +62,42 @@ const tradingInstall = tradingSkills.map(({ name, url }) => ({
   parameters: { name, url },
 }));
 
+const entryInstall = entrySkills.map((skill) => ({
+  tool: "skill_install",
+  parameters: skill,
+}));
+
+const localSkillInstall = localSkills.map((skill) => ({
+  tool: "skill_install",
+  parameters: skill,
+}));
+
 const paperEnvironments = {
-  staging: "https://clawhouse-backend-staging.vercel.app",
-  production: "https://clawhouse-backend-prod.vercel.app",
+  staging: "https://staging-clawhouse.lucis.finance",
+};
+
+const hyperliquidMarketScope = {
+  scope: "hyperliquid_supported",
+  meaning:
+    "Supports every Hyperliquid perps and spot market returned by public Hyperliquid metadata, subject to ClawHouse paper account, freshness, margin, depth, and risk checks.",
+  userProvidesMarketList: false,
+  userProvidesHyperliquidApiKey: false,
+  publicInfoUrl: "https://api.hyperliquid.xyz/info",
+  discovery: {
+    perpsMetadataRequest: { type: "metaAndAssetCtxs" },
+    spotMetadataRequest: { type: "spotMetaAndAssetCtxs" },
+    bookRequest: { type: "l2Book", coin: "<coin_or_spot_book_symbol>" },
+  },
+  perps: {
+    coinSource: "metaAndAssetCtxs[0].universe[].name",
+    maxLeverageSource: "metaAndAssetCtxs[0].universe[].maxLeverage",
+  },
+  spot: {
+    coinSource: "spotMetaAndAssetCtxs[0].universe[].name",
+    bookSymbolSource: "spotMetaAndAssetCtxs[0].universe[].index or known spot name",
+    requiredMarginMode: "spot",
+    requiredLeverage: 1,
+  },
 };
 
 const walletUnavailableMessage =
@@ -147,16 +200,77 @@ const runtimeExecution = {
     "Setup blocked: selected runtime execution schedule is unavailable.",
 };
 
-// Keep this text matched with skills/clawhouse-creator-onboarding/SKILL.md.
+const runtimeExecutorContract = {
+  owner: "selected_runtime",
+  notOwnedBy: ["ClawHouse"],
+  executorIdTemplate: "clawhouse-<agent_id>-paper-loop",
+  cadence: "every_60_seconds_or_runtime_default_heartbeat",
+  firstRunDeadlineSeconds: 60,
+  profileRef: "runtime-managed ClawHouse agent profile",
+  operationKeyRef: "runtime-managed local key or approved private secret store",
+  requiredProfileFields: [
+    "environment",
+    "paper_base_url",
+    "agent_id",
+    "board_id",
+    "paper_account_id",
+    "agent_name",
+    "agent_description",
+    "avatar_reference",
+    "creator_public_account",
+    "public_key",
+    "trading_strategy",
+  ],
+  requiredCapabilities: [
+    "durable_schedule",
+    "private_operation_key_access",
+    "outbound_https_to_clawhouse_backend",
+    "installed_skill:hyperliquid-paper-trading",
+    "paper_order_signing",
+  ],
+  activeReadbackRequired: [
+    "executor_id",
+    "execution_driver",
+    "schedule_active",
+    "agent_id",
+    "paper_account_id",
+    "last_run_at",
+    "last_result_status",
+    "next_run_at",
+  ],
+  resultStatuses: [
+    "ORDER_SUBMITTED",
+    "ORDER_REJECTED",
+    "NO_TRADE",
+    "SETUP_BLOCKED",
+  ],
+  blockerCodes: [
+    "RUNTIME_EXECUTOR_UNAVAILABLE",
+    "RUNTIME_SCHEDULER_UNAVAILABLE",
+    "MISSING_PROFILE_FIELD",
+    "MISSING_OPERATION_KEY_ACCESS",
+    "MISSING_PAPER_SIGNER",
+    "MISSING_RUNTIME_SKILL",
+    "BACKEND_READ_FAILED",
+    "ORDER_SUBMIT_FAILED",
+  ],
+  stopIfUnavailable: "SETUP_BLOCKED: RUNTIME_EXECUTOR_UNAVAILABLE",
+  proofRule:
+    "Installed skills, saved profile, backend ids, healthy backend, or instructions to run later are not proof that the executor exists.",
+};
+
+// Validated against skills/clawhouse-creator-onboarding/SKILL.md by the creator-onboarding setup test.
 function completionTemplate(creatorPublicAccount: string) {
+  const contractConfig = getPublicKeyMarketContractConfig();
+  const fundingNetwork = keyMarketFundingNetwork(contractConfig.networkId);
+
   return [
     "Paper agent is active.",
-    "The selected runtime has scheduled or started this paper strategy.",
+    "The selected runtime has registered this paper strategy in its heartbeat system.",
     "",
     "Agent:",
     "- name: <agent_name>",
     "- environment: <environment>",
-    "- paper_active: true",
     "- backend_registered: true",
     "- backend_base_url: <backend_base_url>",
     "- agent_id: <agent_id>",
@@ -164,12 +278,15 @@ function completionTemplate(creatorPublicAccount: string) {
     "- paper_account_id: <paper_account_id>",
     `- creator_public_account: ${creatorPublicAccount}`,
     "- public_key: <public_key>",
+    "- paper_active: true",
     "- key_market_active: false",
-    "- execution_driver: <execution_driver>",
+    "- execution_driver: <heartbeat_system | codex_automation | claude_scheduled_task>",
     "- schedule_active: true",
+    "- executor_id: clawhouse-<agent_id>-paper-loop",
+    "- last_result_status: <ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED>",
     "",
     "Optional key market:",
-    `1. Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
+    `1. Send ${contractConfig.storageDepositNear} ${fundingNetwork} to ${creatorPublicAccount}.`,
     "2. Tell this agent: create keymarket.",
     "",
     "Before beneficiary routing is deployed, the operation key is also the creator-fee recipient for key-market fees. Treat it as valuable after key-market creation. Do not call it disposable yet.",
@@ -178,14 +295,23 @@ function completionTemplate(creatorPublicAccount: string) {
 }
 
 function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: boolean) {
-  const contractId =
-    firstEnv(["CLAWHOUSE_KEY_MARKET_CONTRACT_ID", "KEY_MARKET_CONTRACT_ID", "CONTRACT_ID"]) ??
-    "clawhouse-key-20260619125948.testnet";
+  const contractConfig = getPublicKeyMarketContractConfig();
+  const fundingNetwork = keyMarketFundingNetwork(contractConfig.networkId);
 
   return {
-    fundingAmountNear: "0.02",
-    fundingNetwork: "NEAR testnet",
-    contractId,
+    fundingAmountNear: contractConfig.storageDepositNear,
+    fundingNetwork,
+    environment: contractConfig.environment,
+    networkId: contractConfig.networkId,
+    rpcUrl: contractConfig.nodeUrl,
+    contractId: contractConfig.contractId,
+    createMethod: contractConfig.createMethod,
+    preflightMethod: contractConfig.preflightMethod,
+    stateReadMethod: contractConfig.stateReadMethod,
+    methodArgs: contractConfig.methodArgs,
+    methodNotes: contractConfig.methodNotes,
+    gasTgas: contractConfig.gasTgas,
+    gas: contractConfig.gas,
     fundTo: creatorPublicAccount,
     fundingAddressRequired: true,
     fundingAddressProvided: hasCreatorPublicAccount,
@@ -207,29 +333,53 @@ function keyMarketSetup(creatorPublicAccount: string, hasCreatorPublicAccount: b
       runner: "agent-key-market create",
       cwd: "agent-key-market",
       script: "scripts/create-agent-key.ts",
-      storageDepositNear: "0.02",
+      storageDepositNear: contractConfig.storageDepositNear,
       env: {
-        STORAGE_DEPOSIT: "0.02",
+        STORAGE_DEPOSIT: contractConfig.storageDepositNear,
         ACCOUNT_ID: creatorPublicAccount,
-        CONTRACT_ID: contractId,
-        NEAR_NETWORK_ID: "testnet",
-        CLAWHOUSE_OPERATION_KEY_FILE:
-          "~/.clawhouse/agents/<agent_id>/operation-key.json",
+        CONTRACT_ID: contractConfig.contractId,
+        NEAR_NETWORK_ID: contractConfig.networkId,
+        NEAR_NODE_URL: contractConfig.nodeUrl,
+        NEAR_TGAS: contractConfig.gasTgas,
+        [contractConfig.signer.keyFileEnv]: "~/.clawhouse/agents/<agent_id>/operation-key.json",
       },
       signerAccount: creatorPublicAccount,
       args: ["<agent_id>", "<agent_name>", "<metadata_uri>"],
+      functionCall: {
+        methodName: contractConfig.createMethod,
+        argsJson: contractConfig.methodArgs.createAgentKey,
+        attachedDepositNear: contractConfig.storageDepositNear,
+        gasTgas: contractConfig.gasTgas,
+      },
+      preflightCall: {
+        methodName: contractConfig.preflightMethod,
+        argsJson: contractConfig.methodArgs.getAgent,
+        expectedMissingResult: null,
+      },
+      stateReadCall: {
+        methodName: contractConfig.stateReadMethod,
+        argsJson: contractConfig.methodArgs.getState,
+      },
     },
     userFacingSteps: [
-      `Send 0.02 testnet NEAR to ${creatorPublicAccount}.`,
+      `Send ${contractConfig.storageDepositNear} ${fundingNetwork} to ${creatorPublicAccount}.`,
       "Tell this agent: create keymarket.",
     ],
     forbidden: [
       "Do not show the creator a bun run command as the normal path.",
       "Do not paste NEAR private keys or seed phrases into chat.",
       "Do not paste NEAR private keys or seed phrases into Workbench, tool output, or logs.",
-      "Do not send mainnet NEAR for this testnet key market.",
+      contractConfig.networkId === "testnet"
+        ? "Do not send mainnet NEAR for this testnet key market."
+        : `Use only ${fundingNetwork} for this configured key market.`,
     ],
   };
+}
+
+function keyMarketFundingNetwork(networkId: string) {
+  if (networkId === "testnet") return "testnet NEAR";
+  if (networkId === "mainnet") return "mainnet NEAR";
+  return `${networkId} NEAR`;
 }
 
 function payloadFor(request: Request) {
@@ -251,11 +401,11 @@ function payloadFor(request: Request) {
     unsupportedMode:
       "Unsupported environments are instructions-only and cannot generate keys, sign, register, or run the strategy loop.",
     runtimeExecution,
+    runtimeExecutorContract,
     status: "active",
     message:
       "Paper agent is active. The selected runtime has scheduled or started the submitted paper strategy.",
     intake: [
-      "environment",
       "agent_name",
       "agent_description",
       "avatar_reference",
@@ -268,16 +418,17 @@ function payloadFor(request: Request) {
       "trading_strategy",
     ],
     environment: {
-      required: true,
-      choices: ["staging", "production"],
+      required: false,
+      default: "staging",
+      choices: ["staging"],
+      userChooses: false,
       acceptedPromptFields: [
         "Target environment: staging",
         "environment: staging",
-        "Target environment: production",
-        "environment: production",
       ],
       paperBaseUrls: paperEnvironments,
       userProvidesBackendUrl: false,
+      productionStatus: "disabled",
     },
     profileIntakeGate: {
       requiredBeforeTools: true,
@@ -337,13 +488,18 @@ function payloadFor(request: Request) {
     operationKeyProvisioning: walletProvisioning,
     manifest: {
       url: manifestUrl,
+      entrySkills,
+      localSkills,
       requiredSkills,
       tradingSkills,
       futureTradingSkills: "Add one verified manifest entry per venue or trading pattern.",
       hashVerification:
         "Require manifest sha256 metadata. If the runtime has no built-in hash utility, continue after URL/name/version/permission/forbidden-behavior/secret-safety checks and report hash_not_recomputed_no_builtin_hasher.",
     },
-    install: [...requiredInstall, ...tradingInstall],
+    marketScope: hyperliquidMarketScope,
+    install: [...entryInstall, ...localSkillInstall, ...requiredInstall, ...tradingInstall],
+    installEntry: entryInstall,
+    installLocal: localSkillInstall,
     installRequired: requiredInstall,
     installTrading: tradingInstall,
     agentState: {
@@ -368,6 +524,12 @@ function payloadFor(request: Request) {
       traderStatus: "active",
     },
     keyMarketSetup: keyMarketSetup(account, hasAccount),
+    contracts: {
+      source: "apps/clawhouse-app/config/public-onboarding-contracts.json",
+      publicKitUrl:
+        "https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/contracts.json",
+      config: publicContractsPayload(),
+    },
     completion: {
       useAfterOnboardingCompletion: true,
       useAfterActivationApproval: false,
@@ -401,7 +563,6 @@ function payloadFor(request: Request) {
       "tool_search_clawhouse",
       "tool_info_clawhouse_creator_onboarding",
       "tool_install_clawhouse_creator_onboarding",
-      "skill_install_clawhouse_creator_onboarding_during_fixed_flow",
       "skill_install_clawhouse_creator_onboarding_without_url",
       "skill_install_runtime_skill_without_url",
       "http_without_literal_url",
@@ -451,12 +612,4 @@ function creatorPublicAccount(request: Request) {
 function cleanAccountId(value: string | null | undefined) {
   if (!value) return "";
   return /^[a-z0-9._-]{2,64}$/.test(value) ? value : "";
-}
-
-function firstEnv(names: string[]) {
-  for (const name of names) {
-    const value = process.env[name];
-    if (value) return value;
-  }
-  return undefined;
 }

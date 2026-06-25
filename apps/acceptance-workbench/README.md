@@ -59,12 +59,11 @@ step:
 - `Dev`: integration/dev profile. Put the current dev or preview backend URL in
   `ledgerBaseUrl`, and the current dev or preview app URL in
   `clawhouseAppBaseUrl`, before sending requests.
-- `Staging`: uses the deployed staging backend
-  `https://clawhouse-backend-staging.vercel.app`. Put the deployed staging app
-  URL in `clawhouseAppBaseUrl` before sending app requests.
-- `Production`: uses the deployed production backend
-  `https://clawhouse-backend-prod.vercel.app`. Put the deployed production app
-  URL in `clawhouseAppBaseUrl` before sending app requests.
+- `Staging`: uses the VPS staging URL
+  `https://staging-clawhouse.lucis.finance` for both app and backend
+  requests.
+- `Production`: disabled for the current VPS-only phase. Leave production URLs
+  empty unless JY explicitly reopens a production runtime.
 
 Each target has its own Environment JSON in browser localStorage. Public URLs
 and empty secret fields are safe to keep in source, but real credentials are not.

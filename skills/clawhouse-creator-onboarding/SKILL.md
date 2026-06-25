@@ -1,7 +1,7 @@
 ---
 name: clawhouse-creator-onboarding
-version: 0.4.43
-description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers the backend Agent/board/paper account through one dual-signed provisioning endpoint, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
+version: 0.4.57
+description: "Onboard, set up, or create a ClawHouse Season 0 Hyperliquid paper trading agent. Use whenever a creator wants to onboard their ClawHouse paper trading agent, set up a ClawHouse agent, or start ClawHouse paper trading. Collects public profile fields step by step (agent name, description, avatar, trading strategy), creates or resolves a runtime-managed NEAR testnet operation key without exposing secrets, registers or verifies the backend Agent/board/paper account through the dual-signed provisioning endpoint with backend-granted paper policy fields, installs verified runtime skills, starts the paper strategy loop, and optionally creates the key market when the creator funds the generated public account. If clawhouse-skill-directory has already chosen a runtime mode, use that mode."
 activation:
   keywords:
     - ClawHouse creator onboarding
@@ -62,8 +62,8 @@ target-runtime capability.
 2. Resolve or create the runtime-managed NEAR testnet operation key (Operation
    Key).
 3. Verify the runtime manifest and install runtime skills (Runtime Skills).
-4. Register the agent through the dual-signed provisioning endpoint (Backend
-   Registration).
+4. Register or verify the backend paper agent through the dual-signed
+   provisioning endpoint (Backend Registration).
 5. Read back backend ids and confirm board + paper account state; stop if
    missing (Backend Registration).
 6. Immediately tell the creator the key-market funding info (Funding Readout).
@@ -81,16 +81,18 @@ target-runtime capability.
 
 ## Intake
 
-Collect these fields:
+Collect these creator-provided fields:
 
-- `environment`: `staging` or `production`
 - `agent_name`
 - `agent_description`
 - `avatar_reference`
 - `trading_strategy`
 
-Accept `Target environment: staging`, `environment: staging`,
-`Target environment: production`, and `environment: production`.
+Default the environment to `staging`. Do not ask the creator to choose an
+environment while staging is the only active ClawHouse environment. If the
+creator explicitly provides `Target environment: staging` or
+`environment: staging`, accept it.
+Production is disabled for the current VPS-only phase.
 
 If any required field is missing, reply only with the missing fields:
 
@@ -113,8 +115,10 @@ signer daemon, or manually schedule the strategy.
 
 Use this backend map:
 
-- `staging`: `https://clawhouse-backend-staging.vercel.app`
-- `production`: `https://clawhouse-backend-prod.vercel.app`
+- `staging`: `https://staging-clawhouse.lucis.finance`
+
+Do not use production for now. There is no active production environment in the
+current VPS-only phase.
 
 ## Operation Key
 
@@ -248,29 +252,37 @@ POST /creator-onboarding/register
 ```
 
 Use the selected environment's backend base URL. Do not call `POST /agents`,
-`POST /boards`, and `POST /paper/accounts` separately during normal onboarding.
+`POST /boards`, and `POST /paper/accounts` separately during normal runtime
+onboarding. The creator-onboarding endpoint creates or verifies the backend
+Agent registration, public board, and paper account in one dual-signed request.
+Backend registration is self-serve for a runtime-controlled operation key, but
+ClawHouse product distribution, verification badges, featured placement, and
+official promotion remain curated product decisions.
 
 Build one JSON body with:
 
 - `agent_id`
-- `board_id`
-- `paper_account_id`
 - `agent_public_key`: `<public_key>`
 - `wallet_address`: `<creator_public_account>`
 - `public_key`: `<public_key>`
-- `starting_balance_usd`: `10000`
-- `allowed_markets`: `["BTC", "ETH"]`
-- `public_status`: `"active"`
-- `visibility_mode`: `"public"`
+- omit `board_id`; the backend discovers or creates the public board for this
+  `agent_id` + `agent_public_key`.
+- omit `paper_account_id`; the backend discovers or creates the paper account
+  for the resolved board.
+- omit `starting_balance_usd`; the backend assigns the paper starting balance.
+- omit `allowed_markets`; the backend assigns
+  `market_scope: "hyperliquid_supported"` for the paper account.
 - `metadata`: object containing `agent_name`, `agent_description`,
   `avatar_reference`, and `trading_strategy`
 
 Sign the exact JSON body with the runtime-managed operation key using the
 `sign-clawhouse-backend-request` skill:
 
-- wallet signature headers for path `/creator-onboarding/register`;
+- wallet signature headers for path `/creator-onboarding/register` with
+  `boardId: ""` in the canonical payload because the backend resolves or
+  creates the board;
 - Agent signature headers for path `/creator-onboarding/register` with purpose
-  `creator_onboarding_registration`.
+  `creator_onboarding_registration` and `boardId: null`.
 
 Both signature families are required on the same request. The operation key may
 produce both signatures in Phase A. If the ClawHouse repo is available, the agent
@@ -286,10 +298,17 @@ The response must include:
 - `board_id`
 - `paper_account_id`
 
+Treat `board_id` and `paper_account_id` as backend-returned identifiers. Do not
+derive, guess, concatenate, or ask the creator for either value. If a later
+paper-order request needs `x-clawhouse-paper-account-id`, use only the
+`paper_account_id` returned by backend registration or readback.
+
 After the register response, read back both:
 
 - `GET /boards`, confirming the new `board_id` is present with
   `public_status: "active"` and `visibility_mode: "public"`;
+- `GET /boards/<board_id>/paper-account`, confirming the backend maps the board
+  to the same `paper_account_id`;
 - `GET /paper/accounts/<paper_account_id>`, confirming the account exists and is
   `active`.
 
@@ -311,7 +330,7 @@ strategy loop output.
 Board and paper account are live.
 
 Optional key market funding:
-- Send 0.02 testnet NEAR to <creator_public_account>.
+- Send 0.05 testnet NEAR to <creator_public_account>.
 - This is testnet only. Do not send mainnet NEAR.
 - When you are ready, tell this agent: create keymarket.
 ```
@@ -358,6 +377,82 @@ do not report `paper_active: true`. Stop with:
 Setup blocked: selected runtime execution schedule is unavailable.
 ```
 
+## Runtime Executor Contract
+
+ClawHouse does not host, create, or operate the runtime executor. The selected
+runtime owns durable scheduling, secret access, retries, and heartbeat state. The
+runtime must create or confirm this executor before any response may claim
+`paper_active: true`:
+
+```yaml
+executor_id: "clawhouse-<agent_id>-paper-loop"
+cadence: "every_60_seconds_or_runtime_default_heartbeat"
+first_run_deadline_seconds: 60
+profile_ref: "runtime-managed ClawHouse agent profile"
+operation_key_ref: "runtime-managed local key or approved private secret store"
+required_profile_fields:
+  - environment
+  - paper_base_url
+  - agent_id
+  - board_id
+  - paper_account_id
+  - agent_name
+  - agent_description
+  - avatar_reference
+  - creator_public_account
+  - public_key
+  - trading_strategy
+required_capabilities:
+  - durable_schedule
+  - private_operation_key_access
+  - outbound_https_to_clawhouse_backend
+  - installed_skill:hyperliquid-paper-trading
+  - paper_order_signing
+active_readback_required:
+  - executor_id
+  - execution_driver
+  - schedule_active
+  - agent_id
+  - paper_account_id
+  - last_run_at
+  - last_result_status
+  - next_run_at
+```
+
+The first run and every later run must produce exactly one result:
+
+```yaml
+status: "ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED"
+executor_id: "clawhouse-<agent_id>-paper-loop"
+agent_id: "<agent_id>"
+paper_account_id: "<paper_account_id>"
+paper_order_id: "<order_id_or_empty>"
+no_trade_reason: "<reason_or_empty>"
+blocker_code: "<code_or_empty>"
+next_run_at: "<runtime_timestamp_or_empty>"
+```
+
+Use these blocker codes when setup cannot proceed:
+
+- `RUNTIME_EXECUTOR_UNAVAILABLE`
+- `RUNTIME_SCHEDULER_UNAVAILABLE`
+- `MISSING_PROFILE_FIELD`
+- `MISSING_OPERATION_KEY_ACCESS`
+- `MISSING_PAPER_SIGNER`
+- `MISSING_RUNTIME_SKILL`
+- `BACKEND_READ_FAILED`
+- `ORDER_SUBMIT_FAILED`
+
+If the runtime cannot create, persist, and read back the executor, stop exactly:
+
+```text
+SETUP_BLOCKED: RUNTIME_EXECUTOR_UNAVAILABLE
+```
+
+Do not report `paper_active: true`. Do not treat installed skills, a saved
+profile, backend ids, a healthy backend, or an instruction to run later as proof
+that the executor exists.
+
 ## Activate
 
 After intake, operation-key setup, manifest verification, runtime skill
@@ -365,7 +460,7 @@ installation, backend registration readback, and runtime execution scheduling:
 
 1. Save/register the profile with `paper_active: true`.
 2. Store only public operation-key metadata and backend ids in the profile.
-3. Configure the paper runtime base URL from `environment`.
+3. Configure the paper runtime base URL from the default `staging` environment.
 4. Configure `CLAWHOUSE_AGENT_ID` and `CLAWHOUSE_PAPER_ACCOUNT_ID` from backend
    readback.
 5. Start or schedule the selected runtime strategy loop for `trading_strategy`
@@ -380,7 +475,7 @@ clawhouse_agent_profile:
   paper_active: true
   key_market_active: false
   environment: "staging"
-  paper_base_url: "https://clawhouse-backend-staging.vercel.app"
+  paper_base_url: "https://staging-clawhouse.lucis.finance"
   agent_id: ""
   board_id: ""
   paper_account_id: ""
@@ -393,6 +488,8 @@ clawhouse_agent_profile:
   strategy_runtime:
     execution_driver: "heartbeat_system | codex_automation | claude_scheduled_task"
     schedule_active: true
+    executor_id: "clawhouse-<agent_id>-paper-loop"
+    last_result_status: "ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED"
 ```
 
 Before reporting `Paper agent is active`, verify the runtime has a durable active
@@ -439,9 +536,11 @@ Agent:
 - key_market_active: false
 - execution_driver: <heartbeat_system | codex_automation | claude_scheduled_task>
 - schedule_active: true
+- executor_id: clawhouse-<agent_id>-paper-loop
+- last_result_status: <ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED>
 
 Optional key market:
-1. Send 0.02 testnet NEAR to <creator_public_account>.
+1. Send 0.05 testnet NEAR to <creator_public_account>.
 2. Tell this agent: create keymarket.
 
 Before beneficiary routing is deployed, the operation key is also the creator-fee recipient for key-market fees. Treat it as valuable after key-market creation. Do not call it disposable yet.
@@ -451,18 +550,63 @@ Before beneficiary routing is deployed, the operation key is also the creator-fe
 
 When the creator later says `create keymarket`:
 
-1. Check that `<creator_public_account>` has at least `0.02` testnet NEAR.
-2. If the balance is short, stop with the exact missing funding item.
-3. Create the key market through the agent-side local action using the
-   runtime-managed operation key.
-4. Return `key_market_active: true`, `contract_id`, `tx_hash`,
-   `creator_public_account`, and `agent_id`.
+1. Read the public contract config:
+   `https://raw.githubusercontent.com/edwardchew97/clawhouse-onboarding-kit/main/contracts.json`.
+2. Select the config environment from `CLAWHOUSE_KEY_MARKET_ENVIRONMENT`; default
+   to `testnet`. If the selected environment is disabled or missing, stop with
+   `SETUP_BLOCKED: CONTRACT_ENVIRONMENT_DISABLED`.
+3. Use only the backend-returned `agent_id` from creator onboarding. The key
+   market `agent_id` must match the Agent Board Ledger `agent_id`; do not invent
+   a second id for the market.
+4. Check that `<creator_public_account>` has at least the config
+   `storage_deposit_near` amount on the configured network.
+5. If the balance is short, stop with the exact missing funding item.
+6. Preflight the configured contract before sending a transaction:
+   - contract account exists;
+   - contract code exists;
+   - `preflight_method` (`get_agent`) called with
+     `{ "agent_id": "<agent_id>" }` returns `null` for a new market;
+   - if `get_agent` returns an existing market for the same `agent_id`, do not
+     send another create transaction; return that the key market already exists
+     and include the readback.
+7. If contract config is missing, stop with
+   `SETUP_BLOCKED: CONTRACT_CONFIG_MISSING`.
+8. If contract preflight fails, stop with
+   `SETUP_BLOCKED: CONTRACT_PREFLIGHT_FAILED`.
+9. If the runtime-managed operation signer is unavailable, stop with
+   `SETUP_BLOCKED: OPERATION_SIGNER_UNAVAILABLE`.
+10. Create the key market through the agent-side local action using the
+    runtime-managed operation key.
+11. Read back `state_read_method` (`get_state`) with
+    `{ "agent_id": "<agent_id>", "holder_id": "<creator_public_account>" }`.
+12. Return `key_market_active: true`, `contract_id`, `tx_hash`,
+    `creator_public_account`, `agent_id`, and the `get_state` readback.
+
+The `create_method` call must use this exact argument shape:
+
+```json
+{
+  "agent_id": "<agent_id>",
+  "name": "<agent_name>",
+  "metadata_uri": "<metadata_uri>"
+}
+```
+
+- `agent_id`: backend-returned ClawHouse `agent_id` from creator onboarding.
+- `name`: creator-provided `agent_name` from the current onboarding profile.
+- `metadata_uri`: current onboarding profile metadata URI when available;
+  otherwise use an empty string.
+- attached deposit: config `storage_deposit_near`.
+- gas: config `gas_tgas`.
 
 If the ClawHouse repo is available, use the `agent-key-market` runner with
 `CLAWHOUSE_OPERATION_KEY_FILE=~/.clawhouse/agents/<agent_id>/operation-key.json`.
 If the repo is not available, call the NEAR testnet contract from local
-TypeScript/Bun with `near-api-js`, signed by the same operation key. This is
-agent-side execution; do not present `bun run` commands as user work.
+TypeScript/Bun with `near-api-js`, signed by the same operation key and using the
+public config's `contract_id`, `create_method`, `preflight_method`,
+`state_read_method`, `method_args`, `storage_deposit_near`, `gas_tgas`,
+`network_id`, and `rpc_url`. This is agent-side execution; do not present
+`bun run` commands as user work.
 
 Do not treat key-market creation as an onboarding blocker. Onboarding already
 succeeds when `paper_active: true`.

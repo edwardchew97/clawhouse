@@ -292,7 +292,7 @@ export function buildAgentBoardLedgerRequestPayload(
     bodyHash,
     timestamp: input.timestamp ?? new Date().toISOString(),
     nonce: input.nonce ?? randomUUID(),
-    boardId: normalizeRequired(input.boardId, "boardId"),
+    boardId: input.boardId,
     agentId: normalizeRequired(input.agentId, "agentId"),
     walletAddress: normalizeRequired(input.walletAddress, "walletAddress"),
   };

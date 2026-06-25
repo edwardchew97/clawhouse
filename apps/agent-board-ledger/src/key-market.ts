@@ -1,4 +1,4 @@
-import { cleanString, newId, requiredString, RequestError, type LedgerDb } from "./db.js";
+import { cleanString, newId, normalizeBodyFields, requiredString, RequestError, type LedgerDb } from "./db.js";
 import type { JsonObject, KeyMarketTradeRow } from "./types.js";
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -11,6 +11,11 @@ const defaultRpcUrls: Record<string, string> = {
   testnet: "https://rpc.testnet.fastnear.com",
   mainnet: "https://rpc.mainnet.fastnear.com",
 };
+const keyMarketEnv = {
+  networkId: ["CLAWHOUSE_KEY_NEAR_NETWORK_ID", "KEY_NEAR_NETWORK_ID", "NEAR_NETWORK_ID"],
+  contractId: ["CLAWHOUSE_KEY_MARKET_CONTRACT_ID", "KEY_MARKET_CONTRACT_ID", "CONTRACT_ID"],
+  rpcUrl: ["CLAWHOUSE_KEY_NEAR_RPC_URL", "KEY_NEAR_RPC_URL", "AGENT_BOARD_LEDGER_NEAR_RPC_URL", "NEAR_NODE_URL"],
+} as const;
 
 export async function listKeyMarketTrades(db: LedgerDb, env: RuntimeEnv, searchParams: URLSearchParams) {
   const agentId = cleanString(searchParams.get("agentId") ?? searchParams.get("agent_id"));
@@ -50,12 +55,12 @@ export async function reportKeyMarketTrade(
   body: BodyResultLike,
   createdAt: string,
 ) {
-  const data = asObject(body.json);
-  const txHash = requiredString(data.txHash ?? data.tx_hash, "tx_hash");
-  const signerId = requiredString(data.signerId ?? data.signer_id ?? data.accountId ?? data.account_id, "signer_id");
+  const data = normalizeBodyFields(body.json);
+  const txHash = requiredString(data.txHash, "tx_hash");
+  const signerId = requiredString(data.signerId ?? data.accountId, "signer_id");
   const expected = {
-    agentId: cleanString(data.agentId ?? data.agent_id),
-    side: normalizeSide(data.side),
+    agentId: cleanString(data.agentId),
+    side: optionalTradeSide(data.side),
     amount: integerString(data.amount, "amount", false),
   };
   const config = keyMarketConfig(env);
@@ -163,28 +168,27 @@ export async function reportKeyMarketTrade(
   };
 }
 
-function keyMarketConfig(env: RuntimeEnv) {
-  const networkId = cleanEnv(env.CLAWHOUSE_KEY_NEAR_NETWORK_ID)
-    ?? cleanEnv(env.KEY_NEAR_NETWORK_ID)
-    ?? cleanEnv(env.NEAR_NETWORK_ID)
-    ?? defaultNetworkId;
-  const contractId = cleanEnv(env.CLAWHOUSE_KEY_MARKET_CONTRACT_ID)
-    ?? cleanEnv(env.KEY_MARKET_CONTRACT_ID)
-    ?? cleanEnv(env.CONTRACT_ID)
-    ?? defaultContractId;
-  const rpcUrl = cleanEnv(env.CLAWHOUSE_KEY_NEAR_RPC_URL)
-    ?? cleanEnv(env.KEY_NEAR_RPC_URL)
-    ?? cleanEnv(env.AGENT_BOARD_LEDGER_NEAR_RPC_URL)
-    ?? cleanEnv(env.NEAR_NODE_URL)
+export function keyMarketConfig(env: RuntimeEnv) {
+  const networkId = firstConfigEnv(env, keyMarketEnv.networkId) ?? defaultNetworkId;
+  const contractId = firstConfigEnv(env, keyMarketEnv.contractId) ?? defaultContractId;
+  const rpcUrl = firstConfigEnv(env, keyMarketEnv.rpcUrl)
     ?? defaultRpcUrls[networkId]
     ?? `https://rpc.${networkId}.near.org`;
 
   return { networkId, contractId, rpcUrl };
 }
 
+function firstConfigEnv(env: RuntimeEnv, names: readonly string[]) {
+  for (const name of names) {
+    const value = cleanEnv(env[name]);
+    if (value) return value;
+  }
+  return null;
+}
+
 function assertReportedKeyMarketConfig(input: JsonObject, config: ReturnType<typeof keyMarketConfig>) {
-  const reportedNetworkId = cleanString(input.networkId ?? input.network_id);
-  const reportedContractId = cleanString(input.contractId ?? input.contract_id);
+  const reportedNetworkId = cleanString(input.networkId);
+  const reportedContractId = cleanString(input.contractId);
   if (reportedNetworkId && reportedNetworkId !== config.networkId) {
     throw new RequestError("Reported network_id does not match configured key-market network", 400);
   }
@@ -208,12 +212,12 @@ async function fetchNearTxStatus(rpcFetch: FetchLike, rpcUrl: string, txHash: st
   if (!response.ok) {
     throw new RequestError(`NEAR tx lookup failed: ${response.status}`, 502);
   }
-  const result = asObject(payload).result;
-  const error = asObject(payload).error;
+  const result = objectRecord(payload).result;
+  const error = objectRecord(payload).error;
   if (error) {
     throw new RequestError(`NEAR tx lookup failed: ${JSON.stringify(error)}`, 502);
   }
-  return asObject(result);
+  return objectRecord(result);
 }
 
 function verifyKeyMarketTx(
@@ -226,7 +230,7 @@ function verifyKeyMarketTx(
   },
 ) {
   assertTxSuccess(txStatus);
-  const transaction = asObject(txStatus.transaction);
+  const transaction = objectRecord(txStatus.transaction);
   const signerId = requiredString(transaction.signer_id, "transaction.signer_id");
   const receiverId = requiredString(transaction.receiver_id, "transaction.receiver_id");
   if (signerId !== options.signerId) {
@@ -245,7 +249,7 @@ function verifyKeyMarketTx(
   const agentId = stringField(tradeData, "agent_id") ?? stringField(args, "agent_id");
   const amount = integerString(tradeData.amount ?? args.amount, "amount", true);
   const traderId = stringField(tradeData, "trader_id") ?? signerId;
-  const tradeSide = normalizeSide(tradeData.side) ?? side;
+  const tradeSide = optionalTradeSide(tradeData.side) ?? side;
 
   if (!agentId) throw new RequestError("Verified key trade is missing agent_id", 502);
   if (tradeSide !== side) throw new RequestError("Verified key trade side does not match function call", 502);
@@ -282,7 +286,7 @@ function verifyKeyMarketTx(
 }
 
 function assertTxSuccess(txStatus: JsonObject) {
-  const status = asObject(txStatus.status);
+  const status = objectRecord(txStatus.status);
   if ("Failure" in status) throw new RequestError("NEAR transaction failed", 400);
   if (!("SuccessValue" in status) && !("SuccessReceiptId" in status)) {
     throw new RequestError("NEAR transaction is not finalized successfully", 400);
@@ -292,8 +296,8 @@ function assertTxSuccess(txStatus: JsonObject) {
 function keyMarketFunctionCall(transaction: JsonObject) {
   const actions = Array.isArray(transaction.actions) ? transaction.actions : [];
   for (const item of actions) {
-    const action = asObject(item);
-    const functionCall = asObject(action.FunctionCall ?? action.function_call);
+    const action = objectRecord(item);
+    const functionCall = objectRecord(action.FunctionCall ?? action.function_call);
     const methodName = cleanString(functionCall.method_name ?? functionCall.methodName);
     if (methodName === "buy_key" || methodName === "sell_key") {
       return {
@@ -306,22 +310,22 @@ function keyMarketFunctionCall(transaction: JsonObject) {
 }
 
 function decodeFunctionCallArgs(value: unknown) {
-  if (value && typeof value === "object") return asObject(value);
+  if (value && typeof value === "object") return objectRecord(value);
   const raw = requiredString(value, "function call args");
   try {
-    return asObject(JSON.parse(Buffer.from(raw, "base64").toString("utf8")));
+    return objectRecord(JSON.parse(Buffer.from(raw, "base64").toString("utf8")));
   } catch {
     throw new RequestError("Could not decode key-market function call args", 400);
   }
 }
 
 function decodeSuccessValue(txStatus: JsonObject) {
-  const successValue = cleanString(asObject(txStatus.status).SuccessValue);
+  const successValue = cleanString(objectRecord(txStatus.status).SuccessValue);
   if (!successValue) return null;
   const decoded = Buffer.from(successValue, "base64").toString("utf8");
   if (!decoded) return null;
   try {
-    return asObject(JSON.parse(decoded));
+    return objectRecord(JSON.parse(decoded));
   } catch {
     return null;
   }
@@ -329,12 +333,12 @@ function decodeSuccessValue(txStatus: JsonObject) {
 
 function findKeyTradeEvent(txStatus: JsonObject) {
   const outcomes = [
-    asObject(txStatus.transaction_outcome),
-    ...arrayOfObjects(txStatus.receipts_outcome),
+    objectRecord(txStatus.transaction_outcome),
+    ...arrayOfRecords(txStatus.receipts_outcome),
   ];
 
   for (const outcome of outcomes) {
-    const logs = arrayOfStrings(asObject(outcome.outcome).logs);
+    const logs = arrayOfStrings(objectRecord(outcome.outcome).logs);
     for (const log of logs) {
       if (!log.startsWith("EVENT_JSON:")) continue;
       const event = parseEventLog(log);
@@ -352,13 +356,13 @@ function findKeyTradeEvent(txStatus: JsonObject) {
 
 function parseEventLog(log: string) {
   try {
-    const payload = asObject(JSON.parse(log.slice("EVENT_JSON:".length)));
+    const payload = objectRecord(JSON.parse(log.slice("EVENT_JSON:".length)));
     const data = payload.data;
     const firstData = Array.isArray(data) ? data[0] : data;
     return {
       standard: cleanString(payload.standard),
       event: cleanString(payload.event),
-      data: asObject(firstData),
+      data: objectRecord(firstData),
     };
   } catch {
     return null;
@@ -397,7 +401,7 @@ function sideFromMethod(methodName: string): "buy" | "sell" {
   throw new RequestError("Unsupported key-market method", 400);
 }
 
-function normalizeSide(value: unknown): "buy" | "sell" | null {
+function optionalTradeSide(value: unknown): "buy" | "sell" | null {
   const cleaned = cleanString(value);
   if (!cleaned) return null;
   if (cleaned !== "buy" && cleaned !== "sell") throw new RequestError("side must be buy or sell", 400);
@@ -430,7 +434,7 @@ function stringField(record: JsonObject, key: string) {
 }
 
 function firstString(record: unknown, keys: string[]) {
-  const object = asObject(record);
+  const object = objectRecord(record);
   for (const key of keys) {
     const value = cleanString(object[key]);
     if (value) return value;
@@ -438,12 +442,13 @@ function firstString(record: unknown, keys: string[]) {
   return null;
 }
 
-function asObject(value: unknown): JsonObject {
+// NEAR RPC/event payloads are partially trusted external shapes; coerce bad nested records to empty objects.
+function objectRecord(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
 }
 
-function arrayOfObjects(value: unknown): JsonObject[] {
-  return Array.isArray(value) ? value.map(asObject) : [];
+function arrayOfRecords(value: unknown): JsonObject[] {
+  return Array.isArray(value) ? value.map(objectRecord) : [];
 }
 
 function arrayOfStrings(value: unknown): string[] {
