@@ -20,6 +20,7 @@ export type PublicKeyMarketContractConfig = {
   };
   methodNotes: Record<string, string>;
   storageDepositNear: string;
+  fundingAmountNear: string;
   gasTgas: string;
   gas: string;
   signer: {
@@ -46,7 +47,7 @@ export function getPublicKeyMarketContractConfig(environment = selectedContractE
     throw new ContractConfigError(`Key-market contract environment is disabled: ${environment}`);
   }
   const keyMarket = config.key_market;
-  if (!keyMarket.contract_id || !keyMarket.storage_deposit_near || !keyMarket.gas_tgas) {
+  if (!keyMarket.contract_id || !keyMarket.storage_deposit_near || !keyMarket.funding_amount_near || !keyMarket.gas_tgas) {
     throw new ContractConfigError(`Key-market contract config is incomplete: ${environment}`);
   }
 
@@ -65,6 +66,7 @@ export function getPublicKeyMarketContractConfig(environment = selectedContractE
     },
     methodNotes: { ...keyMarket.method_notes },
     storageDepositNear: keyMarket.storage_deposit_near,
+    fundingAmountNear: keyMarket.funding_amount_near,
     gasTgas: keyMarket.gas_tgas,
     gas: teraToGas(keyMarket.gas_tgas as `${number}`).toString(),
     signer: {

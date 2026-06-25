@@ -317,6 +317,7 @@ async function validateContractsConfig(kitRepo: string) {
     preflightMethod: stringField(keyMarket, "preflight_method"),
     stateReadMethod: stringField(keyMarket, "state_read_method"),
     storageDepositNear: stringField(keyMarket, "storage_deposit_near"),
+    fundingAmountNear: stringField(keyMarket, "funding_amount_near"),
     gasTgas: stringField(keyMarket, "gas_tgas"),
   };
   const gasUnits = /^\d+$/.test(expected.gasTgas) ? teraToGasString(expected.gasTgas) : "";
@@ -337,10 +338,14 @@ async function validateContractsConfig(kitRepo: string) {
   if (stateArgs.agent_id !== "<agent_id>" || stateArgs.holder_id !== "<optional_account_id_or_null>") {
     errors.push("contracts.json get_state method_args must include agent_id and holder_id placeholders");
   }
-  if (expected.storageDepositNear !== "0.05") {
-    errors.push("contracts.json storage_deposit_near must be 0.05 for creator key-market funding buffer");
+  if (expected.storageDepositNear !== "0.02") {
+    errors.push("contracts.json storage_deposit_near must be 0.02 for key-market attached storage deposit");
   }
   if (!/^\d+(?:\.\d+)?$/.test(expected.storageDepositNear)) errors.push("contracts.json storage_deposit_near must be numeric");
+  if (expected.fundingAmountNear !== "0.05") {
+    errors.push("contracts.json funding_amount_near must be 0.05 for creator account funding buffer");
+  }
+  if (!/^\d+(?:\.\d+)?$/.test(expected.fundingAmountNear)) errors.push("contracts.json funding_amount_near must be numeric");
   if (!/^\d+$/.test(expected.gasTgas)) errors.push("contracts.json gas_tgas must be integer TGas");
   if (Object.prototype.hasOwnProperty.call(keyMarket, "gas_units")) {
     errors.push("contracts.json must not store gas_units; derive it from gas_tgas");

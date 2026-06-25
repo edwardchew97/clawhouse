@@ -453,7 +453,7 @@
             "agentId": "",
             "agentName": "NEAR Dip Scout",
             "metadataUri": "ipfs://near-dip-scout",
-            "STORAGE_DEPOSIT": "0.05"
+            "STORAGE_DEPOSIT": "0.02"
           },
           "setVars": {
             "agentId": "response.json.agentId",
@@ -1425,7 +1425,7 @@
             "agentId": "",
             "keyAmount": "1",
             "buyMaxPriceNear": "",
-            "STORAGE_DEPOSIT": "0.05"
+            "STORAGE_DEPOSIT": "0.02"
           },
           "fillDefaultsWhenEmpty": [
             "keyAmount"
