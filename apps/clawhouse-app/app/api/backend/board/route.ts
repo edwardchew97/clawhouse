@@ -77,9 +77,7 @@ export async function GET(request: Request) {
     const paperAccountId = paperAccountIdForBoard(boardValue, paperLeaderboardValue, boardId);
     const paperActivity = paperAccountId
       ? await Promise.allSettled([
-          fetchBackendJson(`/paper/accounts/${encodeURIComponent(paperAccountId)}/activity?limit=240`, {
-            headers: { authorization: ledgerAdminAuthorizationHeader() },
-          }),
+          fetchBackendJson(`/paper/accounts/${encodeURIComponent(paperAccountId)}/activity?limit=240`, detailOptions),
         ]).then((results) => results[0])
       : null;
 
