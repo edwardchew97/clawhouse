@@ -458,6 +458,50 @@ function paperActivity(agent) {
   return activity;
 }
 
+function paperActivityReadError(agent) {
+  if (!agent || !backendApplies(agent) || !chainState.backend?.ok) return null;
+  const error = chainState.backend?.errors?.paperActivity;
+  return typeof error === "string" && error.trim() ? error.trim() : null;
+}
+
+function paperActivityAccessState(agent) {
+  const error = paperActivityReadError(agent);
+  if (!error || !/read access/i.test(error)) return null;
+  if (!chainState.accountId) {
+    return {
+      tone: "wallet",
+      title: "Connect Wallet",
+      message: "Connect Wallet to check key ownership and load holder-gated paper activity.",
+      badge: "Wallet",
+    };
+  }
+  const balance = holderBalance(agent);
+  if (keyStateInitialLoading(agent) || balance === null) {
+    return {
+      tone: "idle",
+      title: "Checking key ownership",
+      message: "Reading the connected wallet's key balance before loading holder-gated paper activity.",
+      badge: "Checking",
+    };
+  }
+  if (balance > 0) {
+    return {
+      tone: "idle",
+      title: roomAccessLoading(agent) ? "Opening room access" : "Room access unavailable",
+      message: roomAccessLoading(agent)
+        ? "Refreshing holder read access for this board."
+        : "Holder access was not available for this board yet. Refresh or reconnect the wallet session.",
+      badge: roomAccessLoading(agent) ? "Opening" : "Access",
+    };
+  }
+  return {
+    tone: "wallet",
+    title: "Key required",
+    message: "Buy 1 key to unlock this agent's paper trading chart, room events, and positions.",
+    badge: "Gate: 1 key",
+  };
+}
+
 function paperOrders(agent) {
   const orders = paperActivity(agent)?.orders;
   return Array.isArray(orders) ? orders : [];
@@ -1089,6 +1133,17 @@ function chartModel(agent) {
   }
 
   const activity = paperActivity(agent);
+  const accessState = paperActivityAccessState(agent);
+  if (!activity && accessState) {
+    return {
+      values: [],
+      points: [],
+      events: [],
+      tone: accessState.tone,
+      title: accessState.title,
+      message: `${rangePrefix}${accessState.message}`,
+    };
+  }
   if (!activity && isPaperAgent(agent)) {
     return {
       values: [],
@@ -1807,18 +1862,22 @@ function gateLabel(agent, options = {}) {
 
 function renderRoom(agent) {
   const activity = paperActivity(agent);
+  const accessState = paperActivityAccessState(agent);
   const events = activity
     ? sortedByObservedAt(paperOrders(agent)).slice(-12).reverse().map((order, index) => normalizePaperOrderEvent(order, index, agent, 0, null))
     : chartModel(agent).events;
   if (!events.length) {
+    const title = accessState?.title || "No readable room events yet";
+    const detail = accessState?.message || "Orders and agent updates will appear here when this board reports activity.";
+    const badge = accessState?.badge || "Idle";
     byId("roomFeed").innerHTML = `
       <div class="chat-empty" aria-label="Agent chat room has no readable events">
         <div class="chat-empty-copy">
           <span>Chatroom</span>
-          <strong>No readable room events yet</strong>
-          <p>Orders and agent updates will appear here when this board reports activity.</p>
+          <strong>${escapeHtml(title)}</strong>
+          <p>${escapeHtml(detail)}</p>
         </div>
-        <div class="chat-empty-badge">Idle</div>
+        <div class="chat-empty-badge">${escapeHtml(badge)}</div>
       </div>
     `;
     return;
@@ -2188,6 +2247,7 @@ function setChartEmptyState(isEmpty, message = "", title = "Backend chart data u
   if (!panel || !overlay) return;
   const isLoading = isEmpty && (loading || chartLoadingState(title, message));
   const isPaperInactive = title === "Agent has not started trading yet";
+  const isRoomAccess = title === "Connect Wallet" || title === "Checking key ownership" || title === "Opening room access" || title === "Room access unavailable" || title === "Key required";
   panel.classList.toggle("is-empty", isEmpty);
   panel.classList.toggle("is-loading", isLoading);
   overlay.classList.toggle("is-loading", isLoading);
@@ -2195,7 +2255,7 @@ function setChartEmptyState(isEmpty, message = "", title = "Backend chart data u
   overlay.setAttribute("aria-label", isLoading ? "Loading chart data" : title);
   overlay.hidden = !isEmpty;
   if (!isEmpty) return;
-  byId("chartEmptyKicker").textContent = isPaperInactive ? "Paper trading inactive" : "Chart unavailable";
+  byId("chartEmptyKicker").textContent = isPaperInactive ? "Paper trading inactive" : isRoomAccess ? "Holder-gated chart" : "Chart unavailable";
   byId("chartEmptyTitle").textContent = title;
   byId("chartEmptyDetail").textContent = message || "No backend time series has been recorded for this agent.";
 }
