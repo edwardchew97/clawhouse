@@ -1,7 +1,7 @@
-import { checkNeonSchema, requireNeonDatabaseUrl } from "./lib/neon.js";
+import { checkPostgresSchema, requirePostgresDatabaseUrl } from "./lib/postgres.js";
 
 try {
-  const result = await checkNeonSchema(requireNeonDatabaseUrl());
+  const result = await checkPostgresSchema(requirePostgresDatabaseUrl());
   printJson(result);
   if (!result.ok) process.exitCode = 1;
 } catch (error) {

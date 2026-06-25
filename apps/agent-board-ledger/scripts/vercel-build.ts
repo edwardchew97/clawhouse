@@ -1,13 +1,13 @@
-import { migrateNeon, readNeonDatabaseUrl } from "./lib/neon.js";
+import { migratePostgres, readPostgresDatabaseUrl } from "./lib/postgres.js";
 
 const vercelEnv = process.env.VERCEL_ENV?.trim();
-const databaseUrl = readNeonDatabaseUrl();
+const databaseUrl = readPostgresDatabaseUrl();
 
 try {
   if (vercelEnv !== "production") {
     printJson({
       ok: true,
-      action: "skip_neon_migration",
+      action: "skip_postgres_migration",
       reason: "non_production_vercel_build",
       vercelEnv: vercelEnv || null,
     });
@@ -15,20 +15,20 @@ try {
   }
 
   if (!databaseUrl) {
-    throw new Error("Missing AGENT_BOARD_LEDGER_DATABASE_URL or DATABASE_URL for production Vercel migration");
+    throw new Error("Missing AGENT_BOARD_LEDGER_DATABASE_URL or DATABASE_URL for production Postgres migration");
   }
 
-  const result = await migrateNeon(databaseUrl);
+  const result = await migratePostgres(databaseUrl);
   printJson({
     ...result,
-    action: "migrate_neon_schema",
+    action: "migrate_postgres_schema",
     vercelEnv,
   });
   if (!result.ok) process.exitCode = 1;
 } catch (error) {
   printJson({
     ok: false,
-    action: "migrate_neon_schema",
+    action: "migrate_postgres_schema",
     vercelEnv: vercelEnv || null,
     error: error instanceof Error ? error.message : String(error),
   });

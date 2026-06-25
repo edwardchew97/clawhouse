@@ -1322,7 +1322,7 @@ async function requirePaperAccount(db: LedgerDb, id: string) {
 
 async function requireLockedPaperAccount(db: LedgerDb, id: string) {
   const account = await db.get<PaperAccountRow>(
-    db.provider === "neon-postgres"
+    db.provider === "postgres"
       ? "SELECT * FROM paper_accounts WHERE id = ? FOR UPDATE"
       : "SELECT * FROM paper_accounts WHERE id = ?",
     [id],

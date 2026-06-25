@@ -41,7 +41,7 @@ The margin-rejection finding was already fixed in current source: margin failure
 
 ## Fixes Applied
 
-- Added internal `ingest_sequence` columns for paper market snapshots, risk snapshots, and audit events in SQLite and Neon schema definitions.
+- Added internal `ingest_sequence` columns for paper market snapshots, risk snapshots, and audit events in SQLite and Postgres schema definitions.
 - Used `ingest_sequence` for latest market snapshot, latest risk snapshot, and audit-chain `previous_hash` selection.
 - Included the audit event sequence in the audit event hash payload.
 - Kept `ingest_sequence` out of API presentation objects.
