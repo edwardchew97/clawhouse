@@ -30,7 +30,7 @@ Severity: **Critical / High / Medium / Low / Informational**.
 ### A1. Live credentials in plaintext on disk — **Medium**
 `.env.local` and `apps/agent-board-ledger/.env.local` in the local main checkout hold a live Postgres connection string **with password** and the admin bearer token (`AGENT_BOARD_LEDGER_ADMIN_TOKEN`); `.env` holds the AES key (`ACCEPTANCE_WORKBENCH_ENCRYPTION_KEY`).
 - Mitigating: git-ignored, **never committed** (checked all 237 revisions), files are `0o600`. These ignored files were not present in the app-managed review worktree.
-- **Action:** Rotate the Postgres password and admin token; prefer a secrets manager / runtime injection. Confirm prod secrets live only in Vercel env.
+- **Action:** Rotate the Postgres password and admin token; prefer a secrets manager / runtime injection. Confirm production secrets live only in the runtime environment.
 
 ### A2. NEAR wallet private keys unencrypted in `work/` and `.worktrees/` — **Medium**
 15 distinct `*-wallet.json` files in the local main checkout contain plaintext `private_key: "ed25519:..."`.
@@ -49,8 +49,8 @@ Severity: **Critical / High / Medium / Low / Informational**.
 - **Action:** Allowlist outbound targets (or block private/loopback/link-local) and gate behind auth.
 - **Status:** Fixed in code for `/run/http` and `/run/near-view` with outbound origin allowlists and redirect following disabled.
 
-### A5. Non-constant-time comparison for cron secret and read-token hash — **Low**
-`src/vercel.ts:~70` `authorization !== \`Bearer ${cronSecret}\``; `src/server.ts:~1608` `metadata?.read_token_sha256 !== tokenHash`. The admin-token path is already correct (`crypto.timingSafeEqual` in `auth.ts`); these two aren't.
+### A5. Non-constant-time comparison for read-token hash — **Low**
+`src/server.ts:~1608` `metadata?.read_token_sha256 !== tokenHash`. The admin-token path is already correct (`crypto.timingSafeEqual` in `auth.ts`); this path is not.
 - **Action:** Reuse the timing-safe comparison.
 - **Status:** Fixed in code.
 
@@ -135,7 +135,6 @@ Reviewed as a third party from the code itself, not the docs. The backend is one
 - **`cron/tick` conflates three subsystems** (NEAR polling, PnL reconcile, paper liquidation) and **swallows paper-monitor failures** into a synthetic success (`runPaperLiquidationMonitorSafely`, ~944-959), so `status` can read green while liquidations silently failed.
 
 ### C5. Doc-vs-code discrepancies
-- Vercel adapter advertises `DELETE/PATCH/PUT/OPTIONS`; router serves none (C1).
 - PnL requires a **separately created** paper account linked to the board (server.ts:1065-1072); nothing in the `GET /pnl` response signals why `latest` is null. Implicit, undocumented dependency.
 - `presentOrder` emits `reduce_only` as boolean (paper-trading.ts:1201) while the `PaperOrderRow` type declares it `number` (types.ts:224) and fills/positions emit the raw integer — response shape contradicts the declared type on one field/one path.
 - `staleness_status`/`completeness_status` are free-form strings assembled across many sites with no canonical enum; DB defaults (`'unknown'`/`'fresh'`, db.ts:346-347/321) aren't in any documented set.
