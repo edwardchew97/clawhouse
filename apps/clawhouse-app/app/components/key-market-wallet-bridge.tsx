@@ -760,13 +760,14 @@ export function KeyMarketWalletBridge() {
           return activeAccess;
         })
         .catch((error) => {
+          const retryingReadAccess = Boolean(account?.accountId && shouldRetryReadAccess && retryAttempt < 3);
           renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
             readAccess: null,
-            readAccessLoading: false,
-            readAccessError: errorMessage(error, "Room access refresh failed."),
+            readAccessLoading: retryingReadAccess,
+            readAccessError: retryingReadAccess ? null : errorMessage(error, "Room access refresh failed."),
           });
           return null;
         });
@@ -793,12 +794,14 @@ export function KeyMarketWalletBridge() {
           renderRefreshState({ accountId: account?.accountId ?? null, contractId: config.contractId, networkId: config.networkId, backend: result.backend, backendLoading: false });
         })
         .catch((error) => {
+          const retryingBackend = Boolean(restoredReadAccess && retryAttempt < 3);
+          shouldRetryBackend = retryingBackend;
           renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
-            backendLoading: false,
-            backend: { ok: false, error: errorMessage(error, "Backend read failed.") },
+            backendLoading: retryingBackend,
+            ...(retryingBackend ? {} : { backend: { ok: false, error: errorMessage(error, "Backend read failed.") } }),
           });
         });
 

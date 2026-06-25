@@ -39,6 +39,7 @@ let chainState = {
   readAccessError: null,
   error: null
 };
+const backendCache = new Map();
 
 const TICKER_PX_PER_SECOND = 18;
 const BACKEND_REFRESH_MS = 60_000;
@@ -115,8 +116,7 @@ const roomAccessLoading = (agent) => {
     || (keyStateUnavailable(agent) && !readAccessApplies(agent))
     || (chainState.backend && !backendApplies(agent))
     || !chainState.backend
-    ||
-    chainState.pending && (chainState.phase === "authenticating" || chainState.phase === "refreshing")
+    || (chainState.pending && (chainState.phase === "authenticating" || chainState.phase === "refreshing"))
     || (balance !== null && balance > 0 && !readAccessApplies(agent) && !chainState.readAccessError)
   );
 };
@@ -234,6 +234,7 @@ function setChainState(nextState) {
     loadingClears.readAccessLoading = false;
   }
   chainState = { ...chainState, ...loadingClears, ...nextState };
+  cacheBackend(chainState.backend);
   render();
 }
 
@@ -244,6 +245,42 @@ function clearQuote() {
     quoteSide: null,
     protection: null,
     error: null
+  };
+}
+
+function backendCacheKeyFromBackend(backend) {
+  if (!backend || typeof backend !== "object") return "";
+  return backend.boardId || backend.board?.id || "";
+}
+
+function cacheBackend(backend) {
+  const key = backendCacheKeyFromBackend(backend);
+  if (key) backendCache.set(key, backend);
+}
+
+function restoreCachedBackendForAgent(agent) {
+  if (!agent) return;
+  const cached = backendCache.get(agent.boardId || agent.id);
+  if (cached) {
+    chainState = { ...chainState, backend: cached, backendLoading: false };
+  }
+}
+
+function hasCachedBackendForAgent(agent) {
+  if (!agent) return false;
+  return backendCache.has(agent.boardId || agent.id);
+}
+
+function prepareAgentRead(agent) {
+  if (!agent) return;
+  const cached = hasCachedBackendForAgent(agent);
+  restoreCachedBackendForAgent(agent);
+  chainState = {
+    ...chainState,
+    backendLoading: !cached,
+    stateLoading: Boolean(chainState.accountId),
+    readAccessLoading: Boolean(chainState.accountId && !readAccessApplies(agent)),
+    readAccessError: null,
   };
 }
 
@@ -465,6 +502,7 @@ function paperLeaderboardRow(agent) {
 function paperActivity(agent) {
   if (!agent) return null;
   if (!backendApplies(agent) || !chainState.backend?.ok) return null;
+  if (!readAccessApplies(agent)) return null;
   const activity = chainState.backend?.paperActivity;
   if (!activity?.ok || !activity.account) return null;
   const row = paperLeaderboardRow(agent);
@@ -486,6 +524,7 @@ function paperActivityLoading(agent) {
     || keyStateInitialLoading(agent)
     || (keyStateUnavailable(agent) && !readAccessApplies(agent))
     || chainState.readAccessLoading
+    || roomAccessLoading(agent)
     || (readAccessApplies(agent) && !paperActivity(agent))
     || !chainState.backend
     || (chainState.backend && !backendApplies(agent))
@@ -705,6 +744,7 @@ function ensureVisibleSelectedAgent() {
   if (!visible.length) return;
   if (visible.some((agent) => agentMatchesSelection(agent, selectedId))) return;
   selectedId = agentSelectionKey(visible[0] ?? agents[0]);
+  prepareAgentRead(selectedAgent());
 }
 
 function agentEventCount(agent) {
@@ -1400,6 +1440,7 @@ async function refreshBackendRead(_reason) {
       backend: nextBackend,
       backendLoading: false,
     };
+    cacheBackend(nextBackend);
   } catch (error) {
     if (refreshId !== backendRefreshId) return;
     chainState = {
@@ -1518,6 +1559,7 @@ async function loadDiscoveryAgents() {
       ? requestedAgentId
       : selectedId;
     selectedId = resolveSelectedId(preferredId);
+    prepareAgentRead(selectedAgent());
     discoveryLoading = false;
     chainState = {
       ...chainState,
@@ -1680,6 +1722,7 @@ function renderAgentList() {
       activeEventId = null;
       chartAnimationPending = true;
       clearQuote();
+      prepareAgentRead(selectedAgent());
       render();
       scheduleBackendRefresh("agent-change", 0);
       scheduleKeyMarketRefresh("agent-change", 0);
@@ -1906,7 +1949,7 @@ function roomLoadingSkeleton() {
 
 function balanceLabel(agent, balance) {
   if (!chainState.accountId) return "Connect wallet";
-  if (keyStateInitialLoading(agent)) return skeleton("38px", "inline-skeleton");
+  if (keyStateInitialLoading(agent) || roomAccessLoading(agent)) return skeleton("38px", "inline-skeleton");
   if (chainState.error && !chainApplies(agent)) return "Unable to load";
   return balance === null ? "--" : keyAmountLabel(balance);
 }
@@ -1926,10 +1969,9 @@ function gateLabel(agent, options = {}) {
   const balance = holderBalance(agent);
   if (isUnlocked(agent)) return "Room open";
   if (!chainState.accountId) return options.compact ? "1 key" : "Gate: 1 key";
-  if (keyStateInitialLoading(agent)) return options.compact ? "Checking" : `Checking ${skeleton("34px", "inline-skeleton")}`;
-  if (roomAccessLoading(agent)) return options.compact ? "Opening" : "Opening room...";
+  if (keyStateInitialLoading(agent) || roomAccessLoading(agent)) return skeleton(options.compact ? "42px" : "86px", "inline-skeleton");
   if (chainState.readAccessError) return options.compact ? "Access error" : "Access unavailable";
-  return balance && balance > 0 ? "Opening room..." : options.compact ? "1 key" : "Gate: 1 key";
+  return balance && balance > 0 ? skeleton(options.compact ? "42px" : "86px", "inline-skeleton") : options.compact ? "1 key" : "Gate: 1 key";
 }
 
 function renderRoom(agent) {
