@@ -1268,7 +1268,7 @@
         {
           "id": "clawhouseApp.backend.board",
           "name": "Read App Staging Backend Board",
-          "description": "Reads the selected Agent Board through the ClawHouse App server proxy, including events, portfolio, PnL, balance changes, price snapshots, labeled Paper leaderboard data, and public Paper activity used by the app chart.",
+          "description": "Reads the selected Agent Board through the ClawHouse App server proxy, including events, portfolio, PnL, balance changes, price snapshots, labeled Paper leaderboard data, and public Paper activity used by the app chart and Agent Base View tabs.",
           "type": "http",
           "access": "public",
           "method": "GET",
@@ -1276,6 +1276,7 @@
           "runningNotes": [
             "Calling the local ClawHouse App server proxy.",
             "The proxy calls the staging Agent Board Ledger /boards/:id, /events, /portfolio, /pnl, /balance-changes, /prices, /paper/leaderboard, and matching /paper/accounts/:id/activity read paths.",
+            "The Chatroom tab uses the paper orders/events from this response, and the Positions tab uses the response paperActivity.positions open-position rows.",
             "If the VPS staging app cannot reach the backend, the response should expose ok:false instead of hiding the backend state."
           ],
           "inputs": {
@@ -1293,7 +1294,9 @@
             "backendPaperLeaderboardError": "response.json.json.errors.paperLeaderboard",
             "backendPaperActivityError": "response.json.json.errors.paperActivity",
             "backendPaperActivityFilledOrders": "response.json.json.paperActivity.summary.filled_orders",
-            "backendPaperActivityLatestRiskAt": "response.json.json.paperActivity.summary.latest_risk_at"
+            "backendPaperActivityLatestRiskAt": "response.json.json.paperActivity.summary.latest_risk_at",
+            "backendPaperFirstPositionCoin": "response.json.json.paperActivity.positions.0.coin",
+            "backendPaperFirstPositionStatus": "response.json.json.paperActivity.positions.0.status"
           },
           "clearInputs": {
             "userBrowsesAgent.ledger.getBoard": [

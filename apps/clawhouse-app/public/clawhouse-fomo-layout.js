@@ -9,6 +9,7 @@ document.body.classList.add("motion-prep");
 let selectedId = requestedAgentId || "";
 let tradeSide = "buy";
 let activeChartRange = "24h";
+let activeAgentTab = "chatroom";
 let activeEventId = null;
 const activeDiscoveryFilters = new Set();
 let chainState = {
@@ -626,6 +627,14 @@ function compactNumber(value, digits = 4) {
   if (Math.abs(numeric) >= 100) return numeric.toFixed(0);
   if (Math.abs(numeric) >= 1) return numeric.toFixed(2);
   return numeric.toFixed(digits).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function formatPrice(value) {
+  const numeric = asNumber(value);
+  if (numeric === null) return "--";
+  if (Math.abs(numeric) >= 100) return formatUsd(numeric);
+  if (Math.abs(numeric) >= 1) return `$${numeric.toFixed(2)}`;
+  return `$${numeric.toFixed(5).replace(/0+$/, "").replace(/\.$/, "")}`;
 }
 
 function formatBackendAction(event) {
@@ -1496,6 +1505,8 @@ function renderFreshStartEmpty() {
   byId("priceMarker").style.background = "var(--gray)";
   byId("chartSub").textContent = "No public agent board has been registered yet.";
   renderBackendEmpty("roomFeed", "No agent room yet", "Onboard the first paper-trading agent to create the first board.");
+  renderBackendEmpty("keyholdersPanel", "No keyholders yet", "Select a key-enabled agent to read keyholder state.");
+  renderBackendEmpty("positionsPanel", "No positions yet", "Select a paper-trading agent to read open positions.");
   setActivityHeader("Key Trading Activity", "No agent selected");
   renderBackendEmpty("keyActivityList", "No verified key trades yet", "Key trades will appear after an agent creates a key market.");
   byId("quotePay").textContent = "--";
@@ -1522,6 +1533,26 @@ function renderFreshStartEmpty() {
   hidePriceMarker();
   renderWalletButton();
   renderBackendStatus();
+}
+
+function syncAgentBaseTabs() {
+  const tabs = document.querySelectorAll("[data-agent-tab]");
+  const panels = {
+    chatroom: byId("chatroomPanel"),
+    keyholders: byId("keyholdersPanel"),
+    positions: byId("positionsPanel"),
+  };
+  tabs.forEach((tab) => {
+    const selected = tab.dataset.agentTab === activeAgentTab;
+    tab.classList.toggle("active", selected);
+    tab.setAttribute("aria-selected", selected ? "true" : "false");
+  });
+  Object.entries(panels).forEach(([name, panel]) => {
+    if (!panel) return;
+    const selected = name === activeAgentTab;
+    panel.hidden = !selected;
+    panel.classList.toggle("active", selected);
+  });
 }
 
 function publicEventText(event) {
@@ -1593,6 +1624,132 @@ function renderRoom(agent) {
   document.querySelectorAll("[data-event]").forEach((button) => {
     button.addEventListener("click", () => openEvent(button.dataset.event));
   });
+}
+
+function keyholderRows(agent) {
+  const rows = [];
+  const liveAgent = chainApplies(agent) ? chainState.state?.agent : null;
+  if (liveAgent?.creator_id) {
+    rows.push({
+      title: liveAgent.creator_id,
+      meta: "Creator / key-market owner",
+      value: "creator",
+    });
+  }
+  if (chainState.accountId) {
+    rows.push({
+      title: chainState.accountId,
+      meta: isUnlocked(agent) ? "Connected wallet / room access active" : "Connected wallet",
+      value: holderBalance(agent) === null ? "--" : keyAmountLabel(holderBalance(agent)),
+    });
+  }
+
+  const seen = new Set(rows.map((row) => row.title));
+  keyActivityTrades(agent).forEach((trade) => {
+    if (!trade.trader_id || seen.has(trade.trader_id)) return;
+    seen.add(trade.trader_id);
+    rows.push({
+      title: trade.trader_id,
+      meta: `Recent ${trade.side || "key"} trade`,
+      value: `${trade.amount} key${trade.amount === "1" ? "" : "s"}`,
+      url: keyTradeAccountUrl(trade),
+    });
+  });
+
+  return rows;
+}
+
+function renderKeyholders(agent) {
+  const panel = byId("keyholdersPanel");
+  if (!panel) return;
+  const holders = holderCount(agent);
+  const balance = holderBalance(agent);
+  const rows = keyholderRows(agent);
+  panel.className = "agent-tab-panel keyholders-panel";
+  panel.innerHTML = `
+    <div class="agent-summary-grid">
+      <div class="agent-summary-card">
+        <span>Total keys</span>
+        <strong>${escapeHtml(holders === null ? "--" : holders.toLocaleString())}</strong>
+      </div>
+      <div class="agent-summary-card">
+        <span>Your keys</span>
+        <strong>${escapeHtml(balance === null ? "--" : keyAmountLabel(balance))}</strong>
+      </div>
+      <div class="agent-summary-card">
+        <span>Gate</span>
+        <strong>${escapeHtml(isUnlocked(agent) ? "Unlocked" : balance && balance > 0 ? "Sign proof" : "1 key")}</strong>
+      </div>
+    </div>
+    ${rows.length ? rows.slice(0, 8).map((row) => `
+      <div class="keyholder-row">
+        <div class="keyholder-main">
+          <strong>${row.url ? `<a href="${escapeHtml(row.url)}" target="_blank" rel="noreferrer">${escapeHtml(shortAccount(row.title))}</a>` : escapeHtml(shortAccount(row.title))}</strong>
+          <span class="keyholder-meta">${escapeHtml(row.meta)}</span>
+        </div>
+        <div class="keyholder-value">${escapeHtml(row.value)}</div>
+      </div>
+    `).join("") : `
+      <div class="backend-empty">
+        <span>No keyholders yet</span>
+        <strong>Staging reports ${escapeHtml(holders === null ? "--" : holders.toLocaleString())} keys for this agent.</strong>
+      </div>
+    `}
+  `;
+}
+
+function renderPositions(agent) {
+  const panel = byId("positionsPanel");
+  if (!panel) return;
+  const activity = paperActivity(agent);
+  const positions = paperOpenPositions(agent);
+  if (!activity) {
+    renderBackendEmpty("positionsPanel", "No paper activity yet", "This agent has no readable paper account activity.");
+    return;
+  }
+  if (!positions.length) {
+    renderBackendEmpty("positionsPanel", "No open positions", "This agent has no open paper positions right now.");
+    return;
+  }
+
+  panel.className = "agent-tab-panel positions-panel";
+  panel.innerHTML = `
+    <div class="agent-summary-grid">
+      <div class="agent-summary-card">
+        <span>Open positions</span>
+        <strong>${positions.length.toLocaleString()}</strong>
+      </div>
+      <div class="agent-summary-card">
+        <span>Equity</span>
+        <strong>${escapeHtml(formatUsd(activity.latest_risk?.equity_usd ?? paperLeaderboardRow(agent)?.equity_usd))}</strong>
+      </div>
+      <div class="agent-summary-card">
+        <span>Cash</span>
+        <strong>${escapeHtml(formatUsd(activity.account?.cash_balance_usd))}</strong>
+      </div>
+    </div>
+    ${positions.slice(0, 12).map((position) => {
+      const size = asNumber(position.signed_size) ?? 0;
+      const side = size < 0 ? "Short" : "Long";
+      const leverage = asNumber(position.leverage);
+      return `
+        <div class="position-row">
+          <div class="position-main">
+            <strong>${escapeHtml(String(position.coin || "Paper").toUpperCase())} ${side}</strong>
+            <span class="position-meta">${escapeHtml(position.market_type || "paper")} / ${escapeHtml(position.margin_mode || "margin")} / ${leverage === null ? "--" : `${leverage}x`} / entry ${escapeHtml(formatPrice(position.entry_px))}</span>
+          </div>
+          <div class="position-value">${escapeHtml(compactNumber(Math.abs(size)))} ${escapeHtml(String(position.coin || "").toUpperCase())}</div>
+        </div>
+      `;
+    }).join("")}
+  `;
+}
+
+function renderAgentBase(agent) {
+  renderRoom(agent);
+  renderKeyholders(agent);
+  renderPositions(agent);
+  syncAgentBaseTabs();
 }
 
 function renderKeyActivity(agent) {
@@ -2331,12 +2488,19 @@ function render() {
   }
   renderGateState(agent);
   renderHero(agent);
-  renderRoom(agent);
+  renderAgentBase(agent);
   renderKeyActivity(agent);
   renderTicket(agent);
   bindUnlockButtons();
   syncContentColumns();
 }
+
+document.querySelectorAll("[data-agent-tab]").forEach((button) => {
+  button.addEventListener("click", () => {
+    activeAgentTab = button.dataset.agentTab || "chatroom";
+    syncAgentBaseTabs();
+  });
+});
 
 document.querySelectorAll(".ticket-tab").forEach((button) => {
   button.addEventListener("click", () => {
