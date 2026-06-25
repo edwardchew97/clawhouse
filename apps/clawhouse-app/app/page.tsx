@@ -19,10 +19,6 @@ export default function Page() {
           </div>
         </header>
 
-        <section className="ticker" aria-label="Live market ticker">
-          <div className="ticker-track" id="tickerTrack" />
-        </section>
-
         <section className="main">
           <aside className="panel left">
             <div className="panel-head">
@@ -42,54 +38,44 @@ export default function Page() {
           </aside>
 
           <section className="center">
-            <section className="panel hero">
-              <div className="hero-banner" aria-hidden="true">
-                <img id="heroBannerImage" src="/agent-banners/default-agent-banner.png" alt="" />
-              </div>
-              <div className="hero-content">
-                <div className="hero-left">
-                  <div className="avatar" id="heroAvatar">--</div>
-                  <div>
-                    <div className="hero-name">
-                      <span className="hero-title" id="heroName">Loading agent</span>
-                      <span className="live-badge"><span className="dot" /> running</span>
-                    </div>
-                    <div className="hero-desc" id="heroDesc">
-                      Reading backend ledger and paper-trading data.
-                    </div>
-                  </div>
-                </div>
-                <div className="hero-stats">
-                  <div className="stat">
-                    <label>Agent P&amp;L 24h</label>
-                    <strong className="green" id="statPnl">--</strong>
-                  </div>
-                  <div className="stat">
-                    <label>Key price tNEAR</label>
-                    <strong id="statKey">--</strong>
-                  </div>
-                  <div className="stat">
-                    <label>Holders</label>
-                    <strong id="statHolders">--</strong>
-                  </div>
-                  <div className="stat">
-                    <label>Last update</label>
-                    <strong id="statUpdate">checking</strong>
-                  </div>
-                  <div className="stat">
-                    <label>Room gate</label>
-                    <strong id="statGate">1 key</strong>
-                  </div>
-                </div>
-              </div>
-            </section>
-
             <section className="panel chart-panel" id="chartPanel">
               <div className="chart-top">
-                <div>
-                  <div className="panel-title">Paper Net Worth Chart</div>
-                  <div className="panel-sub" id="chartSub">
-                    Backend agent network series. Key market quotes use NEAR testnet.
+                <div className="fomo-agent-bar">
+                  <div className="fomo-agent-identity">
+                    <div className="fomo-agent-avatar" id="marketAvatar">--</div>
+                    <div className="fomo-agent-copy">
+                      <div className="fomo-agent-title-row">
+                        <strong id="marketName">Loading agent</strong>
+                        <span className="fomo-agent-status"><span className="dot" /> running</span>
+                      </div>
+                      <div className="fomo-agent-meta" id="marketMeta">Backend agent network series</div>
+                    </div>
+                  </div>
+                  <div className="fomo-stat-strip" aria-label="Agent market stats">
+                    <div className="fomo-stat-chip">
+                      <span>Equity</span>
+                      <strong id="marketEquity">--</strong>
+                    </div>
+                    <div className="fomo-stat-chip">
+                      <span>Key price</span>
+                      <strong id="marketKeyPrice">--</strong>
+                    </div>
+                    <div className="fomo-stat-chip">
+                      <span>24H P&amp;L</span>
+                      <strong id="marketPnl">--</strong>
+                    </div>
+                    <div className="fomo-stat-chip">
+                      <span>Positions</span>
+                      <strong id="marketPositions">--</strong>
+                    </div>
+                    <div className="fomo-stat-chip">
+                      <span>Filled</span>
+                      <strong id="marketFilled">--</strong>
+                    </div>
+                    <div className="fomo-stat-chip">
+                      <span>Holders</span>
+                      <strong id="marketHolders">--</strong>
+                    </div>
                   </div>
                 </div>
                 <div className="range">
@@ -149,6 +135,47 @@ export default function Page() {
           </section>
 
           <aside className="right">
+            <section className="panel hero agent-profile">
+              <div className="hero-banner" aria-hidden="true">
+                <img id="heroBannerImage" src="/agent-banners/default-agent-banner.png" alt="" />
+              </div>
+              <div className="hero-content">
+                <div className="hero-left">
+                  <div className="avatar" id="heroAvatar">--</div>
+                  <div>
+                    <div className="hero-name">
+                      <span className="hero-title" id="heroName">Loading agent</span>
+                      <span className="live-badge"><span className="dot" /> running</span>
+                    </div>
+                    <div className="hero-desc" id="heroDesc">
+                      Reading backend ledger and paper-trading data.
+                    </div>
+                  </div>
+                </div>
+                <div className="hero-stats">
+                  <div className="stat">
+                    <label>Agent P&amp;L 24h</label>
+                    <strong className="green" id="statPnl">--</strong>
+                  </div>
+                  <div className="stat">
+                    <label>Key price tNEAR</label>
+                    <strong id="statKey">--</strong>
+                  </div>
+                  <div className="stat">
+                    <label>Holders</label>
+                    <strong id="statHolders">--</strong>
+                  </div>
+                  <div className="stat">
+                    <label>Last update</label>
+                    <strong id="statUpdate">checking</strong>
+                  </div>
+                  <div className="stat">
+                    <label>Room gate</label>
+                    <strong id="statGate">1 key</strong>
+                  </div>
+                </div>
+              </div>
+            </section>
             <section className="panel ticket" id="keyMarketTicket">
               <div className="ticket-controls" id="keyMarketTicketControls">
                 <div className="ticket-tabs">

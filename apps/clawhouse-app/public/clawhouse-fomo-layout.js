@@ -353,6 +353,11 @@ function asNumber(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function asNullableNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  return asNumber(value);
+}
+
 function normalizePct(value) {
   if (value === null || value === undefined || value === "") return null;
   const numeric = asNumber(value);
@@ -473,6 +478,36 @@ function paperOpenPositions(agent) {
   return Array.isArray(positions)
     ? positions.filter((position) => String(position?.status || "open").toLowerCase() === "open" && Math.abs(asNumber(position?.signed_size) ?? 0) > 0)
     : [];
+}
+
+function hyperliquidPriceRows() {
+  const prices = chainState.backend?.hyperliquidPrices?.prices;
+  return Array.isArray(prices) ? prices : [];
+}
+
+function positionMarkPx(position) {
+  const direct = asNullableNumber(position?.mark_px ?? position?.markPx ?? position?.current_px ?? position?.currentPx);
+  if (direct !== null) return direct;
+  const coin = String(position?.coin || "").toUpperCase();
+  const row = hyperliquidPriceRows().find((price) => String(price?.coin || "").toUpperCase() === coin);
+  return asNullableNumber(row?.mark_px ?? row?.markPx);
+}
+
+function positionPnlUsd(position) {
+  const direct = [
+    position?.unrealized_pnl_usd,
+    position?.unrealizedPnlUsd,
+    position?.current_pnl_usd,
+    position?.currentPnlUsd,
+    position?.pnl_usd,
+    position?.pnlUsd,
+  ].map(asNullableNumber).find((value) => value !== null);
+  if (direct !== undefined) return direct;
+  const mark = positionMarkPx(position);
+  const entry = asNullableNumber(position?.entry_px);
+  const size = asNullableNumber(position?.signed_size);
+  if (mark === null || entry === null || size === null) return null;
+  return (mark - entry) * size;
 }
 
 function latestPaperActivityTimestamp(agent) {
@@ -632,6 +667,22 @@ function formatUsd(value) {
   const numeric = asNumber(value);
   if (numeric === null) return "--";
   return `$${numeric.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatCompactUsd(value) {
+  const numeric = asNumber(value);
+  if (numeric === null) return "--";
+  const absolute = Math.abs(numeric);
+  if (absolute >= 1_000_000) return `$${(numeric / 1_000_000).toFixed(2).replace(/\.?0+$/, "")}M`;
+  if (absolute >= 1_000) return `$${(numeric / 1_000).toFixed(2).replace(/\.?0+$/, "")}K`;
+  return formatUsd(numeric);
+}
+
+function formatSignedUsd(value) {
+  const numeric = asNullableNumber(value);
+  if (numeric === null) return "--";
+  const sign = numeric > 0 ? "+" : numeric < 0 ? "-" : "";
+  return `${sign}${formatUsd(Math.abs(numeric))}`;
 }
 
 function formatUtcTime(value) {
@@ -1220,10 +1271,17 @@ async function refreshBackendRead(_reason) {
   const refreshId = ++backendRefreshId;
   try {
     const backend = await fetchJson(`/api/backend/board?boardId=${encodeURIComponent(agent.boardId || agent.id)}`);
+    const openPositions = Array.isArray(backend?.paperActivity?.positions)
+      ? backend.paperActivity.positions.filter((position) => String(position?.status || "open").toLowerCase() === "open" && Math.abs(asNumber(position?.signed_size) ?? 0) > 0)
+      : [];
+    const coins = [...new Set(openPositions.map((position) => String(position?.coin || "").toUpperCase()).filter(Boolean))];
+    const hyperliquidPrices = coins.length
+      ? await fetchJson(`/api/backend/hyperliquid-prices?coins=${encodeURIComponent(coins.join(","))}`).catch((error) => ({ ok: false, error: errorMessage(error, "Price read failed.") }))
+      : { ok: true, prices: [] };
     if (refreshId !== backendRefreshId) return;
     chainState = {
       ...chainState,
-      backend,
+      backend: { ...backend, hyperliquidPrices },
     };
   } catch (error) {
     if (refreshId !== backendRefreshId) return;
@@ -1357,6 +1415,8 @@ function buyOneForUnlock() {
 }
 
 function renderTicker() {
+  const track = byId("tickerTrack");
+  if (!track) return;
   const items = agents.flatMap((agent) => {
     const pnl = backendPnl(agent);
     const pnlSource = backendPnlSource(agent);
@@ -1369,13 +1429,13 @@ function renderTicker() {
       `<span class="ticker-item"><b>${holders === null ? "--" : holders}</b><span>keys in ${escapeHtml(title)}</span><span>${events} ledger events</span></span>`
     ];
   });
-  const track = byId("tickerTrack");
   track.innerHTML = items.concat(items).join("");
   window.requestAnimationFrame(syncTickerSpeed);
 }
 
 function syncTickerSpeed() {
   const track = byId("tickerTrack");
+  if (!track) return;
   const loopWidth = track.scrollWidth / 2;
   if (!Number.isFinite(loopWidth) || loopWidth <= 0) {
     track.style.removeProperty("--ticker-duration");
@@ -1502,6 +1562,23 @@ function renderHero(agent) {
   const activity = paperActivity(agent);
   const summary = paperSummary(agent);
   const latestRiskAt = summary.latest_risk_at || activity?.latest_risk?.created_at;
+  const holders = holderCount(agent);
+  const openPositions = paperOpenPositions(agent).length;
+  const filledOrders = summary.filled_orders ?? paperFills(agent).length;
+  const equity = activity?.latest_risk?.equity_usd ?? paperLeaderboardRow(agent)?.equity_usd;
+  const marketMeta = activity
+    ? `${agent.desc} · ${backendNetwork(agent)} paper · ${summary.total_orders ?? 0} orders`
+    : `${agent.desc} · ${backendNetwork(agent)} · ${pnlSource}`;
+  byId("marketAvatar").innerHTML = agentIcon(agent);
+  byId("marketName").textContent = title;
+  byId("marketMeta").textContent = marketMeta;
+  byId("marketEquity").textContent = formatCompactUsd(equity);
+  byId("marketKeyPrice").textContent = keyPriceLabel(agent).replace(" tNEAR", "");
+  byId("marketPnl").textContent = pnl === null ? "--" : signedPct(pnl);
+  byId("marketPnl").className = pnl === null ? "" : pnl >= 0 ? "green" : "red";
+  byId("marketPositions").textContent = openPositions.toLocaleString();
+  byId("marketFilled").textContent = filledOrders.toLocaleString();
+  byId("marketHolders").textContent = holders === null ? "--" : holders.toLocaleString();
   byId("heroAvatar").innerHTML = agentIcon(agent);
   byId("heroBannerImage").src = agent.bannerUrl || DEFAULT_AGENT_BANNER_URL;
   byId("heroName").textContent = title;
@@ -1509,7 +1586,6 @@ function renderHero(agent) {
   byId("statPnl").textContent = pnl === null ? "--" : signedPct(pnl);
   byId("statPnl").className = pnl === null ? "" : pnl >= 0 ? "green" : "red";
   byId("statKey").textContent = keyPriceLabel(agent).replace(" tNEAR", "");
-  const holders = holderCount(agent);
   byId("statHolders").textContent = holders === null ? "--" : holders.toLocaleString();
   byId("statUpdate").textContent = latestRiskAt
     ? formatUtcTime(latestRiskAt)
@@ -1517,12 +1593,22 @@ function renderHero(agent) {
   setInlineState("statGate", gateLabel(agent, { compact: true }));
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
-  byId("chartSub").textContent = activity
-    ? `${chart.message} / ${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled orders / ${backendNetwork(agent)}`
-    : `${chart.message} / ${backendNetwork(agent)} / ${pnlSource} / key market ${chainApplies(agent) ? "live" : "checking"}`;
+  byId("marketMeta").textContent = activity
+    ? `${chart.message} · ${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled · ${backendNetwork(agent)}`
+    : `${chart.message} · ${backendNetwork(agent)} · key market ${chainApplies(agent) ? "live" : "checking"}`;
 }
 
 function renderFreshStartEmpty() {
+  byId("marketAvatar").textContent = "--";
+  byId("marketName").textContent = "No agents yet";
+  byId("marketMeta").textContent = "Fresh staging is ready.";
+  byId("marketEquity").textContent = "--";
+  byId("marketKeyPrice").textContent = "--";
+  byId("marketPnl").textContent = "--";
+  byId("marketPnl").className = "";
+  byId("marketPositions").textContent = "--";
+  byId("marketFilled").textContent = "--";
+  byId("marketHolders").textContent = "--";
   byId("heroAvatar").textContent = "--";
   byId("heroBannerImage").src = DEFAULT_AGENT_BANNER_URL;
   byId("heroName").textContent = "No agents yet";
@@ -1535,7 +1621,7 @@ function renderFreshStartEmpty() {
   byId("statGate").textContent = "--";
   byId("priceMarker").textContent = "backend";
   byId("priceMarker").style.background = "var(--gray)";
-  byId("chartSub").textContent = "No public agent board has been registered yet.";
+  byId("marketMeta").textContent = "No public agent board has been registered yet.";
   renderBackendEmpty("roomFeed", "No agent room yet", "Onboard the first paper-trading agent to create the first board.");
   renderBackendEmpty("keyholdersPanel", "No keyholders yet", "Select a key-enabled agent to read keyholder state.");
   renderBackendEmpty("positionsPanel", "No positions yet", "Select a paper-trading agent to read open positions.");
@@ -1673,15 +1759,13 @@ function renderRoom(agent) {
     : chartModel(agent).events;
   if (!events.length) {
     byId("roomFeed").innerHTML = `
-      <div class="blur-status feed-unavailable" aria-label="Agent chat room unavailable">
-        <div class="blur-status-content" aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
-          <span></span>
+      <div class="chat-empty" aria-label="Agent chat room has no readable events">
+        <div class="chat-empty-copy">
+          <span>Chatroom</span>
+          <strong>No readable room events yet</strong>
+          <p>Orders and agent updates will appear here when this board reports activity.</p>
         </div>
-        <div class="blur-status-label">Unavailable</div>
+        <div class="chat-empty-badge">Idle</div>
       </div>
     `;
     return;
@@ -1797,6 +1881,11 @@ function renderPositions(agent) {
   }
 
   panel.className = "agent-tab-panel positions-panel";
+  const hasPositionPnl = positions.some((position) => positionPnlUsd(position) !== null);
+  const totalPositionPnl = positions.reduce((sum, position) => {
+    const value = positionPnlUsd(position);
+    return value === null ? sum : sum + value;
+  }, 0);
   panel.innerHTML = `
     <div class="agent-summary-grid">
       <div class="agent-summary-card">
@@ -1812,20 +1901,38 @@ function renderPositions(agent) {
         <strong>${escapeHtml(formatUsd(activity.account?.cash_balance_usd))}</strong>
       </div>
     </div>
-    ${positions.slice(0, 12).map((position) => {
+    <div class="position-table" role="table" aria-label="Open paper positions">
+      <div class="position-table-head" role="row">
+        <span>Market</span>
+        <span>Size</span>
+        <span>Entry</span>
+        <span>P&L</span>
+      </div>
+      ${positions.map((position) => {
       const size = asNumber(position.signed_size) ?? 0;
       const side = size < 0 ? "Short" : "Long";
       const leverage = asNumber(position.leverage);
+      const coin = String(position.coin || "").toUpperCase();
+      const pnl = positionPnlUsd(position);
+      const pnlTone = pnl === null ? "empty" : pnl >= 0 ? "up" : "down";
       return `
-        <div class="position-row">
+        <div class="position-row" role="row">
           <div class="position-main">
-            <strong>${escapeHtml(String(position.coin || "Paper").toUpperCase())} ${side}</strong>
-            <span class="position-meta">${escapeHtml(position.market_type || "paper")} / ${escapeHtml(position.margin_mode || "margin")} / ${leverage === null ? "--" : `${leverage}x`} / entry ${escapeHtml(formatPrice(position.entry_px))}</span>
+            <strong>${escapeHtml(coin || "PAPER")} <span class="${size < 0 ? "down" : "up"}">${side}</span></strong>
+            <span class="position-meta">${escapeHtml(position.market_type || "paper")} / ${escapeHtml(position.margin_mode || "margin")} / ${leverage === null ? "--" : `${leverage}x`}</span>
           </div>
-          <div class="position-value">${escapeHtml(compactNumber(Math.abs(size)))} ${escapeHtml(String(position.coin || "").toUpperCase())}</div>
+          <div class="position-value">${escapeHtml(compactNumber(Math.abs(size)))} ${escapeHtml(coin)}</div>
+          <div class="position-entry">${escapeHtml(formatPrice(position.entry_px))}</div>
+          <div class="position-pnl ${pnlTone}">${escapeHtml(formatSignedUsd(pnl))}</div>
         </div>
       `;
-    }).join("")}
+      }).join("")}
+    </div>
+    <div class="positions-footnote">
+      ${hasPositionPnl
+        ? `Visible position P&L total <strong class="${totalPositionPnl >= 0 ? "up" : "down"}">${escapeHtml(formatSignedUsd(totalPositionPnl))}</strong>`
+        : "Per-position P&L needs mark price or unrealized P&L from the backend."}
+    </div>
   `;
 }
 
