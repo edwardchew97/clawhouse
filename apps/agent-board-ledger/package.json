@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/server.ts",
-    "db:migrate:neon": "bun scripts/migrate-neon.ts",
-    "db:check:neon": "bun scripts/check-neon.ts",
+    "db:migrate": "bun scripts/migrate-postgres.ts",
+    "db:check": "bun scripts/check-postgres.ts",
+    "db:fresh": "bun scripts/fresh-postgres.ts",
     "vercel:build": "bun scripts/vercel-build.ts",
     "vercel:runtime-check": "bun scripts/check-vercel-runtime.ts",
     "test": "bun test",
@@ -13,7 +14,6 @@
   },
   "dependencies": {
     "@near-js/crypto": "^2.5.1",
-    "@neondatabase/serverless": "^1.1.0",
     "pg": "^8.22.0"
   },
   "devDependencies": {

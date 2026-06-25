@@ -1,4 +1,4 @@
-export const neonSchemaStatements = [
+export const postgresSchemaStatements = [
   `
 	    CREATE TABLE IF NOT EXISTS boards (
 	      id TEXT PRIMARY KEY,
@@ -782,7 +782,7 @@ export const neonSchemaStatements = [
   "UPDATE pnl_snapshots SET completeness_status = 'unknown' WHERE completeness_status IS NULL OR completeness_status = ''",
 ] as const;
 
-export const neonRequiredTables = [
+export const postgresRequiredTables = [
   "boards",
   "auth_nonces",
   "events",

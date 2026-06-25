@@ -1,9 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { Pool, type PoolClient } from "@neondatabase/serverless";
 import pg from "pg";
-import { neonSchemaStatements } from "./neon-schema.js";
+import { postgresSchemaStatements } from "./postgres-schema.js";
 import type {
   AttachmentRow,
   Board,
@@ -20,7 +19,7 @@ export type RunResult = {
 };
 
 export type LedgerDb = {
-  provider: "sqlite" | "neon-postgres" | "postgres";
+  provider: "sqlite" | "postgres";
   get<T>(sql: string, params?: unknown[]): Promise<T | undefined>;
   all<T>(sql: string, params?: unknown[]): Promise<T[]>;
   run(sql: string, params?: unknown[]): Promise<RunResult>;
@@ -44,21 +43,21 @@ export function readRuntimeDatabaseUrl(env = process.env) {
     ?? cleanEnv(env.ledgerDatabaseUrl);
 }
 
-type OpenNeonLedgerDb = (databaseUrl: string) => LedgerDb;
+type OpenPostgresLedgerDb = (databaseUrl: string) => LedgerDb;
 
-export async function openRuntimeLedgerDb(env = process.env, openNeonDb: OpenNeonLedgerDb = openNeonLedgerDb): Promise<LedgerDb> {
+export async function openRuntimeLedgerDb(env = process.env, openPostgresDb: OpenPostgresLedgerDb = openPostgresLedgerDb): Promise<LedgerDb> {
   const databaseUrl = readRuntimeDatabaseUrl(env);
   if (!databaseUrl) {
-    throw new Error("Missing AGENT_BOARD_LEDGER_DATABASE_URL, DATABASE_URL, or ledgerDatabaseUrl; runtime storage must use Neon/Postgres");
+    throw new Error("Missing AGENT_BOARD_LEDGER_DATABASE_URL, DATABASE_URL, or ledgerDatabaseUrl; runtime storage must use Postgres");
   }
 
-  return openNeonDb(databaseUrl);
+  return openPostgresDb(databaseUrl);
 }
 
-export async function openMigratedRuntimeLedgerDb(env = process.env, openNeonDb: OpenNeonLedgerDb = openNeonLedgerDb): Promise<LedgerDb> {
-  const db = await openRuntimeLedgerDb(env, openNeonDb);
+export async function openMigratedRuntimeLedgerDb(env = process.env, openPostgresDb: OpenPostgresLedgerDb = openPostgresLedgerDb): Promise<LedgerDb> {
+  const db = await openRuntimeLedgerDb(env, openPostgresDb);
   try {
-    await migrateNeonLedgerDb(db);
+    await migratePostgresLedgerDb(db);
     return db;
   } catch (error) {
     await db.close();
@@ -66,16 +65,13 @@ export async function openMigratedRuntimeLedgerDb(env = process.env, openNeonDb:
   }
 }
 
-export function openNeonLedgerDb(databaseUrl: string): LedgerDb {
-  if (isLocalPostgresUrl(databaseUrl)) {
-    const pool = new pg.Pool({ connectionString: databaseUrl });
-    return new PostgresLedgerDb(pool, pool);
-  }
-  return new NeonLedgerDb(new Pool({ connectionString: databaseUrl }));
+export function openPostgresLedgerDb(databaseUrl: string): LedgerDb {
+  const pool = new pg.Pool({ connectionString: databaseUrl });
+  return new PostgresLedgerDb(pool, pool);
 }
 
-export async function migrateNeonLedgerDb(db: LedgerDb) {
-  for (const statement of neonSchemaStatements) {
+export async function migratePostgresLedgerDb(db: LedgerDb) {
+  for (const statement of postgresSchemaStatements) {
     await db.run(statement);
   }
 }
@@ -123,60 +119,13 @@ function loadSqliteDatabase(): BunSqliteDatabaseConstructor {
   try {
     return (requireFromHere("bun:sqlite") as { Database: BunSqliteDatabaseConstructor }).Database;
   } catch {
-    throw new Error("SQLite ledger storage requires Bun; hosted runtime storage must use Neon/Postgres");
+    throw new Error("SQLite ledger storage requires Bun; hosted runtime storage must use Postgres");
   }
 }
 
-type NeonQueryRunner = Pick<Pool, "query"> | Pick<PoolClient, "query">;
 type PostgresPool = pg.Pool;
 type PostgresClient = pg.PoolClient;
 type PostgresQueryRunner = Pick<PostgresPool, "query"> | Pick<PostgresClient, "query">;
-
-class NeonLedgerDb implements LedgerDb {
-  readonly provider = "neon-postgres" as const;
-
-  constructor(
-    private readonly runner: NeonQueryRunner,
-    private readonly pool?: Pool,
-  ) {}
-
-  async get<T>(sql: string, params: unknown[] = []): Promise<T | undefined> {
-    const result = await this.runner.query(toPostgresPlaceholders(sql), params);
-    return result.rows[0] as T | undefined;
-  }
-
-  async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-    const result = await this.runner.query(toPostgresPlaceholders(sql), params);
-    return result.rows as T[];
-  }
-
-  async run(sql: string, params: unknown[] = []): Promise<RunResult> {
-    const result = await this.runner.query(toPostgresPlaceholders(sql), params);
-    return { changes: result.rowCount ?? undefined };
-  }
-
-  async transaction<T>(callback: (tx: LedgerDb) => Promise<T>): Promise<T> {
-    if (!this.pool) return await callback(this);
-
-    const client = await this.pool.connect();
-    const tx = new NeonLedgerDb(client);
-    try {
-      await client.query("BEGIN");
-      const result = await callback(tx);
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
-
-  async close() {
-    if (this.pool) await this.pool.end();
-  }
-}
 
 class PostgresLedgerDb implements LedgerDb {
   readonly provider = "postgres" as const;
@@ -231,15 +180,6 @@ function toPostgresPlaceholders(sql: string) {
 
 function cleanEnv(value: string | undefined) {
   return value && value.trim() !== "" ? value.trim() : undefined;
-}
-
-function isLocalPostgresUrl(databaseUrl: string) {
-  try {
-    const url = new URL(databaseUrl);
-    return url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1";
-  } catch {
-    return false;
-  }
 }
 
 export function migrate(db: Database) {

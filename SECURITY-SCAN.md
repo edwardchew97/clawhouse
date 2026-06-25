@@ -28,9 +28,9 @@ Current branch remediation after the audit:
 Severity: **Critical / High / Medium / Low / Informational**.
 
 ### A1. Live credentials in plaintext on disk — **Medium**
-`.env.local` and `apps/agent-board-ledger/.env.local` in the local main checkout hold a live Neon Postgres connection string **with password** and the admin bearer token (`AGENT_BOARD_LEDGER_ADMIN_TOKEN`); `.env` holds the AES key (`ACCEPTANCE_WORKBENCH_ENCRYPTION_KEY`).
+`.env.local` and `apps/agent-board-ledger/.env.local` in the local main checkout hold a live Postgres connection string **with password** and the admin bearer token (`AGENT_BOARD_LEDGER_ADMIN_TOKEN`); `.env` holds the AES key (`ACCEPTANCE_WORKBENCH_ENCRYPTION_KEY`).
 - Mitigating: git-ignored, **never committed** (checked all 237 revisions), files are `0o600`. These ignored files were not present in the app-managed review worktree.
-- **Action:** Rotate the Neon password and admin token; prefer a secrets manager / runtime injection. Confirm prod secrets live only in Vercel env.
+- **Action:** Rotate the Postgres password and admin token; prefer a secrets manager / runtime injection. Confirm prod secrets live only in Vercel env.
 
 ### A2. NEAR wallet private keys unencrypted in `work/` and `.worktrees/` — **Medium**
 15 distinct `*-wallet.json` files in the local main checkout contain plaintext `private_key: "ed25519:..."`.
@@ -94,7 +94,7 @@ The contract's unit tests (lines 493-614) cover create/buy/sell/min-price/final-
 
 ## Part C — Independent backend design review (`agent-board-ledger`)
 
-Reviewed as a third party from the code itself, not the docs. The backend is one flat `if`-ladder router in `src/server.ts` (~2164 lines) plus `paper-trading.ts`, `db.ts`, `neon-schema.ts`, `hyperliquid.ts`. **28 endpoints** total. Code treated as ground truth.
+Reviewed as a third party from the code itself, not the docs. The backend is one flat `if`-ladder router in `src/server.ts` (~2164 lines) plus `paper-trading.ts`, `db.ts`, `postgres-schema.ts`, `hyperliquid.ts`. **28 endpoints** total. Code treated as ground truth.
 
 ### C1. Dead routes advertised but unreachable — **flag**
 `api/ledger.ts` (lines 5-26) exports `DELETE/PATCH/PUT/OPTIONS`, but the router only handles `GET`/`POST` — all four fall through to `404` (server.ts:196). `OPTIONS` 404 + no CORS headers means the API is **not browser-cross-origin usable**.
@@ -122,7 +122,7 @@ Reviewed as a third party from the code itself, not the docs. The backend is one
 - **N+1 on the event timeline:** `listEvents` then `Promise.all(map(presentEvent))`, each firing its own `listAttachments` (server.ts:~1480, 1497-1505).
 - **Missing pagination / silent caps:** `GET /boards/:id/events` is **fully unbounded** (db.ts:743-745); balance-changes/prices silently cap at `LIMIT 100` with no cursor; `GET /boards` caps at 100. Original scan found that `matchingReadGrant` scanned only the last `LIMIT 50` granted checks (server.ts:~1601), so a board with >50 newer grants could push a still-valid token out of the window and randomly deny a valid read token. **Status:** the `LIMIT 50` correctness bug is fixed; indexed token lookup remains a follow-up schema improvement.
 - **Idempotency only works sequentially:** `submitPaperOrder` does its idempotency `SELECT` outside the transaction (paper-trading.ts:188); two concurrent identical `client_order_id`s both pass the pre-check, and the second hits the generic unique-violation → **409 "Duplicate record"** instead of the intended "return existing order" replay path.
-- **Double-write on board creation (SQLite only):** the handler inserts `tracked_wallets` (server.ts:274-293) **and** an `AFTER INSERT` trigger inserts the same row (db.ts:567-593); the Neon schema has no such trigger. Idempotent today (`ON CONFLICT DO NOTHING`) but a divergence that will break when one path is edited.
+- **Double-write on board creation (SQLite only):** the handler inserts `tracked_wallets` (server.ts:274-293) **and** an `AFTER INSERT` trigger inserts the same row (db.ts:567-593); the Postgres schema has no such trigger. Idempotent today (`ON CONFLICT DO NOTHING`) but a divergence that will break when one path is edited.
 - **Watch endpoints write a row every tick even on zero delta** (server.ts:750-779, 873-902); there's even a persisted `"no_change"` classification (~1950). Unbounded write amplification for idle boards.
 - Status-code inconsistencies: server-generated-value parse errors throw `500` (`normalizeReadGrantExpiry`, ~675); RPC and input errors are conflated as `502`.
 
@@ -157,7 +157,7 @@ Reviewed as a third party from the code itself, not the docs. The backend is one
 - `cargo audit` could not be run because the `cargo-audit` subcommand is not installed.
 
 ## Overall priority order
-1. Rotate Neon password + admin token (A1).
+1. Rotate Postgres password + admin token (A1).
 2. Smart contract: handle transfer failure on the sell payout path (B1).
 3. Decide and implement the backend trust-model change for PnL-moving writes (C4).
 4. Patch the dependency advisories surfaced by `bun audit`; install/run `cargo audit`.

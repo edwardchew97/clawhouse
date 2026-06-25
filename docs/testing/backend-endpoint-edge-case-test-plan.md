@@ -45,7 +45,7 @@ Scope notes:
 
 Use these fixtures across endpoint tests:
 
-- Fresh SQLite test DB for local handler tests, plus a Neon/Postgres runtime
+- Fresh SQLite test DB for local handler tests, plus a Postgres runtime
   check where deployment behavior matters.
 - Admin token fixture: `AGENT_BOARD_LEDGER_ADMIN_TOKEN`.
 - Cron token fixture: `CRON_SECRET`.
@@ -406,7 +406,7 @@ Edge cases:
   partial inserts.
 - `source_observation_id` or `source_event_id` points to another board or a
   nonexistent row. Current DB behavior may allow null or enforce FK depending on
-  provider path; test both SQLite and Neon where possible.
+  provider path; test both SQLite and Postgres where possible.
 
 ### L09: `GET /boards/:boardId/balance-changes`
 

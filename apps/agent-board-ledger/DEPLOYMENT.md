@@ -59,10 +59,10 @@ Hosted requests must not run schema migrations.
 For manual operations, run:
 
 ```bash
-bun run db:migrate:neon
+bun run db:migrate
 ```
 
-Use `bun run db:check:neon` for read-only schema checks. Do not use public
+Use `bun run db:check` for read-only schema checks. Do not use public
 runtime endpoints such as `/health`, `/boards`, `/paper/...`, or `/cron/tick` as
 a migration trigger.
 

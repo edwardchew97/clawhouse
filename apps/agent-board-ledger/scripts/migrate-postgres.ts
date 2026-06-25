@@ -1,7 +1,7 @@
-import { migrateNeon, requireNeonDatabaseUrl } from "./lib/neon.js";
+import { migratePostgres, requirePostgresDatabaseUrl } from "./lib/postgres.js";
 
 try {
-  const result = await migrateNeon(requireNeonDatabaseUrl());
+  const result = await migratePostgres(requirePostgresDatabaseUrl());
   printJson(result);
   if (!result.ok) process.exitCode = 1;
 } catch (error) {

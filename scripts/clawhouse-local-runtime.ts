@@ -308,8 +308,8 @@ async function prepareDatabase(env: Record<string, string>, checks: RuntimeStatu
     };
   }
   const cwd = join(runtimeRepoRoot, "apps/agent-board-ledger");
-  await run(["bun", "run", "db:migrate:neon"], cwd, env);
-  await run(["bun", "run", "db:check:neon"], cwd, env);
+  await run(["bun", "run", "db:migrate"], cwd, env);
+  await run(["bun", "run", "db:check"], cwd, env);
   return { ...checks, databaseMigrated: true, databaseChecked: true, databaseError: undefined };
 }
 

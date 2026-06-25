@@ -701,7 +701,7 @@
           "url": "{{ledgerBaseUrl}}/health",
           "runningNotes": [
             "Calling the real Agent Board Ledger /health endpoint.",
-            "Use this first to confirm the local backend is running and connected to Neon/Postgres."
+            "Use this first to confirm the local backend is running and connected to Postgres."
           ],
           "setVars": {
             "ledgerHealthDb": "response.json.json.db"
@@ -2817,7 +2817,7 @@
           "url": "{{ledgerBaseUrl}}/health",
           "runningNotes": [
             "Calling the real Agent Board Ledger /health endpoint.",
-            "Use this first to confirm the local backend is running and connected to Neon/Postgres."
+            "Use this first to confirm the local backend is running and connected to Postgres."
           ],
           "setVars": {
             "ledgerHealthDb": "response.json.json.db"
@@ -2848,14 +2848,14 @@
           }
         },
         {
-          "id": "developerSetup.ledger.neonMigrate",
+          "id": "developerSetup.ledger.postgresMigrate",
           "name": "Migrate Ledger Schema",
-          "description": "Runs the real Neon migration script for Agent Board Ledger schema setup.",
+          "description": "Runs the real Postgres migration script for Agent Board Ledger schema setup.",
           "type": "script",
           "access": "protected",
           "command": "bun",
           "args": [
-            "scripts/migrate-neon.ts"
+            "scripts/migrate-postgres.ts"
           ],
           "cwd": "{{repoRoot}}/apps/agent-board-ledger",
           "redactPrivateKeyOutput": true,
@@ -2868,26 +2868,26 @@
           ],
           "runningNotes": [
             "Uses the editable ledgerDatabaseUrl input as an environment variable; the database URL is not placed in command-line arguments.",
-            "Creates or updates the Neon Postgres schema for boards, events, observations, accounting snapshots, read access checks, and audit events.",
+            "Creates or updates the Postgres schema for boards, events, observations, accounting snapshots, read access checks, and audit events.",
             "Returns a redacted connection string, table list, and small row-count health check."
           ],
           "inputs": {
             "ledgerDatabaseUrl": ""
           },
           "setVars": {
-            "ledgerNeonProvider": "response.json.provider",
-            "ledgerNeonMissingTables": "response.json.missing"
+            "ledgerPostgresProvider": "response.json.provider",
+            "ledgerPostgresMissingTables": "response.json.missing"
           }
         },
         {
-          "id": "developerSetup.ledger.neonCheck",
-          "name": "Check Neon Schema",
-          "description": "Runs the real Neon schema check script without applying migrations. Use this to verify the configured database has the required Agent Board Ledger tables.",
+          "id": "developerSetup.ledger.postgresCheck",
+          "name": "Check Postgres Schema",
+          "description": "Runs the real Postgres schema check script without applying migrations. Use this to verify the configured database has the required Agent Board Ledger tables.",
           "type": "script",
           "access": "protected",
           "command": "bun",
           "args": [
-            "scripts/check-neon.ts"
+            "scripts/check-postgres.ts"
           ],
           "cwd": "{{repoRoot}}/apps/agent-board-ledger",
           "redactPrivateKeyOutput": true,
@@ -2900,14 +2900,46 @@
           ],
           "runningNotes": [
             "Uses ledgerDatabaseUrl as an environment variable; the database URL is not placed in command-line arguments.",
-            "Reads the Neon/Postgres schema and reports missing required tables without applying migrations."
+            "Reads the Postgres schema and reports missing required tables without applying migrations."
           ],
           "inputs": {
             "ledgerDatabaseUrl": ""
           },
           "setVars": {
-            "ledgerNeonProvider": "response.json.provider",
-            "ledgerNeonMissingTables": "response.json.missing"
+            "ledgerPostgresProvider": "response.json.provider",
+            "ledgerPostgresMissingTables": "response.json.missing"
+          }
+        },
+        {
+          "id": "developerSetup.ledger.postgresFresh",
+          "name": "Fresh Postgres Migration",
+          "description": "Drops and recreates the public schema, then runs the real Postgres migration and schema check.",
+          "type": "script",
+          "access": "protected",
+          "command": "bun",
+          "args": [
+            "scripts/fresh-postgres.ts"
+          ],
+          "cwd": "{{repoRoot}}/apps/agent-board-ledger",
+          "redactPrivateKeyOutput": true,
+          "forbiddenOutputIncludes": [
+            "privateKey",
+            "private_key",
+            "secretKey",
+            "secret_key",
+            "mnemonic"
+          ],
+          "runningNotes": [
+            "Destructive staging/dev operation: drops public schema before recreating it.",
+            "Uses ledgerDatabaseUrl as an environment variable; the database URL is not placed in command-line arguments.",
+            "Returns a redacted connection string, table list, and zeroed row-count health check."
+          ],
+          "inputs": {
+            "ledgerDatabaseUrl": ""
+          },
+          "setVars": {
+            "ledgerPostgresProvider": "response.json.provider",
+            "ledgerPostgresMissingTables": "response.json.missing"
           }
         },
         {
