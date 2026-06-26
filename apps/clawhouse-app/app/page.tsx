@@ -1,5 +1,7 @@
 import Script from "next/script";
 import { KeyMarketWalletBridge } from "./components/key-market-wallet-bridge";
+import { StoreBridge } from "./components/store-bridge";
+import { Toast } from "./components/toast";
 
 export default function Page() {
   return (
@@ -243,7 +245,8 @@ export default function Page() {
         </section>
       </main>
 
-      <div className="toast" id="toast">Preview action</div>
+      <Toast />
+      <StoreBridge />
       <KeyMarketWalletBridge />
 
       <section className="launch-agent-drawer" id="launch-agent" aria-labelledby="launchAgentTitle">

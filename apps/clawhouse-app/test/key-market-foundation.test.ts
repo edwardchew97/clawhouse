@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { nearBlocksTxUrl, shortAccount, shortHash } from "../app/lib/format";
 import { agentSelectionKey, errorMessage, firstRejectedMessage, normalizedAmount } from "../app/lib/key-market-utils";
-import { initialChainState, mergeChainState } from "../app/store/key-market-store";
+import { initialChainState, mergeChainState, useKeyMarketStore } from "../app/store/key-market-store";
 
 describe("format helpers", () => {
   test("shortAccount truncates only long ids", () => {
@@ -63,5 +63,21 @@ describe("mergeChainState mirrors legacy setChainState loading-clears", () => {
   test("explicit caller values win over implicit clears", () => {
     const merged = mergeChainState(initialChainState, { backend: {}, backendLoading: true });
     expect(merged.backendLoading).toBe(true);
+  });
+});
+
+describe("store showToast action", () => {
+  test("captures message + options and increments id so repeats re-trigger", () => {
+    const { showToast } = useKeyMarketStore.getState();
+    showToast("hello");
+    const first = useKeyMarketStore.getState().toast;
+    expect(first?.message).toBe("hello");
+    expect(first?.linkUrl).toBeUndefined();
+
+    showToast("with link", { linkUrl: "https://x", linkLabel: "Open" });
+    const second = useKeyMarketStore.getState().toast;
+    expect(second?.message).toBe("with link");
+    expect(second?.linkUrl).toBe("https://x");
+    expect(second?.id).toBe((first?.id ?? 0) + 1);
   });
 });

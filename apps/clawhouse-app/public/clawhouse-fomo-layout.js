@@ -1401,21 +1401,9 @@ function pnlClass(value) {
 }
 
 function showToast(message, options = {}) {
-  const toast = byId("toast");
-  toast.textContent = "";
-  toast.append(document.createTextNode(message));
-  toast.classList.toggle("actionable", Boolean(options.linkUrl));
-  if (options.linkUrl) {
-    const link = document.createElement("a");
-    link.href = options.linkUrl;
-    link.target = "_blank";
-    link.rel = "noreferrer";
-    link.textContent = options.linkLabel || "Open";
-    toast.append(link);
-  }
-  toast.classList.add("show");
-  window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => toast.classList.remove("show"), options.durationMs || (options.linkUrl ? 9000 : 1800));
+  // Ported to React (app/components/toast.tsx). The toast now lives in the Zustand
+  // store; this delegates through the transitional window handle (see store-bridge.tsx).
+  window.__clawhouseStore?.getState().showToast(message, options);
 }
 
 async function fetchJson(path) {

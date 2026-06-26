@@ -1,5 +1,8 @@
 import { create } from "zustand";
-import type { DemoChainState, TradeSide } from "../lib/key-market-types";
+import type { DemoChainState, ToastOptions, TradeSide } from "../lib/key-market-types";
+
+/** A toast currently requested for display. `id` re-triggers the timer on repeat messages. */
+export type ToastMessage = ToastOptions & { id: number; message: string };
 
 /**
  * Canonical client state for the key-market UI.
@@ -75,9 +78,11 @@ export type KeyMarketState = {
   activeAgentTab: AgentTab;
   activeEventId: string | null;
   activeDiscoveryFilters: Set<string>;
+  toast: ToastMessage | null;
 
   setChainState: (next: DemoChainState) => void;
   clearQuote: () => void;
+  showToast: (message: string, options?: ToastOptions) => void;
   setSelectedId: (id: string) => void;
   setTradeSide: (side: TradeSide) => void;
   setChartRange: (range: ChartRange) => void;
@@ -94,8 +99,11 @@ export const useKeyMarketStore = create<KeyMarketState>((set) => ({
   activeAgentTab: "chatroom",
   activeEventId: null,
   activeDiscoveryFilters: new Set<string>(),
+  toast: null,
 
   setChainState: (next) => set((s) => ({ chain: mergeChainState(s.chain, next) })),
+  showToast: (message, options) =>
+    set((s) => ({ toast: { id: (s.toast?.id ?? 0) + 1, message, ...options } })),
   clearQuote: () =>
     set((s) => ({
       chain: { ...s.chain, quote: null, quoteSide: null, protection: null, error: null },
