@@ -12,6 +12,7 @@ let activeChartRange = "24h";
 let activeAgentTab = "chatroom";
 let activeEventId = null;
 const activeDiscoveryFilters = new Set();
+let discoverySearchQuery = "";
 let chainState = {
   accountId: null,
   contractId: null,
@@ -678,6 +679,11 @@ function agentMatchesDiscoveryFilters(agent) {
   return true;
 }
 
+function agentMatchesDiscoverySearch(agent) {
+  if (!discoverySearchQuery) return true;
+  return String(agent?.strategy || "").toLowerCase().includes(discoverySearchQuery);
+}
+
 function activeDiscoveryFilterLabels() {
   const labels = {
     last24h: "Last 24h active",
@@ -739,9 +745,10 @@ function hasPaperActivity(agent) {
 function visibleDiscoveryAgents() {
   const rows = paperLeaderboardRows();
   const base = !rows ? [...agents] : agents.filter(hasPaperActivity);
-  const visible = base.length ? base : [...agents];
-  if (!activeDiscoveryFilters.size) return visible;
-  return visible.filter(agentMatchesDiscoveryFilters);
+  let visible = base.length ? base : [...agents];
+  if (discoverySearchQuery) visible = visible.filter(agentMatchesDiscoverySearch);
+  if (activeDiscoveryFilters.size) visible = visible.filter(agentMatchesDiscoveryFilters);
+  return visible;
 }
 
 function ensureVisibleSelectedAgent() {
@@ -1754,16 +1761,21 @@ function renderAgentList() {
   const sorted = sortedAgents();
   if (!sorted.length) {
     const filters = activeDiscoveryFilterLabels();
+    const searchLabel = discoverySearchQuery ? `strategy name "${escapeHtml(discoverySearchQuery)}"` : "";
+    const activeCriteria = [...filters, searchLabel].filter(Boolean);
     list.innerHTML = `
       <div class="agent-list-empty">
-        <span class="agent-list-empty-kicker">${filters.length ? `${filters.length} filters active` : "No matches"}</span>
+        <span class="agent-list-empty-kicker">${activeCriteria.length ? `${activeCriteria.length} filters active` : "No matches"}</span>
         <strong>No agents found</strong>
-        <p>${filters.length ? `No public agent matches ${escapeHtml(filters.join(" + "))}.` : "No public agents are available right now."}</p>
+        <p>${activeCriteria.length ? `No public agent matches ${activeCriteria.join(" + ")}.` : "No public agents are available right now."}</p>
         <button class="agent-clear-filters" type="button">Clear filters</button>
       </div>
     `;
     list.querySelector(".agent-clear-filters")?.addEventListener("click", () => {
       activeDiscoveryFilters.clear();
+      discoverySearchQuery = "";
+      const input = byId("agentStrategySearch");
+      if (input) input.value = "";
       render();
     });
     return;
@@ -1818,6 +1830,11 @@ function syncDiscoveryFilters() {
   });
 }
 
+function syncDiscoverySearch() {
+  const input = byId("agentStrategySearch");
+  if (input && input.value !== discoverySearchQuery) input.value = discoverySearchQuery;
+}
+
 document.querySelectorAll("[data-agent-filter]").forEach((input) => {
   input.addEventListener("change", () => {
     if (input.checked) {
@@ -1828,6 +1845,11 @@ document.querySelectorAll("[data-agent-filter]").forEach((input) => {
     activeEventId = null;
     render();
   });
+});
+
+byId("agentStrategySearch")?.addEventListener("input", (event) => {
+  discoverySearchQuery = String(event.target.value || "").trim().toLowerCase();
+  render();
 });
 
 function renderHero(agent) {
@@ -3003,6 +3025,7 @@ function renderNow() {
   const agent = selectedAgent();
   renderTicker();
   syncDiscoveryFilters();
+  syncDiscoverySearch();
   renderAgentList();
   if (!agent) {
     renderFreshStartEmpty();
