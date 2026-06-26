@@ -17,6 +17,8 @@ type DemoAgent = {
   name: string;
   displayName?: string;
   boardId?: string;
+  keyMarketStatus?: string;
+  keyMarketAgentId?: string | null;
 };
 
 type ToastOptions = {
@@ -614,6 +616,7 @@ export function KeyMarketWalletBridge() {
         return;
       }
       const selectedKey = agentSelectionKey(agent);
+      const marketUnavailable = keyMarketReadbackUnavailable(agent);
       const refreshStillApplies = () => {
         if (disposed || refreshId !== walletReadRefreshRef.current) return false;
         const currentAgent = demo.getSelectedAgent();
@@ -638,85 +641,102 @@ export function KeyMarketWalletBridge() {
         accountId: account?.accountId ?? null,
         contractId: config.contractId,
         networkId: config.networkId,
-        stateLoading: true,
-        quoteLoading: true,
-        activityLoading: true,
-        maxBuyLoading: Boolean(maxBuyPath),
+        stateLoading: !marketUnavailable,
+        quoteLoading: !marketUnavailable,
+        activityLoading: !marketUnavailable,
+        maxBuyLoading: Boolean(maxBuyPath && !marketUnavailable),
         backendLoading: true,
-        readAccessLoading: Boolean(account?.accountId),
+        readAccessLoading: Boolean(account?.accountId && !marketUnavailable),
         readAccessError: null,
       });
-      const statePromise = fetchJson<{ state: Record<string, unknown> }>(statePath)
-        .then((response) => {
-          const balance = Number(response.state?.holder_balance);
-          shouldRetryReadAccess = Number.isFinite(balance) ? balance > 0 : Boolean(account?.accountId);
-          renderRefreshState({
-            accountId: account?.accountId ?? null,
-            contractId: config.contractId,
-            networkId: config.networkId,
-            state: response.state,
-            stateLoading: false,
-            error: null,
+      const statePromise = marketUnavailable
+        ? Promise.resolve(null)
+        : fetchJson<{ state: Record<string, unknown> }>(statePath)
+          .then((response) => {
+            if (!response) return null;
+            const balance = Number(response.state?.holder_balance);
+            shouldRetryReadAccess = Number.isFinite(balance) ? balance > 0 : Boolean(account?.accountId);
+            renderRefreshState({
+              accountId: account?.accountId ?? null,
+              contractId: config.contractId,
+              networkId: config.networkId,
+              state: response.state,
+              stateLoading: false,
+              error: null,
+            });
+            return response.state;
+          })
+          .catch((error) => {
+            shouldRetryReadAccess = Boolean(account?.accountId);
+            renderRefreshState({
+              accountId: account?.accountId ?? null,
+              contractId: config.contractId,
+              networkId: config.networkId,
+              stateLoading: false,
+              error: errorMessage(error, "Key market state read failed."),
+            });
+            return null;
           });
-          return response.state;
-        })
-        .catch((error) => {
-          shouldRetryReadAccess = Boolean(account?.accountId);
-          renderRefreshState({
-            accountId: account?.accountId ?? null,
-            contractId: config.contractId,
-            networkId: config.networkId,
-            stateLoading: false,
-            error: errorMessage(error, "Key market state read failed."),
-          });
-          return null;
-        });
 
-      const quotePromise = fetchJson<QuoteResponse>(quotePath)
-        .then((response) => {
-          renderRefreshState({
-            accountId: account?.accountId ?? null,
-            contractId: config.contractId,
-            networkId: config.networkId,
-            quote: response.quote,
-            quoteSide: side,
-            protection: response.protection,
-            quoteLoading: false,
-            error: null,
+      const quotePromise = marketUnavailable
+        ? Promise.resolve()
+        : fetchJson<QuoteResponse>(quotePath)
+          .then((response) => {
+            renderRefreshState({
+              accountId: account?.accountId ?? null,
+              contractId: config.contractId,
+              networkId: config.networkId,
+              quote: response.quote,
+              quoteSide: side,
+              protection: response.protection,
+              quoteLoading: false,
+              error: null,
+            });
+          })
+          .catch((error) => {
+            renderRefreshState({
+              accountId: account?.accountId ?? null,
+              contractId: config.contractId,
+              networkId: config.networkId,
+              quoteLoading: false,
+              error: errorMessage(error, "Key market quote read failed."),
+            });
           });
-        })
-        .catch((error) => {
-          renderRefreshState({
-            accountId: account?.accountId ?? null,
-            contractId: config.contractId,
-            networkId: config.networkId,
-            quoteLoading: false,
-            error: errorMessage(error, "Key market quote read failed."),
-          });
-        });
 
-      const activityPromise = fetchJson<Record<string, unknown>>(activityPath)
-        .then((activity) => {
+      const activityPromise = marketUnavailable
+        ? Promise.resolve().then(() => {
           renderRefreshState({
             accountId: account?.accountId ?? null,
             contractId: config.contractId,
             networkId: config.networkId,
-            activity,
+            activity: { ok: true, agent_id: agent.id, count: 0, trades: [] },
             activityLoading: false,
             activityError: null,
+            error: null,
           });
         })
-        .catch((error) => {
-          renderRefreshState({
-            accountId: account?.accountId ?? null,
-            contractId: config.contractId,
-            networkId: config.networkId,
-            activityLoading: false,
-            activityError: errorMessage(error, "Key activity read failed."),
+        : fetchJson<Record<string, unknown>>(activityPath)
+          .then((activity) => {
+            renderRefreshState({
+              accountId: account?.accountId ?? null,
+              contractId: config.contractId,
+              networkId: config.networkId,
+              activity,
+              activityLoading: false,
+              activityError: null,
+            });
+          })
+          .catch((error) => {
+            renderRefreshState({
+              accountId: account?.accountId ?? null,
+              contractId: config.contractId,
+              networkId: config.networkId,
+              activityLoading: false,
+              activityError: errorMessage(error, "Key activity read failed."),
+            });
           });
-        });
 
-      const maxBuyPromise = maxBuyPath
+      const maxBuyPromise = maxBuyPath && !marketUnavailable
         ? fetchJson<Record<string, unknown>>(maxBuyPath)
           .then((maxBuy) => {
             renderRefreshState({
@@ -741,36 +761,38 @@ export function KeyMarketWalletBridge() {
           renderRefreshState({ accountId: account?.accountId ?? null, maxBuy: null, maxBuyLoading: false, maxBuyError: null });
         });
 
-      const activeAccessPromise = statePromise
-        .then((state) => ensureReadAccess(agent, state, refreshId))
-        .then((activeAccess) => {
-          restoredReadAccess = activeAccess;
-          renderRefreshState({
-            accountId: account?.accountId ?? null,
-            contractId: config.contractId,
-            networkId: config.networkId,
-            readAccess: activeAccess ? {
-              boardId: activeAccess.boardId,
-              holderAccountId: activeAccess.holderAccountId,
-              expiresAt: activeAccess.expiresAt,
-            } : null,
-            readAccessLoading: false,
-            readAccessError: null,
+      const activeAccessPromise = marketUnavailable
+        ? Promise.resolve(null)
+        : statePromise
+          .then((state) => ensureReadAccess(agent, state, refreshId))
+          .then((activeAccess) => {
+            restoredReadAccess = activeAccess;
+            renderRefreshState({
+              accountId: account?.accountId ?? null,
+              contractId: config.contractId,
+              networkId: config.networkId,
+              readAccess: activeAccess ? {
+                boardId: activeAccess.boardId,
+                holderAccountId: activeAccess.holderAccountId,
+                expiresAt: activeAccess.expiresAt,
+              } : null,
+              readAccessLoading: false,
+              readAccessError: null,
+            });
+            return activeAccess;
+          })
+          .catch((error) => {
+            const retryingReadAccess = Boolean(account?.accountId && shouldRetryReadAccess && retryAttempt < 3);
+            renderRefreshState({
+              accountId: account?.accountId ?? null,
+              contractId: config.contractId,
+              networkId: config.networkId,
+              readAccess: null,
+              readAccessLoading: retryingReadAccess,
+              readAccessError: retryingReadAccess ? null : errorMessage(error, "Room access refresh failed."),
+            });
+            return null;
           });
-          return activeAccess;
-        })
-        .catch((error) => {
-          const retryingReadAccess = Boolean(account?.accountId && shouldRetryReadAccess && retryAttempt < 3);
-          renderRefreshState({
-            accountId: account?.accountId ?? null,
-            contractId: config.contractId,
-            networkId: config.networkId,
-            readAccess: null,
-            readAccessLoading: retryingReadAccess,
-            readAccessError: retryingReadAccess ? null : errorMessage(error, "Room access refresh failed."),
-          });
-          return null;
-        });
 
       const backendPromise = activeAccessPromise
         .then(async (activeAccess) => {
@@ -808,6 +830,7 @@ export function KeyMarketWalletBridge() {
       await Promise.allSettled([statePromise, quotePromise, activityPromise, maxBuyPromise, activeAccessPromise, backendPromise]);
       const retryingRoomRead = refreshStillApplies()
         && account?.accountId
+        && !marketUnavailable
         && ((shouldRetryReadAccess && !restoredReadAccess) || shouldRetryBackend)
         && retryAttempt < 3;
       if (retryingRoomRead) {
@@ -1061,6 +1084,10 @@ async function fetchBackendBoard(agent: DemoAgent) {
 
 function agentSelectionKey(agent: DemoAgent) {
   return agent.boardId ?? agent.id;
+}
+
+function keyMarketReadbackUnavailable(agent: DemoAgent) {
+  return agent.keyMarketStatus === "unavailable";
 }
 
 function readAccessRetryAttempt(reason: string) {
