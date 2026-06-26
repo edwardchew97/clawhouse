@@ -28,6 +28,26 @@ export type DemoAgent = {
   keyMarketAgentId?: string | null;
 };
 
+/**
+ * The richer agent shape produced by the legacy `normalizeDiscoveryAgent`. The
+ * known display fields are typed; the index signature covers raw API sub-objects
+ * (keyMarket, pnl, paperActivity, …) that panels reach into. Fields get promoted
+ * out of the index signature as panels are ported and their reads are typed.
+ */
+export type LegacyAgent = DemoAgent & {
+  initials?: string;
+  color?: string;
+  bannerUrl?: string;
+  strategy?: string;
+  desc?: string;
+  holders?: number | null;
+  gate?: string;
+  last?: string;
+  pnl?: number | null;
+  discoveryIndex?: number;
+  [key: string]: unknown;
+};
+
 export type ToastOptions = {
   linkUrl?: string | null;
   linkLabel?: string;
@@ -74,6 +94,8 @@ export type DemoChainState = {
   statusTitle?: string;
   statusBody?: string;
   statusTone?: TradeTone;
+  discovery?: Record<string, unknown> | null;
+  discoveryError?: string | null;
 };
 
 export type DemoApi = {

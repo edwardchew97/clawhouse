@@ -253,6 +253,24 @@ function clearQuote() {
   };
 }
 
+// TRANSITIONAL (Phase 2): push the legacy globals into the React store so ported
+// panels read live data. Removed in Phase 4 with the rest of this file. The store
+// is a downstream replica here — legacy globals remain the source of truth until
+// the data layer itself is ported.
+function syncStore() {
+  window.__clawhouseStore?.getState().hydrate({
+    chain: chainState,
+    agents,
+    selectedId,
+    tradeSide,
+    activeChartRange,
+    activeAgentTab,
+    activeEventId,
+    discoveryLoading,
+    activeDiscoveryFilters: new Set(activeDiscoveryFilters),
+  });
+}
+
 function backendCacheKeyFromBackend(backend) {
   if (!backend || typeof backend !== "object") return "";
   return backend.boardId || backend.board?.id || "";
@@ -2792,6 +2810,7 @@ function openEvent(eventId) {
     return;
   }
   activeEventId = event.id;
+  syncStore();
   renderChartEvents(agent, null, model);
   renderBackendEventModal(agent, event);
   byId("eventModal").hidden = false;
@@ -2988,6 +3007,7 @@ function render() {
 }
 
 function renderNow() {
+  syncStore();
   const agent = selectedAgent();
   renderTicker();
   syncDiscoveryFilters();
@@ -3010,6 +3030,7 @@ document.querySelectorAll("[data-agent-tab]").forEach((button) => {
   button.addEventListener("click", () => {
     activeAgentTab = button.dataset.agentTab || "chatroom";
     syncAgentBaseTabs();
+    syncStore();
   });
 });
 
@@ -3022,6 +3043,7 @@ document.querySelectorAll(".ticket-tab").forEach((button) => {
     document.querySelectorAll(".ticket-tab").forEach((item) => item.classList.remove("active", "buy", "sell"));
     button.classList.add("active", tradeSide);
     renderTicket(agent);
+    syncStore();
     scheduleKeyMarketRefresh("side-change");
     dispatchUiEvent("clawhouse:side-change");
   });
@@ -3058,6 +3080,7 @@ function setChartRange(range) {
     renderFreshStartEmpty();
   }
   syncContentColumns();
+  syncStore();
   dispatchUiEvent("clawhouse:chart-range-change");
 }
 

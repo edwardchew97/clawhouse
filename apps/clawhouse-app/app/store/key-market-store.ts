@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { DemoChainState, ToastOptions, TradeSide } from "../lib/key-market-types";
+import type { DemoChainState, LegacyAgent, ToastOptions, TradeSide } from "../lib/key-market-types";
 
 /** A toast currently requested for display. `id` re-triggers the timer on repeat messages. */
 export type ToastMessage = ToastOptions & { id: number; message: string };
@@ -70,15 +70,29 @@ export function mergeChainState(current: DemoChainState, next: DemoChainState): 
   return { ...current, ...loadingClears, ...next };
 }
 
-export type KeyMarketState = {
+/** The slice of state the legacy script mirrors into the store each render. */
+export type LegacySnapshot = {
   chain: DemoChainState;
+  agents: LegacyAgent[];
   selectedId: string;
   tradeSide: TradeSide;
   activeChartRange: ChartRange;
   activeAgentTab: AgentTab;
   activeEventId: string | null;
+  discoveryLoading: boolean;
   activeDiscoveryFilters: Set<string>;
+};
+
+export type KeyMarketState = LegacySnapshot & {
   toast: ToastMessage | null;
+
+  /**
+   * TRANSITIONAL (Phase 2): wholesale-replace the read replica from the legacy
+   * script. While the legacy globals still own state, the store is a downstream
+   * mirror, so this replaces rather than merges. Replaced by React-owned state in
+   * Phase 3, after which the granular actions below are the only writers.
+   */
+  hydrate: (snapshot: Partial<LegacySnapshot>) => void;
 
   setChainState: (next: DemoChainState) => void;
   clearQuote: () => void;
@@ -93,14 +107,17 @@ export type KeyMarketState = {
 
 export const useKeyMarketStore = create<KeyMarketState>((set) => ({
   chain: initialChainState,
+  agents: [],
   selectedId: "",
   tradeSide: "buy",
   activeChartRange: "24h",
   activeAgentTab: "chatroom",
   activeEventId: null,
+  discoveryLoading: true,
   activeDiscoveryFilters: new Set<string>(),
   toast: null,
 
+  hydrate: (snapshot) => set(snapshot),
   setChainState: (next) => set((s) => ({ chain: mergeChainState(s.chain, next) })),
   showToast: (message, options) =>
     set((s) => ({ toast: { id: (s.toast?.id ?? 0) + 1, message, ...options } })),

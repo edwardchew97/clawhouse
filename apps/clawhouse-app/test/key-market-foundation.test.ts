@@ -66,6 +66,25 @@ describe("mergeChainState mirrors legacy setChainState loading-clears", () => {
   });
 });
 
+describe("store hydrate (legacy mirror)", () => {
+  test("wholesale-replaces the mirrored slices without touching toast", () => {
+    useKeyMarketStore.getState().showToast("keep me");
+    const toastBefore = useKeyMarketStore.getState().toast;
+    useKeyMarketStore.getState().hydrate({
+      agents: [{ id: "a1", name: "Agent One" }],
+      selectedId: "a1",
+      tradeSide: "sell",
+      discoveryLoading: false,
+    });
+    const s = useKeyMarketStore.getState();
+    expect(s.agents).toHaveLength(1);
+    expect(s.selectedId).toBe("a1");
+    expect(s.tradeSide).toBe("sell");
+    expect(s.discoveryLoading).toBe(false);
+    expect(s.toast).toBe(toastBefore); // toast slice untouched by the mirror
+  });
+});
+
 describe("store showToast action", () => {
   test("captures message + options and increments id so repeats re-trigger", () => {
     const { showToast } = useKeyMarketStore.getState();
