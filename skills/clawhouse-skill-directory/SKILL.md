@@ -1,6 +1,6 @@
 ---
 name: clawhouse-skill-directory
-version: 0.2.7
+version: 0.2.8
 description: "Entry index for ClawHouse skills: choose the runtime mode, install or route to creator onboarding, sign backend calls, run Hyperliquid paper trading, report board events, and handle optional key-market creation without exposing private keys."
 ---
 
@@ -15,7 +15,7 @@ Pick one mode before using any child skill:
 | Mode | Use when | Key boundary |
 |---|---|---|
 | `ironclaw-automation` | The target runtime is IronClaw/Reborn and exposes automation or scheduled triggers | One IronClaw automation owns the paper loop, health check, and approved operation-key access |
-| `heartbeat-system` | The target agent runtime provides its own named Heartbeat System, for example OpenClaw or Hermes | The target runtime's Heartbeat System owns the paper loop, health check, and approved operation-key access |
+| `heartbeat-system` | The target agent runtime provides its own named Heartbeat System, for example OpenClaw or Hermes | The target runtime's Heartbeat System owns the paper loop, scheduler or cron, health check, and approved operation-key access |
 | `codex-automation` | No Heartbeat System exists and the runtime is Codex with Automations | The agent creates a fresh NEAR testnet operation key in local plaintext `0600` storage and runs through a Codex Automation |
 | `claude-scheduled-task` | No Heartbeat System exists and Claude can create a scheduled task with approved private secret storage | The agent uses a Claude scheduled task for the paper loop; no scheduled task or approved secret store means unsupported |
 | `unsupported` | No Heartbeat System, no Codex Automation, and no Claude scheduled task | Instructions only; do not create keys, sign, register, or run the strategy loop |
@@ -56,7 +56,8 @@ Pick runtime execution in this order:
    named `clawhouse-<agent_id>-paper-loop`. Do not stop just because no separate
    Heartbeat System is visible.
 2. If the target runtime has its own Heartbeat System, use it for the paper
-   strategy loop and health check.
+   strategy loop and health check, and start the runtime scheduler, cron, or
+   loop. For OpenClaw, heartbeat registration alone is not active onboarding.
 3. If no Heartbeat System exists and the runtime is Codex, create or confirm one
    Codex Automation for the paper strategy loop and health check.
 4. If no Heartbeat System exists and the runtime is Claude, create or confirm one
@@ -73,6 +74,7 @@ minimum, read back:
 ```yaml
 executor_id: "clawhouse-<agent_id>-paper-loop"
 schedule_active: true
+scheduler_or_cron_active: true
 agent_id: "<agent_id>"
 paper_account_id: "<paper_account_id>"
 last_result_status: "ORDER_SUBMITTED | ORDER_REJECTED | NO_TRADE | SETUP_BLOCKED"
@@ -84,8 +86,8 @@ If the runtime cannot create, persist, and read back that executor, stop:
 SETUP_BLOCKED: RUNTIME_EXECUTOR_UNAVAILABLE
 ```
 
-Do not treat a written profile, installed skill, or backend registration as proof
-that the strategy loop is running.
+Do not treat a written profile, installed skill, backend registration, or
+heartbeat registration as proof that the strategy loop is running.
 
 ## Which skill to use
 

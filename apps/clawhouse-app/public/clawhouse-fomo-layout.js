@@ -89,6 +89,7 @@ const maxBuyApplies = (agent) => {
   const maxBuy = chainState.maxBuy;
   return Boolean(maxBuy && maxBuy.agent_id === agent.id && maxBuy.account_id === chainState.accountId);
 };
+const keyMarketReadbackUnavailable = (agent) => Boolean(agent && agent.keyMarketStatus === "unavailable");
 const readAccessApplies = (agent) => {
   if (!agent) return false;
   const access = chainState.readAccess;
@@ -124,6 +125,7 @@ const roomAccessLoading = (agent) => {
 function keyMarketUnavailable(agent) {
   if (!agent) return true;
   if (chainApplies(agent)) return false;
+  if (keyMarketReadbackUnavailable(agent)) return true;
   const message = String(chainState.error || "");
   return /Agent key market does not exist|WasmTrap\(Unreachable\)/i.test(message);
 }
@@ -275,11 +277,12 @@ function prepareAgentRead(agent) {
   if (!agent) return;
   const cached = hasCachedBackendForAgent(agent);
   restoreCachedBackendForAgent(agent);
+  const marketUnavailable = keyMarketUnavailable(agent);
   chainState = {
     ...chainState,
     backendLoading: !cached,
-    stateLoading: Boolean(chainState.accountId),
-    readAccessLoading: Boolean(chainState.accountId && !readAccessApplies(agent)),
+    stateLoading: Boolean(chainState.accountId && !marketUnavailable),
+    readAccessLoading: Boolean(chainState.accountId && !marketUnavailable && !readAccessApplies(agent)),
     readAccessError: null,
   };
 }
@@ -502,7 +505,7 @@ function paperLeaderboardRow(agent) {
 function paperActivity(agent) {
   if (!agent) return null;
   if (!backendApplies(agent) || !chainState.backend?.ok) return null;
-  if (!readAccessApplies(agent)) return null;
+  if (!readAccessApplies(agent) && !keyMarketUnavailable(agent)) return null;
   const activity = chainState.backend?.paperActivity;
   if (!activity?.ok || !activity.account) return null;
   const row = paperLeaderboardRow(agent);
@@ -521,10 +524,10 @@ function paperActivityLoading(agent) {
   if (!agent) return false;
   return Boolean(
     chainState.backendLoading
-    || keyStateInitialLoading(agent)
-    || (keyStateUnavailable(agent) && !readAccessApplies(agent))
-    || chainState.readAccessLoading
-    || roomAccessLoading(agent)
+    || (!keyMarketUnavailable(agent) && keyStateInitialLoading(agent))
+    || (!keyMarketUnavailable(agent) && keyStateUnavailable(agent) && !readAccessApplies(agent))
+    || (!keyMarketUnavailable(agent) && chainState.readAccessLoading)
+    || (!keyMarketUnavailable(agent) && roomAccessLoading(agent))
     || (readAccessApplies(agent) && !paperActivity(agent))
     || !chainState.backend
     || (chainState.backend && !backendApplies(agent))
@@ -1068,6 +1071,29 @@ function paperNetWorthValues(rows) {
   return equities;
 }
 
+function paperLeaderboardChartRows(agent) {
+  const row = paperLeaderboardRow(agent);
+  if (!row) return [];
+  const equity = asNumber(row.equity_usd);
+  if (equity === null) return [];
+  const pnlUsd = asNumber(row.paper_pnl_usd);
+  const latestTime = rowTimestamp(row);
+  const createdAt = Number.isFinite(latestTime) ? latestTime : Date.now();
+  if (pnlUsd === null) {
+    return [{ created_at: new Date(createdAt).toISOString(), equity_usd: equity }];
+  }
+  return [
+    {
+      created_at: new Date(createdAt - 60 * 60 * 1000).toISOString(),
+      equity_usd: equity - pnlUsd,
+    },
+    {
+      created_at: new Date(createdAt).toISOString(),
+      equity_usd: equity,
+    },
+  ];
+}
+
 function firstFilledPaperOrder(orderRows) {
   return orderRows
     .filter((order) => String(order?.status || "").toLowerCase() === "filled")
@@ -1219,7 +1245,7 @@ function chartModel(agent) {
 
   const activity = paperActivity(agent);
   const accessState = paperActivityAccessState(agent);
-  if (!activity && accessState) {
+  if (!activity && accessState && !keyMarketUnavailable(agent)) {
     return {
       values: [],
       points: [],
@@ -1227,6 +1253,21 @@ function chartModel(agent) {
       tone: accessState.tone,
       title: accessState.title,
       message: `${rangePrefix}${accessState.message}`,
+    };
+  }
+  const leaderboardRows = paperLeaderboardChartRows(agent);
+  if (!activity && keyMarketUnavailable(agent) && leaderboardRows.length >= 2) {
+    const values = paperNetWorthValues(leaderboardRows);
+    const points = chartPointsForValues(values, leaderboardRows);
+    return {
+      values,
+      points,
+      events: [],
+      tone: "success",
+      title: undefined,
+      source: "public paper leaderboard",
+      valueKind: "usd",
+      message: `${range.label} public paper leaderboard`,
     };
   }
   if (!activity && isPaperAgent(agent)) {
@@ -1464,6 +1505,26 @@ async function refreshKeyMarketRead(_reason) {
   const agent = selectedAgent();
   if (!agent) return;
   const refreshId = ++keyMarketRefreshId;
+  if (keyMarketReadbackUnavailable(agent)) {
+    chainState = {
+      ...chainState,
+      state: null,
+      quote: null,
+      quoteSide: null,
+      protection: null,
+      maxBuy: null,
+      maxBuyError: null,
+      stateLoading: false,
+      quoteLoading: false,
+      activityLoading: false,
+      maxBuyLoading: false,
+      activity: { ok: true, agent_id: agent.id, count: 0, trades: [] },
+      activityError: null,
+      error: null,
+    };
+    render();
+    return;
+  }
   const side = tradeSide === "sell" ? "sell" : "buy";
   const amount = normalizedAmount(byId("keyAmount")?.value || "1");
   const holderParam = chainState.accountId ? `&holderId=${encodeURIComponent(chainState.accountId)}` : "";

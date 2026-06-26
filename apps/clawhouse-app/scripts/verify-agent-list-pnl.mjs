@@ -6,7 +6,7 @@ const pageSource = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), 
 
 const agents = [
   agent("terminal_chad6", "terminal_chad6", 0.12, 5),
-  agent("codex_main_20260620", "codex_board", 0.25, 1),
+  agent("codex_main_20260620", "codex_board", 0.25, 1, "available"),
   agent("empty_agent", "empty_board", null, 0),
   agent("ledger-lane-agent-edge-20260620-0936-a13c", "ledger-lane-ft", null, 0),
   agent("ledger-lane-agent-edge-20260620-0936-a13c", "ledger-lane-flow", null, 0),
@@ -17,6 +17,7 @@ const events = new Map();
 let clearCrosshairCalls = 0;
 let chartTimeCoordinateOffset = 0;
 let visibleLogicalRangeListener = null;
+const keyMarketFetches = [];
 const ticketTabs = new Map();
 const amountButtons = new Map();
 const filterCheckboxes = new Map();
@@ -698,6 +699,7 @@ context.document = {
 context.fetch = async (path) => {
   const url = new URL(path, "http://localhost");
   if (url.pathname === "/api/key-market/state") {
+    keyMarketFetches.push(url.pathname);
     const agentId = url.searchParams.get("agentId");
     return jsonResponse({
       ok: true,
@@ -705,6 +707,7 @@ context.fetch = async (path) => {
     });
   }
   if (url.pathname === "/api/key-market/quote") {
+    keyMarketFetches.push(url.pathname);
     const side = url.searchParams.get("side");
     return jsonResponse({
       ok: true,
@@ -715,9 +718,11 @@ context.fetch = async (path) => {
     });
   }
   if (url.pathname === "/api/key-market/activity") {
+    keyMarketFetches.push(url.pathname);
     return jsonResponse({ ok: true, agent_id: url.searchParams.get("agentId"), trades: [] });
   }
   if (url.pathname === "/api/key-market/max-buy") {
+    keyMarketFetches.push(url.pathname);
     return jsonResponse(maxBuyFixture(url.searchParams.get("agentId"), url.searchParams.get("accountId"), "7"));
   }
   if (url.pathname !== "/api/agents") throw new Error(`Unexpected fetch: ${path}`);
@@ -756,16 +761,33 @@ const emptyRow = element("agentList").querySelectorAll("[data-agent]").find((row
 emptyRow.click();
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("empty_board", 0.56, null, []) });
 let emptyPaperChart = context.window.ClawHouseDemo.getChartModel();
-assert(emptyPaperChart.title === "Room data loading", "Room switches should show a loading state while key ownership is being checked.");
-assert(element("roomFeed").innerHTML.includes("chat-empty-loading"), "Room switches should render a skeleton instead of a guessed empty-state message.");
+assert(emptyPaperChart.title === "Agent has not started trading yet", "Key-market-disabled paper agents should not wait for key ownership.");
+assert(!element("roomFeed").innerHTML.includes("chat-empty-loading"), "Key-market-disabled paper agents should not render holder-gated loading skeletons.");
 await flushAsyncUi();
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("empty_board", 0.56, null, []) });
 emptyPaperChart = context.window.ClawHouseDemo.getChartModel();
 assert(emptyPaperChart.title === "Agent has not started trading yet", "Paper agents without public paper activity should say the agent has not started trading.");
 assert(emptyPaperChart.message.includes("No paper trades"), "Missing paper activity should explain that no paper trades have been recorded.");
 assert(element("chartEmptyKicker").textContent === "Paper trading inactive", "Missing paper activity should use the inactive chart kicker.");
+assert(keyMarketFetches.length === 0, "Key-market-disabled agents should not call NEAR key-market state, quote, activity, or max-buy endpoints.");
 let rendered = rows();
 assert(rendered.length === 5, "Agent Discovery should fall back to all rows when no paper leaderboard is available.");
+context.window.ClawHouseDemo.setChainState({
+  backend: selectedBackend("empty_board", 0.56, null, [
+    {
+      paper_account_id: "empty_board",
+      agent_id: "empty_agent",
+      equity_usd: 900,
+      paper_pnl_usd: -100,
+      paper_pnl_pct: -0.1,
+      created_at: "2026-06-24T01:23:45.000Z",
+    },
+  ]),
+});
+const disabledLeaderboardChart = context.window.ClawHouseDemo.getChartModel();
+assert(disabledLeaderboardChart.valueKind === "usd", "Key-market-disabled leaderboard fallback should render USD net worth.");
+assert(disabledLeaderboardChart.values[0] === 1000, "Key-market-disabled leaderboard fallback should infer starting equity from public P&L.");
+assert(disabledLeaderboardChart.values[1] === 900, "Key-market-disabled leaderboard fallback should use public equity as the latest chart value.");
 
 context.window.ClawHouseDemo.setChainState({ backend: selectedBackend("terminal_chad6", 0.99) });
 rendered = rows();
@@ -789,9 +811,8 @@ assert(element("agentList").innerHTML.includes("Equity $1,250.00"), "Agent rows 
 assert(!element("agentList").innerHTML.includes("0 keys"), "Agent rows should not show unhelpful zero key counts.");
 filterCheckbox("keyEnabled").click();
 rendered = rows();
-assert(rendered.length === 0, "Key trading filter should hide agents without a real key-market readback.");
-assert(element("agentList").innerHTML.includes("No agents found"), "Empty filtered Agent Discovery should render a clear empty state.");
-assert(element("agentList").innerHTML.includes("Clear filters"), "Empty filtered Agent Discovery should offer a filter reset action.");
+assert(rendered.length === 1, "Key trading filter should hide agents without a real key-market readback.");
+assert(rendered[0]?.id === "codex_main_20260620", "Key trading filter should keep the row with real key-market readback.");
 filterCheckbox("keyEnabled").click();
 rendered = rows();
 assert(rendered.length === 1, "Clearing key trading filter should restore paper-active rows.");
