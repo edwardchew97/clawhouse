@@ -2,14 +2,15 @@ import { NextResponse } from "next/server";
 import {
   formatQuote,
   getKeyMarketConfig,
-  getProvider,
+  maxBuyQuoteFromSupply,
   quoteProtection,
   requireAccountId,
   requireAgentId,
   routeError,
+  type MarketState,
   viewFunction,
+  viewAccount,
   yoctoToNearString,
-  type PriceQuote,
 } from "../lib";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +21,23 @@ export async function GET(request: Request) {
     const agentId = requireAgentId(searchParams.get("agentId"));
     const accountId = requireAccountId(searchParams.get("accountId"));
     const config = getKeyMarketConfig();
-    const account = await getProvider().viewAccount({ accountId });
+    const [account, state] = await Promise.all([
+      viewAccount(accountId),
+      viewFunction<MarketState>("get_state", {
+        agent_id: agentId,
+        holder_id: accountId,
+      }),
+    ]);
     const liquidYocto = account.amount > account.locked ? account.amount - account.locked : BigInt(0);
     const reserveYocto = BigInt(config.buyMaxReserveYocto);
     const spendableYocto = liquidYocto > reserveYocto ? liquidYocto - reserveYocto : BigInt(0);
-    const result = await maxBuyQuote(agentId, spendableYocto, config.buyMaxSearchLimit);
+    const result = maxBuyQuoteFromSupply(
+      agentId,
+      state.agent.supply,
+      spendableYocto,
+      config.buyMaxSearchLimit,
+      config.storageDepositYocto,
+    );
     const protection = result.quote ? quoteProtection("buy", result.quote) : null;
 
     return NextResponse.json({
@@ -46,52 +59,4 @@ export async function GET(request: Request) {
   } catch (error) {
     return routeError(error);
   }
-}
-
-async function maxBuyQuote(agentId: string, spendableYocto: bigint, searchLimit: number) {
-  let bestAmount = 0;
-  let bestQuote: PriceQuote | null = null;
-  let low = 1;
-  let high = 1;
-
-  while (high <= searchLimit) {
-    const quote = await buyQuote(agentId, high);
-    if (attachedDeposit(quote) > spendableYocto) break;
-    bestAmount = high;
-    bestQuote = quote;
-    low = high + 1;
-    high *= 2;
-  }
-
-  let cappedHigh = Math.min(high, searchLimit);
-  while (low <= cappedHigh) {
-    const mid = Math.floor((low + cappedHigh) / 2);
-    const quote = await buyQuote(agentId, mid);
-    if (attachedDeposit(quote) <= spendableYocto) {
-      bestAmount = mid;
-      bestQuote = quote;
-      low = mid + 1;
-    } else {
-      cappedHigh = mid - 1;
-    }
-  }
-
-  return {
-    amount: bestAmount,
-    quote: bestQuote,
-    capped: bestAmount >= searchLimit,
-  };
-}
-
-async function buyQuote(agentId: string, amount: number) {
-  return viewFunction<PriceQuote>("get_buy_price", {
-    agent_id: agentId,
-    amount: amount.toString(),
-  });
-}
-
-function attachedDeposit(quote: PriceQuote) {
-  const protection = quoteProtection("buy", quote);
-  if (!("attached_deposit" in protection)) return BigInt(0);
-  return BigInt(protection.attached_deposit ?? "0");
 }

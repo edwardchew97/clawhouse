@@ -8,11 +8,18 @@ const defaultBuyMaxReserveNear = "0.05";
 const defaultBuyMaxSearchLimit = 100_000;
 const slippageBps = BigInt(100);
 const bpsDenominator = BigInt(10_000);
+const yoctoPerNear = BigInt("1000000000000000000000000");
+const basePriceYocto = yoctoPerNear / BigInt(20);
+const curveScale = BigInt(2_000);
+const protocolFeeBps = BigInt(500);
+const creatorFeeBps = BigInt(500);
 
 type JsonRecord = Record<string, unknown>;
 
 let provider: JsonRpcProvider | null = null;
 let providerUrl = "";
+const viewCache = new Map<string, { expiresAt: number; promise: Promise<unknown> }>();
+const viewCacheTtlMs = 1500;
 
 export type PriceQuote = {
   agent_id: string;
@@ -71,9 +78,14 @@ export function getKeyMarketConfig() {
     storageDepositYocto,
     buyMaxReserveYocto,
     buyMaxSearchLimit: numberEnv(keyMarketEnv.buyMaxSearchLimit, defaultBuyMaxSearchLimit),
-    defaultAgentId: firstEnv([...keyMarketEnv.defaultAgentId]) ?? null,
+  defaultAgentId: firstEnv([...keyMarketEnv.defaultAgentId]) ?? null,
   };
 }
+
+export type AccountView = {
+  amount: bigint;
+  locked: bigint;
+};
 
 export function getProvider() {
   const { nodeUrl } = getKeyMarketConfig();
@@ -86,12 +98,21 @@ export function getProvider() {
 
 export async function viewFunction<T>(methodName: string, args: JsonRecord): Promise<T> {
   const { contractId } = getKeyMarketConfig();
-  const result = await getProvider().callFunction({
-    contractId,
-    method: methodName,
-    args,
+  const cacheKey = `view:${contractId}:${methodName}:${stableJson(args)}`;
+  return cachedView<T>(cacheKey, async () => {
+    const result = await getProvider().callFunction({
+      contractId,
+      method: methodName,
+      args,
+    });
+    return result as unknown as T;
   });
-  return result as T;
+}
+
+export async function viewAccount(accountId: string): Promise<AccountView> {
+  return cachedView(`account:${accountId}`, async () => {
+    return getProvider().viewAccount({ accountId }) as Promise<AccountView>;
+  });
 }
 
 export function requireAgentId(value: string | null) {
@@ -134,6 +155,45 @@ export function formatQuote(quote: PriceQuote) {
   };
 }
 
+export function localBuyQuote(agentId: string, supply: string | number | bigint, amount: string | number | bigint) {
+  const supplyBefore = integerValue(supply, "supply");
+  const quantity = positiveIntegerValue(amount, "amount");
+  const supplyAfter = supplyBefore + quantity;
+  const price = priceRange(supplyBefore, quantity);
+  return priceQuote(agentId, quantity, supplyBefore, supplyAfter, price, true);
+}
+
+export function maxBuyQuoteFromSupply(
+  agentId: string,
+  supply: string | number | bigint,
+  spendableYocto: bigint,
+  searchLimit: number,
+  storageDepositYocto: string,
+) {
+  let low = 1;
+  let high = searchLimit;
+  let bestAmount = 0;
+  let bestQuote: PriceQuote | null = null;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const quote = localBuyQuote(agentId, supply, mid);
+    if (buyAttachedDeposit(quote, storageDepositYocto) <= spendableYocto) {
+      bestAmount = mid;
+      bestQuote = quote;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return {
+    amount: bestAmount,
+    quote: bestQuote,
+    capped: bestAmount >= searchLimit,
+  };
+}
+
 export function formatState(state: MarketState) {
   return {
     ...state,
@@ -167,6 +227,10 @@ export function quoteProtection(side: "buy" | "sell", quote: PriceQuote) {
     min_payout_near: yoctoToNearString(minPayout.toString()),
     slippage_bps: slippageBps.toString(),
   };
+}
+
+export function buyAttachedDeposit(quote: PriceQuote, storageDepositYocto = getKeyMarketConfig().storageDepositYocto) {
+  return applyBps(BigInt(quote.total_cost), slippageBps) + BigInt(storageDepositYocto);
 }
 
 export function routeError(error: unknown) {
@@ -219,4 +283,77 @@ function applyBps(value: bigint, bps: bigint) {
 
 function removeBps(value: bigint, bps: bigint) {
   return (value * (bpsDenominator - bps)) / bpsDenominator;
+}
+
+function positiveIntegerValue(value: string | number | bigint, label: string) {
+  const parsed = integerValue(value, label);
+  if (parsed <= BigInt(0)) throw new RouteInputError(`${label} must be greater than zero`);
+  return parsed;
+}
+
+function integerValue(value: string | number | bigint, label: string) {
+  const normalized = value.toString();
+  if (!/^\d+$/.test(normalized)) throw new RouteInputError(`Invalid ${label}`);
+  return BigInt(normalized);
+}
+
+function priceRange(startSupply: bigint, amount: bigint) {
+  const end = startSupply + amount - BigInt(1);
+  const base = basePriceYocto * amount;
+  const squareSum = sumSquares(end) - (startSupply === BigInt(0) ? BigInt(0) : sumSquares(startSupply - BigInt(1)));
+  const curve = squareSum * yoctoPerNear / curveScale;
+  return base + curve;
+}
+
+function sumSquares(n: bigint) {
+  return n * (n + BigInt(1)) * (BigInt(2) * n + BigInt(1)) / BigInt(6);
+}
+
+function fee(price: bigint, bps: bigint) {
+  return price * bps / bpsDenominator;
+}
+
+function priceQuote(
+  agentId: string,
+  amount: bigint,
+  supplyBefore: bigint,
+  supplyAfter: bigint,
+  price: bigint,
+  isBuy: boolean,
+): PriceQuote {
+  const protocolFee = fee(price, protocolFeeBps);
+  const creatorFee = fee(price, creatorFeeBps);
+  const totalFees = protocolFee + creatorFee;
+  return {
+    agent_id: agentId,
+    amount: amount.toString(),
+    supply_before: supplyBefore.toString(),
+    supply_after: supplyAfter.toString(),
+    price: price.toString(),
+    protocol_fee: protocolFee.toString(),
+    creator_fee: creatorFee.toString(),
+    total_cost: isBuy ? (price + totalFees).toString() : "0",
+    payout: isBuy ? "0" : (price - totalFees).toString(),
+  };
+}
+
+async function cachedView<T>(key: string, load: () => Promise<T>) {
+  const now = Date.now();
+  const cached = viewCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    return cached.promise as Promise<T>;
+  }
+
+  const promise: Promise<T> = load();
+  viewCache.set(key, { expiresAt: now + viewCacheTtlMs, promise });
+  try {
+    return await promise;
+  } catch (error) {
+    if (viewCache.get(key)?.promise === promise) viewCache.delete(key);
+    throw error;
+  }
+}
+
+function stableJson(value: JsonRecord) {
+  return JSON.stringify(value, Object.keys(value).sort());
 }

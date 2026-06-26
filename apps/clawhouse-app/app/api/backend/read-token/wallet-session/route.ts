@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     const accountId = requireAccountIdValue(searchParams.get("accountId") ?? searchParams.get("account_id"));
     const authorization = ledgerAdminAuthorizationHeader();
     const session = readWalletSessionCookie(request, authorization);
-    if (!session) return invalidSession("missing_wallet_session");
+    if (!session) return invalidSession("missing_wallet_session", true);
     if (session.accountId !== accountId) return invalidSession("wallet_account_mismatch", true);
 
     return validSession({
@@ -90,7 +90,14 @@ function validSession(input: { accountId: string; expiresAt: string }) {
 }
 
 function invalidSession(reason: string, clearWallet = false) {
-  const response = NextResponse.json({ ok: true, valid: false, reason });
+  const response = NextResponse.json({
+    ok: true,
+    valid: false,
+    reason,
+    error_code: reason,
+    needs_auth: true,
+    hint_action: reason === "wallet_account_mismatch" ? "re_sign_wallet" : "request_wallet_session",
+  });
   response.headers.set("cache-control", "no-store");
   if (clearWallet) {
     clearHolderReadCookie(response);
