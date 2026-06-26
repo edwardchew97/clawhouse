@@ -408,7 +408,7 @@
       max-height: 896px;
       align-self: start;
       display: grid;
-      grid-template-rows: auto auto 1fr auto;
+      grid-template-rows: auto auto auto minmax(0, 1fr);
     }
 
     .panel-head {
@@ -450,7 +450,11 @@
       grid-auto-rows: max-content;
       align-content: start;
       gap: 6px;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: #353a3f transparent;
       background: transparent;
     }
 
@@ -489,6 +493,43 @@
       height: 11px;
       margin: 0;
       accent-color: #63d8bd;
+    }
+
+    .agent-search {
+      display: grid;
+      gap: 5px;
+      padding: 8px 10px 4px;
+    }
+
+    .agent-search label {
+      color: #8f959b;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .agent-search input {
+      width: 100%;
+      height: 30px;
+      min-width: 0;
+      padding: 0 9px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.025);
+      color: #f4f4f4;
+      font: inherit;
+      font-size: 11px;
+      outline: none;
+    }
+
+    .agent-search input::placeholder {
+      color: #5f666c;
+    }
+
+    .agent-search input:focus {
+      border-color: rgba(99, 216, 189, 0.38);
+      box-shadow: 0 0 0 2px rgba(99, 216, 189, 0.08);
     }
 
     .agent-list-empty {

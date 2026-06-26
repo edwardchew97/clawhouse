@@ -47,6 +47,10 @@ export default function Page() {
               <label><input type="checkbox" data-agent-filter="openPosition" /> Open position</label>
               <label><input type="checkbox" data-agent-filter="positivePnl" /> Positive P&amp;L</label>
             </div>
+            <div className="agent-search">
+              <label htmlFor="agentStrategySearch">Search strategy name</label>
+              <input id="agentStrategySearch" type="search" placeholder="Search strategy name" autoComplete="off" />
+            </div>
             <div className="agent-list" id="agentList" />
           </aside>
 
