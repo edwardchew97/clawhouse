@@ -27,7 +27,10 @@ export async function GET(request: Request) {
     const authorization = ledgerAdminAuthorizationHeader();
     const walletSessionResult = readWalletSession(request, authorization);
     if (!walletSessionResult.session) {
-      return invalidSession(walletSessionResult.reason, { clearWallet: walletSessionResult.clearWallet });
+      return invalidSession(
+        walletSessionResult.reason ?? "missing_wallet_session",
+        { clearWallet: walletSessionResult.clearWallet, needsAuth: true },
+      );
     }
     if (walletSessionResult.session.accountId !== holderAccountId) {
       return invalidSession("wallet_account_mismatch", { clearWallet: true });
@@ -86,6 +89,12 @@ export async function GET(request: Request) {
     if (error instanceof ReadTokenInputError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
     }
+    const status = typeof (error as { status?: unknown }).status === "number"
+      ? (error as { status: number }).status
+      : null;
+    if (status === 401 || status === 403) {
+      return invalidSession("read_access_unauthorized", { clearHolder: true, needsAuth: true });
+    }
     return backendError(error);
   }
 }
@@ -101,7 +110,9 @@ export async function DELETE() {
 function readWalletSession(request: Request, authorization: string) {
   try {
     const session = readWalletSessionCookie(request, authorization);
-    return session ? { session, reason: null, clearWallet: false } : { session: null, reason: "missing_wallet_session", clearWallet: false };
+    return session
+      ? { session, reason: null, clearWallet: false }
+      : { session: null, reason: "missing_wallet_session", clearWallet: false };
   } catch {
     return { session: null, reason: "invalid_wallet_session", clearWallet: true };
   }
@@ -143,8 +154,19 @@ function validSession(input: {
   return response;
 }
 
-function invalidSession(reason: string | null, options: { clearHolder?: boolean; clearWallet?: boolean } = {}) {
-  const response = NextResponse.json({ ok: true, valid: false, reason });
+function invalidSession(
+  reason: string | null,
+  options: { clearHolder?: boolean; clearWallet?: boolean; needsAuth?: boolean } = {},
+) {
+  const payload = {
+    ok: true,
+    valid: false,
+    reason,
+    error_code: reason,
+    needs_auth: options.needsAuth ?? false,
+    hint_action: reason === "wallet_account_mismatch" ? "re_sign_wallet" : "request_wallet_session",
+  };
+  const response = NextResponse.json(payload);
   response.headers.set("cache-control", "no-store");
   if (options.clearHolder) clearHolderReadCookie(response);
   if (options.clearWallet) {

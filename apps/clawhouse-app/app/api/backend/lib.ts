@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { firstEnv } from "../../lib/env";
 import { boardIdPattern } from "./board-id";
 
-const defaultBackendBaseUrl = "https://staging-clawhouse.lucis.finance";
+const defaultLocalBackendBaseUrl = "http://127.0.0.1:4321";
 
 type BackendFetchOptions = {
   headers?: HeadersInit;
@@ -11,16 +11,22 @@ type BackendFetchOptions = {
 };
 
 export function getBackendConfig() {
-  const baseUrl = trimTrailingSlash(
-    firstEnv([
-      "CLAWHOUSE_AGENT_API_BASE_URL",
-      "CLAWHOUSE_LEDGER_BASE_URL",
-      "NEXT_PUBLIC_CLAWHOUSE_AGENT_API_BASE_URL",
-    ]) ?? defaultBackendBaseUrl,
-  );
+  const baseUrl = firstEnv([
+    "CLAWHOUSE_AGENT_API_BASE_URL",
+    "CLAWHOUSE_LEDGER_BASE_URL",
+    "NEXT_PUBLIC_CLAWHOUSE_AGENT_API_BASE_URL",
+  ]) ?? (process.env.NODE_ENV === "production" ? undefined : defaultLocalBackendBaseUrl);
+
+  if (!baseUrl) {
+    throw new BackendConfigError(
+      "Backend base URL is not configured. Set CLAWHOUSE_AGENT_API_BASE_URL (or CLAWHOUSE_LEDGER_BASE_URL) for non-local environments.",
+    );
+  }
+
+  const trimmedBaseUrl = trimTrailingSlash(baseUrl);
 
   return {
-    baseUrl,
+    baseUrl: trimmedBaseUrl,
     defaultBoardId: firstEnv(["CLAWHOUSE_DEFAULT_LEDGER_BOARD_ID"]) ?? null,
   };
 }
@@ -28,7 +34,9 @@ export function getBackendConfig() {
 export function ledgerAdminAuthorizationHeader() {
   const token = firstEnv(["CLAWHOUSE_LEDGER_ADMIN_TOKEN", "AGENT_BOARD_LEDGER_ADMIN_TOKEN"]);
   if (!token) {
-    throw new BackendConfigError("CLAWHOUSE_LEDGER_ADMIN_TOKEN is not configured");
+    throw new BackendConfigError(
+      "CLAWHOUSE_LEDGER_ADMIN_TOKEN or AGENT_BOARD_LEDGER_ADMIN_TOKEN is not configured",
+    );
   }
   return `Bearer ${token}`;
 }
@@ -78,7 +86,7 @@ export function backendError(error: unknown) {
     return NextResponse.json({ ok: false, error: error.message, status: error.status }, { status: error.status });
   }
   if (error instanceof BackendConfigError) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: error.message }, { status: 503 });
   }
 
   console.error(error);

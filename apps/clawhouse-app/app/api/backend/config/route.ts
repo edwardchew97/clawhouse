@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
-import { publicBackendConfig } from "../lib";
+import { backendError, publicBackendConfig } from "../lib";
 
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  return NextResponse.json({
-    ok: true,
-    config: publicBackendConfig(),
-  });
+  try {
+    return NextResponse.json({
+      ok: true,
+      config: publicBackendConfig(),
+    });
+  } catch (error) {
+    return backendError(error);
+  }
 }

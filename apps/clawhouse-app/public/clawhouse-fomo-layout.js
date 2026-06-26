@@ -40,6 +40,9 @@ let chainState = {
   error: null
 };
 const backendCache = new Map();
+const inFlightFetches = new Map();
+let renderFrame = 0;
+let roomFeedClickBound = false;
 
 const TICKER_PX_PER_SECOND = 18;
 const BACKEND_REFRESH_MS = 60_000;
@@ -1416,17 +1419,38 @@ function showToast(message, options = {}) {
 }
 
 async function fetchJson(path) {
-  const response = await fetch(path, { cache: "no-store" });
-  const data = await response.json();
-  if (!response.ok || data.ok === false) {
-    throw new Error(data.error || `Request failed: ${response.status}`);
-  }
-  return data;
+  const existing = inFlightFetches.get(path);
+  if (existing) return existing;
+
+  const responsePromise = (async () => {
+    const response = await fetch(path, { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok || data.ok === false) {
+      throw new Error(data.error || `Request failed: ${response.status}`);
+    }
+    return data;
+  })();
+
+  inFlightFetches.set(path, responsePromise);
+  responsePromise.finally(() => {
+    if (inFlightFetches.get(path) === responsePromise) {
+      inFlightFetches.delete(path);
+    }
+  });
+
+  return responsePromise;
 }
 
 function normalizedAmount(value) {
-  const trimmed = String(value || "").trim();
-  return /^[1-9]\d{0,5}$/.test(trimmed) ? trimmed : "1";
+  const parsed = Number(String(value || "").trim());
+  if (!Number.isFinite(parsed) || parsed <= 0) return "1";
+  return String(Math.max(1, Math.min(Math.floor(parsed), 999999)));
+}
+
+function normalizedAmountOrZero(value) {
+  const parsed = Number(String(value || "").trim());
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Math.floor(parsed);
 }
 
 function firstRejectedMessage(results) {
@@ -1532,6 +1556,7 @@ async function refreshKeyMarketRead(_reason) {
   const quotePath = `/api/key-market/quote?side=${side}&agentId=${encodeURIComponent(agent.id)}&amount=${encodeURIComponent(amount)}`;
   const activityPath = `/api/key-market/activity?agentId=${encodeURIComponent(agent.id)}&limit=7`;
   const shouldRefreshMaxBuy = chainState.accountId
+    && side === "buy"
     && _reason !== "amount-change"
     && _reason !== "side-change";
   const maxBuyPath = `/api/key-market/max-buy?agentId=${encodeURIComponent(agent.id)}&accountId=${encodeURIComponent(chainState.accountId || "")}`;
@@ -1548,36 +1573,30 @@ async function refreshKeyMarketRead(_reason) {
     .then((data) => {
       if (refreshId !== keyMarketRefreshId) return;
       chainState = { ...chainState, state: data.state, stateLoading: false, error: null };
-      render();
     })
     .catch((error) => {
       if (refreshId !== keyMarketRefreshId) return;
       chainState = { ...chainState, stateLoading: false, error: errorMessage(error, "Key market state read failed.") };
-      render();
     });
 
   const quotePromise = fetchJson(quotePath)
     .then((data) => {
       if (refreshId !== keyMarketRefreshId) return;
       chainState = { ...chainState, quote: data.quote, quoteSide: side, protection: data.protection, quoteLoading: false, error: null };
-      render();
     })
     .catch((error) => {
       if (refreshId !== keyMarketRefreshId) return;
       chainState = { ...chainState, quoteLoading: false, error: errorMessage(error, "Key market quote read failed.") };
-      render();
     });
 
   const activityPromise = fetchJson(activityPath)
     .then((data) => {
       if (refreshId !== keyMarketRefreshId) return;
       chainState = { ...chainState, activity: data, activityLoading: false, activityError: null };
-      render();
     })
     .catch((error) => {
       if (refreshId !== keyMarketRefreshId) return;
       chainState = { ...chainState, activityLoading: false, activityError: errorMessage(error, "Key activity read failed.") };
-      render();
     });
 
   const maxBuyPromise = shouldRefreshMaxBuy
@@ -1585,20 +1604,20 @@ async function refreshKeyMarketRead(_reason) {
       .then((data) => {
         if (refreshId !== keyMarketRefreshId) return;
         chainState = { ...chainState, maxBuy: data, maxBuyLoading: false, maxBuyError: null };
-        render();
       })
       .catch((error) => {
         if (refreshId !== keyMarketRefreshId) return;
         chainState = { ...chainState, maxBuyLoading: false, maxBuyError: errorMessage(error, "Max buy read failed.") };
-        render();
       })
     : Promise.resolve().then(() => {
       if (refreshId !== keyMarketRefreshId) return;
       chainState = { ...chainState, maxBuyLoading: false };
-      render();
     });
 
   await Promise.allSettled([statePromise, quotePromise, activityPromise, maxBuyPromise]);
+  if (refreshId === keyMarketRefreshId) {
+    render();
+  }
 }
 
 async function loadDiscoveryAgents() {
@@ -2080,9 +2099,17 @@ function renderRoom(agent) {
     </article>
   `).join("");
 
-  document.querySelectorAll("[data-event]").forEach((button) => {
-    button.addEventListener("click", () => openEvent(button.dataset.event));
-  });
+  if (!roomFeedClickBound) {
+    const roomFeed = byId("roomFeed");
+    roomFeed?.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) return;
+      const eventButton = event.target.closest("[data-event]");
+      if (eventButton?.dataset.event) {
+        openEvent(eventButton.dataset.event);
+      }
+    });
+    roomFeedClickBound = true;
+  }
 }
 
 function keyholderRows(agent) {
@@ -2319,7 +2346,7 @@ function yoctoNearLabel(value) {
 
 function renderTicket(agent) {
   const keyAmount = byId("keyAmount");
-  const amount = Math.max(Number(keyAmount?.value || 1), 0);
+  const amount = normalizedAmountOrZero(keyAmount?.value);
   const balance = holderBalance(agent);
   const maxAmount = maxAmountForSide(agent);
   const busy = Boolean(chainState.pending);
@@ -2965,6 +2992,14 @@ function syncContentColumns() {
   });
 }
 function render() {
+  if (renderFrame) return;
+  renderFrame = window.requestAnimationFrame(() => {
+    renderFrame = 0;
+    renderNow();
+  });
+}
+
+function renderNow() {
   const agent = selectedAgent();
   renderTicker();
   syncDiscoveryFilters();
@@ -3074,7 +3109,7 @@ if (tradeButton) {
   tradeButton.addEventListener("click", () => {
     const agent = selectedAgent();
     if (!agent) return;
-    const amount = Math.max(Number(byId("keyAmount")?.value || 1), 0);
+    const amount = normalizedAmountOrZero(byId("keyAmount")?.value);
     if (amount <= 0) {
       showToast("Enter a key amount first.");
       return;
@@ -3083,7 +3118,7 @@ if (tradeButton) {
       showToast(`No ${agentTitle(agent)} key to sell.`);
       return;
     }
-    showToast("Connect Wallet to continue.");
+    // Bridge owns the connect/submit flow; avoid duplicate UX hints here.
   });
 }
 
