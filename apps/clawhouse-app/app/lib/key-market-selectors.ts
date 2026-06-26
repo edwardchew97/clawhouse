@@ -9,7 +9,7 @@
  */
 
 import type { DemoChainState, LegacyAgent, TradeSide } from "./key-market-types";
-import { asNumber, nearLabel, normalizePct } from "./key-market-format";
+import { asNumber, nearLabel, normalizePct, shortAccount, titleCase, yoctoNearLabel } from "./key-market-format";
 
 export type SelectorContext = {
   chain: DemoChainState;
@@ -172,4 +172,69 @@ export function backendPnl(s: SelectorContext, agent: LegacyAgent | null): numbe
   const paper = paperLeaderboardRow(s, agent);
   if (paper) return normalizePct(paper.paper_pnl_pct);
   return selectedBackendPnl(s, agent) ?? (agent ? discoveryPnl(agent) : null);
+}
+
+// --- Key trading activity -------------------------------------------------
+
+export type KeyTrade = Rec & {
+  side?: string;
+  amount?: string;
+  trader_id?: string;
+  tx_hash?: string;
+  network_id?: string;
+};
+
+export type KeyActivityRow = {
+  title: string;
+  amountLabel: string;
+  traderLabel: string;
+  traderUrl: string | null;
+  side: string;
+  linkUrl: string | null;
+  tone: "buy" | "sell";
+};
+
+export function keyActivityTrades(s: SelectorContext, agent: LegacyAgent | null): KeyTrade[] {
+  const activity = rec(s.chain.activity);
+  if (!agent || !activity || activity.agent_id !== agent.id) return [];
+  return Array.isArray(activity.trades) ? (activity.trades as KeyTrade[]) : [];
+}
+
+export function keyActivityLoading(s: SelectorContext, agent: LegacyAgent | null) {
+  return Boolean(agent && s.chain.activityLoading);
+}
+
+export function keyActivityInitialLoading(s: SelectorContext, agent: LegacyAgent | null) {
+  return keyActivityLoading(s, agent) && !keyActivityTrades(s, agent).length;
+}
+
+function nearBlocksHost(networkId: unknown) {
+  return networkId === "mainnet" ? "nearblocks.io" : "testnet.nearblocks.io";
+}
+
+export function keyTradeValueLabel(trade: KeyTrade) {
+  const rawValue = trade.side === "sell" ? trade.payout : trade.total_cost;
+  return yoctoNearLabel(rawValue || trade.price);
+}
+
+export function keyTradeExplorerUrl(trade: KeyTrade) {
+  if (!trade.tx_hash) return null;
+  return `https://${nearBlocksHost(trade.network_id)}/txns/${encodeURIComponent(String(trade.tx_hash))}`;
+}
+
+export function keyTradeAccountUrl(trade: KeyTrade) {
+  if (!trade.trader_id) return null;
+  return `https://${nearBlocksHost(trade.network_id)}/address/${encodeURIComponent(String(trade.trader_id))}`;
+}
+
+export function keyActivityRows(s: SelectorContext, agent: LegacyAgent | null): KeyActivityRow[] {
+  return keyActivityTrades(s, agent).map((trade) => ({
+    title: titleCase(trade.side),
+    amountLabel: `${trade.amount} key${trade.amount === "1" ? "" : "s"}`,
+    traderLabel: shortAccount(String(trade.trader_id ?? "")),
+    traderUrl: keyTradeAccountUrl(trade),
+    side: keyTradeValueLabel(trade),
+    linkUrl: keyTradeExplorerUrl(trade),
+    tone: trade.side === "sell" ? "sell" : "buy",
+  }));
 }

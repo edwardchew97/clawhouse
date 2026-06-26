@@ -2255,41 +2255,9 @@ function renderAgentBase(agent) {
   syncAgentBaseTabs();
 }
 
-function renderKeyActivity(agent) {
-  setActivityHeader("Key Trading Activity", "NEAR testnet key market", keyActivityLoading(agent));
-  if (keyActivityInitialLoading(agent)) {
-    byId("keyActivityList").innerHTML = loadingRows(3);
-    return;
-  }
-  const rows = keyActivityRows(agent);
-  if (!rows.length) {
-    renderBackendEmpty(
-      "keyActivityList",
-      chainState.activityError ? "Key activity unavailable" : "No verified key trades yet",
-      chainState.activityError || "Verified ClawHouse key buy/sell reports will appear here."
-    );
-    return;
-  }
-
-  byId("keyActivityList").innerHTML = rows.slice(0, 7).map((row) => `
-    <div class="activity-row key-activity-row ${escapeHtml(row.tone)}">
-      <span class="activity-action">${escapeHtml(row.title)}</span>
-      <span class="activity-main">
-        <b>${escapeHtml(row.amountLabel)}</b>
-        <span>by ${row.traderUrl ? `<a href="${escapeHtml(row.traderUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.traderLabel)}</a>` : escapeHtml(row.traderLabel)}</span>
-      </span>
-      <span class="activity-value">${row.linkUrl ? `<a href="${escapeHtml(row.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(row.side)}</a>` : escapeHtml(row.side)}</span>
-    </div>
-  `).join("");
-}
-
-function setActivityHeader(title, subtitle, loading = false) {
-  const titleNode = byId("activityPanelTitle");
-  titleNode.textContent = title;
-  titleNode.classList.toggle("is-refreshing", loading);
-  byId("activityPanelSub").textContent = subtitle;
-}
-
+// Key trading activity panel ported to React
+// (app/components/key-market/key-activity-panel.tsx). keyActivityRows below is
+// retained only as long as other legacy panels reference its sibling helpers.
 function keyActivityRows(agent) {
   const rows = [];
   const trades = keyActivityTrades(agent);
@@ -3008,7 +2976,6 @@ function renderNow() {
   renderGateState(agent);
   renderHero(agent);
   renderAgentBase(agent);
-  renderKeyActivity(agent);
   renderTicket(agent);
   bindUnlockButtons();
   syncContentColumns();

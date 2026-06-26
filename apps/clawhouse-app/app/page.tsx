@@ -3,6 +3,7 @@ import { KeyMarketWalletBridge } from "./components/key-market-wallet-bridge";
 import { StoreBridge } from "./components/store-bridge";
 import { Toast } from "./components/toast";
 import { TopMarketStrip } from "./components/key-market/top-market-strip";
+import { KeyActivityPanel } from "./components/key-market/key-activity-panel";
 
 export default function Page() {
   return (
@@ -216,20 +217,7 @@ export default function Page() {
               </div>
             </section>
 
-            <section className="panel key-activity">
-              <div className="key-activity-head">
-                <div>
-                  <div className="panel-title" id="activityPanelTitle">Key Trading Activity</div>
-                  <div className="panel-sub" id="activityPanelSub">NEAR testnet key market</div>
-                </div>
-              </div>
-              <div className="activity-list key-activity-list" id="keyActivityList">
-                <div className="backend-empty">
-                  <span>Reading key market</span>
-                  <strong>Waiting for NEAR testnet key-market state.</strong>
-                </div>
-              </div>
-            </section>
+            <KeyActivityPanel />
           </aside>
         </section>
       </main>
