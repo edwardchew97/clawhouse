@@ -7,6 +7,7 @@ import {
   publicBackendConfig,
   requireBoardId,
 } from "../lib";
+import { viewFunction } from "../../key-market/lib";
 import { paperAccountIdForBoard } from "./paper-activity";
 import {
   clearHolderReadCookie,
@@ -73,9 +74,11 @@ export async function GET(request: Request) {
     const boardValue = settledValue(board);
     const paperLeaderboardValue = settledValue(paperLeaderboard);
     const paperAccountId = paperAccountIdForBoard(boardValue, paperLeaderboardValue, boardId);
+    const keyMarketUnavailable = await keyMarketIsUnavailable(boardValue);
+    const publicPaperOptions = keyMarketUnavailable ? serviceDetailOptions() : detailOptions;
     const paperActivity = paperAccountId
       ? await Promise.allSettled([
-          fetchBackendJson(`/paper/accounts/${encodeURIComponent(paperAccountId)}/activity?limit=240`, detailOptions),
+          fetchBackendJson(`/paper/accounts/${encodeURIComponent(paperAccountId)}/activity?limit=240`, publicPaperOptions),
         ]).then((results) => results[0])
       : null;
 
@@ -90,6 +93,7 @@ export async function GET(request: Request) {
       balanceChanges: settledValue(balanceChanges),
       prices: settledValue(prices),
       paperLeaderboard: paperLeaderboardValue,
+      keyMarket: keyMarketUnavailable ? { status: "unavailable" } : { status: "unknown" },
       paperActivity: paperActivity ? settledValue(paperActivity) : null,
       errors: {
         board: settledError(board),
@@ -107,6 +111,31 @@ export async function GET(request: Request) {
     return response;
   } catch (error) {
     return backendError(error);
+  }
+}
+
+async function keyMarketIsUnavailable(board: unknown) {
+  const agentId = agentIdFromBoard(board);
+  if (!agentId) return false;
+  try {
+    return await viewFunction("get_agent", { agent_id: agentId }) === null;
+  } catch {
+    return false;
+  }
+}
+
+function agentIdFromBoard(board: unknown) {
+  if (!board || typeof board !== "object") return null;
+  const value = (board as { agent_id?: unknown; agentId?: unknown }).agent_id
+    ?? (board as { agent_id?: unknown; agentId?: unknown }).agentId;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function serviceDetailOptions() {
+  try {
+    return { headers: { authorization: ledgerAdminAuthorizationHeader() } };
+  } catch {
+    return undefined;
   }
 }
 
