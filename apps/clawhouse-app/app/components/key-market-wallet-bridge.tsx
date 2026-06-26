@@ -2,111 +2,22 @@
 
 import { useEffect, useRef } from "react";
 import { NearConnector, type Account, type NearWalletBase } from "@hot-labs/near-connect";
-
-type TradeSide = "buy" | "sell";
-type TradeTone = "idle" | "pending" | "success" | "error";
-
-type KeyMarketConfig = {
-  networkId: "testnet";
-  contractId: string;
-  gas: string;
-};
-
-type DemoAgent = {
-  id: string;
-  name: string;
-  displayName?: string;
-  boardId?: string;
-  keyMarketStatus?: string;
-  keyMarketAgentId?: string | null;
-};
-
-type ToastOptions = {
-  linkUrl?: string | null;
-  linkLabel?: string;
-  durationMs?: number;
-};
-
-type ReadAccessState = {
-  boardId: string;
-  holderAccountId: string;
-  expiresAt: string;
-};
-
-type WalletSessionState = {
-  accountId: string;
-  expiresAt: string;
-};
-
-type DemoChainState = {
-  accountId?: string | null;
-  contractId?: string;
-  networkId?: string;
-  pending?: boolean;
-  phase?: "idle" | "connecting" | "authenticating" | "quoting" | "signing" | "refreshing";
-  lastTxHash?: string | null;
-  explorerUrl?: string | null;
-  state?: Record<string, unknown> | null;
-  quote?: Record<string, unknown> | null;
-  quoteSide?: TradeSide | null;
-  protection?: Record<string, unknown> | null;
-  maxBuy?: Record<string, unknown> | null;
-  maxBuyError?: string | null;
-  stateLoading?: boolean;
-  quoteLoading?: boolean;
-  maxBuyLoading?: boolean;
-  activityLoading?: boolean;
-  backendLoading?: boolean;
-  readAccessLoading?: boolean;
-  activity?: Record<string, unknown> | null;
-  activityError?: string | null;
-  backend?: Record<string, unknown> | null;
-  readAccess?: ReadAccessState | null;
-  readAccessError?: string | null;
-  error?: string | null;
-  statusTitle?: string;
-  statusBody?: string;
-  statusTone?: TradeTone;
-};
-
-type DemoApi = {
-  getSelectedAgent: () => DemoAgent | null;
-  getTradeSide: () => TradeSide;
-  getKeyAmount: () => string;
-  setChainState: (state: DemoChainState) => void;
-  showToast: (message: string, options?: ToastOptions) => void;
-};
-
-type QuoteResponse = {
-  quote: Record<string, unknown>;
-  protection: {
-    attached_deposit?: string;
-    max_price?: string;
-    min_payout?: string;
-  };
-};
-
-type WalletSessionChallengeResponse = {
-  challenge: {
-    challenge: string;
-    message: string;
-    recipient: string;
-    nonce: string;
-  };
-};
-
-type WalletSessionResponse = {
-  valid: boolean;
-  accountId?: string;
-  expiresAt?: string;
-};
-
-type ReadSessionResponse = {
-  valid: boolean;
-  boardId?: string;
-  holderAccountId?: string;
-  expiresAt?: string;
-};
+import { nearBlocksTxUrl, shortAccount, shortHash } from "../lib/format";
+import { agentSelectionKey, errorMessage, firstRejectedMessage, normalizedAmount } from "../lib/key-market-utils";
+import type {
+  DemoAgent,
+  DemoApi,
+  DemoChainState,
+  KeyMarketConfig,
+  QuoteResponse,
+  ReadAccessState,
+  ReadSessionResponse,
+  ToastOptions,
+  TradeSide,
+  WalletSessionChallengeResponse,
+  WalletSessionResponse,
+  WalletSessionState,
+} from "../lib/key-market-types";
 
 declare global {
   interface Window {
@@ -1082,10 +993,6 @@ async function fetchBackendBoard(agent: DemoAgent) {
   return fetchJson<Record<string, unknown>>(`/api/backend/board?boardId=${encodeURIComponent(boardId)}`);
 }
 
-function agentSelectionKey(agent: DemoAgent) {
-  return agent.boardId ?? agent.id;
-}
-
 function keyMarketReadbackUnavailable(agent: DemoAgent) {
   return agent.keyMarketStatus === "unavailable";
 }
@@ -1117,11 +1024,6 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
-function normalizedAmount(value: string) {
-  const trimmed = value.trim();
-  return /^[1-9]\d{0,5}$/.test(trimmed) ? trimmed : "1";
-}
-
 function base64UrlToBytes(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
@@ -1131,15 +1033,6 @@ function base64UrlToBytes(value: string) {
 function requireString(value: unknown, message: string) {
   if (typeof value !== "string" || !value) throw new Error(message);
   return value;
-}
-
-function firstRejectedMessage(results: PromiseSettledResult<unknown>[]) {
-  const rejected = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
-  return rejected ? errorMessage(rejected.reason, "Key market read failed.") : null;
-}
-
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 function extractTxHash(result: unknown) {
@@ -1171,16 +1064,3 @@ function stringifyFailure(value: unknown) {
   }
 }
 
-function shortHash(value: string) {
-  return `${value.slice(0, 6)}...${value.slice(-4)}`;
-}
-
-function nearBlocksTxUrl(txHash: string, networkId: string) {
-  if (!txHash) return null;
-  const host = networkId === "testnet" ? "testnet.nearblocks.io" : "nearblocks.io";
-  return `https://${host}/txns/${encodeURIComponent(txHash)}`;
-}
-
-function shortAccount(accountId: string) {
-  return accountId.length > 20 ? `${accountId.slice(0, 10)}...${accountId.slice(-7)}` : accountId;
-}
