@@ -44,6 +44,8 @@ declare global {
     __clawhouseLegacy?: {
       chartModel: (agent: LegacyAgent | null) => ChartModel;
       openEvent: (eventId: string) => void;
+      selectAgent: (id: string) => void;
+      clearDiscoveryFilters: () => void;
     };
   }
 }
@@ -57,4 +59,14 @@ export function legacyChartModel(agent: LegacyAgent | null): ChartModel | null {
 /** Open the (still-legacy) event modal for an event id. Removed when the modal ports. */
 export function legacyOpenEvent(eventId: string) {
   window.__clawhouseLegacy?.openEvent(eventId);
+}
+
+/** Drive the legacy-authoritative agent selection (chart + ticket still read it). */
+export function legacySelectAgent(id: string) {
+  window.__clawhouseLegacy?.selectAgent(id);
+}
+
+/** Clear the legacy-owned discovery filters. */
+export function legacyClearDiscoveryFilters() {
+  window.__clawhouseLegacy?.clearDiscoveryFilters();
 }

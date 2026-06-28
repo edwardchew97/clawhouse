@@ -1628,7 +1628,7 @@ async function refreshKeyMarketRead(_reason) {
 
 async function loadDiscoveryAgents() {
   discoveryLoading = true;
-  renderAgentList();
+  render();
 
   try {
     const response = await fetch("/api/agents", { cache: "no-store" });
@@ -1726,98 +1726,7 @@ function syncTickerSpeed() {
   track.style.setProperty("--ticker-duration", `${duration.toFixed(2)}s`);
 }
 
-function agentListSkeletonRows() {
-  return Array.from({ length: 8 }, () => `
-    <div class="agent-row agent-row-skeleton" aria-hidden="true">
-      <div class="avatar agent-skeleton-avatar"></div>
-      <div class="agent-copy">
-        <div class="agent-name">
-          <span class="agent-skeleton-line agent-skeleton-name"></span>
-          <span class="agent-skeleton-line agent-skeleton-tag"></span>
-        </div>
-        <div class="agent-skeleton-line agent-skeleton-meta"></div>
-        <div class="agent-stats">
-          <span class="agent-skeleton-line agent-skeleton-stat"></span>
-          <span class="agent-skeleton-line agent-skeleton-stat short"></span>
-          <b class="agent-skeleton-line agent-skeleton-change"></b>
-        </div>
-      </div>
-    </div>
-  `).join("");
-}
-
-function renderAgentList() {
-  const list = byId("agentList");
-  const readbackLoading = agents.length > 0 && !chainState.backend;
-  if (discoveryLoading || readbackLoading) {
-    list.setAttribute("aria-busy", "true");
-    list.innerHTML = agentListSkeletonRows();
-    return;
-  }
-
-  list.removeAttribute("aria-busy");
-  ensureVisibleSelectedAgent();
-  const sorted = sortedAgents();
-  if (!sorted.length) {
-    const filters = activeDiscoveryFilterLabels();
-    list.innerHTML = `
-      <div class="agent-list-empty">
-        <span class="agent-list-empty-kicker">${filters.length ? `${filters.length} filters active` : "No matches"}</span>
-        <strong>No agents found</strong>
-        <p>${filters.length ? `No public agent matches ${escapeHtml(filters.join(" + "))}.` : "No public agents are available right now."}</p>
-        <button class="agent-clear-filters" type="button">Clear filters</button>
-      </div>
-    `;
-    list.querySelector(".agent-clear-filters")?.addEventListener("click", () => {
-      activeDiscoveryFilters.clear();
-      render();
-    });
-    return;
-  }
-
-  list.innerHTML = sorted.map((agent) => {
-    const pnl = agentRowPnl(agent);
-    const selectionKey = agentSelectionKey(agent);
-    const selected = selectionKey === selectedId;
-    const title = agentTitle(agent);
-    const pnlTone = pnl === null ? "empty" : pnl < 0 ? "down" : "up";
-    const readout = agentRowReadout(agent);
-    const rowTag = isPaperAgent(agent) ? "paper" : "key market";
-    return `
-    <button class="agent-row" data-agent="${escapeHtml(selectionKey)}" data-agent-id="${escapeHtml(agent.id)}" data-selected="${selected ? "true" : "false"}" aria-label="Open ${escapeHtml(title)}">
-      <div class="avatar">${agentIcon(agent)}</div>
-      <div class="agent-copy">
-        <div class="agent-name">
-          <span class="agent-title" title="${escapeHtml(agent.name)}">${escapeHtml(title)}</span>
-          <span class="tag">${escapeHtml(rowTag)}</span>
-        </div>
-        <div class="agent-meta">${escapeHtml(agent.strategy)}</div>
-        <div class="agent-stats">
-          <span class="agent-row-metric">${escapeHtml(readout.primary)}</span>
-          <span class="agent-row-status ${escapeHtml(readout.tone)}">${escapeHtml(readout.secondary)}</span>
-          <b class="agent-change ${pnlTone}">${pnlLabel(pnl)}</b>
-        </div>
-      </div>
-    </button>
-  `;
-  }).join("");
-
-  list.querySelectorAll("[data-agent]").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectedId = button.dataset.agent;
-      activeEventId = null;
-      chartAnimationPending = true;
-      clearQuote();
-      prepareAgentRead(selectedAgent());
-      render();
-      scheduleBackendRefresh("agent-change", 0);
-      scheduleKeyMarketRefresh("agent-change", 0);
-      dispatchUiEvent("clawhouse:agent-change");
-      animateAgentChange();
-    });
-  });
-}
-
+// Agent discovery list ported to React (app/components/key-market/agent-list.tsx).
 function syncDiscoveryFilters() {
   document.querySelectorAll("[data-agent-filter]").forEach((input) => {
     input.checked = activeDiscoveryFilters.has(input.dataset.agentFilter);
@@ -2669,6 +2578,8 @@ function syncContentColumns() {
   });
 }
 function render() {
+  // Keep the selection valid (auto-reselect when filters hide it) before mirroring.
+  ensureVisibleSelectedAgent();
   // Mirror state to the React store synchronously, independent of the rAF-gated
   // DOM render below — so ported panels stay live even when the tab is not
   // painting (and so the legacy renderers below remain rAF-debounced as before).
@@ -2684,7 +2595,7 @@ function renderNow() {
   const agent = selectedAgent();
   renderTicker();
   syncDiscoveryFilters();
-  renderAgentList();
+  // Agent list ported to React (app/components/key-market/agent-list.tsx).
   if (!agent) {
     renderFreshStartEmpty();
     syncContentColumns();
@@ -2863,6 +2774,25 @@ window.ClawHouseDemo = {
 window.__clawhouseLegacy = {
   chartModel: (agent) => chartModel(agent || selectedAgent()),
   openEvent: (eventId) => openEvent(eventId),
+  // Selection stays legacy-authoritative (chart + ticket still read it) until
+  // those panels port; the React agent list drives selection through here.
+  selectAgent: (id) => {
+    if (!id || id === selectedId) return;
+    selectedId = id;
+    activeEventId = null;
+    chartAnimationPending = true;
+    clearQuote();
+    prepareAgentRead(selectedAgent());
+    render();
+    scheduleBackendRefresh("agent-change", 0);
+    scheduleKeyMarketRefresh("agent-change", 0);
+    dispatchUiEvent("clawhouse:agent-change");
+    animateAgentChange();
+  },
+  clearDiscoveryFilters: () => {
+    activeDiscoveryFilters.clear();
+    render();
+  },
 };
 
 syncChartRangeButtons();

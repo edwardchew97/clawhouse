@@ -11,7 +11,11 @@ export function useSelectorContext(): SelectorContext {
   const chain = useKeyMarketStore((s) => s.chain);
   const agents = useKeyMarketStore((s) => s.agents);
   const tradeSide = useKeyMarketStore((s) => s.tradeSide);
-  return useMemo(() => ({ chain, agents, tradeSide }), [chain, agents, tradeSide]);
+  const activeDiscoveryFilters = useKeyMarketStore((s) => s.activeDiscoveryFilters);
+  return useMemo(
+    () => ({ chain, agents, tradeSide, activeDiscoveryFilters }),
+    [chain, agents, tradeSide, activeDiscoveryFilters],
+  );
 }
 
 /** The currently selected agent, resolved the same way the legacy getter does. */

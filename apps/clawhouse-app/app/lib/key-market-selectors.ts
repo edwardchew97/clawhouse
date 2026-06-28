@@ -9,12 +9,13 @@
  */
 
 import type { DemoChainState, LegacyAgent, TradeSide } from "./key-market-types";
-import { asNullableNumber, asNumber, nearLabel, normalizePct, shortAccount, titleCase, yoctoNearLabel } from "./key-market-format";
+import { asNullableNumber, asNumber, formatBackendTime, formatUsd, nearLabel, normalizePct, shortAccount, titleCase, yoctoNearLabel } from "./key-market-format";
 
 export type SelectorContext = {
   chain: DemoChainState;
   agents: LegacyAgent[];
   tradeSide: TradeSide;
+  activeDiscoveryFilters: Set<string>;
 };
 
 type Rec = Record<string, unknown>;
@@ -362,6 +363,113 @@ export function backendPnl(s: SelectorContext, agent: LegacyAgent | null): numbe
   const paper = paperLeaderboardRow(s, agent);
   if (paper) return normalizePct(paper.paper_pnl_pct);
   return selectedBackendPnl(s, agent) ?? (agent ? discoveryPnl(agent) : null);
+}
+
+// --- Discovery list (filter / sort / row readout) -------------------------
+
+export function keyTradingEnabled(s: SelectorContext, agent: LegacyAgent | null) {
+  if (!agent) return false;
+  if (chainApplies(s, agent)) {
+    return !keyMarketUnavailable(s, agent) && rec(rec(s.chain.state)?.agent)?.agent_id === agent.id;
+  }
+  return agent.keyMarketStatus === "available" && agent.keyMarketAgentId === agent.id;
+}
+
+function latestPaperActivityTimestamp(s: SelectorContext, agent: LegacyAgent): number | null {
+  const times: number[] = [];
+  const row = paperLeaderboardRow(s, agent);
+  const summary = paperSummary(s, agent);
+  [
+    row?.created_at,
+    summary.latest_fill_at,
+    summary.latest_order_at,
+    summary.latest_risk_at,
+    (paperActivity(s, agent)?.latest_risk as Rec | undefined)?.created_at,
+  ].forEach((value) => {
+    const parsed = Date.parse(String(value || ""));
+    if (Number.isFinite(parsed)) times.push(parsed);
+  });
+  return times.length ? Math.max(...times) : null;
+}
+
+export function hasRecentPaperActivity(s: SelectorContext, agent: LegacyAgent, hours = 24) {
+  const timestamp = latestPaperActivityTimestamp(s, agent);
+  if (timestamp === null || !Number.isFinite(timestamp)) return false;
+  return timestamp >= Date.now() - hours * 60 * 60 * 1000;
+}
+
+export function agentMatchesDiscoveryFilters(s: SelectorContext, agent: LegacyAgent) {
+  const f = s.activeDiscoveryFilters;
+  if (f.has("last24h") && !hasRecentPaperActivity(s, agent)) return false;
+  if (f.has("keyEnabled") && !keyTradingEnabled(s, agent)) return false;
+  if (f.has("openPosition") && paperOpenPositions(s, agent).length === 0) return false;
+  if (f.has("positivePnl") && !((backendPnl(s, agent) ?? 0) > 0)) return false;
+  return true;
+}
+
+export function activeDiscoveryFilterLabels(filters: Set<string>) {
+  const labels: Record<string, string> = {
+    last24h: "Last 24h active",
+    keyEnabled: "Key trading enabled",
+    openPosition: "Open position",
+    positivePnl: "Positive P&L",
+  };
+  return [...filters].map((filter) => labels[filter]).filter(Boolean);
+}
+
+function paperLeaderboardRows(s: SelectorContext): unknown[] | null {
+  const rows = rec(rec(s.chain.backend)?.paperLeaderboard)?.leaderboard;
+  return Array.isArray(rows) ? rows : null;
+}
+
+function hasPaperActivity(s: SelectorContext, agent: LegacyAgent) {
+  return Boolean(paperLeaderboardRow(s, agent));
+}
+
+export function visibleDiscoveryAgents(s: SelectorContext): LegacyAgent[] {
+  const rows = paperLeaderboardRows(s);
+  const base = !rows ? [...s.agents] : s.agents.filter((a) => hasPaperActivity(s, a));
+  const visible = base.length ? base : [...s.agents];
+  if (!s.activeDiscoveryFilters.size) return visible;
+  return visible.filter((a) => agentMatchesDiscoveryFilters(s, a));
+}
+
+export function agentRowPnl(s: SelectorContext, agent: LegacyAgent): number | null {
+  const paper = paperLeaderboardRow(s, agent);
+  return paper ? normalizePct(paper.paper_pnl_pct) : null;
+}
+
+export function sortedAgents(s: SelectorContext): LegacyAgent[] {
+  return visibleDiscoveryAgents(s).slice().sort((a, b) => {
+    const aValue = agentRowPnl(s, a);
+    const bValue = agentRowPnl(s, b);
+    if (aValue === null && bValue !== null) return 1;
+    if (aValue !== null && bValue === null) return -1;
+    if (aValue !== null && bValue !== null && aValue !== bValue) return bValue - aValue;
+    return ((a.discoveryIndex as number) ?? 0) - ((b.discoveryIndex as number) ?? 0);
+  });
+}
+
+export type AgentRowReadout = { primary: string; secondary: string; tone: string };
+
+export function agentRowReadout(s: SelectorContext, agent: LegacyAgent): AgentRowReadout {
+  const paper = paperLeaderboardRow(s, agent);
+  if (paper) {
+    const freshness = String(paper.stale_data_status || "").replace(/_/g, " ");
+    const updated = formatBackendTime(paper.created_at);
+    const liquidations = asNumber(paper.liquidation_count) ?? 0;
+    return {
+      primary: `Equity ${formatUsd(paper.equity_usd)}`,
+      secondary: `${freshness || "paper"} · ${updated}${liquidations > 0 ? ` · ${liquidations} liq` : ""}`,
+      tone: freshness.includes("stale") ? "warn" : "fresh",
+    };
+  }
+  const holders = holderCount(s, agent);
+  return {
+    primary: keyPriceLabel(s, agent),
+    secondary: holders === null ? "key market checking" : `${holders} key holders`,
+    tone: "idle",
+  };
 }
 
 // --- Key trading activity -------------------------------------------------

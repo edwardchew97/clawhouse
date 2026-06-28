@@ -7,6 +7,7 @@ import { KeyActivityPanel } from "./components/key-market/key-activity-panel";
 import { AgentProfile } from "./components/key-market/agent-profile";
 import { FomoAgentBar } from "./components/key-market/fomo-agent-bar";
 import { AgentBase } from "./components/key-market/agent-base";
+import { AgentList } from "./components/key-market/agent-list";
 
 export default function Page() {
   return (
@@ -42,7 +43,7 @@ export default function Page() {
               <label><input type="checkbox" data-agent-filter="openPosition" /> Open position</label>
               <label><input type="checkbox" data-agent-filter="positivePnl" /> Positive P&amp;L</label>
             </div>
-            <div className="agent-list" id="agentList" />
+            <AgentList />
           </aside>
 
           <section className="center">

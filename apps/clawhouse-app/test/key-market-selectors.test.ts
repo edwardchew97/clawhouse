@@ -18,7 +18,12 @@ import {
 
 const agent: LegacyAgent = { id: "agent-1", name: "Agent One", boardId: "board-1", holders: 7 };
 function ctx(chain: Partial<DemoChainState> = {}) {
-  return { chain: { ...initialChainState, ...chain }, agents: [agent], tradeSide: "buy" as const };
+  return {
+    chain: { ...initialChainState, ...chain },
+    agents: [agent],
+    tradeSide: "buy" as const,
+    activeDiscoveryFilters: new Set<string>(),
+  };
 }
 
 describe("agent identity + selection", () => {
