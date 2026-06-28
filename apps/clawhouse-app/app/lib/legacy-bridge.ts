@@ -49,8 +49,20 @@ declare global {
       clearDiscoveryFilters: () => void;
       setTradeSide: (side: "buy" | "sell") => void;
       onAmountChange: () => void;
+      applyDiscovery: (agents: LegacyAgent[], data: Record<string, unknown>) => void;
+      applyDiscoveryError: (message: string) => void;
     };
   }
+}
+
+/** Wait until the legacy script has installed the bridge, then resolve it. */
+export async function whenLegacyReady(timeoutMs = 6000): Promise<Window["__clawhouseLegacy"] | null> {
+  if (typeof window === "undefined") return null;
+  const started = Date.now();
+  while (!window.__clawhouseLegacy && Date.now() - started < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return window.__clawhouseLegacy ?? null;
 }
 
 /** Current chart model for an agent, or null before the legacy script has loaded. */

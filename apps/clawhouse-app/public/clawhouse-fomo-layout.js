@@ -1626,48 +1626,32 @@ async function refreshKeyMarketRead(_reason) {
   }
 }
 
-async function loadDiscoveryAgents() {
-  discoveryLoading = true;
+// Discovery fetch + normalization ported to React (app/lib/market-data.ts +
+// market-data-controller.tsx). These appliers receive the already-normalized
+// result and run the existing orchestration (selection, refreshes, render).
+function applyDiscovery(nextAgents, data) {
+  agents = Array.isArray(nextAgents) ? nextAgents : [];
+  const preferredId = requestedAgentId && agents.some((agent) => agentMatchesSelection(agent, requestedAgentId))
+    ? requestedAgentId
+    : selectedId;
+  selectedId = resolveSelectedId(preferredId);
+  prepareAgentRead(selectedAgent());
+  discoveryLoading = false;
+  chainState = { ...chainState, discovery: data, discoveryError: null };
+  chartAnimationPending = true;
   render();
-
-  try {
-    const response = await fetch("/api/agents", { cache: "no-store" });
-    const data = await response.json();
-    if (!response.ok || data.ok === false) {
-      throw new Error(data.error || `Discovery request failed: ${response.status}`);
-    }
-
-    const nextAgents = Array.isArray(data.agents)
-      ? data.agents.map((agent, index) => normalizeDiscoveryAgent(agent, index))
-      : [];
-    agents = nextAgents;
-    const preferredId = requestedAgentId && agents.some((agent) => agentMatchesSelection(agent, requestedAgentId))
-      ? requestedAgentId
-      : selectedId;
-    selectedId = resolveSelectedId(preferredId);
-    prepareAgentRead(selectedAgent());
-    discoveryLoading = false;
-    chainState = {
-      ...chainState,
-      discovery: data,
-      discoveryError: null,
-    };
-    chartAnimationPending = true;
-    render();
-    if (selectedAgent()) {
-      scheduleBackendRefresh("discovery", 0);
-      scheduleKeyMarketRefresh("discovery", 0);
-      dispatchUiEvent("clawhouse:agent-change");
-    }
-  } catch (error) {
-    discoveryLoading = false;
-    chainState = {
-      ...chainState,
-      discoveryError: error instanceof Error ? error.message : "Discovery unavailable.",
-    };
-    render();
-    showToast(`Discovery unavailable: ${chainState.discoveryError}`, { durationMs: 4200 });
+  if (selectedAgent()) {
+    scheduleBackendRefresh("discovery", 0);
+    scheduleKeyMarketRefresh("discovery", 0);
+    dispatchUiEvent("clawhouse:agent-change");
   }
+}
+
+function applyDiscoveryError(message) {
+  discoveryLoading = false;
+  chainState = { ...chainState, discoveryError: message || "Discovery unavailable." };
+  render();
+  showToast(`Discovery unavailable: ${chainState.discoveryError}`, { durationMs: 4200 });
 }
 
 function setTextWithOptionalLink(node, text, linkUrl) {
@@ -2527,13 +2511,17 @@ window.__clawhouseLegacy = {
     scheduleKeyMarketRefresh("amount-change");
     dispatchUiEvent("clawhouse:amount-change");
   },
+  // Discovery fetch lives in React (market-data-controller.tsx); these run the
+  // existing orchestration on the normalized result.
+  applyDiscovery: (agents, data) => applyDiscovery(agents, data),
+  applyDiscoveryError: (message) => applyDiscoveryError(message),
 };
 
 syncChartRangeButtons();
 render();
 dispatchUiEvent("clawhouse:ready");
 if (selectedAgent()) scheduleKeyMarketRefresh("initial", 0);
-void loadDiscoveryAgents();
+// Discovery is kicked off by the React market-data controller.
 window.requestAnimationFrame(() => document.body.classList.add("ui-ready"));
 animateAsciiKey();
 if (query.get("event")) {

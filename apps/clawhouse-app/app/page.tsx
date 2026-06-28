@@ -11,6 +11,7 @@ import { AgentList } from "./components/key-market/agent-list";
 import { Ticket } from "./components/key-market/ticket";
 import { WalletButton } from "./components/key-market/wallet-button";
 import { EventModal } from "./components/key-market/event-modal";
+import { MarketDataController } from "./components/key-market/market-data-controller";
 
 export default function Page() {
   return (
@@ -102,6 +103,7 @@ export default function Page() {
 
       <Toast />
       <StoreBridge />
+      <MarketDataController />
       <KeyMarketWalletBridge />
 
       <section className="launch-agent-drawer" id="launch-agent" aria-labelledby="launchAgentTitle">
