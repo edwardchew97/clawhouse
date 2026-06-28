@@ -5,6 +5,7 @@ import { Toast } from "./components/toast";
 import { TopMarketStrip } from "./components/key-market/top-market-strip";
 import { KeyActivityPanel } from "./components/key-market/key-activity-panel";
 import { AgentProfile } from "./components/key-market/agent-profile";
+import { FomoAgentBar } from "./components/key-market/fomo-agent-bar";
 
 export default function Page() {
   return (
@@ -46,44 +47,7 @@ export default function Page() {
           <section className="center">
             <section className="panel chart-panel" id="chartPanel">
               <div className="chart-top">
-                <div className="fomo-agent-bar">
-                  <div className="fomo-agent-identity">
-                    <div className="fomo-agent-avatar" id="marketAvatar">--</div>
-                    <div className="fomo-agent-copy">
-                      <div className="fomo-agent-title-row">
-                        <strong id="marketName">Loading agent</strong>
-                        <span className="fomo-agent-status"><span className="dot" /> running</span>
-                      </div>
-                      <div className="fomo-agent-meta" id="marketMeta">Backend agent network series</div>
-                    </div>
-                  </div>
-                  <div className="fomo-stat-strip" aria-label="Agent market stats">
-                    <div className="fomo-stat-chip">
-                      <span>Equity</span>
-                      <strong id="marketEquity">--</strong>
-                    </div>
-                    <div className="fomo-stat-chip">
-                      <span>Key price</span>
-                      <strong id="marketKeyPrice">--</strong>
-                    </div>
-                    <div className="fomo-stat-chip">
-                      <span>24H P&amp;L</span>
-                      <strong id="marketPnl">--</strong>
-                    </div>
-                    <div className="fomo-stat-chip">
-                      <span>Positions</span>
-                      <strong id="marketPositions">--</strong>
-                    </div>
-                    <div className="fomo-stat-chip">
-                      <span>Filled</span>
-                      <strong id="marketFilled">--</strong>
-                    </div>
-                    <div className="fomo-stat-chip">
-                      <span>Holders</span>
-                      <strong id="marketHolders">--</strong>
-                    </div>
-                  </div>
-                </div>
+                <FomoAgentBar />
                 <div className="range">
                   <button data-chart-range="1h" type="button" aria-pressed="false">1H</button>
                   <button className="active" data-chart-range="24h" type="button" aria-pressed="true">24H</button>

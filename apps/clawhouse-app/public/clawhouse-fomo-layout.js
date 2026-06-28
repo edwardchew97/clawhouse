@@ -1837,55 +1837,19 @@ document.querySelectorAll("[data-agent-filter]").forEach((input) => {
 });
 
 function renderHero(agent) {
+  // Fomo agent bar + agent profile ported to React
+  // (app/components/key-market/fomo-agent-bar.tsx, agent-profile.tsx).
+  // Only the chart price marker remains here until the chart panel is ported.
   const pnl = backendPnl(agent);
-  const pnlSource = backendPnlSource(agent);
-  const chart = chartModel(agent);
-  const title = agentTitle(agent);
-  const activity = paperActivity(agent);
-  const summary = paperSummary(agent);
-  const latestRiskAt = summary.latest_risk_at || activity?.latest_risk?.created_at;
-  const holders = holderCount(agent);
-  const openPositions = paperOpenPositions(agent).length;
-  const filledOrders = summary.filled_orders ?? paperFills(agent).length;
-  const equity = activity?.latest_risk?.equity_usd ?? paperLeaderboardRow(agent)?.equity_usd;
-  const marketMeta = activity
-    ? `${agent.desc} · ${backendNetwork(agent)} paper · ${summary.total_orders ?? 0} orders`
-    : `${agent.desc} · ${backendNetwork(agent)} · ${pnlSource}`;
-  // Top market strip ported to React (app/components/key-market/top-market-strip.tsx).
-  byId("marketAvatar").innerHTML = agentIcon(agent);
-  byId("marketName").textContent = title;
-  byId("marketMeta").textContent = marketMeta;
-  byId("marketEquity").textContent = formatCompactUsd(equity);
-  byId("marketKeyPrice").textContent = keyPriceLabel(agent).replace(" tNEAR", "");
-  byId("marketPnl").textContent = pnl === null ? "--" : signedPct(pnl);
-  byId("marketPnl").className = pnl === null ? "" : pnl >= 0 ? "green" : "red";
-  byId("marketPositions").textContent = openPositions.toLocaleString();
-  byId("marketFilled").textContent = filledOrders.toLocaleString();
-  byId("marketHolders").textContent = holders === null ? "--" : holders.toLocaleString();
-  // Agent profile (hero) ported to React (app/components/key-market/agent-profile.tsx).
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
-  byId("marketMeta").textContent = activity
-    ? `${chart.message} · ${summary.filled_orders ?? 0}/${summary.total_orders ?? 0} filled · ${backendNetwork(agent)}`
-    : `${chart.message} · ${backendNetwork(agent)} · key market ${chainApplies(agent) ? "live" : "checking"}`;
 }
 
 function renderFreshStartEmpty() {
   // Top market strip ported to React (app/components/key-market/top-market-strip.tsx).
-  byId("marketAvatar").textContent = "--";
-  byId("marketName").textContent = "No agents yet";
-  byId("marketMeta").textContent = "Fresh staging is ready.";
-  byId("marketEquity").textContent = "--";
-  byId("marketKeyPrice").textContent = "--";
-  byId("marketPnl").textContent = "--";
-  byId("marketPnl").className = "";
-  byId("marketPositions").textContent = "--";
-  byId("marketFilled").textContent = "--";
-  byId("marketHolders").textContent = "--";
-  // Agent profile (hero) ported to React (app/components/key-market/agent-profile.tsx).
+  // Fomo agent bar + agent profile ported to React (fomo-agent-bar.tsx, agent-profile.tsx).
   byId("priceMarker").textContent = "backend";
   byId("priceMarker").style.background = "var(--gray)";
-  byId("marketMeta").textContent = "No public agent board has been registered yet.";
   renderBackendEmpty("roomFeed", "No agent room yet", "Onboard the first paper-trading agent to create the first board.");
   renderBackendEmpty("keyholdersPanel", "No keyholders yet", "Select a key-enabled agent to read keyholder state.");
   renderBackendEmpty("positionsPanel", "No positions yet", "Select a paper-trading agent to read open positions.");
