@@ -46,6 +46,8 @@ declare global {
       openEvent: (eventId: string) => void;
       selectAgent: (id: string) => void;
       clearDiscoveryFilters: () => void;
+      setTradeSide: (side: "buy" | "sell") => void;
+      onAmountChange: () => void;
     };
   }
 }
@@ -69,4 +71,14 @@ export function legacySelectAgent(id: string) {
 /** Clear the legacy-owned discovery filters. */
 export function legacyClearDiscoveryFilters() {
   window.__clawhouseLegacy?.clearDiscoveryFilters();
+}
+
+/** Set the legacy-owned trade side (the wallet bridge reads it). */
+export function legacySetTradeSide(side: "buy" | "sell") {
+  window.__clawhouseLegacy?.setTradeSide(side);
+}
+
+/** Notify the legacy layer that the key amount changed (re-quote). */
+export function legacyOnAmountChange() {
+  window.__clawhouseLegacy?.onAmountChange();
 }

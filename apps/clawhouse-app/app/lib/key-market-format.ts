@@ -48,6 +48,13 @@ export function wholeKeyAmount(value: unknown): number | null {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 }
 
+/** Floor a raw amount input to a positive integer, or 0 if invalid. */
+export function normalizedAmountOrZero(value: unknown): number {
+  const parsed = Number(String(value || "").trim());
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Math.floor(parsed);
+}
+
 export function averageKeyPriceLabel(totalNear: unknown, amount: unknown) {
   const numericTotal = Number(totalNear);
   const numericAmount = Number(amount);

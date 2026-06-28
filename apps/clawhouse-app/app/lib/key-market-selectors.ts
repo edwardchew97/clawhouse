@@ -9,7 +9,7 @@
  */
 
 import type { DemoChainState, LegacyAgent, TradeSide } from "./key-market-types";
-import { asNullableNumber, asNumber, formatBackendTime, formatUsd, nearLabel, normalizePct, shortAccount, titleCase, yoctoNearLabel } from "./key-market-format";
+import { asNullableNumber, asNumber, formatBackendTime, formatUsd, nearLabel, normalizePct, shortAccount, titleCase, wholeKeyAmount, yoctoNearLabel } from "./key-market-format";
 
 export type SelectorContext = {
   chain: DemoChainState;
@@ -236,6 +236,34 @@ export function buyMaxAmount(s: SelectorContext, agent: LegacyAgent | null): num
   const amount = rec(rec(s.chain.maxBuy)?.maxBuy)?.amount;
   const numeric = Math.floor(Number(amount));
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+export function maxAmountForSide(s: SelectorContext, agent: LegacyAgent | null): number | null {
+  if (s.tradeSide === "sell") return wholeKeyAmount(holderBalance(s, agent));
+  return buyMaxAmount(s, agent);
+}
+
+export function quoteApplies(s: SelectorContext, agent: LegacyAgent | null) {
+  return Boolean(agent && chainApplies(s, agent) && s.chain.quoteSide === s.tradeSide && s.chain.quote);
+}
+
+export function quoteLoading(s: SelectorContext) {
+  return Boolean(s.chain.quoteLoading || s.chain.phase === "quoting");
+}
+
+export function quoteInitialLoading(s: SelectorContext, agent: LegacyAgent | null) {
+  return quoteLoading(s) && !quoteApplies(s, agent);
+}
+
+export function statusButtonText(s: SelectorContext) {
+  switch (s.chain.phase) {
+    case "connecting": return "Opening wallet...";
+    case "authenticating": return "Confirm session...";
+    case "quoting": return "Refreshing quote...";
+    case "signing": return "Confirm in wallet...";
+    case "refreshing": return "Refreshing balance...";
+    default: return "Working...";
+  }
 }
 
 export function paperLeaderboardRow(s: SelectorContext, agent: LegacyAgent | null): Rec | null {

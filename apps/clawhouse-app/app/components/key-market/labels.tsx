@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { keyAmountLabel } from "../../lib/key-market-format";
 import {
+  buyMaxAmount,
   chainApplies,
   holderBalance,
   isUnlocked,
@@ -36,4 +37,19 @@ export function BalanceValue({ ctx, agent }: { ctx: SelectorContext; agent: Lega
   }
   if (ctx.chain.error && !chainApplies(ctx, agent)) return <Skeleton width="38px" className="inline-skeleton" />;
   return balance === null ? "--" : keyAmountLabel(balance);
+}
+
+/** Max-buy / sellable label. Ported from legacy maxBuyLabel. */
+export function MaxBuyValue({ ctx, agent }: { ctx: SelectorContext; agent: LegacyAgent }): ReactNode {
+  const balance = holderBalance(ctx, agent);
+  if (!ctx.chain.accountId) return "Connect wallet";
+  if (ctx.chain.maxBuyError) return "Max buy unavailable";
+  if (ctx.tradeSide === "sell") {
+    return keyStateInitialLoading(ctx, agent)
+      ? <>Sellable <Skeleton width="38px" className="inline-skeleton" /></>
+      : <>Sellable {balance === null ? "--" : keyAmountLabel(balance)}</>;
+  }
+  const maxBuy = buyMaxAmount(ctx, agent);
+  if (ctx.chain.maxBuyLoading && maxBuy === null) return <>Max buy <Skeleton width="34px" className="inline-skeleton" /></>;
+  return <>Max buy {maxBuy === null ? "--" : keyAmountLabel(maxBuy)}</>;
 }

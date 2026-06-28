@@ -85,6 +85,9 @@ export type LegacySnapshot = {
 
 export type KeyMarketState = LegacySnapshot & {
   toast: ToastMessage | null;
+  /** Raw key-amount input value. React-owned; the legacy wallet bridge reads it from the DOM. */
+  keyAmount: string;
+  setKeyAmount: (value: string) => void;
 
   /**
    * TRANSITIONAL (Phase 2): wholesale-replace the read replica from the legacy
@@ -116,7 +119,9 @@ export const useKeyMarketStore = create<KeyMarketState>((set) => ({
   discoveryLoading: true,
   activeDiscoveryFilters: new Set<string>(),
   toast: null,
+  keyAmount: "1",
 
+  setKeyAmount: (keyAmount) => set({ keyAmount }),
   hydrate: (snapshot) => set(snapshot),
   setChainState: (next) => set((s) => ({ chain: mergeChainState(s.chain, next) })),
   showToast: (message, options) =>

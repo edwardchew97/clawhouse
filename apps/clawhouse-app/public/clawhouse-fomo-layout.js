@@ -1759,29 +1759,11 @@ function renderFreshStartEmpty() {
   // Fomo agent bar + agent profile ported to React (fomo-agent-bar.tsx, agent-profile.tsx).
   byId("priceMarker").textContent = "backend";
   byId("priceMarker").style.background = "var(--gray)";
-  // Agent base + key activity ported to React (agent-base.tsx, key-activity-panel.tsx).
-  byId("quotePay").textContent = "--";
-  byId("quoteReceive").textContent = "--";
-  byId("quoteAverage").textContent = "--";
-  const tradeButton = byId("tradeButton");
-  if (tradeButton) {
-    tradeButton.textContent = "No agent selected";
-    tradeButton.disabled = true;
-  }
-  const ticket = byId("keyMarketTicket");
-  const ticketControls = byId("keyMarketTicketControls");
-  const ticketEmpty = byId("keyMarketUnavailable");
-  if (ticket) {
-    ticket.classList.add("market-disabled");
-    ticket.setAttribute("aria-disabled", "true");
-  }
-  if (ticketControls) ticketControls.setAttribute("aria-hidden", "true");
-  if (ticketEmpty) ticketEmpty.hidden = false;
+  // Agent base + key activity + ticket + wallet button ported to React.
   lastPnlChartModel = null;
   activeEventId = null;
   byId("chartEvents").innerHTML = "";
   hidePriceMarker();
-  renderWalletButton();
   renderBackendStatus();
 }
 
@@ -1929,96 +1911,7 @@ function yoctoNearLabel(value) {
   return nearLabel(Number(text) / 1e24);
 }
 
-function renderTicket(agent) {
-  const keyAmount = byId("keyAmount");
-  const amount = normalizedAmountOrZero(keyAmount?.value);
-  const balance = holderBalance(agent);
-  const maxAmount = maxAmountForSide(agent);
-  const busy = Boolean(chainState.pending);
-  const marketUnavailable = keyMarketUnavailable(agent);
-  const quote = quoteApplies(agent) ? chainState.quote : null;
-  const chainTotal = tradeSide === "sell" ? quote?.payout_near : quote?.total_cost_near;
-  renderTicketBalance(agent, balance);
-  const ticket = byId("keyMarketTicket");
-  const ticketControls = byId("keyMarketTicketControls");
-  const ticketEmpty = byId("keyMarketUnavailable");
-  if (ticket) {
-    ticket.classList.toggle("market-disabled", marketUnavailable);
-    ticket.setAttribute("aria-disabled", marketUnavailable ? "true" : "false");
-  }
-  if (ticketControls) {
-    ticketControls.setAttribute("aria-hidden", marketUnavailable ? "true" : "false");
-  }
-  if (ticketEmpty) ticketEmpty.hidden = !marketUnavailable;
-  if (quoteInitialLoading(agent)) {
-    setInlineState("quotePay", skeleton("88px", "inline-skeleton align-right"));
-    setInlineState("quoteReceive", skeleton("54px", "inline-skeleton align-right"));
-    setInlineState("quoteAverage", skeleton("88px", "inline-skeleton align-right"));
-  } else if (tradeSide === "sell") {
-    setInlineState("quotePay", keyAmountLabel(amount));
-    setInlineState("quoteReceive", chainTotal ? nearLabel(chainTotal) : "--");
-    setInlineState("quoteAverage", chainTotal ? averageKeyPriceLabel(chainTotal, amount) : "--");
-  } else {
-    setInlineState("quotePay", chainTotal ? nearLabel(chainTotal) : keyPriceLabel(agent));
-    setInlineState("quoteReceive", keyAmountLabel(amount));
-    setInlineState("quoteAverage", chainTotal
-      ? averageKeyPriceLabel(chainTotal, amount)
-      : (amount === 1 ? keyPriceLabel(agent) : "--"));
-  }
-  const tradeButton = byId("tradeButton");
-  if (tradeButton) {
-    tradeButton.textContent = busy
-      ? statusButtonText()
-      : marketUnavailable
-        ? "Key trading unavailable"
-      : chainState.accountId ? `${tradeSide === "buy" ? "Buy" : "Sell"} ${agentTitle(agent)} key` : "Connect Wallet";
-    tradeButton.className = `${tradeSide === "buy" ? "primary" : "primary sell"}${busy ? " loading" : ""}`;
-    tradeButton.disabled = marketUnavailable || busy || amount <= 0 || (tradeSide === "sell" && (balance === null || balance <= 0));
-  }
-  document.querySelectorAll(".ticket-tab, [data-unlock-agent]").forEach((button) => {
-    button.disabled = marketUnavailable || busy;
-  });
-  document.querySelectorAll("[data-amount]").forEach((button) => {
-    const isMax = button.dataset.amount === "max";
-    button.disabled = marketUnavailable || busy || (isMax && maxAmount === null);
-    if (isMax) {
-      button.title = marketUnavailable
-        ? "Key trading is not enabled for this agent."
-        : chainState.maxBuyLoading
-        ? "Loading max buy."
-        : maxAmount === null
-        ? (tradeSide === "buy" ? "Connect Wallet to read max buy." : "No key balance to sell.")
-        : `Use ${keyAmountLabel(maxAmount)}`;
-    }
-  });
-  if (keyAmount) keyAmount.disabled = marketUnavailable || busy;
-  // Gate button ported to React (agent-base.tsx).
-  renderWalletButton();
-  renderBackendStatus();
-}
-
-function renderWalletButton() {
-  const walletButton = byId("walletButton");
-  if (walletButton) {
-    walletButton.textContent = chainState.accountId ? shortAccount(chainState.accountId) : "Connect Wallet";
-    walletButton.classList.toggle("connected", Boolean(chainState.accountId));
-    walletButton.disabled = Boolean(chainState.pending);
-  }
-}
-
-function renderTicketBalance(agent, balance) {
-  setInlineState("ticketOwnedKeys", balanceLabel(agent, balance));
-  setInlineState("ticketMaxBuy", maxBuyLabel(agent, balance));
-}
-
-function statusButtonText() {
-  if (chainState.phase === "connecting") return "Opening wallet...";
-  if (chainState.phase === "authenticating") return "Confirm session...";
-  if (chainState.phase === "quoting") return "Refreshing quote...";
-  if (chainState.phase === "signing") return "Confirm in wallet...";
-  if (chainState.phase === "refreshing") return "Refreshing balance...";
-  return "Working...";
-}
+// Ticket / wallet button / balance ported to React (ticket.tsx, wallet-button.tsx, labels.tsx).
 
 function renderBackendStatus() {
   if (!byId("backendStatus") || !byId("backendUrl")) return;
@@ -2603,27 +2496,15 @@ function renderNow() {
   }
   renderGateState(agent);
   renderHero(agent);
-  renderTicket(agent);
+  // Ticket ported to React (app/components/key-market/ticket.tsx).
   bindUnlockButtons();
   syncContentColumns();
 }
 
 // Agent base tabs ported to React (agent-base.tsx).
 
-document.querySelectorAll(".ticket-tab").forEach((button) => {
-  button.addEventListener("click", () => {
-    const agent = selectedAgent();
-    if (!agent) return;
-    tradeSide = button.dataset.side;
-    clearQuote();
-    document.querySelectorAll(".ticket-tab").forEach((item) => item.classList.remove("active", "buy", "sell"));
-    button.classList.add("active", tradeSide);
-    renderTicket(agent);
-    syncStore();
-    scheduleKeyMarketRefresh("side-change");
-    dispatchUiEvent("clawhouse:side-change");
-  });
-});
+// Ticket side tabs ported to React (ticket.tsx); side changes drive the legacy
+// state via window.__clawhouseLegacy.setTradeSide.
 
 function syncChartRangeButtons() {
   document.querySelectorAll("[data-chart-range]").forEach((button) => {
@@ -2659,54 +2540,9 @@ function setChartRange(range) {
   dispatchUiEvent("clawhouse:chart-range-change");
 }
 
-document.querySelectorAll("[data-amount]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const agent = selectedAgent();
-    if (!agent) return;
-    const amount = button.dataset.amount === "max"
-      ? maxAmountForSide(agent)
-      : wholeKeyAmount(button.dataset.amount);
-    if (amount === null) {
-      showToast(tradeSide === "buy" ? "Connect Wallet to read max buy." : "No key balance to sell.");
-      return;
-    }
-    byId("keyAmount").value = amount.toString();
-    clearQuote();
-    renderTicket(agent);
-    scheduleKeyMarketRefresh("amount-change");
-    dispatchUiEvent("clawhouse:amount-change");
-  });
-});
-
-const keyAmountInput = byId("keyAmount");
-if (keyAmountInput) {
-  keyAmountInput.addEventListener("input", () => {
-    const agent = selectedAgent();
-    if (!agent) return;
-    clearQuote();
-    renderTicket(agent);
-    scheduleKeyMarketRefresh("amount-change");
-    dispatchUiEvent("clawhouse:amount-change");
-  });
-}
-
-const tradeButton = byId("tradeButton");
-if (tradeButton) {
-  tradeButton.addEventListener("click", () => {
-    const agent = selectedAgent();
-    if (!agent) return;
-    const amount = normalizedAmountOrZero(byId("keyAmount")?.value);
-    if (amount <= 0) {
-      showToast("Enter a key amount first.");
-      return;
-    }
-    if (tradeSide === "sell" && (holderBalance(agent) ?? 0) <= 0) {
-      showToast(`No ${agentTitle(agent)} key to sell.`);
-      return;
-    }
-    // Bridge owns the connect/submit flow; avoid duplicate UX hints here.
-  });
-}
+// Ticket amount buttons + key amount input ported to React (ticket.tsx); amount
+// changes drive the legacy state via window.__clawhouseLegacy.onAmountChange. The
+// #tradeButton click is owned by the wallet bridge (document capture-click).
 
 byId("modalClose").addEventListener("click", closeModal);
 byId("eventModal").addEventListener("click", (event) => {
@@ -2792,6 +2628,22 @@ window.__clawhouseLegacy = {
   clearDiscoveryFilters: () => {
     activeDiscoveryFilters.clear();
     render();
+  },
+  // Trade side + key amount stay legacy-authoritative (the wallet bridge reads
+  // them) until Phase 3; the React ticket drives them through here.
+  setTradeSide: (side) => {
+    if (side !== "buy" && side !== "sell") return;
+    tradeSide = side;
+    clearQuote();
+    render();
+    scheduleKeyMarketRefresh("side-change");
+    dispatchUiEvent("clawhouse:side-change");
+  },
+  onAmountChange: () => {
+    clearQuote();
+    render();
+    scheduleKeyMarketRefresh("amount-change");
+    dispatchUiEvent("clawhouse:amount-change");
   },
 };
 
