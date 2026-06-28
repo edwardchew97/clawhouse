@@ -1,4 +1,4 @@
-import type { LegacyAgent } from "./key-market-types";
+import type { DemoChainState, LegacyAgent } from "./key-market-types";
 
 /**
  * TRANSITIONAL (Phase 4): typed access to legacy chart logic still living in
@@ -89,6 +89,11 @@ export function legacySelectAgent(id: string) {
 /** Clear the legacy-owned discovery filters. */
 export function legacyClearDiscoveryFilters() {
   window.__clawhouseLegacy?.clearDiscoveryFilters();
+}
+
+/** Write chain state through the legacy container (merges + renders + mirrors to store). */
+export function legacySetChainState(next: DemoChainState) {
+  window.ClawHouseDemo?.setChainState(next);
 }
 
 /** Set the legacy-owned trade side (the wallet bridge reads it). */

@@ -1524,107 +1524,8 @@ async function refreshBackendRead(_reason) {
   scheduleBackendRefresh("poll", BACKEND_REFRESH_MS);
 }
 
-function scheduleKeyMarketRefresh(reason, delayMs = 120) {
-  window.clearTimeout(keyMarketRefreshTimer);
-  keyMarketRefreshTimer = window.setTimeout(() => {
-    void refreshKeyMarketRead(reason);
-  }, delayMs);
-}
-
-async function refreshKeyMarketRead(_reason) {
-  const agent = selectedAgent();
-  if (!agent) return;
-  const refreshId = ++keyMarketRefreshId;
-  if (keyMarketReadbackUnavailable(agent)) {
-    chainState = {
-      ...chainState,
-      state: null,
-      quote: null,
-      quoteSide: null,
-      protection: null,
-      maxBuy: null,
-      maxBuyError: null,
-      stateLoading: false,
-      quoteLoading: false,
-      activityLoading: false,
-      maxBuyLoading: false,
-      activity: { ok: true, agent_id: agent.id, count: 0, trades: [] },
-      activityError: null,
-      error: null,
-    };
-    render();
-    return;
-  }
-  const side = tradeSide === "sell" ? "sell" : "buy";
-  const amount = normalizedAmount(byId("keyAmount")?.value || "1");
-  const holderParam = chainState.accountId ? `&holderId=${encodeURIComponent(chainState.accountId)}` : "";
-  const statePath = `/api/key-market/state?agentId=${encodeURIComponent(agent.id)}${holderParam}`;
-  const quotePath = `/api/key-market/quote?side=${side}&agentId=${encodeURIComponent(agent.id)}&amount=${encodeURIComponent(amount)}`;
-  const activityPath = `/api/key-market/activity?agentId=${encodeURIComponent(agent.id)}&limit=7`;
-  const shouldRefreshMaxBuy = chainState.accountId
-    && side === "buy"
-    && _reason !== "amount-change"
-    && _reason !== "side-change";
-  const maxBuyPath = `/api/key-market/max-buy?agentId=${encodeURIComponent(agent.id)}&accountId=${encodeURIComponent(chainState.accountId || "")}`;
-  chainState = {
-    ...chainState,
-    stateLoading: true,
-    quoteLoading: true,
-    activityLoading: true,
-    maxBuyLoading: Boolean(shouldRefreshMaxBuy),
-  };
-  render();
-
-  const statePromise = fetchJson(statePath)
-    .then((data) => {
-      if (refreshId !== keyMarketRefreshId) return;
-      chainState = { ...chainState, state: data.state, stateLoading: false, error: null };
-    })
-    .catch((error) => {
-      if (refreshId !== keyMarketRefreshId) return;
-      chainState = { ...chainState, stateLoading: false, error: errorMessage(error, "Key market state read failed.") };
-    });
-
-  const quotePromise = fetchJson(quotePath)
-    .then((data) => {
-      if (refreshId !== keyMarketRefreshId) return;
-      chainState = { ...chainState, quote: data.quote, quoteSide: side, protection: data.protection, quoteLoading: false, error: null };
-    })
-    .catch((error) => {
-      if (refreshId !== keyMarketRefreshId) return;
-      chainState = { ...chainState, quoteLoading: false, error: errorMessage(error, "Key market quote read failed.") };
-    });
-
-  const activityPromise = fetchJson(activityPath)
-    .then((data) => {
-      if (refreshId !== keyMarketRefreshId) return;
-      chainState = { ...chainState, activity: data, activityLoading: false, activityError: null };
-    })
-    .catch((error) => {
-      if (refreshId !== keyMarketRefreshId) return;
-      chainState = { ...chainState, activityLoading: false, activityError: errorMessage(error, "Key activity read failed.") };
-    });
-
-  const maxBuyPromise = shouldRefreshMaxBuy
-    ? fetchJson(maxBuyPath)
-      .then((data) => {
-        if (refreshId !== keyMarketRefreshId) return;
-        chainState = { ...chainState, maxBuy: data, maxBuyLoading: false, maxBuyError: null };
-      })
-      .catch((error) => {
-        if (refreshId !== keyMarketRefreshId) return;
-        chainState = { ...chainState, maxBuyLoading: false, maxBuyError: errorMessage(error, "Max buy read failed.") };
-      })
-    : Promise.resolve().then(() => {
-      if (refreshId !== keyMarketRefreshId) return;
-      chainState = { ...chainState, maxBuyLoading: false };
-    });
-
-  await Promise.allSettled([statePromise, quotePromise, activityPromise, maxBuyPromise]);
-  if (refreshId === keyMarketRefreshId) {
-    render();
-  }
-}
+// Key-market read ported to React (app/lib/market-data.ts refreshKeyMarket +
+// market-data-controller.tsx); triggered reactively on selection/side/amount/wallet.
 
 // Discovery fetch + normalization ported to React (app/lib/market-data.ts +
 // market-data-controller.tsx). These appliers receive the already-normalized
@@ -1642,7 +1543,6 @@ function applyDiscovery(nextAgents, data) {
   render();
   if (selectedAgent()) {
     scheduleBackendRefresh("discovery", 0);
-    scheduleKeyMarketRefresh("discovery", 0);
     dispatchUiEvent("clawhouse:agent-change");
   }
 }
@@ -1674,7 +1574,6 @@ function buyOneForUnlock() {
   if (input) input.value = "1";
   clearQuote();
   render();
-  scheduleKeyMarketRefresh("unlock-buy", 0);
   showToast("Connect Wallet to buy this agent key.");
 }
 
@@ -2487,7 +2386,6 @@ window.__clawhouseLegacy = {
     prepareAgentRead(selectedAgent());
     render();
     scheduleBackendRefresh("agent-change", 0);
-    scheduleKeyMarketRefresh("agent-change", 0);
     dispatchUiEvent("clawhouse:agent-change");
     animateAgentChange();
   },
@@ -2502,13 +2400,11 @@ window.__clawhouseLegacy = {
     tradeSide = side;
     clearQuote();
     render();
-    scheduleKeyMarketRefresh("side-change");
     dispatchUiEvent("clawhouse:side-change");
   },
   onAmountChange: () => {
     clearQuote();
     render();
-    scheduleKeyMarketRefresh("amount-change");
     dispatchUiEvent("clawhouse:amount-change");
   },
   // Discovery fetch lives in React (market-data-controller.tsx); these run the
@@ -2520,7 +2416,6 @@ window.__clawhouseLegacy = {
 syncChartRangeButtons();
 render();
 dispatchUiEvent("clawhouse:ready");
-if (selectedAgent()) scheduleKeyMarketRefresh("initial", 0);
 // Discovery is kicked off by the React market-data controller.
 window.requestAnimationFrame(() => document.body.classList.add("ui-ready"));
 animateAsciiKey();
