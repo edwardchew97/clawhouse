@@ -2284,128 +2284,15 @@ function openEvent(eventId) {
   activeEventId = event.id;
   syncStore();
   renderChartEvents(agent, null, model);
-  renderBackendEventModal(agent, event);
-  byId("eventModal").hidden = false;
+  // Modal rendering ported to React (app/components/key-market/event-modal.tsx);
+  // legacy keeps activeEventId + chart-event highlighting.
 }
 
-function renderBackendEventModal(agent, event) {
-  const raw = event.raw || {};
-  const model = readableEventModel(raw, event, agent);
-  byId("modalKicker").textContent = `${agentTitle(agent)} / ${event.time}`;
-  byId("modalTitle").textContent = model.title;
-  byId("modalSummary").textContent = model.summary;
-  byId("modalMoveHint").textContent = model.receipt;
-  byId("modalDirection").textContent = model.direction;
-  byId("modalVenue").textContent = model.venue;
-  byId("modalAction").textContent = model.action;
-  byId("modalReason").textContent = event.reason;
-}
-
-function readableEventModel(raw, event, agent) {
-  const tradeType = readableTradeType(raw);
-  const venue = eventVenue(raw, agent);
-  const action = formatBackendAction(raw);
-  const direction = readableTradeDirection(raw);
-  const receipt = raw.id ? `Receipt ${shortHash(raw.id)}` : eventReferenceLabel(raw) || "Agent Board Ledger";
-  const status = raw.status_claim || raw.event_type || "event";
-  const statusText = titleCase(status);
-
-  return {
-    title: event.title || tradeType,
-    summary: readableTradeSummary(raw, action, tradeType, statusText, venue),
-    receipt,
-    direction,
-    venue,
-    action,
-  };
-}
-
-function readableTradeSummary(event, action, tradeType, statusText, venue) {
-  if (isPaperTradeEvent(event)) {
-    return `${tradeType} on ${venue}: ${action}. Backend recorded ${statusText.toLowerCase()}.`;
-  }
-  return `${tradeType}: ${action}. Backend recorded ${statusText.toLowerCase()}.`;
-}
-
-function readableTradeType(event) {
-  if (!isPaperTradeEvent(event)) return titleCase(event.event_type || "Backend event");
-  const market = eventMarketType(event);
-  if (market === "spot") return "Paper spot order";
-  if (market === "perp") return "Paper perp order";
-  return "Paper trade";
-}
-
-function eventMarketType(event) {
-  const metadata = eventMetadata(event);
-  const rawMarket = metadata.market_type || metadata.marketType || event.market_type || event.marketType;
-  if (rawMarket) return String(rawMarket).toLowerCase();
-  const reason = String(event.reason || "").toLowerCase();
-  if (reason.includes("perp")) return "perp";
-  if (reason.includes("spot")) return "spot";
-  return "";
-}
-
-function readableTradeDirection(event) {
-  const side = readableTradeSide(event);
-  const coin = eventCoin(event);
-  const leverage = eventLeverage(event);
-  if (side === "long" || side === "short") {
-    return [leverage, coin, side].filter(Boolean).join(" ") || titleCase(side);
-  }
-  if (side) return [titleCase(side), coin].filter(Boolean).join(" ");
-  return coin || "--";
-}
-
-function readableTradeSide(event) {
-  const metadata = eventMetadata(event);
-  const text = [
-    event.reason,
-    event.client_event_id,
-    metadata.side,
-    metadata.direction,
-    metadata.position_side,
-    metadata.positionSide,
-  ].filter(Boolean).join(" ").toLowerCase();
-  if (/\blong\b/.test(text)) return "long";
-  if (/\bshort\b/.test(text)) return "short";
-  const side = String(metadata.side || event.side || "").toLowerCase();
-  const market = eventMarketType(event);
-  if (side === "buy" && market === "perp") return "long";
-  if (side === "sell" && market === "perp") return "short";
-  if (side === "buy" || side === "sell") return side;
-  const eventId = String(event.client_event_id || "").toLowerCase();
-  if (eventId.includes("-buy-")) return market === "perp" ? "long" : "buy";
-  if (eventId.includes("-sell-")) return market === "perp" ? "short" : "sell";
-  const assetIn = String(event.asset_in || "").toUpperCase();
-  const assetOut = String(event.asset_out || "").toUpperCase();
-  if (assetIn === "USD" && assetOut && assetOut !== "USD") return market === "perp" ? "long" : "buy";
-  if (assetOut === "USD" && assetIn && assetIn !== "USD") return market === "perp" ? "short" : "sell";
-  return "";
-}
-
-function eventCoin(event) {
-  const metadata = eventMetadata(event);
-  const direct = metadata.coin || event.coin;
-  if (direct) return String(direct).toUpperCase();
-  const assetOut = String(event.asset_out || "").toUpperCase();
-  const assetIn = String(event.asset_in || "").toUpperCase();
-  if (assetOut && assetOut !== "USD") return assetOut;
-  if (assetIn && assetIn !== "USD") return assetIn;
-  const match = String(event.reason || "").match(/\b(BTC|ETH|SOL|USDC|USDT|PURR)\b/i);
-  return match ? match[1].toUpperCase() : "";
-}
-
-function eventLeverage(event) {
-  const metadata = eventMetadata(event);
-  const value = asNumber(metadata.leverage ?? event.leverage);
-  if (value !== null) return `${Number.isInteger(value) ? value.toFixed(0) : String(value)}x`;
-  const match = String(event.reason || "").match(/\b(\d+(?:\.\d+)?)\s*x\b/i);
-  return match ? `${match[1]}x` : "";
-}
+// Event modal detail ported to React (event-modal.tsx) / key-market-events.ts.
 
 function closeModal() {
-  byId("eventModal").hidden = true;
   activeEventId = null;
+  syncStore();
   const agent = selectedAgent();
   if (agent && lastPnlChartModel) renderChartEvents(agent, null, lastPnlChartModel);
 }
@@ -2544,13 +2431,7 @@ function setChartRange(range) {
 // changes drive the legacy state via window.__clawhouseLegacy.onAmountChange. The
 // #tradeButton click is owned by the wallet bridge (document capture-click).
 
-byId("modalClose").addEventListener("click", closeModal);
-byId("eventModal").addEventListener("click", (event) => {
-  if (event.target === byId("eventModal")) closeModal();
-});
-window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeModal();
-});
+// Event modal close (button / backdrop / Escape) handled in React (event-modal.tsx).
 window.addEventListener("resize", syncContentColumns);
 window.addEventListener("resize", () => window.requestAnimationFrame(syncTickerSpeed));
 
@@ -2610,6 +2491,7 @@ window.ClawHouseDemo = {
 window.__clawhouseLegacy = {
   chartModel: (agent) => chartModel(agent || selectedAgent()),
   openEvent: (eventId) => openEvent(eventId),
+  closeEvent: () => closeModal(),
   // Selection stays legacy-authoritative (chart + ticket still read it) until
   // those panels port; the React agent list drives selection through here.
   selectAgent: (id) => {

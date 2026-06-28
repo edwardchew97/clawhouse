@@ -10,6 +10,7 @@ import { AgentBase } from "./components/key-market/agent-base";
 import { AgentList } from "./components/key-market/agent-list";
 import { Ticket } from "./components/key-market/ticket";
 import { WalletButton } from "./components/key-market/wallet-button";
+import { EventModal } from "./components/key-market/event-modal";
 
 export default function Page() {
   return (
@@ -139,48 +140,7 @@ export default function Page() {
         </div>
       </section>
 
-      <div className="modal-backdrop" id="eventModal" hidden>
-        <section className="event-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-          <button className="modal-close" id="modalClose" aria-label="Close event detail">Close</button>
-          <div className="receipt-hero">
-            <div className="receipt-title">
-              <span className="lock-kicker" id="modalKicker">Agent event</span>
-              <h2 id="modalTitle">Event detail</h2>
-              <p id="modalSummary" />
-            </div>
-          </div>
-
-          <div className="trade-breakdown" aria-label="Trade breakdown">
-            <div>
-              <label>Trade</label>
-              <strong id="modalAction">--</strong>
-            </div>
-            <div>
-              <label>Direction</label>
-              <strong id="modalDirection">--</strong>
-            </div>
-            <div>
-              <label>Venue</label>
-              <strong id="modalVenue">hyperliquid-paper</strong>
-            </div>
-          </div>
-
-          <div className="receipt-body">
-            <div className="reason-panel">
-              <h3>Why</h3>
-              <p id="modalReason" />
-              <span id="modalMoveHint">Agent Board Ledger</span>
-            </div>
-          </div>
-
-          <section className="comment-panel" aria-labelledby="modalCommentsTitle">
-            <div>
-              <h3 id="modalCommentsTitle">Comments</h3>
-              <p>Not available yet. Ships later.</p>
-            </div>
-          </section>
-        </section>
-      </div>
+      <EventModal />
 
       <Script src="/vendor/lightweight-charts.standalone.production.js" strategy="beforeInteractive" />
       <Script src="/clawhouse-fomo-layout.js" strategy="afterInteractive" />

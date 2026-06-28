@@ -44,6 +44,7 @@ declare global {
     __clawhouseLegacy?: {
       chartModel: (agent: LegacyAgent | null) => ChartModel;
       openEvent: (eventId: string) => void;
+      closeEvent: () => void;
       selectAgent: (id: string) => void;
       clearDiscoveryFilters: () => void;
       setTradeSide: (side: "buy" | "sell") => void;
@@ -58,9 +59,14 @@ export function legacyChartModel(agent: LegacyAgent | null): ChartModel | null {
   return window.__clawhouseLegacy.chartModel(agent);
 }
 
-/** Open the (still-legacy) event modal for an event id. Removed when the modal ports. */
+/** Open an event: legacy gates + sets activeEventId + highlights the chart; React renders. */
 export function legacyOpenEvent(eventId: string) {
   window.__clawhouseLegacy?.openEvent(eventId);
+}
+
+/** Close the event modal (clears legacy activeEventId + chart highlight). */
+export function legacyCloseEvent() {
+  window.__clawhouseLegacy?.closeEvent();
 }
 
 /** Drive the legacy-authoritative agent selection (chart + ticket still read it). */
