@@ -6,6 +6,7 @@ import { TopMarketStrip } from "./components/key-market/top-market-strip";
 import { KeyActivityPanel } from "./components/key-market/key-activity-panel";
 import { AgentProfile } from "./components/key-market/agent-profile";
 import { FomoAgentBar } from "./components/key-market/fomo-agent-bar";
+import { AgentBase } from "./components/key-market/agent-base";
 
 export default function Page() {
   return (
@@ -82,25 +83,7 @@ export default function Page() {
             </section>
 
             <section className="center-bottom">
-              <section className="panel room chat-room">
-                <div className="panel-head">
-                  <div>
-                    <div className="panel-title">Agent Base View</div>
-                    <div className="panel-sub" id="agentBaseSub">Chatroom, keyholders, and agent positions</div>
-                  </div>
-                  <button className="mini-button" id="gateButton">Gate: 1 key</button>
-                </div>
-                <div className="agent-base-tabs" role="tablist" aria-label="Agent base view">
-                  <button className="agent-base-tab active" id="agentTabChatroom" data-agent-tab="chatroom" type="button" role="tab" aria-selected="true" aria-controls="chatroomPanel">Chatroom</button>
-                  <button className="agent-base-tab" id="agentTabKeyholders" data-agent-tab="keyholders" type="button" role="tab" aria-selected="false" aria-controls="keyholdersPanel">Keyholders</button>
-                  <button className="agent-base-tab" id="agentTabPositions" data-agent-tab="positions" type="button" role="tab" aria-selected="false" aria-controls="positionsPanel">Positions</button>
-                </div>
-                <div className="agent-tab-panel active" id="chatroomPanel" role="tabpanel" aria-labelledby="agentTabChatroom">
-                  <div className="room-feed chat-room-feed" id="roomFeed" />
-                </div>
-                <div className="agent-tab-panel" id="keyholdersPanel" role="tabpanel" aria-labelledby="agentTabKeyholders" hidden />
-                <div className="agent-tab-panel" id="positionsPanel" role="tabpanel" aria-labelledby="agentTabPositions" hidden />
-              </section>
+              <AgentBase />
             </section>
           </section>
 

@@ -1,41 +1,26 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { formatUtcTime, keyAmountLabel, signedPct } from "../../lib/key-market-format";
+import { formatUtcTime, signedPct } from "../../lib/key-market-format";
 import {
   agentTitle,
   backendApplies,
   backendNetwork,
   backendPnl,
   chainApplies,
-  holderBalance,
   holderCount,
-  isUnlocked,
   keyPriceLabel,
-  keyStateInitialLoading,
   paperActivity,
   paperSummary,
-  roomAccessLoading,
   type SelectorContext,
 } from "../../lib/key-market-selectors";
 import type { LegacyAgent } from "../../lib/key-market-types";
 import { useKeyMarketStore } from "../../store/key-market-store";
 import { useSelectedAgent, useSelectorContext } from "../../store/use-key-market";
 import { AgentIcon } from "./agent-icon";
-import { Skeleton } from "./skeleton";
+import { GateValue } from "./labels";
 
 const DEFAULT_BANNER = "/agent-banners/default-agent-banner.png";
-
-function GateValue({ ctx, agent }: { ctx: SelectorContext; agent: LegacyAgent }): ReactNode {
-  const balance = holderBalance(ctx, agent);
-  if (isUnlocked(ctx, agent)) return "Room open";
-  if (!ctx.chain.accountId) return "1 key";
-  if (keyStateInitialLoading(ctx, agent) || roomAccessLoading(ctx, agent)) {
-    return <Skeleton width="42px" className="inline-skeleton" />;
-  }
-  if (ctx.chain.readAccessError) return "Access error";
-  return balance && balance > 0 ? <Skeleton width="42px" className="inline-skeleton" /> : "1 key";
-}
 
 function lastUpdate(ctx: SelectorContext, agent: LegacyAgent) {
   const activity = paperActivity(ctx, agent);
@@ -116,7 +101,7 @@ export function AgentProfile() {
           <Stat label="Key price tNEAR" value={keyPriceLabel(ctx, agent).replace(" tNEAR", "")} />
           <Stat label="Holders" value={holders === null ? "--" : holders.toLocaleString()} />
           <Stat label="Last update" value={lastUpdate(ctx, agent)} />
-          <Stat label="Room gate" value={<GateValue ctx={ctx} agent={agent} />} />
+          <Stat label="Room gate" value={<GateValue ctx={ctx} agent={agent} compact />} />
         </div>
       </div>
     </section>

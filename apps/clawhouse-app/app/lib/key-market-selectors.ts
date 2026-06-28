@@ -9,7 +9,7 @@
  */
 
 import type { DemoChainState, LegacyAgent, TradeSide } from "./key-market-types";
-import { asNumber, nearLabel, normalizePct, shortAccount, titleCase, yoctoNearLabel } from "./key-market-format";
+import { asNullableNumber, asNumber, nearLabel, normalizePct, shortAccount, titleCase, yoctoNearLabel } from "./key-market-format";
 
 export type SelectorContext = {
   chain: DemoChainState;
@@ -164,6 +164,66 @@ export function roomAccessLoading(s: SelectorContext, agent: LegacyAgent | null)
   );
 }
 
+export function paperActivityReadError(s: SelectorContext, agent: LegacyAgent | null): string | null {
+  const backend = rec(s.chain.backend);
+  if (!agent || !backendApplies(s, agent) || !backend?.ok) return null;
+  const error = rec(backend.errors)?.paperActivity;
+  return typeof error === "string" && error.trim() ? error.trim() : null;
+}
+
+export function paperActivityLoading(s: SelectorContext, agent: LegacyAgent | null): boolean {
+  if (!agent) return false;
+  return Boolean(
+    s.chain.backendLoading
+    || (!keyMarketUnavailable(s, agent) && keyStateInitialLoading(s, agent))
+    || (!keyMarketUnavailable(s, agent) && keyStateUnavailable(s, agent) && !readAccessApplies(s, agent))
+    || (!keyMarketUnavailable(s, agent) && s.chain.readAccessLoading)
+    || (!keyMarketUnavailable(s, agent) && roomAccessLoading(s, agent))
+    || (readAccessApplies(s, agent) && !paperActivity(s, agent))
+    || !s.chain.backend
+    || (s.chain.backend && !backendApplies(s, agent)),
+  );
+}
+
+export type AccessState = { tone: string; title: string; message: string; badge: string; loading?: boolean };
+
+export function paperActivityAccessState(s: SelectorContext, agent: LegacyAgent | null): AccessState | null {
+  const error = paperActivityReadError(s, agent);
+  if (paperActivityLoading(s, agent)) {
+    return { tone: "idle", title: "Room data loading", message: "Loading holder-gated paper activity.", badge: "Loading", loading: true };
+  }
+  if (!error || !/read access/i.test(error)) return null;
+  if (!s.chain.accountId) {
+    return {
+      tone: "wallet",
+      title: "Connect Wallet",
+      message: "Connect Wallet to check key ownership and load holder-gated paper activity.",
+      badge: "Wallet",
+    };
+  }
+  const balance = holderBalance(s, agent);
+  if (balance === null) {
+    return { tone: "idle", title: "Room data loading", message: "Loading holder-gated paper activity.", badge: "Loading", loading: true };
+  }
+  if (balance > 0) {
+    if (roomAccessLoading(s, agent)) {
+      return { tone: "idle", title: "Room data loading", message: "Loading holder-gated paper activity.", badge: "Loading", loading: true };
+    }
+    return {
+      tone: "idle",
+      title: "Room access unavailable",
+      message: "Holder access was not available for this board yet. Refresh or reconnect the wallet session.",
+      badge: "Access",
+    };
+  }
+  return {
+    tone: "wallet",
+    title: "Key required",
+    message: "Buy 1 key to unlock this agent's paper trading chart, room events, and positions.",
+    badge: "Gate: 1 key",
+  };
+}
+
 export function maxBuyApplies(s: SelectorContext, agent: LegacyAgent | null) {
   if (!agent) return false;
   const maxBuy = rec(s.chain.maxBuy);
@@ -210,6 +270,54 @@ export function paperSummary(s: SelectorContext, agent: LegacyAgent | null): Rec
 export function paperFills(s: SelectorContext, agent: LegacyAgent | null): unknown[] {
   const fills = paperActivity(s, agent)?.fills;
   return Array.isArray(fills) ? fills : [];
+}
+
+export function paperOrders(s: SelectorContext, agent: LegacyAgent | null): Rec[] {
+  const orders = paperActivity(s, agent)?.orders;
+  return Array.isArray(orders) ? (orders as Rec[]) : [];
+}
+
+function hyperliquidPriceRows(s: SelectorContext): Rec[] {
+  const prices = rec(rec(s.chain.backend)?.hyperliquidPrices)?.prices;
+  return Array.isArray(prices) ? (prices as Rec[]) : [];
+}
+
+function positionMarkPx(s: SelectorContext, position: Rec): number | null {
+  const direct = asNullableNumber(position?.mark_px ?? position?.markPx ?? position?.current_px ?? position?.currentPx);
+  if (direct !== null) return direct;
+  const coin = String(position?.coin || "").toUpperCase();
+  const row = hyperliquidPriceRows(s).find((price) => String(price?.coin || "").toUpperCase() === coin);
+  return asNullableNumber(row?.mark_px ?? row?.markPx);
+}
+
+export function positionPnlUsd(s: SelectorContext, position: Rec): number | null {
+  const direct = [
+    position?.unrealized_pnl_usd,
+    position?.unrealizedPnlUsd,
+    position?.current_pnl_usd,
+    position?.currentPnlUsd,
+    position?.pnl_usd,
+    position?.pnlUsd,
+  ].map(asNullableNumber).find((value) => value !== null);
+  if (direct !== undefined) return direct;
+  const mark = positionMarkPx(s, position);
+  const entry = asNullableNumber(position?.entry_px);
+  const size = asNullableNumber(position?.signed_size);
+  if (mark === null || entry === null || size === null) return null;
+  return (mark - entry) * size;
+}
+
+export function rowTimestamp(row: unknown): number {
+  const r = rec(row);
+  return Date.parse(String(r?.observed_at || r?.reported_at || r?.created_at || ""));
+}
+
+export function sortedByObservedAt<T>(rows: T[]): T[] {
+  return rows.slice().sort((a, b) => {
+    const left = rowTimestamp(a);
+    const right = rowTimestamp(b);
+    return (Number.isFinite(left) ? left : 0) - (Number.isFinite(right) ? right : 0);
+  });
 }
 
 export function paperOpenPositions(s: SelectorContext, agent: LegacyAgent | null): Rec[] {

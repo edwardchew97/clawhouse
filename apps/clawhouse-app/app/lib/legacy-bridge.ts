@@ -43,6 +43,7 @@ declare global {
   interface Window {
     __clawhouseLegacy?: {
       chartModel: (agent: LegacyAgent | null) => ChartModel;
+      openEvent: (eventId: string) => void;
     };
   }
 }
@@ -51,4 +52,9 @@ declare global {
 export function legacyChartModel(agent: LegacyAgent | null): ChartModel | null {
   if (typeof window === "undefined" || !window.__clawhouseLegacy) return null;
   return window.__clawhouseLegacy.chartModel(agent);
+}
+
+/** Open the (still-legacy) event modal for an event id. Removed when the modal ports. */
+export function legacyOpenEvent(eventId: string) {
+  window.__clawhouseLegacy?.openEvent(eventId);
 }

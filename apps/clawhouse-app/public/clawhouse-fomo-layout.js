@@ -264,7 +264,7 @@ function syncStore() {
     selectedId,
     tradeSide,
     activeChartRange,
-    activeAgentTab,
+    // activeAgentTab is React-owned (agent-base.tsx); not mirrored from legacy.
     activeEventId,
     discoveryLoading,
     activeDiscoveryFilters: new Set(activeDiscoveryFilters),
@@ -1850,14 +1850,10 @@ function renderFreshStartEmpty() {
   // Fomo agent bar + agent profile ported to React (fomo-agent-bar.tsx, agent-profile.tsx).
   byId("priceMarker").textContent = "backend";
   byId("priceMarker").style.background = "var(--gray)";
-  renderBackendEmpty("roomFeed", "No agent room yet", "Onboard the first paper-trading agent to create the first board.");
-  renderBackendEmpty("keyholdersPanel", "No keyholders yet", "Select a key-enabled agent to read keyholder state.");
-  renderBackendEmpty("positionsPanel", "No positions yet", "Select a paper-trading agent to read open positions.");
-  // Key activity panel ported to React (app/components/key-market/key-activity-panel.tsx).
+  // Agent base + key activity ported to React (agent-base.tsx, key-activity-panel.tsx).
   byId("quotePay").textContent = "--";
   byId("quoteReceive").textContent = "--";
   byId("quoteAverage").textContent = "--";
-  byId("gateButton").textContent = "No agent selected";
   const tradeButton = byId("tradeButton");
   if (tradeButton) {
     tradeButton.textContent = "No agent selected";
@@ -1878,26 +1874,6 @@ function renderFreshStartEmpty() {
   hidePriceMarker();
   renderWalletButton();
   renderBackendStatus();
-}
-
-function syncAgentBaseTabs() {
-  const tabs = document.querySelectorAll("[data-agent-tab]");
-  const panels = {
-    chatroom: byId("chatroomPanel"),
-    keyholders: byId("keyholdersPanel"),
-    positions: byId("positionsPanel"),
-  };
-  tabs.forEach((tab) => {
-    const selected = tab.dataset.agentTab === activeAgentTab;
-    tab.classList.toggle("active", selected);
-    tab.setAttribute("aria-selected", selected ? "true" : "false");
-  });
-  Object.entries(panels).forEach(([name, panel]) => {
-    if (!panel) return;
-    const selected = name === activeAgentTab;
-    panel.hidden = !selected;
-    panel.classList.toggle("active", selected);
-  });
 }
 
 function publicEventText(event) {
@@ -1991,212 +1967,7 @@ function gateLabel(agent, options = {}) {
   return balance && balance > 0 ? skeleton(options.compact ? "42px" : "86px", "inline-skeleton") : options.compact ? "1 key" : "Gate: 1 key";
 }
 
-function renderRoom(agent) {
-  const activity = paperActivity(agent);
-  const accessState = paperActivityAccessState(agent);
-  const events = activity
-    ? sortedByObservedAt(paperOrders(agent)).slice(-12).reverse().map((order, index) => normalizePaperOrderEvent(order, index, agent, 0, null))
-    : chartModel(agent).events;
-  if (!events.length) {
-    if (accessState?.loading || paperActivityLoading(agent)) {
-      byId("roomFeed").innerHTML = roomLoadingSkeleton();
-      return;
-    }
-    const title = accessState?.title || "No readable room events yet";
-    const detail = accessState?.message || "Orders and agent updates will appear here when this board reports activity.";
-    const badge = accessState?.badge || "Idle";
-    byId("roomFeed").innerHTML = `
-      <div class="chat-empty" aria-label="Agent chat room has no readable events">
-        <div class="chat-empty-copy">
-          <span>Chatroom</span>
-          <strong>${escapeHtml(title)}</strong>
-          <p>${escapeHtml(detail)}</p>
-        </div>
-        <div class="chat-empty-badge">${escapeHtml(badge)}</div>
-      </div>
-    `;
-    return;
-  }
-
-  byId("roomFeed").innerHTML = events.map((event) => `
-    <article class="update" data-event="${event.id}">
-      <div class="update-avatar" aria-hidden="true">${agentIcon(agent)}</div>
-      <div class="update-copy">
-        <div class="update-title">
-          <strong>${escapeHtml(agentTitle(agent))}</strong>
-          <span class="tag">${escapeHtml(eventTag(event))}</span>
-          <time>${escapeHtml(event.time)}</time>
-        </div>
-        <div class="update-text">${escapeHtml(compactReason(event.reason))}</div>
-        <div class="update-action">
-          <span>Action</span>
-          <strong>${escapeHtml(event.action)}</strong>
-        </div>
-      </div>
-    </article>
-  `).join("");
-
-  if (!roomFeedClickBound) {
-    const roomFeed = byId("roomFeed");
-    roomFeed?.addEventListener("click", (event) => {
-      if (!(event.target instanceof Element)) return;
-      const eventButton = event.target.closest("[data-event]");
-      if (eventButton?.dataset.event) {
-        openEvent(eventButton.dataset.event);
-      }
-    });
-    roomFeedClickBound = true;
-  }
-}
-
-function keyholderRows(agent) {
-  const rows = [];
-  const liveAgent = chainApplies(agent) ? chainState.state?.agent : null;
-  if (liveAgent?.creator_id) {
-    rows.push({
-      title: liveAgent.creator_id,
-      meta: "Creator / key-market owner",
-      value: "creator",
-    });
-  }
-  if (chainState.accountId) {
-    rows.push({
-      title: chainState.accountId,
-      meta: isUnlocked(agent) ? "Connected wallet / room access active" : roomAccessLoading(agent) ? "Connected wallet / opening room" : "Connected wallet",
-      value: keyStateInitialLoading(agent) ? skeleton("48px", "inline-skeleton align-right") : holderBalance(agent) === null ? "--" : keyAmountLabel(holderBalance(agent)),
-    });
-  }
-
-  const seen = new Set(rows.map((row) => row.title));
-  keyActivityTrades(agent).forEach((trade) => {
-    if (!trade.trader_id || seen.has(trade.trader_id)) return;
-    seen.add(trade.trader_id);
-    rows.push({
-      title: trade.trader_id,
-      meta: `Recent ${trade.side || "key"} trade`,
-      value: `${trade.amount} key${trade.amount === "1" ? "" : "s"}`,
-      url: keyTradeAccountUrl(trade),
-    });
-  });
-
-  return rows;
-}
-
-function renderKeyholders(agent) {
-  const panel = byId("keyholdersPanel");
-  if (!panel) return;
-  const holders = holderCount(agent);
-  const balance = holderBalance(agent);
-  const rows = keyholderRows(agent);
-  panel.className = "agent-tab-panel keyholders-panel";
-  panel.innerHTML = `
-    <div class="agent-summary-grid">
-      <div class="agent-summary-card">
-        <span>Total keys</span>
-        <strong>${holders === null && keyStateInitialLoading(agent) ? skeleton("42px") : escapeHtml(holders === null ? "--" : holders.toLocaleString())}</strong>
-      </div>
-      <div class="agent-summary-card">
-        <span>Your keys</span>
-        <strong>${balanceLabel(agent, balance)}</strong>
-      </div>
-      <div class="agent-summary-card">
-        <span>Gate</span>
-        <strong>${gateLabel(agent, { compact: true })}</strong>
-      </div>
-    </div>
-    ${rows.length ? rows.slice(0, 8).map((row) => `
-      <div class="keyholder-row">
-        <div class="keyholder-main">
-          <strong>${row.url ? `<a href="${escapeHtml(row.url)}" target="_blank" rel="noreferrer">${escapeHtml(shortAccount(row.title))}</a>` : escapeHtml(shortAccount(row.title))}</strong>
-          <span class="keyholder-meta">${escapeHtml(row.meta)}</span>
-        </div>
-        <div class="keyholder-value">${String(row.value).includes("<") ? row.value : escapeHtml(row.value)}</div>
-      </div>
-    `).join("") : `
-      <div class="backend-empty">
-        <span>No keyholders yet</span>
-        <strong>Staging reports ${escapeHtml(holders === null ? "--" : holders.toLocaleString())} keys for this agent.</strong>
-      </div>
-    `}
-  `;
-}
-
-function renderPositions(agent) {
-  const panel = byId("positionsPanel");
-  if (!panel) return;
-  const activity = paperActivity(agent);
-  const positions = paperOpenPositions(agent);
-  if (!activity) {
-    renderBackendEmpty("positionsPanel", "No paper activity yet", "This agent has no readable paper account activity.");
-    return;
-  }
-  if (!positions.length) {
-    renderBackendEmpty("positionsPanel", "No open positions", "This agent has no open paper positions right now.");
-    return;
-  }
-
-  panel.className = "agent-tab-panel positions-panel";
-  const hasPositionPnl = positions.some((position) => positionPnlUsd(position) !== null);
-  const totalPositionPnl = positions.reduce((sum, position) => {
-    const value = positionPnlUsd(position);
-    return value === null ? sum : sum + value;
-  }, 0);
-  panel.innerHTML = `
-    <div class="agent-summary-grid">
-      <div class="agent-summary-card">
-        <span>Open positions</span>
-        <strong>${positions.length.toLocaleString()}</strong>
-      </div>
-      <div class="agent-summary-card">
-        <span>Equity</span>
-        <strong>${escapeHtml(formatUsd(activity.latest_risk?.equity_usd ?? paperLeaderboardRow(agent)?.equity_usd))}</strong>
-      </div>
-      <div class="agent-summary-card">
-        <span>Cash</span>
-        <strong>${escapeHtml(formatUsd(activity.account?.cash_balance_usd))}</strong>
-      </div>
-    </div>
-    <div class="position-table" role="table" aria-label="Open paper positions">
-      <div class="position-table-head" role="row">
-        <span>Market</span>
-        <span>Size</span>
-        <span>Entry</span>
-        <span>P&L</span>
-      </div>
-      ${positions.map((position) => {
-      const size = asNumber(position.signed_size) ?? 0;
-      const side = size < 0 ? "Short" : "Long";
-      const leverage = asNumber(position.leverage);
-      const coin = String(position.coin || "").toUpperCase();
-      const pnl = positionPnlUsd(position);
-      const pnlTone = pnl === null ? "empty" : pnl >= 0 ? "up" : "down";
-      return `
-        <div class="position-row" role="row">
-          <div class="position-main">
-            <strong>${escapeHtml(coin || "PAPER")} <span class="${size < 0 ? "down" : "up"}">${side}</span></strong>
-            <span class="position-meta">${escapeHtml(position.market_type || "paper")} / ${escapeHtml(position.margin_mode || "margin")} / ${leverage === null ? "--" : `${leverage}x`}</span>
-          </div>
-          <div class="position-value">${escapeHtml(compactNumber(Math.abs(size)))} ${escapeHtml(coin)}</div>
-          <div class="position-entry">${escapeHtml(formatPrice(position.entry_px))}</div>
-          <div class="position-pnl ${pnlTone}">${escapeHtml(formatSignedUsd(pnl))}</div>
-        </div>
-      `;
-      }).join("")}
-    </div>
-    <div class="positions-footnote">
-      ${hasPositionPnl
-        ? `Visible position P&L total <strong class="${totalPositionPnl >= 0 ? "up" : "down"}">${escapeHtml(formatSignedUsd(totalPositionPnl))}</strong>`
-        : "Per-position P&L needs mark price or unrealized P&L from the backend."}
-    </div>
-  `;
-}
-
-function renderAgentBase(agent) {
-  renderRoom(agent);
-  renderKeyholders(agent);
-  renderPositions(agent);
-  syncAgentBaseTabs();
-}
+// Agent base (room / keyholders / positions tabs) ported to React (app/components/key-market/agent-base.tsx).
 
 // Key trading activity panel ported to React
 // (app/components/key-market/key-activity-panel.tsx). keyActivityRows below is
@@ -2312,7 +2083,7 @@ function renderTicket(agent) {
     }
   });
   if (keyAmount) keyAmount.disabled = marketUnavailable || busy;
-  setInlineState("gateButton", gateLabel(agent));
+  // Gate button ported to React (agent-base.tsx).
   renderWalletButton();
   renderBackendStatus();
 }
@@ -2921,19 +2692,12 @@ function renderNow() {
   }
   renderGateState(agent);
   renderHero(agent);
-  renderAgentBase(agent);
   renderTicket(agent);
   bindUnlockButtons();
   syncContentColumns();
 }
 
-document.querySelectorAll("[data-agent-tab]").forEach((button) => {
-  button.addEventListener("click", () => {
-    activeAgentTab = button.dataset.agentTab || "chatroom";
-    syncAgentBaseTabs();
-    syncStore();
-  });
-});
+// Agent base tabs ported to React (agent-base.tsx).
 
 document.querySelectorAll(".ticket-tab").forEach((button) => {
   button.addEventListener("click", () => {
@@ -2976,7 +2740,6 @@ function setChartRange(range) {
   const agent = selectedAgent();
   if (agent) {
     renderHero(agent);
-    renderRoom(agent);
   } else {
     renderFreshStartEmpty();
   }
@@ -3099,6 +2862,7 @@ window.ClawHouseDemo = {
 // callers get the same result the legacy renderer would.
 window.__clawhouseLegacy = {
   chartModel: (agent) => chartModel(agent || selectedAgent()),
+  openEvent: (eventId) => openEvent(eventId),
 };
 
 syncChartRangeButtons();
