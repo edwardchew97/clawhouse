@@ -95,6 +95,88 @@ export function backendBoard(s: SelectorContext, agent: LegacyAgent | null): Rec
   return backendApplies(s, agent) ? rec(rec(s.chain.backend)?.board) : null;
 }
 
+function parseJsonField(value: unknown): Rec | null {
+  if (!value || typeof value !== "string") return null;
+  try {
+    return rec(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+export function boardMetadata(s: SelectorContext, agent: LegacyAgent | null): Rec {
+  const board = backendBoard(s, agent);
+  return rec(board?.metadata) ?? parseJsonField(board?.metadata_json) ?? {};
+}
+
+export function isPaperAgent(s: SelectorContext, agent: LegacyAgent | null) {
+  if (!agent) return false;
+  if (paperLeaderboardRow(s, agent)) return true;
+  const text = [agent.id, agent.name, agent.displayName, agent.strategy, agent.desc, (agent as Rec).description]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return text.includes("paper") || text.includes("hyperliquid");
+}
+
+export function backendNetwork(s: SelectorContext, agent: LegacyAgent | null) {
+  const board = backendBoard(s, agent);
+  const metadata = boardMetadata(s, agent);
+  if (isPaperAgent(s, agent)) return "hyperliquid";
+  return (metadata.network_id as string) || (metadata.networkId as string) || (board?.chain as string) || "near";
+}
+
+export function backendVenue(s: SelectorContext, agent: LegacyAgent | null) {
+  const board = backendBoard(s, agent);
+  const metadata = boardMetadata(s, agent);
+  if (isPaperAgent(s, agent)) return "hyperliquid-paper";
+  return (metadata.venue as string) || (metadata.venue_namespace as string)
+    || (board?.venue_namespace as string) || "agent-board-ledger";
+}
+
+// --- Loading / access state -----------------------------------------------
+
+export function keyStateLoading(s: SelectorContext, agent: LegacyAgent | null) {
+  return Boolean(agent && s.chain.stateLoading);
+}
+
+export function keyStateInitialLoading(s: SelectorContext, agent: LegacyAgent | null) {
+  return keyStateLoading(s, agent) && !chainApplies(s, agent);
+}
+
+export function keyStateUnavailable(s: SelectorContext, agent: LegacyAgent | null) {
+  return Boolean(agent && s.chain.error && !chainApplies(s, agent));
+}
+
+export function roomAccessLoading(s: SelectorContext, agent: LegacyAgent | null): boolean {
+  if (!agent || !s.chain.accountId) return false;
+  if (readAccessApplies(s, agent)) return false;
+  const balance = holderBalance(s, agent);
+  return Boolean(
+    s.chain.readAccessLoading
+    || s.chain.backendLoading
+    || keyStateInitialLoading(s, agent)
+    || (keyStateUnavailable(s, agent) && !readAccessApplies(s, agent))
+    || (s.chain.backend && !backendApplies(s, agent))
+    || !s.chain.backend
+    || (s.chain.pending && (s.chain.phase === "authenticating" || s.chain.phase === "refreshing"))
+    || (balance !== null && balance > 0 && !readAccessApplies(s, agent) && !s.chain.readAccessError),
+  );
+}
+
+export function maxBuyApplies(s: SelectorContext, agent: LegacyAgent | null) {
+  if (!agent) return false;
+  const maxBuy = rec(s.chain.maxBuy);
+  return Boolean(maxBuy && maxBuy.agent_id === agent.id && maxBuy.account_id === s.chain.accountId);
+}
+
+export function buyMaxAmount(s: SelectorContext, agent: LegacyAgent | null): number | null {
+  if (!maxBuyApplies(s, agent)) return null;
+  const amount = rec(rec(s.chain.maxBuy)?.maxBuy)?.amount;
+  const numeric = Math.floor(Number(amount));
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
 export function paperLeaderboardRow(s: SelectorContext, agent: LegacyAgent | null): Rec | null {
   if (!agent) return null;
   const rows = rec(rec(s.chain.backend)?.paperLeaderboard)?.leaderboard;

@@ -3,12 +3,16 @@ import { initialChainState } from "../app/store/key-market-store";
 import type { DemoChainState, LegacyAgent } from "../app/lib/key-market-types";
 import {
   agentKey,
+  backendNetwork,
   backendPnl,
   chainApplies,
   holderBalance,
   holderCount,
+  isPaperAgent,
+  isUnlocked,
   keyActivityRows,
   keyMarketUnavailable,
+  roomAccessLoading,
   selectAgent,
 } from "../app/lib/key-market-selectors";
 
@@ -48,6 +52,33 @@ describe("chain-applies gated derivation", () => {
       backend: { ok: true, boardId: "board-1", board: { id: "board-1" }, paperLeaderboard: { leaderboard: [{ paper_account_id: "board-1", paper_pnl_pct: -0.4012 }] } },
     });
     expect(backendPnl(chain, agent)).toBeCloseTo(-40.12, 4);
+  });
+});
+
+describe("backend network + access state", () => {
+  test("isPaperAgent + backendNetwork classify paper agents as hyperliquid", () => {
+    const paper: LegacyAgent = { id: "p1", name: "Paper Hunter", boardId: "b1" };
+    const lb = ctx({ backend: { ok: true, boardId: "b1", board: { id: "b1" }, paperLeaderboard: { leaderboard: [{ paper_account_id: "b1", equity_usd: 100 }] } } });
+    const pctx = { ...lb, agents: [paper] };
+    expect(isPaperAgent(pctx, paper)).toBe(true);
+    expect(backendNetwork(pctx, paper)).toBe("hyperliquid");
+    // non-paper falls back to metadata/near
+    const plain: LegacyAgent = { id: "x", name: "Plain", boardId: "bx" };
+    expect(backendNetwork(ctx(), plain)).toBe("near");
+  });
+
+  test("isUnlocked requires wallet + valid read access; roomAccessLoading reflects pending reads", () => {
+    expect(isUnlocked(ctx(), agent)).toBe(false); // no wallet
+    const future = new Date(Date.now() + 60_000).toISOString();
+    const unlocked = ctx({
+      accountId: "me.testnet",
+      readAccess: { boardId: "board-1", holderAccountId: "me.testnet", expiresAt: future },
+      backend: { ok: true, boardId: "board-1", board: { id: "board-1" } },
+    });
+    expect(isUnlocked(unlocked, agent)).toBe(true);
+    expect(roomAccessLoading(unlocked, agent)).toBe(false); // access already applies
+    const loading = ctx({ accountId: "me.testnet", readAccessLoading: true });
+    expect(roomAccessLoading(loading, agent)).toBe(true);
   });
 });
 

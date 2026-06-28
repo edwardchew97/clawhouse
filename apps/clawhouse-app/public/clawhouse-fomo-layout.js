@@ -1862,18 +1862,7 @@ function renderHero(agent) {
   byId("marketPositions").textContent = openPositions.toLocaleString();
   byId("marketFilled").textContent = filledOrders.toLocaleString();
   byId("marketHolders").textContent = holders === null ? "--" : holders.toLocaleString();
-  byId("heroAvatar").innerHTML = agentIcon(agent);
-  byId("heroBannerImage").src = agent.bannerUrl || DEFAULT_AGENT_BANNER_URL;
-  byId("heroName").textContent = title;
-  byId("heroDesc").textContent = agent.desc;
-  byId("statPnl").textContent = pnl === null ? "--" : signedPct(pnl);
-  byId("statPnl").className = pnl === null ? "" : pnl >= 0 ? "green" : "red";
-  byId("statKey").textContent = keyPriceLabel(agent).replace(" tNEAR", "");
-  byId("statHolders").textContent = holders === null ? "--" : holders.toLocaleString();
-  byId("statUpdate").textContent = latestRiskAt
-    ? formatUtcTime(latestRiskAt)
-    : chainApplies(agent) ? "testnet live" : backendApplies(agent) && chainState.backend?.ok ? backendNetwork(agent) : agent.last;
-  setInlineState("statGate", gateLabel(agent, { compact: true }));
+  // Agent profile (hero) ported to React (app/components/key-market/agent-profile.tsx).
   byId("priceMarker").textContent = pnl === null ? "backend" : signedPct(pnl);
   byId("priceMarker").style.background = pnl === null ? "var(--gray)" : pnl >= 0 ? "var(--green)" : "var(--red)";
   byId("marketMeta").textContent = activity
@@ -1893,24 +1882,14 @@ function renderFreshStartEmpty() {
   byId("marketPositions").textContent = "--";
   byId("marketFilled").textContent = "--";
   byId("marketHolders").textContent = "--";
-  byId("heroAvatar").textContent = "--";
-  byId("heroBannerImage").src = DEFAULT_AGENT_BANNER_URL;
-  byId("heroName").textContent = "No agents yet";
-  byId("heroDesc").textContent = "Fresh staging is ready. New agents will appear after onboarding registers a public board and paper account.";
-  byId("statPnl").textContent = "--";
-  byId("statPnl").className = "";
-  byId("statKey").textContent = "--";
-  byId("statHolders").textContent = "--";
-  byId("statUpdate").textContent = "fresh start";
-  byId("statGate").textContent = "--";
+  // Agent profile (hero) ported to React (app/components/key-market/agent-profile.tsx).
   byId("priceMarker").textContent = "backend";
   byId("priceMarker").style.background = "var(--gray)";
   byId("marketMeta").textContent = "No public agent board has been registered yet.";
   renderBackendEmpty("roomFeed", "No agent room yet", "Onboard the first paper-trading agent to create the first board.");
   renderBackendEmpty("keyholdersPanel", "No keyholders yet", "Select a key-enabled agent to read keyholder state.");
   renderBackendEmpty("positionsPanel", "No positions yet", "Select a paper-trading agent to read open positions.");
-  setActivityHeader("Key Trading Activity", "No agent selected");
-  renderBackendEmpty("keyActivityList", "No verified key trades yet", "Key trades will appear after an agent creates a key market.");
+  // Key activity panel ported to React (app/components/key-market/key-activity-panel.tsx).
   byId("quotePay").textContent = "--";
   byId("quoteReceive").textContent = "--";
   byId("quoteAverage").textContent = "--";
@@ -2955,6 +2934,10 @@ function syncContentColumns() {
   });
 }
 function render() {
+  // Mirror state to the React store synchronously, independent of the rAF-gated
+  // DOM render below — so ported panels stay live even when the tab is not
+  // painting (and so the legacy renderers below remain rAF-debounced as before).
+  syncStore();
   if (renderFrame) return;
   renderFrame = window.requestAnimationFrame(() => {
     renderFrame = 0;
@@ -2963,7 +2946,6 @@ function render() {
 }
 
 function renderNow() {
-  syncStore();
   const agent = selectedAgent();
   renderTicker();
   syncDiscoveryFilters();
@@ -3145,6 +3127,14 @@ window.ClawHouseDemo = {
   setChartRange,
   setChainState,
   showToast
+};
+
+// TRANSITIONAL (removed in Phase 4 once chartModel is ported to TS): expose the
+// exact legacy chart-data computation so ported React panels (hero, room, chart)
+// reuse it verbatim instead of re-deriving it. Reads current legacy globals, so
+// callers get the same result the legacy renderer would.
+window.__clawhouseLegacy = {
+  chartModel: (agent) => chartModel(agent || selectedAgent()),
 };
 
 syncChartRangeButtons();
