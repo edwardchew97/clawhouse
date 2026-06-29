@@ -8,8 +8,24 @@
 import { normalizeDiscoveryAgent } from "./discovery";
 import { legacySetChainState } from "./legacy-bridge";
 import { errorMessage, normalizedAmount } from "./key-market-utils";
-import { keyMarketReadbackUnavailable } from "./key-market-selectors";
+import { asNumber } from "./key-market-format";
+import {
+  backendApplies,
+  keyMarketReadbackUnavailable,
+  paperActivity,
+  readAccessApplies,
+  type SelectorContext,
+} from "./key-market-selectors";
+import { useKeyMarketStore } from "../store/key-market-store";
 import type { DemoChainState, LegacyAgent, TradeSide } from "./key-market-types";
+
+export const BACKEND_REFRESH_MS = 60_000;
+
+/** Current selector context from the store (chain is mirrored from the legacy container). */
+function currentContext(): SelectorContext {
+  const s = useKeyMarketStore.getState();
+  return { chain: s.chain, agents: s.agents, tradeSide: s.tradeSide, activeDiscoveryFilters: s.activeDiscoveryFilters };
+}
 
 const inFlight = new Map<string, Promise<unknown>>();
 
@@ -101,4 +117,50 @@ export async function refreshKeyMarket(args: KeyMarketRefreshArgs): Promise<void
   const [state, quote, activity, maxBuy] = await Promise.all([statePromise, quotePromise, activityPromise, maxBuyPromise]);
   if (refreshId !== keyMarketRefreshId) return;
   legacySetChainState({ ...state, ...quote, ...activity, ...maxBuy });
+}
+
+// --- Backend read ---------------------------------------------------------
+
+let backendRefreshId = 0;
+
+type Rec = Record<string, unknown>;
+const rec = (v: unknown): Rec => (v && typeof v === "object" ? (v as Rec) : {});
+
+/**
+ * Read the backend board (+ hyperliquid mark prices for open positions) and write
+ * it through the legacy chain container (which also caches it). Ported from the
+ * legacy refreshBackendRead, including the read-access shortcut that avoids
+ * clobbering wallet-gated paper activity with a public read. Returns whether the
+ * caller should schedule the next poll.
+ */
+export async function refreshBackend(agent: LegacyAgent, reason: string): Promise<{ reschedule: boolean }> {
+  const refreshId = ++backendRefreshId;
+  const showLoading = reason !== "poll" || !backendApplies(currentContext(), agent);
+  if (showLoading) legacySetChainState({ backendLoading: true });
+
+  try {
+    const backend = await fetchJson<Rec>(`/api/backend/board?boardId=${enc(String(agent.boardId || agent.id))}`);
+    const positions = rec(backend.paperActivity).positions;
+    const openPositions = Array.isArray(positions)
+      ? positions.filter((p) => String(rec(p).status || "open").toLowerCase() === "open" && Math.abs(asNumber(rec(p).signed_size) ?? 0) > 0)
+      : [];
+    const coins = [...new Set(openPositions.map((p) => String(rec(p).coin || "").toUpperCase()).filter(Boolean))];
+    const hyperliquidPrices = coins.length
+      ? await fetchJson(`/api/backend/hyperliquid-prices?coins=${enc(coins.join(","))}`).catch((e) => ({ ok: false, error: errorMessage(e, "Price read failed.") }))
+      : { ok: true, prices: [] };
+
+    if (refreshId !== backendRefreshId) return { reschedule: false };
+    const nextBackend = { ...backend, hyperliquidPrices } as Rec;
+    const ctx = currentContext();
+    const nextPaperOk = rec(nextBackend.paperActivity).ok;
+    if (ctx.chain.accountId && readAccessApplies(ctx, agent) && paperActivity(ctx, agent) && !nextPaperOk) {
+      legacySetChainState({ backendLoading: false });
+      return { reschedule: true };
+    }
+    legacySetChainState({ backend: nextBackend, backendLoading: false });
+  } catch (error) {
+    if (refreshId !== backendRefreshId) return { reschedule: false };
+    legacySetChainState({ backendLoading: false, backend: { ok: false, error: errorMessage(error, "Backend read failed.") } });
+  }
+  return { reschedule: true };
 }

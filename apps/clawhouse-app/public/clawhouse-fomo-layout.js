@@ -1473,56 +1473,8 @@ let keyMarketRefreshId = 0;
 let backendRefreshTimer = 0;
 let backendRefreshId = 0;
 
-function scheduleBackendRefresh(reason, delayMs = 0) {
-  window.clearTimeout(backendRefreshTimer);
-  backendRefreshTimer = window.setTimeout(() => {
-    void refreshBackendRead(reason);
-  }, delayMs);
-}
-
-async function refreshBackendRead(_reason) {
-  const agent = selectedAgent();
-  if (!agent) return;
-  const refreshId = ++backendRefreshId;
-  const showLoading = _reason !== "poll" || !backendApplies(agent);
-  if (showLoading) {
-    chainState = { ...chainState, backendLoading: true };
-    render();
-  }
-  try {
-    const backend = await fetchJson(`/api/backend/board?boardId=${encodeURIComponent(agent.boardId || agent.id)}`);
-    const openPositions = Array.isArray(backend?.paperActivity?.positions)
-      ? backend.paperActivity.positions.filter((position) => String(position?.status || "open").toLowerCase() === "open" && Math.abs(asNumber(position?.signed_size) ?? 0) > 0)
-      : [];
-    const coins = [...new Set(openPositions.map((position) => String(position?.coin || "").toUpperCase()).filter(Boolean))];
-    const hyperliquidPrices = coins.length
-      ? await fetchJson(`/api/backend/hyperliquid-prices?coins=${encodeURIComponent(coins.join(","))}`).catch((error) => ({ ok: false, error: errorMessage(error, "Price read failed.") }))
-      : { ok: true, prices: [] };
-    if (refreshId !== backendRefreshId) return;
-    const nextBackend = { ...backend, hyperliquidPrices };
-    if (chainState.accountId && readAccessApplies(agent) && paperActivity(agent) && !nextBackend.paperActivity?.ok) {
-      chainState = { ...chainState, backendLoading: false };
-      render();
-      scheduleBackendRefresh("poll", BACKEND_REFRESH_MS);
-      return;
-    }
-    chainState = {
-      ...chainState,
-      backend: nextBackend,
-      backendLoading: false,
-    };
-    cacheBackend(nextBackend);
-  } catch (error) {
-    if (refreshId !== backendRefreshId) return;
-    chainState = {
-      ...chainState,
-      backendLoading: false,
-      backend: { ok: false, error: errorMessage(error, "Backend read failed.") },
-    };
-  }
-  render();
-  scheduleBackendRefresh("poll", BACKEND_REFRESH_MS);
-}
+// Backend read ported to React (app/lib/market-data.ts refreshBackend +
+// market-data-controller.tsx); per-agent read with a 60s poll.
 
 // Key-market read ported to React (app/lib/market-data.ts refreshKeyMarket +
 // market-data-controller.tsx); triggered reactively on selection/side/amount/wallet.
@@ -1542,7 +1494,6 @@ function applyDiscovery(nextAgents, data) {
   chartAnimationPending = true;
   render();
   if (selectedAgent()) {
-    scheduleBackendRefresh("discovery", 0);
     dispatchUiEvent("clawhouse:agent-change");
   }
 }
@@ -2385,7 +2336,6 @@ window.__clawhouseLegacy = {
     clearQuote();
     prepareAgentRead(selectedAgent());
     render();
-    scheduleBackendRefresh("agent-change", 0);
     dispatchUiEvent("clawhouse:agent-change");
     animateAgentChange();
   },

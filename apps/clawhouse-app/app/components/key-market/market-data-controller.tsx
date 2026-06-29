@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { fetchDiscovery, refreshKeyMarket } from "../../lib/market-data";
+import { BACKEND_REFRESH_MS, fetchDiscovery, refreshBackend, refreshKeyMarket } from "../../lib/market-data";
 import { whenLegacyReady } from "../../lib/legacy-bridge";
 import { selectAgent } from "../../lib/key-market-selectors";
 import { useKeyMarketStore } from "../../store/key-market-store";
@@ -54,6 +54,22 @@ export function MarketDataController() {
     }, 120);
     return () => window.clearTimeout(timer);
   }, [agents, selectedId, tradeSide, keyAmount, accountId]);
+
+  // Backend board read + 60s poll, per selected agent.
+  useEffect(() => {
+    const agent = selectAgent(agents, selectedId);
+    if (!agent) return;
+    let cancelled = false;
+    let timer = 0;
+    const run = async (reason: string) => {
+      if (cancelled) return;
+      const { reschedule } = await refreshBackend(agent, reason);
+      if (cancelled || !reschedule) return;
+      timer = window.setTimeout(() => void run("poll"), BACKEND_REFRESH_MS);
+    };
+    void run("agent-change");
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [agents, selectedId]);
 
   return null;
 }
